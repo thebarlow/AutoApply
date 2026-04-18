@@ -1,0 +1,33 @@
+# Environment
+.env
+
+# Job data
+jobs/pending/
+jobs/processed/
+jobs/outputs/
+
+# Trigger.dev
+.trigger
+.mcp.json
+node_modules/
+package.json
+package-lock.json
+trigger.config.ts
+src/
+.github/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.pdf
+
+# OS
+.DS_Store
+Thumbs.db

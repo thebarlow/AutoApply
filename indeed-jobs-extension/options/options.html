@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Indeed Scraper — Settings</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 480px;
+      margin: 40px auto;
+      padding: 0 16px;
+      color: #222;
+    }
+    h2 { font-size: 18px; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; margin-bottom: 4px; }
+    input[type="text"] {
+      width: 100%;
+      padding: 7px 10px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .row { margin-bottom: 20px; }
+    button {
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+    }
+    #btn-save { background: #1a57d6; color: #fff; }
+    #btn-clear { background: #e74c3c; color: #fff; margin-left: 8px; }
+    #msg { margin-top: 12px; font-size: 13px; color: #27ae60; min-height: 18px; }
+    #msg.error { color: #c0392b; }
+    hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
+    .dedup-section h3 { font-size: 14px; margin-bottom: 6px; }
+    .dedup-section p { font-size: 12px; color: #666; margin: 0 0 10px; }
+  </style>
+</head>
+<body>
+  <h2>Indeed Scraper — Settings</h2>
+
+  <div class="row">
+    <label for="webhook-url">n8n Webhook URL</label>
+    <input type="text" id="webhook-url" placeholder="http://localhost:5678/webhook/indeed-jobs" />
+  </div>
+
+  <button id="btn-save">Save</button>
+  <div id="msg"></div>
+
+  <hr />
+
+  <div class="dedup-section">
+    <h3>Sent Jobs History</h3>
+    <p>
+      The extension skips jobs it has already sent. Clear this history to re-send all saved jobs.
+    </p>
+    <button id="btn-clear">Clear History</button>
+    <span id="dedup-count"></span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+\documentclass[10pt]{article}
+
+% ── Page geometry ──────────────────────────────────────────────────────────────
+\usepackage[top=0.5in, bottom=0.5in, left=0.65in, right=0.65in]{geometry}
+
+% ── Font ───────────────────────────────────────────────────────────────────────
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+
+% ── Packages ───────────────────────────────────────────────────────────────────
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{microtype}
+\usepackage{fontawesome5}
+
+% ── Hyperlink styling ──────────────────────────────────────────────────────────
+\hypersetup{colorlinks=true, urlcolor=black, hidelinks}
+
+% ── No page numbers, headsers, footers ────────────────────────────────────────────────────────────
+\pagestyle{empty}
+
+% ── Pandoc list compatibility ──────────────────────────────────────────────────
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}}
+
+% ── Section headers ────────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\normalsize\bfseries\uppercase}
+  {}{0em}{}
+  [\vspace{1pt}\titlerule\vspace{4pt}]
+\titlespacing{\section}{0pt}{4pt}{4pt}
+
+% ── List spacing ───────────────────────────────────────────────────────────────
+\setlist[itemize]{
+  leftmargin=1.2em,
+  itemsep=1pt,
+  parsep=0pt,
+  topsep=2pt
+}
+
+% ── Paragraph spacing ──────────────────────────────────────────────────────────
+\setlength{\parskip}{0pt}
+\setlength{\parindent}{0pt}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ── Name ───────────────────────────────────────────────────────────────────────
+{\LARGE\bfseries Matthew Barlow}
+
+\vspace{4pt}
+
+% ── Contact line ───────────────────────────────────────────────────────────────
+{\small
+\begin{tabular}{l l l}
+  \faEnvelope\ hireme@matthewbarlow.me & \faPhone\ (203) 617-7390 & \faMapMarker\ Vero Beach, FL --- open to relocation \\
+  \faGithub\ \href{https://github.com/thebarlow}{github.com/thebarlow} & \faGlobe\ \href{https://matthewbarlow.me}{matthewbarlow.me} & \faLinkedin\ \href{https://www.linkedin.com/in/matthew-barlow-433492199/}{linkedin.com/in/matthew-barlow} \\
+\end{tabular}}
+\\
+
+% ── Profile ────────────────────────────────────────────────────────────────────
+\section{Profile}
+
+Software developer with dual degrees in Electrical Engineering (Columbia) and Physics, specializing in Python backend systems, financial data pipelines, and LLM-integrated automation. I build production-grade tools --- trading dashboards, prediction market engines, and job automation systems --- with a focus on async architecture, clean APIs, and practical deployment via Docker. Experienced in data modeling, ETL design, and integrating ML/LLM workflows into data platforms. Daily Claude Code user; AI-augmented development is central to my workflow.
+
+% ── Education ──────────────────────────────────────────────────────────────────
+\section{Education}
+
+\textbf{B.S. Electrical Engineering} --- GPA 3.2 \\
+Columbia University, New York City, NY --- 2017--2020
+
+\textbf{B.A. Physics} --- GPA 3.3 \\
+University of Redlands, Redlands, CA --- 2014--2017
+
+% ── Experience ─────────────────────────────────────────────────────────────────
+\section{Experience}
+
+\textbf{Research Assistant --- Lehigh University} \hfill \textit{2017} 
+\begin{itemize}
+  \item Designed and deployed technical models of laser-induced crystal nucleation using Python (NumPy, SciPy).
+  \item Collaborated with PhD candidates and faculty, producing clean, documented analytical pipelines.
+\end{itemize}
+
+\textbf{Desktop Support --- Columbia College IT} \hfill \textit{2018--2021} 
+\begin{itemize}
+  \item Maintained accurate documentation of technical issues and resolutions across a large university user base.
+  \item Built systematic debugging habits through high-volume, cross-functional support work.
+\end{itemize}
+
+\textbf{Instructor --- Mathnasium} \hfill \textit{Jan 2023 -- Jan 2024} 
+\begin{itemize}
+  \item Communicated complex concepts clearly; adapted approach per individual --- skills directly applicable to mentorship and code review culture.
+\end{itemize}
+
+% ── Projects ───────────────────────────────────────────────────────────────────
+\section{Projects}
+
+\textbf{MansaMusa Trading Dashboard} --- Python, FastAPI, Vue 3, PostgreSQL, Redis, Celery, Docker 
+\begin{itemize}
+  \item Full-stack financial intelligence platform with real-time OHLCV feeds, sentiment analysis via Reddit (PRAW), WebSocket streaming, and strategy backtesting --- end-to-end data pipeline from ingestion to user-facing features.
+\end{itemize}
+
+\textbf{Arbitrage Engine} --- Python, FastAPI, SQLAlchemy, httpx, APScheduler 
+\begin{itemize}
+  \item Real-time prediction market data pipeline targeting Kalshi and Polymarket; detects cross-market arbitrage opportunities with scheduled incremental polling and a PostgreSQL-backed data store.
+\end{itemize}
+
+\textbf{AutoApply} --- Python, FastAPI, SQLAlchemy, Typer, Docker, Chrome Extension 
+\begin{itemize}
+  \item Multi-component job application pipeline: browser extension (Chrome/Firefox MV3) scrapes job boards, REST API backend orchestrates LLM document generation, PostgreSQL tracks application state end-to-end.
+\end{itemize}
+
+\textbf{Voice Assistant} --- Python, Whisper, pyttsx3, openwakeword, Docker
+\begin{itemize}
+  \item Local AI assistant with swappable LLM backends (Claude, Ollama); modular design demonstrates ML inference pipeline architecture.
+\end{itemize}
+
+% ── Skills ─────────────────────────────────────────────────────────────────────
+\section{Skills}
+
+\begin{itemize}
+  \item \textbf{Programming Languages:} Python, SQL, TypeScript, JavaScript, Scala (familiar), Java, R
+  \item \textbf{Data Engineering \& Pipelines:} ETL/ELT design, incremental processing, APScheduler, Celery, asyncio
+  \item \textbf{Databases \& Storage:} PostgreSQL, SQLite, Redis, SQLAlchemy, Alembic
+  \item \textbf{Backend:} FastAPI, aiohttp, httpx
+  \item \textbf{Cloud \& DevOps:} Docker, Docker Compose, Git, pytest, black, mypy, ruff
+  \item \textbf{AI \& ML:} Anthropic SDK, OpenAI SDK, NumPy, Pandas, Sklearn, SciPy, XGBoost, PyTorch, Keras, TensorFlow --- including NLP, time series forecasting, and model interpretability (SHAP)
+  \item \textbf{APIs \& Integrations:} Alpaca API, yfinance, PRAW, BeautifulSoup4
+  \item \textbf{Frontend:} Vue 3, React, Astro, Tailwind CSS
+  \item \textbf{Certifications:} HackerRank Gold --- Python, C++, Java, Problem Solving \textbar{} HackerRank Silver --- SQL
+\end{itemize}
+
+\end{document}

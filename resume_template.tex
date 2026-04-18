@@ -1,0 +1,75 @@
+\documentclass[10pt]{article}
+
+% ── Page geometry ──────────────────────────────────────────────────────────────
+\usepackage[top=0.5in, bottom=0.5in, left=0.65in, right=0.65in]{geometry}
+
+% ── Font ───────────────────────────────────────────────────────────────────────
+\usepackage{fontspec}
+\setmainfont{Calibri}[
+  BoldFont = Calibri Bold,
+  ItalicFont = Calibri Italic
+]
+
+% ── Packages ───────────────────────────────────────────────────────────────────
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{microtype}
+
+% ── Hyperlink styling ──────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  urlcolor=black,
+  hidelinks
+}
+
+% ── No page numbers ────────────────────────────────────────────────────────────
+\pagestyle{empty}
+
+% ── Pandoc list compatibility ──────────────────────────────────────────────────
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}}
+
+% ── Section headers ────────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\normalsize\bfseries\uppercase}
+  {}{0em}{}
+  [\vspace{1pt}\titlerule\vspace{4pt}]
+
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+% ── List spacing ───────────────────────────────────────────────────────────────
+\setlist[itemize]{
+  leftmargin=1.2em,
+  itemsep=1pt,
+  parsep=0pt,
+  topsep=2pt
+}
+
+% ── Paragraph spacing ──────────────────────────────────────────────────────────
+\setlength{\parskip}{3pt}
+\setlength{\parindent}{0pt}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ── Name ───────────────────────────────────────────────────────────────────────
+{\LARGE\bfseries $name$}
+
+\vspace{4pt}
+
+% ── Contact line ───────────────────────────────────────────────────────────────
+{\small
+$for(author)$$author$$sep$ \textbar{} $endfor$
+}
+
+\vspace{2pt}
+\noindent\rule{\textwidth}{0.4pt}
+\vspace{4pt}
+
+% ── Body ───────────────────────────────────────────────────────────────────────
+$body$
+
+\end{document}

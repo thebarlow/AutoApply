@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe:*)",
+      "Bash(powershell:*)",
+      "Bash(py -3 -c ':*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.hackerrank.com)",
+      "WebFetch(domain:www.linkedin.com)",
+      "Bash(cat /c/Users/barlo/Projects/auto_apply/jobs/pending/*.json)",
+      "Bash(node:*)",
+      "WebFetch(domain:remotive.com)",
+      "WebFetch(domain:support.remotive.com)",
+      "Bash(git init:*)"
+    ]
+  }
+}
