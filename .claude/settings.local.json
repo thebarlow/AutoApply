@@ -12,7 +12,8 @@
       "Bash(node:*)",
       "WebFetch(domain:remotive.com)",
       "WebFetch(domain:support.remotive.com)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(python *)"
     ]
   }
 }

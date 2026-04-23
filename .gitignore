@@ -21,6 +21,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Test outputs
+2_generator/tests/fixtures/outputs/
+
 # LaTeX build artifacts
 *.aux
 *.log

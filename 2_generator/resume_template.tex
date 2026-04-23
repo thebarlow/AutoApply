@@ -5,27 +5,20 @@
 
 % ── Font ───────────────────────────────────────────────────────────────────────
 \usepackage{fontspec}
-\setmainfont{Calibri}[
-  BoldFont = Calibri Bold,
-  ItalicFont = Calibri Italic
-]
+\setmainfont{Latin Modern Roman}
 
 % ── Packages ───────────────────────────────────────────────────────────────────
 \usepackage{hyperref}
 \usepackage{xcolor}
 \usepackage{enumitem}
 \usepackage{titlesec}
-\usepackage{parskip}
 \usepackage{microtype}
+\usepackage{fontawesome5}
 
 % ── Hyperlink styling ──────────────────────────────────────────────────────────
-\hypersetup{
-  colorlinks=true,
-  urlcolor=black,
-  hidelinks
-}
+\hypersetup{colorlinks=true, urlcolor=black, hidelinks}
 
-% ── No page numbers ────────────────────────────────────────────────────────────
+% ── No page numbers, headers, footers ─────────────────────────────────────────
 \pagestyle{empty}
 
 % ── Pandoc list compatibility ──────────────────────────────────────────────────
@@ -37,8 +30,7 @@
   {\normalsize\bfseries\uppercase}
   {}{0em}{}
   [\vspace{1pt}\titlerule\vspace{4pt}]
-
-\titlespacing{\section}{0pt}{8pt}{4pt}
+\titlespacing{\section}{0pt}{4pt}{4pt}
 
 % ── List spacing ───────────────────────────────────────────────────────────────
 \setlist[itemize]{
@@ -49,7 +41,7 @@
 }
 
 % ── Paragraph spacing ──────────────────────────────────────────────────────────
-\setlength{\parskip}{3pt}
+\setlength{\parskip}{0pt}
 \setlength{\parindent}{0pt}
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -60,16 +52,15 @@
 
 \vspace{4pt}
 
-% ── Contact line ───────────────────────────────────────────────────────────────
+% ── Contact table ──────────────────────────────────────────────────────────────
 {\small
-$for(author)$$author$$sep$ \textbar{} $endfor$
-}
+\begin{tabular}{l l l}
+  \faEnvelope\ $email$ & \faPhone\ $phone$ & \faMapMarker\ $location$ \\
+  \faGithub\ \href{https://$github$}{$github$} & \faGlobe\ \href{https://$website$}{$website$} & \faLinkedin\ \href{https://$linkedin$}{$linkedin$} \\
+\end{tabular}}
+\\
 
-\vspace{2pt}
-\noindent\rule{\textwidth}{0.4pt}
-\vspace{4pt}
-
-% ── Body ───────────────────────────────────────────────────────────────────────
+% ── Body (Pandoc-generated content) ───────────────────────────────────────────
 $body$
 
 \end{document}
