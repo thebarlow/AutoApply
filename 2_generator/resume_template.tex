@@ -29,8 +29,14 @@
 \titleformat{\section}
   {\normalsize\bfseries\uppercase}
   {}{0em}{}
-  [\vspace{1pt}\titlerule\vspace{4pt}]
+  []
 \titlespacing{\section}{0pt}{4pt}{4pt}
+
+\titleformat{\subsection}
+  {\normalsize\bfseries\uppercase}
+  {}{0em}{}
+  [\vspace{1pt}\rule{\linewidth}{0.4pt}\vspace{4pt}]
+\titlespacing{\subsection}{0pt}{4pt}{4pt}
 
 % ── List spacing ───────────────────────────────────────────────────────────────
 \setlist[itemize]{
