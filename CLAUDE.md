@@ -5,9 +5,9 @@
 Automated job application pipeline with three stages:
 
 1. **Scrape** — collect job postings from Indeed (browser extension) and remote job boards (n8n), stage as JSON in `jobs/pending/`
-2. **Generate** — produce tailored resume + cover letter per job using Claude, render to PDF. Use the `/generate-resume` skill — do NOT run `2_generator/resume_agent.py` directly. Pass paths explicitly:
+2. **Generate** — produce tailored resume + cover letter per job using Claude, render to PDF. Use the `/generate-resume` skill. Templates and pipeline logic live in `~/.claude/skills/generate-resume/`. Pass paths explicitly:
    ```
-   python agent.py --pending jobs/pending --processed jobs/processed --outputs jobs/outputs
+   python ~/.claude/skills/generate-resume/agent.py --pending jobs/pending --processed jobs/processed --outputs jobs/outputs
    ```
 3. **Apply** — submit applications (scope TBD)
 
@@ -22,12 +22,11 @@ jobs/
 
 ## Routing Rules
 
-Before working in any subdirectory, read its `CONTEXT.md` first.
 
-| Task | Directory | When to go there |
+| Task | Location | When to go there |
 |---|---|---|
 | Browser extension, webhook config, n8n workflow, job scraping logic | `1_scraper/` | Modifying how job data is collected or staged |
-| Resume/cover letter generation, LaTeX template, Claude prompts, PDF rendering | `2_generator/` | Modifying the templates or prompts — run generation via `/generate-resume` skill |
+| Resume/cover letter generation, LaTeX templates, Claude prompts, PDF rendering | `~/.claude/skills/generate-resume/` | Modifying templates, prompts, or pipeline logic |
 | Job application submission, ATS automation, application tracking | `3_applicator/` | Building or modifying the submission pipeline |
 
 ## Formatting Rules
