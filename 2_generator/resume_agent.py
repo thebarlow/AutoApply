@@ -57,6 +57,7 @@ Description:
 - Output ONLY the resume Markdown body. No preamble, no explanation.
 - Do NOT include a name or contact block — those are handled separately.
 - Start directly with the first section header (e.g. ## Profile).
+- Do not use `---` horizontal rules between sections.
 - Do not invent experience or skills not in the master resume.
 - Drop the Soft Skills section entirely.
 
