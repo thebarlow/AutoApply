@@ -5,7 +5,10 @@
 Automated job application pipeline with three stages:
 
 1. **Scrape** — collect job postings from Indeed (browser extension) and remote job boards (n8n), stage as JSON in `jobs/pending/`
-2. **Generate** — produce tailored resume + cover letter per job using Claude, render to PDF. Use the `/generate-resume` skill — do NOT run `2_generator/resume_agent.py` directly.
+2. **Generate** — produce tailored resume + cover letter per job using Claude, render to PDF. Use the `/generate-resume` skill — do NOT run `2_generator/resume_agent.py` directly. Pass paths explicitly:
+   ```
+   python agent.py --pending jobs/pending --processed jobs/processed --outputs jobs/outputs
+   ```
 3. **Apply** — submit applications (scope TBD)
 
 ## Shared Data Layout
