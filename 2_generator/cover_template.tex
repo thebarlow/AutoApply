@@ -1,0 +1,89 @@
+\documentclass[11pt]{article}
+
+% ── Page geometry ──────────────────────────────────────────────────────────────
+\usepackage[top=0.65in, bottom=1.0in, left=1.0in, right=1.0in]{geometry}
+
+% ── Font ───────────────────────────────────────────────────────────────────────
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\newfontfamily\headerfont{Calibri}
+
+% ── Packages ───────────────────────────────────────────────────────────────────
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{fontawesome5}
+
+% ── Hyperlink styling ──────────────────────────────────────────────────────────
+\hypersetup{colorlinks=true, urlcolor=black, hidelinks}
+
+% ── No page numbers, headers, footers ─────────────────────────────────────────
+\pagestyle{empty}
+
+% ── Pandoc list compatibility ──────────────────────────────────────────────────
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}}
+
+% ── Paragraph spacing ──────────────────────────────────────────────────────────
+\setlength{\parskip}{10pt}
+\setlength{\parindent}{0pt}
+
+% ── Colors ─────────────────────────────────────────────────────────────────────
+\definecolor{headerbg}{RGB}{30,30,30}
+\definecolor{headergray}{RGB}{235,235,235}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ── Header ─────────────────────────────────────────────────────────────────────
+\noindent\hspace*{-0.5in}{\color{headerbg}\rule{\dimexpr\linewidth+1.0in}{10pt}}
+
+\vspace{-\parskip}
+
+\setlength{\fboxsep}{8pt}
+\noindent\hspace*{-0.5in}\colorbox{headergray}{%
+  \parbox{\dimexpr\linewidth+1.0in-16pt}{%
+    \vspace{4pt}%
+    \hspace{16pt}%
+    \begin{minipage}[t]{0.50\linewidth}
+      \vspace{0pt}%
+      {\LARGE\headerfont\addfontfeatures{LetterSpace=6}\MakeUppercase{$firstname$} \bfseries\MakeUppercase{$lastname$}}\\[3pt]
+      {\color{black!40}\rule{3.5cm}{1pt}}
+    \end{minipage}%
+    \begin{minipage}[c]{0.40\linewidth}
+      \raggedright\small\vspace{4pt}
+      \faEnvelope\ \href{mailto:$email$}{$email$}\\[8pt]
+      \faPhone\ $phone$\\[8pt]
+      \faLinkedin\ \href{https://$linkedin$}{$linkedin$}\\[8pt]
+      \faGlobe\ \href{https://$website$}{$website$}
+    \end{minipage}%
+    \hspace{16pt}%
+    \vspace{4pt}%
+  }%
+}
+
+\vspace{6pt}
+
+% ── Date ───────────────────────────────────────────────────────────────────────
+\begin{flushright}
+\small\today
+\end{flushright}
+
+\vspace{4pt}
+
+% ── Body ───────────────────────────────────────────────────────────────────────
+$body$
+
+\vspace{16pt}
+
+Sincerely,
+
+\vspace{6pt}
+
+\textbf{\MakeUppercase{$name$}}
+
+% ── Bottom bar ─────────────────────────────────────────────────────────────────
+\vfill
+\noindent\hspace*{-0.5in}{\color{headerbg}\rule{\dimexpr\linewidth+1.0in}{10pt}}
+
+\end{document}

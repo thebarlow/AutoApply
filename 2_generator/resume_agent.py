@@ -26,10 +26,13 @@ PENDING_DIR = ROOT / "jobs/pending"
 PROCESSED_DIR = ROOT / "jobs/processed"
 OUTPUTS_DIR = ROOT / "jobs/outputs"
 TEMPLATE = Path(__file__).parent / "resume_template.tex"
+COVER_TEMPLATE = Path(__file__).parent / "cover_template.tex"
 
 FRONTMATTER = """\
 ---
 name: Matthew Barlow
+firstname: Matthew
+lastname: Barlow
 email: hireme@matthewbarlow.me
 phone: (203) 617-7390
 location: Vero Beach, FL --- open to relocation
@@ -101,9 +104,10 @@ Description:
 
 # Instructions
 - Output ONLY the cover letter Markdown. No preamble, no explanation.
+- Do not use `---` horizontal rules anywhere in the output.
 - Exactly 3 paragraphs: (1) fit and interest, (2) specific value-add tied to the job description, (3) close.
 - Address it to the hiring team at {company}.
-- Sign off as Matthew Barlow with contact info from the master resume.
+- Do not include a sign-off, name, or contact information at the end — those are added automatically.
 - Do not mention n8n or any no-code tools.
 - Do not invent experience or skills not in the master resume.
 """.strip()
@@ -146,14 +150,14 @@ def strip_header_block(md: str) -> str:
     return "\n".join(lines[i:])
 
 
-def render_pdf(md_path: Path, pdf_path: Path) -> None:
-    """Render a markdown resume to PDF via Pandoc and XeLaTeX."""
+def render_pdf(md_path: Path, pdf_path: Path, template: Path = TEMPLATE) -> None:
+    """Render a markdown file to PDF via Pandoc and XeLaTeX."""
     subprocess.run(
         [
             "pandoc", str(md_path),
             "-o", str(pdf_path),
             "--pdf-engine=xelatex",
-            f"--template={TEMPLATE}",
+            f"--template={template}",
         ],
         check=True,
     )
@@ -203,7 +207,9 @@ def process_job(job_path: Path, master_resume: str) -> None:
             description=description,
         )
     )
-    cover_out.write_text(cover_md, encoding="utf-8")
+    cover_out.write_text(FRONTMATTER + cover_md, encoding="utf-8")
+    cover_pdf_out = OUTPUTS_DIR / f"{job_key}_cover.pdf"
+    render_pdf(cover_out, cover_pdf_out, template=COVER_TEMPLATE)
 
     # Move JSON to processed only after all outputs are written.
     shutil.move(str(job_path), PROCESSED_DIR / job_path.name)
