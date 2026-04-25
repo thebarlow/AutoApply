@@ -8,12 +8,12 @@ auto_apply/
 │   ├── indeed-jobs-extension/  # Firefox/Chrome MV3 extension
 │   ├── config.json             # Search keywords, sources, filters
 │   └── CONTEXT.md
-├── 2_generator/                # Stage 2: generate resume + cover letter
-│   ├── resume_agent.py         # Main pipeline script
-│   ├── resume_template.tex     # XeLaTeX template for Pandoc PDF rendering
-│   └── CONTEXT.md
 ├── 3_applicator/               # Stage 3: submit applications (TBD)
 │   └── CONTEXT.md
+├── core/                       # Shared Python types (JobState, SearchConfig, UserProfile)
+├── db/                         # SQLAlchemy models, engine setup, default config seeding
+├── scripts/                    # One-time setup scripts (init_db.py)
+├── tests/                      # pytest test suite
 ├── jobs/                       # Shared data (all stages read/write here)
 │   ├── pending/                # Staged job JSON awaiting generation
 │   ├── processed/              # Archived after generation
@@ -34,8 +34,8 @@ Browser Extension (1_scraper)
   jobs/pending/*.json
         │  read by
         ▼
-  resume_agent.py (2_generator)
-        │  calls claude CLI, pandoc
+  generate-resume skill (~/.claude/skills/generate-resume/)
+        │  calls Claude API, pandoc
         ▼
   jobs/outputs/{key}_resume.md
   jobs/outputs/{key}_resume.pdf
@@ -51,6 +51,8 @@ Browser Extension (1_scraper)
 |---|---|
 | `1_scraper/indeed-jobs-extension/` | Scrapes Indeed saved jobs page; extracts job descriptions; deduplicates; POSTs to n8n |
 | n8n (local, not in repo) | Receives webhook payloads from extension and remote job board APIs; writes JSON to `jobs/pending/` |
-| `2_generator/resume_agent.py` | Reads pending jobs; prompts Claude for tailored resume and cover letter; renders PDF; archives job |
-| `2_generator/resume_template.tex` | XeLaTeX template consumed by Pandoc for PDF rendering |
+| `~/.claude/skills/generate-resume/` | Reads pending jobs; prompts Claude for tailored resume and cover letter; renders PDF via Pandoc; archives job JSON |
+| `core/types.py` | Shared Python types: `JobState` enum, `SearchConfig` dataclass, `UserProfile` dataclass |
+| `db/` | SQLAlchemy ORM models (`Job`, `Config`, `UserProfileModel`), engine setup, default config seeding |
+| `scripts/init_db.py` | One-time setup: creates tables and seeds default config |
 | `3_applicator/` | Application submission — scope TBD |

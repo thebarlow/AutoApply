@@ -75,23 +75,25 @@ from db.database import init_db, get_db, SessionLocal
 from db.seed import seed_default_config, DEFAULT_CONFIG
 
 
-def test_init_db_creates_tables():
-    import tempfile, os
-    from sqlalchemy import create_engine, inspect
-    from sqlalchemy.orm import sessionmaker
+def test_init_db_creates_tables(monkeypatch, tmp_path):
+    import importlib
+    from sqlalchemy import inspect as sa_inspect
 
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        path = f.name
-    try:
-        engine = create_engine(f"sqlite:///{path}")
-        Base.metadata.create_all(engine)
-        inspector = inspect(engine)
-        assert "jobs" in inspector.get_table_names()
-        assert "config" in inspector.get_table_names()
-        assert "user_profile" in inspector.get_table_names()
-    finally:
-        engine.dispose()
-        os.unlink(path)
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+
+    import db.database as db_module
+    importlib.reload(db_module)
+
+    db_module.init_db()
+
+    inspector = sa_inspect(db_module.engine)
+    assert "jobs" in inspector.get_table_names()
+    assert "config" in inspector.get_table_names()
+    assert "user_profile" in inspector.get_table_names()
+
+    db_module.engine.dispose()
+    importlib.reload(db_module)  # restore module state for other tests
 
 
 def test_seed_default_config(db_session):
