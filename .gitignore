@@ -31,6 +31,9 @@ __pycache__/
 *.synctex.gz
 *.pdf
 
+# Database
+auto_apply.db
+
 # OS
 .DS_Store
 Thumbs.db
