@@ -69,3 +69,45 @@ def test_create_user_profile(db_session):
 
     result = db_session.query(UserProfileModel).first()
     assert json.loads(result.data)["name"] == "Matt"
+
+
+from db.database import init_db, get_db, SessionLocal
+from db.seed import seed_default_config, DEFAULT_CONFIG
+
+
+def test_init_db_creates_tables():
+    import tempfile, os
+    from sqlalchemy import create_engine, inspect
+    from sqlalchemy.orm import sessionmaker
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        path = f.name
+    try:
+        engine = create_engine(f"sqlite:///{path}")
+        Base.metadata.create_all(engine)
+        inspector = inspect(engine)
+        assert "jobs" in inspector.get_table_names()
+        assert "config" in inspector.get_table_names()
+        assert "user_profile" in inspector.get_table_names()
+    finally:
+        engine.dispose()
+        os.unlink(path)
+
+
+def test_seed_default_config(db_session):
+    seed_default_config(db_session)
+
+    w1 = db_session.query(Config).filter_by(key="w1").first()
+    assert w1 is not None
+    assert float(w1.value) == 0.5
+
+    reject = db_session.query(Config).filter_by(key="auto_reject_threshold").first()
+    assert float(reject.value) == 0.3
+
+
+def test_seed_is_idempotent(db_session):
+    seed_default_config(db_session)
+    seed_default_config(db_session)  # second call must not raise or duplicate
+
+    results = db_session.query(Config).filter_by(key="w1").all()
+    assert len(results) == 1
