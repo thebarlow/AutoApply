@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import anthropic
 from sqlalchemy.orm import Session
@@ -101,13 +101,13 @@ def strip_header_block(md: str) -> str:
         line = lines[i].strip()
         if line.startswith("## "):
             break
-        if i >= 10:
+        if i >= 10:  # bail if no section heading found in preamble
             break
         i += 1
     return "\n".join(lines[i:])
 
 
-def call_claude(prompt: str, client: anthropic.Anthropic) -> str:
+def call_claude(prompt: str, client: Any) -> str:
     message = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=2048,
@@ -185,6 +185,7 @@ def generate_job(
     if client is None:
         client = anthropic.Anthropic()
 
+    job = None
     try:
         job = db.query(Job).filter_by(job_key=job_key).first()
         if job is None:
