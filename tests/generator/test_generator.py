@@ -102,3 +102,23 @@ def test_build_cover_prompt_contains_job_and_profile():
     assert "Jane Doe" in result
     assert "Acme Corp" in result
     assert "Python and SQL expertise" in result
+
+
+def test_strip_header_block_removes_yaml_frontmatter():
+    md = "---\nname: John\n---\n## Profile\nSome content"
+    result = strip_header_block(md)
+    assert result.startswith("## Profile")
+    assert "name: John" not in result
+
+
+def test_strip_header_block_passthrough_when_no_header():
+    md = "## Profile\nSome content"
+    result = strip_header_block(md)
+    assert result == md
+
+
+def test_call_claude_returns_stripped_text():
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value.content = [MagicMock(text="  Hello world  ")]
+    result = call_claude("some prompt", mock_client)
+    assert result == "Hello world"
