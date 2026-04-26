@@ -113,3 +113,26 @@ def test_seed_is_idempotent(db_session):
 
     results = db_session.query(Config).filter_by(key="w1").all()
     assert len(results) == 1
+
+
+def test_resume_prompt_template_seeded(db_session):
+    seed_default_config(db_session)
+    row = db_session.query(Config).filter_by(key="resume_prompt_template").first()
+    assert row is not None
+    assert "{profile}" in row.value
+    assert "{job}" in row.value
+
+
+def test_cover_prompt_template_seeded(db_session):
+    seed_default_config(db_session)
+    row = db_session.query(Config).filter_by(key="cover_prompt_template").first()
+    assert row is not None
+    assert "{profile}" in row.value
+    assert "{job}" in row.value
+
+
+def test_contact_link_keys_seeded(db_session):
+    seed_default_config(db_session)
+    for key in ("resume_github", "resume_linkedin", "resume_website"):
+        row = db_session.query(Config).filter_by(key=key).first()
+        assert row is not None
