@@ -19,12 +19,12 @@ web/routers/jobs.py
   └── on approve → threading.Thread(target=generate_job, args=(job_key,))
 
 generator/generator.py
-  ├── generate_job(job_key)                      ← thread entry point
-  ├── build_resume_prompt(job, profile) → str
-  ├── build_cover_prompt(job, profile)  → str
-  ├── call_claude(prompt, client) → str          ← Anthropic SDK
-  ├── render_pdf(md_path, pdf_path)              ← Pandoc subprocess
-  └── render_resume_pdf(md_path, pdf_path, job_key)  ← 1-page fit logic
+  ├── generate_job(job_key)                               ← thread entry point
+  ├── build_resume_prompt(job, profile, template) → str
+  ├── build_cover_prompt(job, profile, template)  → str
+  ├── call_claude(prompt, client) → str                  ← Anthropic SDK
+  ├── render_pdf(md_path, pdf_path)                      ← Pandoc subprocess
+  └── render_resume_pdf(md_path, pdf_path, job_key)      ← 1-page fit logic
 ```
 
 The background thread opens its own `SessionLocal()` session — it cannot share the PATCH request's session, which is already closed by the time generation runs.
@@ -44,42 +44,50 @@ The PATCH handler in `web/routers/jobs.py` already transitions job state to `app
 1. Open a fresh DB session
 2. Load the job by `job_key` (exit silently if not found)
 3. Load `UserProfile` from DB
-4. Build resume prompt from job fields + profile
-5. Call Anthropic SDK → resume markdown
-6. Strip any header block Claude added despite instructions
-7. Write `jobs/outputs/{job_key}_resume.md`
-8. Render resume PDF with 1-page fit logic → `jobs/outputs/{job_key}_resume.pdf`
-9. Build cover letter prompt from job fields + profile
-10. Call Anthropic SDK → cover letter markdown
-11. Write `jobs/outputs/{job_key}_cover.md`
-12. Render cover letter PDF → `jobs/outputs/{job_key}_cover.pdf`
-13. Write `resume_path`, `cover_path` back to job record
-14. Transition state `approved` → `generated`, commit
-15. Close DB session
+4. Load resume and cover letter prompt templates from the `config` table
+5. Build resume prompt from job fields + profile + template
+6. Call Anthropic SDK → resume markdown
+7. Strip any header block Claude added despite instructions
+8. Write `jobs/outputs/{job_key}_resume.md`
+9. Render resume PDF with 1-page fit logic → `jobs/outputs/{job_key}_resume.pdf`
+10. Build cover letter prompt from job fields + profile + template
+11. Call Anthropic SDK → cover letter markdown
+12. Write `jobs/outputs/{job_key}_cover.md`
+13. Render cover letter PDF → `jobs/outputs/{job_key}_cover.pdf`
+14. Write `resume_path`, `cover_path` back to job record
+15. Transition state `approved` → `generated`, commit
+16. Close DB session
 
 ---
 
 ## Prompts
 
-Prompts are built from `UserProfile` loaded from the DB — no master resume file dependency. The profile fields map as follows:
+Prompt templates are stored in the `config` table under two keys:
 
-**Resume prompt context:**
+| Config key | Description |
+|---|---|
+| `resume_prompt_template` | Full resume generation instructions with `{profile}` and `{job}` placeholders |
+| `cover_prompt_template` | Full cover letter generation instructions with `{profile}` and `{job}` placeholders |
+
+Templates are seeded into the DB by `db/seed.py` on first run. They can be edited directly in the DB without touching code — no file dependencies.
+
+At generation time, `generate_job` loads the templates from the DB, then `build_resume_prompt` and `build_cover_prompt` format the `{profile}` and `{job}` placeholders with structured text rendered from the `UserProfile` and `Job` objects.
+
+**`{profile}` renders:**
 - Name, skills, target roles, target salary range
 - Work history entries (title, company, dates, summary)
 - Education entries (institution, degree, field, graduated, GPA)
-- Job fields: title, company, location, salary, description
 
-**Cover letter prompt context:**
-- Same profile fields
-- Job fields: title, company, location, description
+**`{job}` renders:**
+- Title, company, location, salary, description
 
-Prompt instructions mirror the existing `agent.py` templates (one-page constraint, section ordering, no invented experience) but are expressed in terms of structured profile fields rather than a freeform markdown block.
+The generator fails with a clear error if either template key is missing from the config table.
 
 ---
 
 ## Error Handling
 
-Any exception raised during steps 4–14 is caught. On failure:
+Any exception raised during steps 4–15 is caught. On failure:
 - Job state transitions to `failed`
 - Exception is logged to stderr
 - DB session is closed
@@ -108,6 +116,7 @@ Any exception raised during steps 4–14 is caught. On failure:
 | `generator/__init__.py` | Create | Package marker |
 | `generator/generator.py` | Create | Full generation pipeline |
 | `web/routers/jobs.py` | Modify | Spawn background thread on approve |
+| `db/seed.py` | Modify | Seed `resume_prompt_template` and `cover_prompt_template` config keys |
 | `tests/generator/__init__.py` | Create | Package marker |
 | `tests/generator/test_generator.py` | Create | Prompt + DB state transition tests |
 
@@ -121,6 +130,7 @@ Any exception raised during steps 4–14 is caught. On failure:
 - `test_build_resume_prompt_contains_job_fields` — assert title, company, description appear in output
 - `test_build_resume_prompt_contains_profile_fields` — assert skills, work history, education appear
 - `test_build_cover_prompt_contains_job_and_profile` — same for cover letter prompt
+- `test_generate_job_fails_if_template_missing` — assert state transitions to `failed` when config key absent
 
 **State transition tests:**
 - `test_generate_job_transitions_to_generated` — mock `call_claude` + rendering, assert state becomes `generated`, resume_path and cover_path are set
