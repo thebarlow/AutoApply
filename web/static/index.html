@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Apply</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="/">Auto Apply</a>
+  <a href="#">Dashboard</a>
+  <a href="/">Review Queue <span class="badge" id="nav-badge" hidden></span></a>
+  <a href="#">Config</a>
+</nav>
+
+<main>
+  <h1>Review Queue</h1>
+  <div id="message"></div>
+  <div id="job-list"></div>
+</main>
+
+<script>
+(function () {
+  const list = document.getElementById('job-list');
+  const msg  = document.getElementById('message');
+  const badge = document.getElementById('nav-badge');
+
+  function scoreClass(s) {
+    if (s >= 0.8) return 'score-green';
+    if (s >= 0.5) return 'score-amber';
+    return 'score-red';
+  }
+
+  function pct(v) {
+    return v != null ? Math.round(v * 100) + '%' : '—';
+  }
+
+  function updateBadge(count) {
+    if (count > 0) {
+      badge.textContent = count;
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
+
+  function buildCard(job) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.key = job.job_key;
+
+    const just = job.score_justification || {};
+
+    card.innerHTML = `
+      <div class="card-actions">
+        <button class="btn btn-approve" data-action="approved">Approve</button>
+        <button class="btn btn-reject"  data-action="rejected">Reject</button>
+      </div>
+      <div class="card-header">
+        <span class="job-title">${esc(job.title || '(no title)')}</span>
+        <span class="final-score ${scoreClass(job.final_score)}">${pct(job.final_score)}</span>
+      </div>
+      <div class="card-meta">${esc(job.company || '')}${job.location ? ' · ' + esc(job.location) : ''}</div>
+      <div class="card-detail">${esc(job.salary || '')}${job.employment_type ? ' · ' + esc(job.employment_type) : ''}${job.posted_at ? ' · ' + esc(job.posted_at) : ''}</div>
+      <div class="pills">
+        <span class="pill">Desirability ${pct(job.desirability_score)}</span>
+        <span class="pill">Fit ${pct(job.fit_score)}</span>
+      </div>
+      <div class="justification">
+        ${just.desirability ? '<p><strong>Desirability:</strong> ' + esc(just.desirability) + '</p>' : ''}
+        ${just.fit         ? '<p><strong>Fit:</strong> '         + esc(just.fit)         + '</p>' : ''}
+      </div>
+      <div class="card-feedback"></div>
+    `;
+
+    card.querySelectorAll('.btn').forEach(btn => {
+      btn.addEventListener('click', () => handleAction(card, btn.dataset.action));
+    });
+
+    return card;
+  }
+
+  async function handleAction(card, state) {
+    const key = card.dataset.key;
+    const btns = card.querySelectorAll('.btn');
+    const feedback = card.querySelector('.card-feedback');
+
+    btns.forEach(b => b.disabled = true);
+    feedback.textContent = '';
+
+    try {
+      const resp = await fetch(`/api/jobs/${encodeURIComponent(key)}/state`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state }),
+      });
+
+      if (resp.ok || resp.status === 404) {
+        const label = state === 'approved' ? 'Approved ✓' : 'Rejected ✗';
+        feedback.className = 'card-feedback card-success';
+        feedback.textContent = label;
+        setTimeout(() => {
+          card.classList.add('fade-out');
+          setTimeout(() => {
+            card.remove();
+            const remaining = list.querySelectorAll('.card').length;
+            updateBadge(remaining);
+            if (remaining === 0) msg.textContent = 'No jobs pending review.';
+          }, 380);
+        }, 600);
+      } else {
+        feedback.className = 'card-feedback card-error';
+        feedback.textContent = 'Action failed — try again';
+        btns.forEach(b => b.disabled = false);
+      }
+    } catch {
+      feedback.className = 'card-feedback card-error';
+      feedback.textContent = 'Action failed — try again';
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  async function load() {
+    try {
+      const resp = await fetch('/api/jobs');
+      if (!resp.ok) throw new Error();
+      const jobs = await resp.json();
+
+      if (jobs.length === 0) {
+        msg.textContent = 'No jobs pending review.';
+        updateBadge(0);
+        return;
+      }
+
+      updateBadge(jobs.length);
+      jobs.forEach(job => list.appendChild(buildCard(job)));
+    } catch {
+      msg.textContent = 'Failed to load jobs. Is the server running?';
+    }
+  }
+
+  load();
+})();
+</script>
+
+</body>
+</html>
