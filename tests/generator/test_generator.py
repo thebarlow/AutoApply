@@ -122,3 +122,111 @@ def test_call_claude_returns_stripped_text():
     mock_client.messages.create.return_value.content = [MagicMock(text="  Hello world  ")]
     result = call_claude("some prompt", mock_client)
     assert result == "Hello world"
+
+
+def _seed_db(db_session) -> None:
+    """Seed minimal config, profile, and an approved job for generator tests."""
+    db_session.add(Config(key="resume_prompt_template", value="Resume: {profile}\n{job}"))
+    db_session.add(Config(key="cover_prompt_template", value="Cover: {profile}\n{job}"))
+    db_session.add(Config(key="resume_github", value=""))
+    db_session.add(Config(key="resume_linkedin", value=""))
+    db_session.add(Config(key="resume_website", value=""))
+    profile_data = {
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "phone": "555-0100",
+        "location": "Remote",
+        "skills": ["Python"],
+        "work_history": [],
+        "education": [],
+        "target_salary_min": 100000,
+        "target_salary_max": 150000,
+        "target_roles": ["SWE"],
+        "resume_path": "",
+    }
+    db_session.add(UserProfileModel(data=json.dumps(profile_data)))
+    db_session.add(Job(
+        job_key="test_job",
+        source="indeed",
+        url="https://example.com/job/1",
+        state=JobState.APPROVED.value,
+        title="SWE",
+        company="Acme",
+        description="Python required.",
+    ))
+    db_session.commit()
+
+
+def test_generate_job_transitions_to_generated(db_session, monkeypatch, tmp_path):
+    _seed_db(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client: "## Profile\nContent here")
+    monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
+    monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
+
+    generate_job("test_job", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.state == JobState.GENERATED.value
+    assert job.resume_path is not None
+    assert job.cover_path is not None
+
+
+def test_generate_job_transitions_to_failed_on_claude_error(db_session, monkeypatch, tmp_path):
+    _seed_db(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+
+    def _raise(*a, **kw):
+        raise RuntimeError("API error")
+
+    monkeypatch.setattr("generator.generator.call_claude", _raise)
+
+    generate_job("test_job", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.state == JobState.FAILED.value
+
+
+def test_generate_job_transitions_to_failed_on_render_error(db_session, monkeypatch, tmp_path):
+    _seed_db(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client: "## Profile\nContent here")
+
+    def _raise(*a, **kw):
+        raise RuntimeError("Pandoc failed")
+
+    monkeypatch.setattr("generator.generator.render_resume_pdf", _raise)
+
+    generate_job("test_job", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.state == JobState.FAILED.value
+
+
+def test_generate_job_fails_if_template_missing(db_session, monkeypatch, tmp_path):
+    profile_data = {
+        "name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100",
+        "location": "Remote", "skills": [], "work_history": [], "education": [],
+        "target_salary_min": None, "target_salary_max": None,
+        "target_roles": [], "resume_path": "",
+    }
+    db_session.add(UserProfileModel(data=json.dumps(profile_data)))
+    db_session.add(Job(
+        job_key="no_tpl",
+        source="indeed",
+        url="https://example.com/job/2",
+        state=JobState.APPROVED.value,
+        title="SWE",
+        company="Acme",
+    ))
+    db_session.commit()
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+
+    generate_job("no_tpl", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="no_tpl").first()
+    assert job.state == JobState.FAILED.value
