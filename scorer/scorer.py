@@ -182,7 +182,8 @@ def run_scorer(
     for job in jobs:
         score_job(job, profile, config, client, db)
         db.refresh(job)
-        print(f"[{job.state.upper()}] {job.job_key} (final={job.final_score:.2f})")
+        score_str = f"{job.final_score:.2f}" if job.final_score is not None else "N/A"
+        print(f"[{job.state.upper()}] {job.job_key} (final={score_str})")
 
 
 if __name__ == "__main__":
