@@ -29,3 +29,26 @@ def determine_state(
     if final > approve_threshold:
         return JobState.APPROVED
     return JobState.PENDING_REVIEW
+
+
+def load_user_profile(db: Session) -> UserProfile:
+    """Load UserProfile from DB. Exits if none found."""
+    row = db.query(UserProfileModel).first()
+    if not row:
+        print("No user profile found. Run scripts/seed_profile.py first.", file=sys.stderr)
+        sys.exit(1)
+
+    data = json.loads(row.data)
+    data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
+    data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+    return UserProfile(**data)
+
+
+def load_config(db: Session) -> dict[str, float]:
+    """Load scoring weights and thresholds from the config table."""
+    keys = ["w1", "w2", "auto_reject_threshold", "auto_approve_threshold"]
+    result = {}
+    for key in keys:
+        row = db.query(Config).filter_by(key=key).first()
+        result[key] = float(row.value) if row else 0.5
+    return result

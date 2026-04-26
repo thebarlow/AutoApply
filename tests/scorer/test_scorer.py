@@ -113,3 +113,36 @@ def test_determine_state_boundary_reject():
 def test_determine_state_boundary_approve():
     # exactly at threshold → not approved (> not >=)
     assert determine_state(0.8, reject_threshold=0.3, approve_threshold=0.8) == JobState.PENDING_REVIEW
+
+
+import json as _json
+from db.models import Config, UserProfileModel
+from scorer.scorer import load_user_profile, load_config
+
+
+def test_load_user_profile(db_session):
+    db_session.add(UserProfileModel(data=_json.dumps(SAMPLE_PROFILE_DICT)))
+    db_session.commit()
+
+    profile = load_user_profile(db_session)
+    assert isinstance(profile, UserProfile)
+    assert profile.name == "Matt Barlow"
+    assert isinstance(profile.work_history[0], WorkHistoryEntry)
+    assert isinstance(profile.education[0], EducationEntry)
+
+
+def test_load_user_profile_missing(db_session):
+    with pytest.raises(SystemExit):
+        load_user_profile(db_session)
+
+
+def test_load_config(db_session):
+    for key, value in [("w1", "0.6"), ("w2", "0.4"), ("auto_reject_threshold", "0.25"), ("auto_approve_threshold", "0.75")]:
+        db_session.add(Config(key=key, value=value))
+    db_session.commit()
+
+    config = load_config(db_session)
+    assert config["w1"] == pytest.approx(0.6)
+    assert config["w2"] == pytest.approx(0.4)
+    assert config["auto_reject_threshold"] == pytest.approx(0.25)
+    assert config["auto_approve_threshold"] == pytest.approx(0.75)
