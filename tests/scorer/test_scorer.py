@@ -116,7 +116,7 @@ def test_determine_state_boundary_approve():
 
 
 import json as _json
-from db.models import Config, UserProfileModel
+from db.models import Config, Job, UserProfileModel
 from scorer.scorer import load_user_profile, load_config
 
 
@@ -146,3 +146,65 @@ def test_load_config(db_session):
     assert config["w2"] == pytest.approx(0.4)
     assert config["auto_reject_threshold"] == pytest.approx(0.25)
     assert config["auto_approve_threshold"] == pytest.approx(0.75)
+
+
+from scorer.scorer import build_prompt, parse_claude_response
+
+
+def test_build_prompt_contains_job_fields():
+    profile = UserProfile(
+        name="Matt",
+        skills=["Python", "SQL"],
+        work_history=[
+            WorkHistoryEntry(company="Acme", title="Engineer", start="2022-01", end="2024-01", summary="Built things.")
+        ],
+        education=[
+            EducationEntry(institution="Columbia", degree="B.S.", field="EE", graduated="2018", gpa=3.5)
+        ],
+        target_salary_min=120000,
+        target_salary_max=160000,
+        target_roles=["Software Engineer"],
+    )
+    job = Job(
+        job_key="test_001",
+        source="indeed",
+        title="Backend Engineer",
+        company="TechCorp",
+        location="Remote",
+        salary="$130k-$150k",
+        description="We need a Python expert.",
+        url="https://example.com/job/1",
+        state=JobState.SCRAPED,
+    )
+
+    prompt = build_prompt(job, profile)
+    assert "Backend Engineer" in prompt
+    assert "TechCorp" in prompt
+    assert "Python" in prompt
+    assert "Matt" in prompt
+    assert "120000" in prompt
+
+
+def test_parse_claude_response_valid():
+    raw = json.dumps({
+        "desirability_score": 0.85,
+        "fit_score": 0.70,
+        "desirability_justification": "Good salary, remote.",
+        "fit_justification": "Python matches well.",
+    })
+
+    result = parse_claude_response(raw)
+    assert result["desirability_score"] == pytest.approx(0.85)
+    assert result["fit_score"] == pytest.approx(0.70)
+    assert result["desirability_justification"] == "Good salary, remote."
+    assert result["fit_justification"] == "Python matches well."
+
+
+def test_parse_claude_response_invalid_returns_none():
+    result = parse_claude_response("not valid json at all")
+    assert result is None
+
+
+def test_parse_claude_response_missing_keys_returns_none():
+    result = parse_claude_response(json.dumps({"desirability_score": 0.8}))
+    assert result is None

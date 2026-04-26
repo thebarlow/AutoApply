@@ -52,3 +52,62 @@ def load_config(db: Session) -> dict[str, float]:
         row = db.query(Config).filter_by(key=key).first()
         result[key] = float(row.value) if row else 0.5
     return result
+
+
+def build_prompt(job: Job, profile: UserProfile) -> str:
+    """Build the Claude scoring prompt for a single job."""
+    work_history_text = "\n".join(
+        f"- {e.title} at {e.company} ({e.start}–{e.end}): {e.summary}"
+        for e in profile.work_history
+    )
+    education_text = "\n".join(
+        f"- {e.degree} in {e.field} from {e.institution} ({e.graduated}), GPA {e.gpa}"
+        for e in profile.education
+    )
+
+    return f"""You are evaluating a job posting for a candidate. Score the job on two dimensions.
+
+## Candidate Profile
+Name: {profile.name}
+Skills: {", ".join(profile.skills)}
+Target roles: {", ".join(profile.target_roles)}
+Target salary: ${profile.target_salary_min}–${profile.target_salary_max}
+
+Work History:
+{work_history_text}
+
+Education:
+{education_text}
+
+## Job Posting
+Title: {job.title}
+Company: {job.company}
+Location: {job.location}
+Salary: {job.salary or "Not specified"}
+Description:
+{job.description or "Not provided"}
+
+## Instructions
+Return ONLY a JSON object with exactly these four keys:
+- desirability_score: float 0.0–1.0 (how much the candidate would want this job)
+- fit_score: float 0.0–1.0 (how well the candidate matches the job requirements)
+- desirability_justification: string (1–2 sentences explaining desirability score)
+- fit_justification: string (1–2 sentences explaining fit score)
+
+Consider for desirability: salary vs target, remote/location fit, role alignment, company quality.
+Consider for fit: required skills vs candidate skills, experience level, education requirements.
+
+Return only the JSON object, no other text.
+"""
+
+
+def parse_claude_response(raw: str) -> Optional[dict]:
+    """Parse Claude's JSON response. Returns None if invalid or missing keys."""
+    required = {"desirability_score", "fit_score", "desirability_justification", "fit_justification"}
+    try:
+        data = json.loads(raw.strip())
+        if not required.issubset(data.keys()):
+            return None
+        return data
+    except (json.JSONDecodeError, AttributeError):
+        return None
