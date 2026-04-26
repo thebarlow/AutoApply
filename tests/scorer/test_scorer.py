@@ -75,3 +75,41 @@ def test_seed_profile_upserts(db_session, tmp_path):
 
     count = db_session.query(UserProfileModel).count()
     assert count == 1
+
+
+from scorer.scorer import compute_final_score, determine_state
+from core.types import JobState
+
+
+def test_compute_final_score_equal_weights():
+    assert compute_final_score(0.5, 0.5, 0.8, 0.6) == pytest.approx(0.7)
+
+
+def test_compute_final_score_unequal_weights():
+    assert compute_final_score(0.8, 0.2, 1.0, 0.0) == pytest.approx(0.8)
+
+
+def test_compute_final_score_clamps_above_one():
+    assert compute_final_score(1.0, 1.0, 1.0, 1.0) == pytest.approx(1.0)
+
+
+def test_determine_state_approved():
+    assert determine_state(0.9, reject_threshold=0.3, approve_threshold=0.8) == JobState.APPROVED
+
+
+def test_determine_state_rejected():
+    assert determine_state(0.2, reject_threshold=0.3, approve_threshold=0.8) == JobState.REJECTED
+
+
+def test_determine_state_pending_review():
+    assert determine_state(0.5, reject_threshold=0.3, approve_threshold=0.8) == JobState.PENDING_REVIEW
+
+
+def test_determine_state_boundary_reject():
+    # exactly at threshold → not rejected (< not <=)
+    assert determine_state(0.3, reject_threshold=0.3, approve_threshold=0.8) == JobState.PENDING_REVIEW
+
+
+def test_determine_state_boundary_approve():
+    # exactly at threshold → not approved (> not >=)
+    assert determine_state(0.8, reject_threshold=0.3, approve_threshold=0.8) == JobState.PENDING_REVIEW
