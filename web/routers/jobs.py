@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from core.types import JobState
 from db.database import get_db
 from db.models import Job
+from generator.generator import generate_job
 
 router = APIRouter(prefix="/api/jobs")
 
@@ -65,4 +67,9 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     job.state = body.state
     db.commit()
     db.refresh(job)
+
+    if job.state == JobState.APPROVED.value:
+        t = threading.Thread(target=generate_job, args=(job_key,), daemon=True)
+        t.start()
+
     return _serialize(job)

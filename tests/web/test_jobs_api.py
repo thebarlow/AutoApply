@@ -128,3 +128,51 @@ def test_patch_invalid_state(client, db_session):
 def test_patch_not_found(client):
     resp = client.patch("/api/jobs/nonexistent/state", json={"state": "approved"})
     assert resp.status_code == 404
+
+
+def test_approve_spawns_generation_thread(client, db_session, monkeypatch):
+    import types
+    import web.routers.jobs as jobs_router
+
+    _make_job(db_session, "job_gen", JobState.PENDING_REVIEW)
+
+    spawned = []
+
+    class MockThread:
+        def __init__(self, target, args, daemon):
+            spawned.append({"target": target.__name__, "args": args})
+
+        def start(self):
+            pass
+
+    mock_threading = types.SimpleNamespace(Thread=MockThread)
+    monkeypatch.setattr(jobs_router, "threading", mock_threading, raising=False)
+
+    resp = client.patch("/api/jobs/job_gen/state", json={"state": "approved"})
+    assert resp.status_code == 200
+    assert len(spawned) == 1
+    assert spawned[0]["target"] == "generate_job"
+    assert spawned[0]["args"] == ("job_gen",)
+
+
+def test_reject_does_not_spawn_thread(client, db_session, monkeypatch):
+    import types
+    import web.routers.jobs as jobs_router
+
+    _make_job(db_session, "job_rej", JobState.PENDING_REVIEW)
+
+    spawned = []
+
+    class MockThread:
+        def __init__(self, **kwargs):
+            spawned.append(kwargs)
+
+        def start(self):
+            pass
+
+    mock_threading = types.SimpleNamespace(Thread=MockThread)
+    monkeypatch.setattr(jobs_router, "threading", mock_threading, raising=False)
+
+    resp = client.patch("/api/jobs/job_rej/state", json={"state": "rejected"})
+    assert resp.status_code == 200
+    assert len(spawned) == 0
