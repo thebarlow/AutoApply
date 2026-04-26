@@ -334,3 +334,43 @@ def test_malformed_claude_response(seeded_db):
 
     assert job.state == JobState.SCRAPED
     assert job.final_score is None
+
+
+from scorer.scorer import run_scorer
+
+
+def test_score_batch_skips_non_scraped(seeded_db):
+    scraped1 = make_job("batch_001", JobState.SCRAPED)
+    scraped2 = make_job("batch_002", JobState.SCRAPED)
+    already_approved = make_job("batch_003", JobState.APPROVED)
+    seeded_db.add_all([scraped1, scraped2, already_approved])
+    seeded_db.commit()
+
+    client = mock_client(MOCK_CLAUDE_RESPONSE)
+    run_scorer(seeded_db, client, job_key=None)
+
+    seeded_db.refresh(scraped1)
+    seeded_db.refresh(scraped2)
+    seeded_db.refresh(already_approved)
+
+    assert scraped1.state == JobState.APPROVED
+    assert scraped2.state == JobState.APPROVED
+    assert already_approved.state == JobState.APPROVED  # unchanged
+    assert client.messages.create.call_count == 2  # only SCRAPED jobs called Claude
+
+
+def test_single_job_key_flag(seeded_db):
+    target = make_job("single_001", JobState.SCRAPED)
+    other = make_job("single_002", JobState.SCRAPED)
+    seeded_db.add_all([target, other])
+    seeded_db.commit()
+
+    client = mock_client(MOCK_CLAUDE_RESPONSE)
+    run_scorer(seeded_db, client, job_key="single_001")
+
+    seeded_db.refresh(target)
+    seeded_db.refresh(other)
+
+    assert target.state == JobState.APPROVED
+    assert other.state == JobState.SCRAPED  # untouched
+    assert client.messages.create.call_count == 1

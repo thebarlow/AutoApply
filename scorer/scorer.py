@@ -159,3 +159,40 @@ def score_job(
     job.state = determine_state(final, config["auto_reject_threshold"], config["auto_approve_threshold"])
 
     db.commit()
+
+
+def run_scorer(
+    db: Session,
+    client: anthropic.Anthropic,
+    job_key: Optional[str] = None,
+) -> None:
+    """Score all SCRAPED jobs, or a single job if job_key is provided."""
+    profile = load_user_profile(db)
+    config = load_config(db)
+
+    if job_key:
+        jobs = db.query(Job).filter_by(job_key=job_key, state=JobState.SCRAPED).all()
+    else:
+        jobs = db.query(Job).filter_by(state=JobState.SCRAPED).all()
+
+    if not jobs:
+        print("No SCRAPED jobs found.")
+        return
+
+    for job in jobs:
+        score_job(job, profile, config, client, db)
+        db.refresh(job)
+        print(f"[{job.state.upper()}] {job.job_key} (final={job.final_score:.2f})")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Score SCRAPED jobs using Claude.")
+    parser.add_argument("--job-key", help="Score a single job by key")
+    args = parser.parse_args()
+
+    db = SessionLocal()
+    claude_client = anthropic.Anthropic()
+    try:
+        run_scorer(db, claude_client, job_key=args.job_key)
+    finally:
+        db.close()
