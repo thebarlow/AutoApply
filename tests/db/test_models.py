@@ -6,6 +6,8 @@ from sqlalchemy.exc import IntegrityError
 
 from db.models import Base, Job, Config, UserProfileModel
 from core.types import JobState
+from db.database import init_db, get_db, SessionLocal
+from db.seed import seed_default_config, DEFAULT_CONFIG
 
 
 @pytest.fixture
@@ -71,10 +73,6 @@ def test_create_user_profile(db_session):
     assert json.loads(result.data)["name"] == "Matt"
 
 
-from db.database import init_db, get_db, SessionLocal
-from db.seed import seed_default_config, DEFAULT_CONFIG
-
-
 def test_init_db_creates_tables(monkeypatch, tmp_path):
     import importlib
     from sqlalchemy import inspect as sa_inspect
@@ -121,6 +119,7 @@ def test_resume_prompt_template_seeded(db_session):
     assert row is not None
     assert "{profile}" in row.value
     assert "{job}" in row.value
+    assert row.value.format(profile="p", job="j")
 
 
 def test_cover_prompt_template_seeded(db_session):
@@ -129,6 +128,7 @@ def test_cover_prompt_template_seeded(db_session):
     assert row is not None
     assert "{profile}" in row.value
     assert "{job}" in row.value
+    assert row.value.format(profile="p", job="j")
 
 
 def test_contact_link_keys_seeded(db_session):
@@ -136,3 +136,4 @@ def test_contact_link_keys_seeded(db_session):
     for key in ("resume_github", "resume_linkedin", "resume_website"):
         row = db_session.query(Config).filter_by(key=key).first()
         assert row is not None
+        assert row.value == ""
