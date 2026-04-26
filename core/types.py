@@ -17,6 +17,24 @@ class JobState(str, Enum):
 
 
 @dataclass
+class WorkHistoryEntry:
+    company: str
+    title: str
+    start: str
+    end: str
+    summary: str
+
+
+@dataclass
+class EducationEntry:
+    institution: str
+    degree: str
+    field: str
+    graduated: str
+    gpa: float
+
+
+@dataclass
 class SearchConfig:
     keywords_whitelist: list[str] = field(default_factory=list)
     keywords_blacklist: list[str] = field(default_factory=list)
@@ -34,8 +52,8 @@ class UserProfile:
     phone: str = ""
     location: str = ""
     skills: list[str] = field(default_factory=list)
-    work_history: list[dict] = field(default_factory=list)
-    education: list[dict] = field(default_factory=list)
+    work_history: list[WorkHistoryEntry] = field(default_factory=list)
+    education: list[EducationEntry] = field(default_factory=list)
     target_salary_min: Optional[int] = None
     target_salary_max: Optional[int] = None
     target_roles: list[str] = field(default_factory=list)
