@@ -111,8 +111,8 @@ def test_determine_state_boundary_reject():
 
 
 def test_determine_state_boundary_approve():
-    # exactly at threshold → not approved (> not >=)
-    assert determine_state(0.8, reject_threshold=0.3, approve_threshold=0.8) == JobState.PENDING_REVIEW
+    # exactly at threshold → approved (>= semantics)
+    assert determine_state(0.8, reject_threshold=0.3, approve_threshold=0.8) == JobState.APPROVED
 
 
 import json as _json
@@ -208,3 +208,129 @@ def test_parse_claude_response_invalid_returns_none():
 def test_parse_claude_response_missing_keys_returns_none():
     result = parse_claude_response(json.dumps({"desirability_score": 0.8}))
     assert result is None
+
+
+from unittest.mock import MagicMock
+from scorer.scorer import score_job
+
+
+MOCK_CLAUDE_RESPONSE = _json.dumps({
+    "desirability_score": 0.85,
+    "fit_score": 0.75,
+    "desirability_justification": "Good salary, fully remote.",
+    "fit_justification": "Python and SQL match perfectly.",
+})
+
+MOCK_CLAUDE_RESPONSE_LOW = _json.dumps({
+    "desirability_score": 0.1,
+    "fit_score": 0.15,
+    "desirability_justification": "Poor salary, on-site only.",
+    "fit_justification": "Requires Java, candidate has none.",
+})
+
+MOCK_CLAUDE_RESPONSE_MID = _json.dumps({
+    "desirability_score": 0.5,
+    "fit_score": 0.55,
+    "desirability_justification": "Decent role.",
+    "fit_justification": "Partial skill match.",
+})
+
+
+@pytest.fixture
+def seeded_db(db_session):
+    """DB with profile and config seeded."""
+    db_session.add(UserProfileModel(data=_json.dumps(SAMPLE_PROFILE_DICT)))
+    for key, value in [("w1", "0.5"), ("w2", "0.5"), ("auto_reject_threshold", "0.3"), ("auto_approve_threshold", "0.8")]:
+        db_session.add(Config(key=key, value=value))
+    db_session.commit()
+    return db_session
+
+
+def make_job(job_key: str, state: JobState = JobState.SCRAPED) -> Job:
+    return Job(
+        job_key=job_key,
+        source="indeed",
+        title="Software Engineer",
+        company="TechCorp",
+        location="Remote",
+        salary="$130k",
+        description="Python and SQL required.",
+        url=f"https://example.com/{job_key}",
+        state=state,
+    )
+
+
+def mock_client(response_text: str):
+    client = MagicMock()
+    message = MagicMock()
+    message.content = [MagicMock(text=response_text)]
+    client.messages.create.return_value = message
+    return client
+
+
+def test_score_job_approved(seeded_db):
+    job = make_job("job_001")
+    seeded_db.add(job)
+    seeded_db.commit()
+
+    profile = load_user_profile(seeded_db)
+    config = load_config(seeded_db)
+    client = mock_client(MOCK_CLAUDE_RESPONSE)
+
+    score_job(job, profile, config, client, seeded_db)
+    seeded_db.refresh(job)
+
+    assert job.state == JobState.APPROVED
+    assert job.desirability_score == pytest.approx(0.85)
+    assert job.fit_score == pytest.approx(0.75)
+    assert job.final_score == pytest.approx(0.8)
+    justification = _json.loads(job.score_justification)
+    assert "desirability" in justification
+    assert "fit" in justification
+
+
+def test_score_job_rejected(seeded_db):
+    job = make_job("job_002")
+    seeded_db.add(job)
+    seeded_db.commit()
+
+    profile = load_user_profile(seeded_db)
+    config = load_config(seeded_db)
+    client = mock_client(MOCK_CLAUDE_RESPONSE_LOW)
+
+    score_job(job, profile, config, client, seeded_db)
+    seeded_db.refresh(job)
+
+    assert job.state == JobState.REJECTED
+    assert job.final_score == pytest.approx(0.125)
+
+
+def test_score_job_pending_review(seeded_db):
+    job = make_job("job_003")
+    seeded_db.add(job)
+    seeded_db.commit()
+
+    profile = load_user_profile(seeded_db)
+    config = load_config(seeded_db)
+    client = mock_client(MOCK_CLAUDE_RESPONSE_MID)
+
+    score_job(job, profile, config, client, seeded_db)
+    seeded_db.refresh(job)
+
+    assert job.state == JobState.PENDING_REVIEW
+
+
+def test_malformed_claude_response(seeded_db):
+    job = make_job("job_004")
+    seeded_db.add(job)
+    seeded_db.commit()
+
+    profile = load_user_profile(seeded_db)
+    config = load_config(seeded_db)
+    client = mock_client("not valid json")
+
+    score_job(job, profile, config, client, seeded_db)
+    seeded_db.refresh(job)
+
+    assert job.state == JobState.SCRAPED
+    assert job.final_score is None

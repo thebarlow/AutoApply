@@ -26,7 +26,7 @@ def determine_state(
     """Map a final score to a JobState based on thresholds."""
     if final < reject_threshold:
         return JobState.REJECTED
-    if final > approve_threshold:
+    if final >= approve_threshold:
         return JobState.APPROVED
     return JobState.PENDING_REVIEW
 
@@ -111,3 +111,51 @@ def parse_claude_response(raw: str) -> Optional[dict]:
         return data
     except (json.JSONDecodeError, AttributeError):
         return None
+
+
+def score_job(
+    job: Job,
+    profile: UserProfile,
+    config: dict[str, float],
+    client: anthropic.Anthropic,
+    db: Session,
+) -> None:
+    """Score a single job using Claude. Updates job in-place and commits."""
+    prompt = build_prompt(job, profile)
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text
+    except Exception as e:
+        warnings.warn(f"Claude API error for {job.job_key}: {e}")
+        return
+
+    parsed = parse_claude_response(raw)
+    if parsed is None:
+        warnings.warn(f"Unparseable Claude response for {job.job_key}: {raw!r}")
+        return
+
+    desirability = max(0.0, min(1.0, float(parsed["desirability_score"])))
+    fit = max(0.0, min(1.0, float(parsed["fit_score"])))
+
+    if desirability != parsed["desirability_score"]:
+        warnings.warn(f"desirability_score clamped for {job.job_key}")
+    if fit != parsed["fit_score"]:
+        warnings.warn(f"fit_score clamped for {job.job_key}")
+
+    final = compute_final_score(config["w1"], config["w2"], desirability, fit)
+
+    job.desirability_score = desirability
+    job.fit_score = fit
+    job.final_score = final
+    job.score_justification = json.dumps({
+        "desirability": parsed["desirability_justification"],
+        "fit": parsed["fit_justification"],
+    })
+    job.state = determine_state(final, config["auto_reject_threshold"], config["auto_approve_threshold"])
+
+    db.commit()
