@@ -102,8 +102,19 @@ def test_get_jobs_justification_parsed(client, db_session):
 
 # --- PATCH /api/jobs/{job_key}/state ---
 
-def test_patch_approve(client, db_session):
+def test_patch_approve(client, db_session, monkeypatch):
+    import types
+    import web.routers.jobs as jobs_router
+
     _make_job(db_session, "job_1", JobState.PENDING_REVIEW)
+
+    class _NoOpThread:
+        def __init__(self, **kwargs):
+            pass
+        def start(self):
+            pass
+
+    monkeypatch.setattr(jobs_router, "threading", types.SimpleNamespace(Thread=_NoOpThread), raising=False)
 
     resp = client.patch("/api/jobs/job_1/state", json={"state": "approved"})
     assert resp.status_code == 200
@@ -139,8 +150,8 @@ def test_approve_spawns_generation_thread(client, db_session, monkeypatch):
     spawned = []
 
     class MockThread:
-        def __init__(self, target, args, daemon):
-            spawned.append({"target": target.__name__, "args": args})
+        def __init__(self, **kwargs):
+            spawned.append({"target": kwargs["target"].__name__, "args": kwargs["args"]})
 
         def start(self):
             pass
