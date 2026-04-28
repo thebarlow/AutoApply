@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Job Scraper",
+  "version": "1.0.0",
+  "description": "Scrapes job listings from LinkedIn and Indeed.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://*.linkedin.com/*",
+    "https://*.indeed.com/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/*",
+        "https://www.linkedin.com/my-items/*"
+      ],
+      "js": ["content/injector.js", "content/linkedin.js"]
+    },
+    {
+      "matches": [
+        "https://www.indeed.com/jobs*",
+        "https://myjobs.indeed.com/*"
+      ],
+      "js": ["content/injector.js", "content/indeed.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Job Scraper"
+  }
+}
