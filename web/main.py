@@ -7,12 +7,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from web.routers import jobs
+from web.routers import scraper
 
 app = FastAPI(title="Auto Apply")
 
 _STATIC = Path(__file__).parent / "static"
 
 app.include_router(jobs.router)
+app.include_router(scraper.router)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 
