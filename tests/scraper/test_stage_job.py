@@ -63,6 +63,14 @@ def test_stage_job_returns_duplicate_for_same_url(client, db_session):
     assert db_session.query(Job).count() == 1  # still only one record
 
 
+def test_stage_job_returns_duplicate_for_same_job_key(client, db_session):
+    client.post("/api/scraper/stage-job", json=_VALID)
+    response = client.post("/api/scraper/stage-job", json=_VALID)
+    assert response.status_code == 200
+    assert response.json() == {"status": "duplicate", "job_key": "linkedin_123"}
+    assert db_session.query(Job).count() == 1
+
+
 def test_stage_job_returns_422_for_missing_title(client):
     payload = {k: v for k, v in _VALID.items() if k != "title"}
     response = client.post("/api/scraper/stage-job", json=payload)

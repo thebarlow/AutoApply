@@ -69,6 +69,7 @@ class StageJobRequest(BaseModel):
 
 @router.post("/stage-job")
 def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str, str]:
+    # scraped_at is accepted for client compatibility but not stored; ScrapedJob has no such field.
     job = ScrapedJob(
         source=body.source,
         job_key=body.job_key,
