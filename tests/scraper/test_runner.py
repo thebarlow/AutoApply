@@ -164,3 +164,18 @@ def test_load_max_jobs_from_db(db_session):
     db_session.add(Config(key="max_jobs_per_source", value="25"))
     db_session.commit()
     assert load_max_jobs(db_session) == 25
+
+
+def test_load_search_config_target_salary_min(db_session):
+    # "0" should become None (falsy int treated as no minimum)
+    db_session.add(Config(key="target_salary_min", value="0"))
+    db_session.commit()
+    config = load_search_config(db_session)
+    assert config.target_salary_min is None
+
+    # Valid non-zero integer should be preserved
+    db_session.query(Config).filter_by(key="target_salary_min").delete()
+    db_session.add(Config(key="target_salary_min", value="100000"))
+    db_session.commit()
+    config2 = load_search_config(db_session)
+    assert config2.target_salary_min == 100000
