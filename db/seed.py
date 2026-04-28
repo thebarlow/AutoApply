@@ -79,6 +79,8 @@ DEFAULT_CONFIG: dict[str, str] = {
     - Do not include a sign-off, name, or contact information at the end — those are added automatically.
     - Do not invent experience or skills not in the candidate profile.
     """),
+    "max_jobs_per_source": "50",
+    "scraper_sources": "remotive,remoteok",
 }
 
 

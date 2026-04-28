@@ -137,3 +137,14 @@ def test_contact_link_keys_seeded(db_session):
         row = db_session.query(Config).filter_by(key=key).first()
         assert row is not None
         assert row.value == ""
+
+
+def test_scraper_config_keys_seeded(db_session):
+    seed_default_config(db_session)
+    row = db_session.query(Config).filter_by(key="max_jobs_per_source").first()
+    assert row is not None
+    assert row.value == "50"
+
+    row2 = db_session.query(Config).filter_by(key="scraper_sources").first()
+    assert row2 is not None
+    assert row2.value == "remotive,remoteok"
