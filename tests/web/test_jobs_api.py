@@ -34,7 +34,14 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _make_job(db_session, job_key: str, state: JobState, final_score: float = 0.75) -> Job:
+def _make_job(
+    db_session,
+    job_key: str,
+    state: JobState,
+    final_score: float = 0.75,
+    description: str | None = None,
+    remote: bool | None = None,
+) -> Job:
     job = Job(
         job_key=job_key,
         source="indeed",
@@ -51,6 +58,8 @@ def _make_job(db_session, job_key: str, state: JobState, final_score: float = 0.
             "desirability": "Good salary and remote.",
             "fit": "Strong Python match.",
         }),
+        description=description,
+        remote=remote,
     )
     db_session.add(job)
     db_session.commit()
@@ -199,23 +208,20 @@ def test_get_jobs_includes_url(client, db_session):
 
 
 def test_get_jobs_includes_description(client, db_session):
-    job = Job(
-        job_key="job_desc",
-        source="indeed",
-        title="Engineer",
-        company="Acme",
-        url="https://indeed.com/job/job_desc",
-        state=JobState.PENDING_REVIEW.value,
-        description="We are looking for a software engineer.",
-        remote=True,
-    )
-    db_session.add(job)
-    db_session.commit()
+    _make_job(db_session, "job_desc", JobState.PENDING_REVIEW, description="We are looking for a software engineer.")
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job_data = resp.json()[0]
     assert job_data["description"] == "We are looking for a software engineer."
+
+
+def test_get_jobs_remote_true_when_set(client, db_session):
+    _make_job(db_session, "job_remote", JobState.PENDING_REVIEW, remote=True)
+
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    job_data = resp.json()[0]
     assert job_data["remote"] is True
 
 
