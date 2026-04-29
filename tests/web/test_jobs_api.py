@@ -187,3 +187,42 @@ def test_reject_does_not_spawn_thread(client, db_session, monkeypatch):
     resp = client.patch("/api/jobs/job_rej/state", json={"state": "rejected"})
     assert resp.status_code == 200
     assert len(spawned) == 0
+
+
+def test_get_jobs_includes_url(client, db_session):
+    _make_job(db_session, "job_url", JobState.PENDING_REVIEW)
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    job = resp.json()[0]
+    assert "url" in job
+    assert job["url"] == "https://indeed.com/job/job_url"
+
+
+def test_get_jobs_includes_description(client, db_session):
+    job = Job(
+        job_key="job_desc",
+        source="indeed",
+        title="Engineer",
+        company="Acme",
+        url="https://indeed.com/job/job_desc",
+        state=JobState.PENDING_REVIEW.value,
+        description="We are looking for a software engineer.",
+        remote=True,
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    job_data = resp.json()[0]
+    assert job_data["description"] == "We are looking for a software engineer."
+    assert job_data["remote"] is True
+
+
+def test_get_jobs_remote_none_when_not_set(client, db_session):
+    _make_job(db_session, "job_noremote", JobState.PENDING_REVIEW)
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    job_data = resp.json()[0]
+    assert "remote" in job_data
+    assert job_data["remote"] is None
