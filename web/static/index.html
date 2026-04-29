@@ -52,6 +52,16 @@
     card.dataset.key = job.job_key;
 
     const just = job.score_justification || {};
+    const linkHtml = job.url
+      ? `<a class="job-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">&#x2197;</a>`
+      : '';
+    const remotePill = job.remote === true
+      ? `<span class="pill pill-remote">Remote</span>`
+      : '';
+    const descHtml = job.description
+      ? `<div class="description" id="desc-${esc(job.job_key)}">${esc(job.description)}</div>
+         <button class="description-toggle" data-target="desc-${esc(job.job_key)}">Read more</button>`
+      : '';
 
     card.innerHTML = `
       <div class="card-actions">
@@ -60,14 +70,19 @@
       </div>
       <div class="card-header">
         <span class="job-title">${esc(job.title || '(no title)')}</span>
-        <span class="final-score ${scoreClass(job.final_score)}">${pct(job.final_score)}</span>
+        <span style="display:flex;align-items:baseline;gap:0.25rem">
+          <span class="final-score ${scoreClass(job.final_score)}">${pct(job.final_score)}</span>
+          ${linkHtml}
+        </span>
       </div>
       <div class="card-meta">${esc(job.company || '')}${job.location ? ' · ' + esc(job.location) : ''}</div>
-      <div class="card-detail">${esc(job.salary || '')}${job.employment_type ? ' · ' + esc(job.employment_type) : ''}${job.posted_at ? ' · ' + esc(job.posted_at) : ''}</div>
+      <div class="card-detail">${esc(job.salary || '')}${job.posted_at ? ' · ' + esc(job.posted_at) : ''}</div>
       <div class="pills">
         <span class="pill">Desirability ${pct(job.desirability_score)}</span>
         <span class="pill">Fit ${pct(job.fit_score)}</span>
+        ${remotePill}
       </div>
+      ${descHtml}
       <div class="justification">
         ${just.desirability ? '<p><strong>Desirability:</strong> ' + esc(just.desirability) + '</p>' : ''}
         ${just.fit         ? '<p><strong>Fit:</strong> '         + esc(just.fit)         + '</p>' : ''}
@@ -75,8 +90,16 @@
       <div class="card-feedback"></div>
     `;
 
-    card.querySelectorAll('.btn').forEach(btn => {
+    card.querySelectorAll('.btn[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleAction(card, btn.dataset.action));
+    });
+
+    card.querySelectorAll('.description-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const desc = document.getElementById(btn.dataset.target);
+        const expanded = desc.classList.toggle('expanded');
+        btn.textContent = expanded ? 'Show less' : 'Read more';
+      });
     });
 
     return card;
