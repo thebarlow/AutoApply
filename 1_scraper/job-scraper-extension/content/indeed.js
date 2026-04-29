@@ -10,17 +10,17 @@ if (_IS_SEARCH || _IS_SAVED) {
     getJobData(card) {
       if (_IS_SEARCH) {
         const anchor = card.querySelector("h2.jobTitle a, .jobTitle a");
-        const rawUrl = anchor ? new URL(anchor.href, location.href).href : "";
+        const rawUrl = anchor ? new URL(anchor.href, window.location.href).href : "";
         const jkMatch = rawUrl.match(/[?&]jk=([a-f0-9]+)/i);
         const job_key = jkMatch ? `indeed_${jkMatch[1]}` : `indeed_${Date.now()}`;
         const title = anchor?.innerText?.trim() ?? "";
         const company = card.querySelector(
           ".companyName, [data-testid='company-name']"
         )?.innerText?.trim() ?? "";
-        const location = card.querySelector(
+        const jobLocation = card.querySelector(
           ".companyLocation, [data-testid='text-location']"
         )?.innerText?.trim() ?? "";
-        return { source: "indeed", job_key, title, company, location, url: rawUrl };
+        return { source: "indeed", job_key, title, company, location: jobLocation, url: rawUrl };
       } else {
         // myjobs.indeed.com — same DOM as retired extension
         const jobKey = card.getAttribute("data-jobkey") ?? "";
@@ -29,8 +29,8 @@ if (_IS_SEARCH || _IS_SAVED) {
         const url = anchor?.href ?? "";
         const spans = card.querySelectorAll(".atw-JobInfo-companyLocation span");
         const company = spans[0]?.innerText?.trim() ?? "";
-        const location = spans[1]?.innerText?.trim() ?? "";
-        return { source: "indeed", job_key: `indeed_${jobKey}`, title, company, location, url };
+        const jobLocation = spans[1]?.innerText?.trim() ?? "";
+        return { source: "indeed", job_key: `indeed_${jobKey}`, title, company, location: jobLocation, url };
       }
     },
 
