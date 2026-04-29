@@ -1,63 +1,44 @@
 # Scraper Context
 
-Collects job postings from Indeed (browser extension) and remote job board APIs (n8n), then stages them as JSON files in `../jobs/pending/`.
+Collects job postings from LinkedIn and Indeed via a browser extension, then stages them as DB records (`state=scraped`) via `POST /api/scraper/stage-job`. Also pulls from Remotive and RemoteOK via `POST /api/scraper/run`.
 
 ## Extension Architecture
 
 ```
-indeed-jobs-extension/
-├── manifest.json           # MV3 manifest — permissions, content script routes
+job-scraper-extension/
+├── manifest.json               # MV3 (Firefox-compatible: background.scripts)
 ├── background/
-│   └── service_worker.js   # Orchestration: scrape list → open tabs → collect descriptions → POST webhook
+│   └── service_worker.js       # Dedup (chrome.storage.local) + POST to FastAPI
 ├── content/
-│   ├── saved_jobs.js       # Injected on myjobs.indeed.com — responds to GET_JOBS, returns job card data
-│   └── job_detail.js       # Injected on /viewjob* — waits for #jobDescriptionText, reports back via runtime.sendMessage
-├── popup/
-│   ├── popup.html
-│   └── popup.js            # Triggers START_SCRAPE, displays live status from service worker
-└── options/
-    ├── options.html
-    └── options.js          # Lets user configure webhook URL (stored in chrome.storage.sync)
+│   ├── injector.js             # MutationObserver, button injection, orchestration
+│   ├── linkedin.js             # LinkedIn search + saved jobs selectors
+│   └── indeed.js               # Indeed search + saved jobs selectors
+└── popup/
+    ├── popup.html
+    └── popup.js                # FastAPI base URL config + clear dedup history
 ```
 
-## Message Flow
+## How It Works
 
-1. User clicks "Scrape" in popup → popup sends `START_SCRAPE` to service worker
-2. Service worker sends `GET_JOBS` to `saved_jobs.js` → gets job card list
-3. For each new job, service worker opens a hidden `/viewjob` tab
-4. `job_detail.js` extracts `#jobDescriptionText`, sends `JOB_DESCRIPTION` back to service worker
-5. Service worker POSTs full job payload to n8n webhook; marks job key as sent in `chrome.storage.local`
-
-**Deduplication:** Sent job keys persisted in `chrome.storage.local` under `sentJobKeys`. Already-sent jobs are skipped.
-
-## Key Configuration
-
-- Default webhook URL: `http://localhost:5678/webhook/indeed-jobs` (overridable via Options page, stored in `chrome.storage.sync`)
-- Tab open delay: 600–1400ms random jitter between job tabs
-- Description timeout: 10s in `job_detail.js`, 20s in service worker
-- `config.json`: search keywords, location, remote filter, enabled job board sources
+1. Extension injects a "Scrape" button on each job card (LinkedIn search, Indeed search, Indeed saved jobs)
+2. On click: programmatically clicks the card to load the detail pane, waits for description to appear, extracts job data
+3. POSTs to `POST /api/scraper/stage-job` → `save_jobs()` → SQLite DB (`state=scraped`)
+4. Dedup: `chrome.storage.local` (extension-side by job_key) + `save_jobs()` (server-side by URL)
+5. Button updates inline: "✓ Scraped", "✓ Already staged", "✗ Timeout", "✗ Server error", "✗ Parse error"
 
 ## Loading the Extension
 
-- Chrome: `chrome://extensions` → Enable Developer Mode → Load Unpacked → select `indeed-jobs-extension/`
-- Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → select `indeed-jobs-extension/manifest.json`
+Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → select `job-scraper-extension/manifest.json`
 
-No build step — plain ES2020+ JS, no transpilation.
+## Known Issues (open)
+
+- **LinkedIn bookmark not firing** — the `bookmarkCard` function targets `button[aria-label*='Save job']` within the card, but LinkedIn's save button does not appear in the card DOM. Needs re-investigation to find the correct element and trigger.
+- **LinkedIn saved jobs page (`/my-items/saved-jobs/`) has no buttons** — the card selector `.entity-result` does not match the current saved jobs DOM. Needs live DOM inspection to find the correct selector.
+
+## API Sources (automated)
+
+`POST /api/scraper/run` — triggers Remotive + RemoteOK scrape in a background thread. Sources configured via `scraper_sources` config key.
 
 ## Output
 
-Job JSON files written to `../jobs/pending/` with schema:
-```json
-{
-  "job_key": "2069747",
-  "source": "remotive",
-  "title": "...",
-  "company": "...",
-  "location": "...",
-  "remote": true,
-  "description": "...",
-  "url": "...",
-  "posted_at": "...",
-  "scraped_at": "..."
-}
-```
+All scraped jobs written to SQLite DB with `state=scraped`. Schema matches `ScrapedJob` dataclass in `scraper/base.py`.
