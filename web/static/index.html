@@ -59,8 +59,8 @@
       ? `<span class="pill pill-remote">Remote</span>`
       : '';
     const descHtml = job.description
-      ? `<div class="description" id="desc-${esc(job.job_key)}">${esc(job.description)}</div>
-         <button class="description-toggle" data-target="desc-${esc(job.job_key)}">Read more</button>`
+      ? `<div class="description" id="${safeId(job.job_key)}">${esc(job.description)}</div>
+         <button class="description-toggle" data-target="${safeId(job.job_key)}">Read more</button>`
       : '';
 
     card.innerHTML = `
@@ -97,6 +97,7 @@
     card.querySelectorAll('.description-toggle').forEach(btn => {
       btn.addEventListener('click', () => {
         const desc = document.getElementById(btn.dataset.target);
+        if (!desc) return;
         const expanded = desc.classList.toggle('expanded');
         btn.textContent = expanded ? 'Show less' : 'Read more';
       });
@@ -151,6 +152,10 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function safeId(str) {
+    return 'desc-' + String(str).replace(/[^A-Za-z0-9_-]/g, '_');
   }
 
   async function load() {
