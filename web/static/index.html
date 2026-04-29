@@ -28,6 +28,7 @@
   const badge = document.getElementById('nav-badge');
 
   function scoreClass(s) {
+    if (s == null) return 'score-none';
     if (s >= 0.8) return 'score-green';
     if (s >= 0.5) return 'score-amber';
     return 'score-red';
@@ -53,13 +54,13 @@
 
     const just = job.score_justification || {};
     const linkHtml = job.url
-      ? `<a class="job-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">&#x2197;</a>`
+      ? `<a class="job-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">View Post</a>`
       : '';
     const remotePill = job.remote === true
       ? `<span class="pill pill-remote">Remote</span>`
       : '';
     const descHtml = job.description
-      ? `<div class="description" id="${safeId(job.job_key)}">${esc(job.description)}</div>
+      ? `<div class="description" id="${safeId(job.job_key)}">${esc(job.description).replace(/\n/g, '<br>')}</div>
          <button class="description-toggle" data-target="${safeId(job.job_key)}">Read more</button>`
       : '';
 
