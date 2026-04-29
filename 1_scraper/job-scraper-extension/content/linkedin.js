@@ -4,7 +4,7 @@ const _IS_SAVED = /^\/my-items\/saved-jobs/.test(location.pathname);
 if (_IS_SEARCH || _IS_SAVED) {
   registerSource({
     cardSelector: _IS_SEARCH
-      ? ".jobs-search-results__list-item"
+      ? ".scaffold-layout__list-item"
       : ".entity-result",
 
     getJobData(card) {
@@ -22,7 +22,7 @@ if (_IS_SEARCH || _IS_SAVED) {
         ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle, .entity-result__primary-subtitle"
       )?.innerText?.trim() ?? "";
       const jobLocation = card.querySelector(
-        ".job-card-container__metadata-item, .job-card-list__footer-item, .entity-result__secondary-subtitle"
+        ".artdeco-entity-lockup__caption li, .entity-result__secondary-subtitle"
       )?.innerText?.trim() ?? "";
       return { source: "linkedin", job_key, title, company, location: jobLocation, url };
     },
