@@ -21,10 +21,10 @@ if (_IS_SEARCH || _IS_SAVED) {
       const company = card.querySelector(
         ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle, .entity-result__primary-subtitle"
       )?.innerText?.trim() ?? "";
-      const location = card.querySelector(
+      const jobLocation = card.querySelector(
         ".job-card-container__metadata-item, .job-card-list__footer-item, .entity-result__secondary-subtitle"
       )?.innerText?.trim() ?? "";
-      return { source: "linkedin", job_key, title, company, location, url };
+      return { source: "linkedin", job_key, title, company, location: jobLocation, url };
     },
 
     getDescription() {
