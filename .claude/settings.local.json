@@ -25,7 +25,13 @@
       "Bash(pandoc jobs/outputs/remotive_2069747_cover.md -o jobs/outputs/remotive_2069747_cover.pdf --pdf-engine=xelatex --template=2_generator/cover_template.tex)",
       "Bash(start \"\" \"jobs/outputs/remotive_2069747_cover.pdf\")",
       "Bash(cp \"C:/Users/barlo/Projects/auto_apply/2_generator/resume_template.tex\" \"/c/Users/barlo/.claude/skills/generate-resume/references/templates/resume_template.tex\")",
-      "Bash(cp \"C:/Users/barlo/Projects/auto_apply/2_generator/cover_template.tex\" \"/c/Users/barlo/.claude/skills/generate-resume/references/templates/cover_template.tex\")"
+      "Bash(cp \"C:/Users/barlo/Projects/auto_apply/2_generator/cover_template.tex\" \"/c/Users/barlo/.claude/skills/generate-resume/references/templates/cover_template.tex\")",
+      "Bash(cp \"C:/Users/barlo/.claude/skills/generate-resume/references/templates/resume_template.tex\" \"C:/Users/barlo/Projects/auto_apply/generator/templates/resume_template.tex\")",
+      "Bash(cp \"C:/Users/barlo/.claude/skills/generate-resume/references/templates/cover_template.tex\" \"C:/Users/barlo/Projects/auto_apply/generator/templates/cover_template.tex\")",
+      "Bash(pytest *)",
+      "Bash(sqlite3 *)",
+      "Bash(git -C \"C:/Users/barlo/Projects/auto_apply\" add tests/web/test_jobs_api.py)",
+      "Bash(git -C \"C:/Users/barlo/Projects/auto_apply\" commit -m \"[test] Split description/remote tests and extend _make_job helper\")"
     ]
   }
 }

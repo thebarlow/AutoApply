@@ -4,10 +4,9 @@
 
 ```
 auto_apply/
-├── 1_scraper/                  # Stage 1: collect job postings
-│   ├── indeed-jobs-extension/  # Firefox/Chrome MV3 extension
-│   ├── config.json             # Search keywords, sources, filters
+├── browser-extension/          # Stage 1a: Firefox/Chrome MV3 extension (LinkedIn + Indeed)
 │   └── CONTEXT.md
+├── scraper/                    # Stage 1b: API scrapers (Remotive, RemoteOK)
 ├── 3_applicator/               # Stage 3: submit applications (TBD)
 │   └── CONTEXT.md
 ├── core/                       # Shared Python types (JobState, SearchConfig, UserProfile)
@@ -25,23 +24,21 @@ auto_apply/
 ## Data Flow
 
 ```
-Browser Extension (1_scraper)
-        │  POST job JSON
-        ▼
-  n8n Webhook (local)
-        │  writes
-        ▼
-  jobs/pending/*.json
-        │  read by
-        ▼
+browser-extension                  scraper/ (Remotive, RemoteOK)
+        │  POST /api/scraper/stage-job     │  run_scraper()
+        └──────────────┬────────────────────┘
+                       ▼
+              SQLite DB (state=scraped)
+                       │  read by
+                       ▼
   generate-resume skill (~/.claude/skills/generate-resume/)
-        │  calls Claude API, pandoc
-        ▼
+                       │  calls Claude API, pandoc
+                       ▼
   jobs/outputs/{key}_resume.md
   jobs/outputs/{key}_resume.pdf
   jobs/outputs/{key}_cover.md
-        │  job JSON moved to
-        ▼
+                       │  job JSON moved to
+                       ▼
   jobs/processed/{key}.json
 ```
 
@@ -49,8 +46,8 @@ Browser Extension (1_scraper)
 
 | Module | Responsibility |
 |---|---|
-| `1_scraper/indeed-jobs-extension/` | Scrapes Indeed saved jobs page; extracts job descriptions; deduplicates; POSTs to n8n |
-| n8n (local, not in repo) | Receives webhook payloads from extension and remote job board APIs; writes JSON to `jobs/pending/` |
+| `browser-extension/` | MV3 extension; injects Scrape buttons on LinkedIn and Indeed; deduplicates; POSTs job data to FastAPI |
+| `scraper/` | API scrapers for Remotive and RemoteOK; reads search config from DB; saves scraped jobs to DB |
 | `~/.claude/skills/generate-resume/` | Reads pending jobs; prompts Claude for tailored resume and cover letter; renders PDF via Pandoc; archives job JSON |
 | `core/types.py` | Shared Python types: `JobState` enum, `SearchConfig` dataclass, `UserProfile` dataclass |
 | `db/` | SQLAlchemy ORM models (`Job`, `Config`, `UserProfileModel`), engine setup, default config seeding |
