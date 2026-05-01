@@ -9,16 +9,19 @@ from pathlib import Path
 from typing import Any, Optional
 
 import anthropic
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
 from db.database import SessionLocal
 from db.models import Config, Job, UserProfileModel
 
+load_dotenv()
+
 _GENERATOR_DIR = Path(__file__).parent
-_OUTPUTS_DIR = _GENERATOR_DIR.parent / "jobs" / "outputs"
-RESUME_TEMPLATE_PATH = _GENERATOR_DIR / "templates" / "resume_template.tex"
-COVER_TEMPLATE_PATH = _GENERATOR_DIR / "templates" / "cover_template.tex"
+_OUTPUTS_DIR = _GENERATOR_DIR / "outputs"
+RESUME_TEMPLATE_PATH = _GENERATOR_DIR / "resume_template.tex"
+COVER_TEMPLATE_PATH = _GENERATOR_DIR / "cover_template.tex"
 
 
 def _render_profile(profile: UserProfile) -> str:

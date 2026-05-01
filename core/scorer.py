@@ -8,7 +8,10 @@ import warnings
 from typing import Optional
 
 import anthropic
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
+
+load_dotenv()
 
 from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
 from db.database import SessionLocal

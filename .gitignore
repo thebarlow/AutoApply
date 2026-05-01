@@ -2,9 +2,8 @@
 .env
 
 # Job data
-jobs/pending/
-jobs/processed/
-jobs/outputs/
+jobs/
+generator/outputs/
 
 # Trigger.dev
 .trigger

@@ -50,7 +50,7 @@ SAMPLE_PROFILE_DICT = {
 
 
 def test_seed_profile_inserts(db_session, tmp_path):
-    from scripts.seed_profile import seed_profile
+    from db.seed_profile import seed_profile
 
     profile_file = tmp_path / "profile.json"
     profile_file.write_text(json.dumps(SAMPLE_PROFILE_DICT))
@@ -65,7 +65,7 @@ def test_seed_profile_inserts(db_session, tmp_path):
 
 
 def test_seed_profile_upserts(db_session, tmp_path):
-    from scripts.seed_profile import seed_profile
+    from db.seed_profile import seed_profile
 
     profile_file = tmp_path / "profile.json"
     profile_file.write_text(json.dumps(SAMPLE_PROFILE_DICT))
@@ -77,7 +77,7 @@ def test_seed_profile_upserts(db_session, tmp_path):
     assert count == 1
 
 
-from scorer.scorer import compute_final_score, determine_state
+from core.scorer import compute_final_score, determine_state
 from core.types import JobState
 
 
@@ -117,7 +117,7 @@ def test_determine_state_boundary_approve():
 
 import json as _json
 from db.models import Config, Job, UserProfileModel
-from scorer.scorer import load_user_profile, load_config
+from core.scorer import load_user_profile, load_config
 
 
 def test_load_user_profile(db_session):
@@ -148,7 +148,7 @@ def test_load_config(db_session):
     assert config["auto_approve_threshold"] == pytest.approx(0.75)
 
 
-from scorer.scorer import build_prompt, parse_claude_response
+from core.scorer import build_prompt, parse_claude_response
 
 
 def test_build_prompt_contains_job_fields():
@@ -211,7 +211,7 @@ def test_parse_claude_response_missing_keys_returns_none():
 
 
 from unittest.mock import MagicMock
-from scorer.scorer import score_job
+from core.scorer import score_job
 
 
 MOCK_CLAUDE_RESPONSE = _json.dumps({
@@ -336,7 +336,7 @@ def test_malformed_claude_response(seeded_db):
     assert job.final_score is None
 
 
-from scorer.scorer import run_scorer
+from core.scorer import run_scorer
 
 
 def test_score_batch_skips_non_scraped(seeded_db):

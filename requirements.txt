@@ -6,7 +6,5 @@ python-dotenv>=1.0
 anthropic>=0.40
 playwright>=1.49
 playwright-stealth>=1.0
-gspread>=6.1
-google-auth>=2.37
 pytest>=8.0
 pytest-asyncio>=0.24
