@@ -15,7 +15,7 @@ from generator.generator import generate_job
 
 router = APIRouter(prefix="/api/jobs")
 
-_ALLOWED_PATCH_STATES = {JobState.APPROVED.value, JobState.REJECTED.value}
+_ALLOWED_PATCH_STATES = {JobState.APPLIED.value, JobState.REJECTED.value}
 
 
 class StateUpdate(BaseModel):
@@ -48,7 +48,7 @@ def _serialize(job: Job) -> dict[str, Any]:
 
 
 @router.get("")
-def get_jobs(state: str = JobState.PENDING_REVIEW.value, db: Session = Depends(get_db)):
+def get_jobs(state: str = JobState.PENDING.value, db: Session = Depends(get_db)):
     jobs = (
         db.query(Job)
         .filter(Job.state == state)
@@ -71,7 +71,7 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(job)
 
-    if job.state == JobState.APPROVED.value:
+    if job.state == JobState.APPLIED.value:
         t = threading.Thread(target=generate_job, args=(job_key,), daemon=True)
         t.start()
 

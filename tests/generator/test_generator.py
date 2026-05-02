@@ -63,7 +63,7 @@ def _make_job_obj() -> Job:
         job_key="test_job",
         source="indeed",
         url="https://example.com/1",
-        state=JobState.APPROVED.value,
+        state=JobState.PENDING.value,
         title="Senior Software Engineer",
         company="Acme Corp",
         location="Remote",
@@ -149,7 +149,7 @@ def _seed_db(db_session) -> None:
         job_key="test_job",
         source="indeed",
         url="https://example.com/job/1",
-        state=JobState.APPROVED.value,
+        state=JobState.PENDING.value,
         title="SWE",
         company="Acme",
         description="Python required.",
@@ -168,7 +168,7 @@ def test_generate_job_transitions_to_generated(db_session, monkeypatch, tmp_path
 
     db_session.expire_all()
     job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.state == JobState.GENERATED.value
+    assert job.state == JobState.PENDING.value
     assert job.resume_path is not None
     assert job.cover_path is not None
 
@@ -218,7 +218,7 @@ def test_generate_job_fails_if_template_missing(db_session, monkeypatch, tmp_pat
         job_key="no_tpl",
         source="indeed",
         url="https://example.com/job/2",
-        state=JobState.APPROVED.value,
+        state=JobState.PENDING.value,
         title="SWE",
         company="Acme",
     ))
