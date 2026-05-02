@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import re
+
+import pdfplumber
 
 
 def markdown_to_profile(md_text: str) -> dict:
@@ -145,5 +148,22 @@ def _extract_education(text: str) -> list[dict]:
 
 
 def pdf_to_markdown(pdf_bytes: bytes) -> str:
-    """Convert raw PDF bytes to a Markdown string (not yet implemented)."""
-    raise NotImplementedError
+    """Convert raw PDF bytes to a Markdown string."""
+    lines: list[str] = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            for line in text.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    lines.append("")
+                    continue
+                if stripped.isupper() and len(stripped) < 50:
+                    lines.append(f"## {stripped.title()}")
+                elif stripped.startswith(("•", "·", "-", "*")):
+                    lines.append(f"- {stripped.lstrip('•·-* ')}")
+                elif line.startswith("  ") and stripped:
+                    lines.append(f"- {stripped}")
+                else:
+                    lines.append(stripped)
+    return "\n".join(lines)

@@ -75,3 +75,42 @@ def test_returns_defaults_for_missing_sections():
     assert result["target_roles"] == []
     assert result["target_salary_min"] is None
     assert result["target_salary_max"] is None
+
+
+from unittest.mock import MagicMock, patch
+
+
+def _make_mock_pdf(pages_text: list):
+    mock_pdf = MagicMock()
+    mock_pages = []
+    for text in pages_text:
+        page = MagicMock()
+        page.extract_text.return_value = text
+        mock_pages.append(page)
+    mock_pdf.pages = mock_pages
+    mock_pdf.__enter__ = lambda s: s
+    mock_pdf.__exit__ = MagicMock(return_value=False)
+    return mock_pdf
+
+
+def test_pdf_to_markdown_extracts_text():
+    from core.profile_parser import pdf_to_markdown
+
+    page_text = "EXPERIENCE\nSoftware Engineer at Acme (2022-2024)\n• Built APIs"
+    mock_pdf = _make_mock_pdf([page_text])
+
+    with patch("core.profile_parser.pdfplumber.open", return_value=mock_pdf):
+        result = pdf_to_markdown(b"fake-pdf-bytes")
+
+    assert "## Experience" in result
+    assert "Software Engineer" in result
+    assert "- Built APIs" in result
+
+
+def test_pdf_to_markdown_handles_empty_page():
+    from core.profile_parser import pdf_to_markdown
+
+    mock_pdf = _make_mock_pdf([None])
+    with patch("core.profile_parser.pdfplumber.open", return_value=mock_pdf):
+        result = pdf_to_markdown(b"fake-pdf-bytes")
+    assert result == ""
