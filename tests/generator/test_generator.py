@@ -63,7 +63,7 @@ def _make_job_obj() -> Job:
         job_key="test_job",
         source="indeed",
         url="https://example.com/1",
-        state=JobState.PENDING.value,
+        state=JobState.SCRAPED.value,
         title="Senior Software Engineer",
         company="Acme Corp",
         location="Remote",
@@ -119,8 +119,10 @@ def test_strip_header_block_passthrough_when_no_header():
 
 def test_call_claude_returns_stripped_text():
     mock_client = MagicMock()
-    mock_client.messages.create.return_value.content = [MagicMock(text="  Hello world  ")]
-    result = call_claude("some prompt", mock_client)
+    choice = MagicMock()
+    choice.message.content = "  Hello world  "
+    mock_client.chat.completions.create.return_value = MagicMock(choices=[choice])
+    result = call_claude("some prompt", mock_client, "test-model")
     assert result == "Hello world"
 
 
@@ -149,7 +151,7 @@ def _seed_db(db_session) -> None:
         job_key="test_job",
         source="indeed",
         url="https://example.com/job/1",
-        state=JobState.PENDING.value,
+        state=JobState.SCRAPED.value,
         title="SWE",
         company="Acme",
         description="Python required.",
@@ -158,9 +160,11 @@ def _seed_db(db_session) -> None:
 
 
 def test_generate_job_transitions_to_generated(db_session, monkeypatch, tmp_path):
+    mock_client = MagicMock()
     _seed_db(db_session)
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client: "## Profile\nContent here")
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Profile\nContent here")
     monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
     monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
 
@@ -168,14 +172,16 @@ def test_generate_job_transitions_to_generated(db_session, monkeypatch, tmp_path
 
     db_session.expire_all()
     job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.state == JobState.PENDING.value
+    assert job.state == JobState.GENERATED.value
     assert job.resume_path is not None
     assert job.cover_path is not None
 
 
 def test_generate_job_transitions_to_failed_on_claude_error(db_session, monkeypatch, tmp_path):
+    mock_client = MagicMock()
     _seed_db(db_session)
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
 
     def _raise(*a, **kw):
         raise RuntimeError("API error")
@@ -190,9 +196,11 @@ def test_generate_job_transitions_to_failed_on_claude_error(db_session, monkeypa
 
 
 def test_generate_job_transitions_to_failed_on_render_error(db_session, monkeypatch, tmp_path):
+    mock_client = MagicMock()
     _seed_db(db_session)
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client: "## Profile\nContent here")
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Profile\nContent here")
 
     def _raise(*a, **kw):
         raise RuntimeError("Pandoc failed")
@@ -207,6 +215,7 @@ def test_generate_job_transitions_to_failed_on_render_error(db_session, monkeypa
 
 
 def test_generate_job_fails_if_template_missing(db_session, monkeypatch, tmp_path):
+    mock_client = MagicMock()
     profile_data = {
         "name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100",
         "location": "Remote", "skills": [], "work_history": [], "education": [],
@@ -218,12 +227,13 @@ def test_generate_job_fails_if_template_missing(db_session, monkeypatch, tmp_pat
         job_key="no_tpl",
         source="indeed",
         url="https://example.com/job/2",
-        state=JobState.PENDING.value,
+        state=JobState.SCRAPED.value,
         title="SWE",
         company="Acme",
     ))
     db_session.commit()
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
 
     generate_job("no_tpl", db=db_session)
 

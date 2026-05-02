@@ -10,6 +10,7 @@ class JobState(str, Enum):
     SCRAPED = "scraped"
     APPROVED = "approved"
     PENDING_REVIEW = "pending_review"
+    GENERATED = "generated"
     APPLIED = "applied"
     REJECTED = "rejected"
     FAILED = "failed"

@@ -8,10 +8,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
-import anthropic
+import openai
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
+from core.llm import get_openai_client
 from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
 from db.database import SessionLocal
 from db.models import Config, Job, UserProfileModel
@@ -20,8 +21,8 @@ load_dotenv()
 
 _GENERATOR_DIR = Path(__file__).parent
 _OUTPUTS_DIR = _GENERATOR_DIR / "outputs"
-RESUME_TEMPLATE_PATH = _GENERATOR_DIR / "resume_template.tex"
-COVER_TEMPLATE_PATH = _GENERATOR_DIR / "cover_template.tex"
+_DEFAULT_RESUME_TEMPLATE = _GENERATOR_DIR / "resume_template.tex"
+_DEFAULT_COVER_TEMPLATE = _GENERATOR_DIR / "cover_template.tex"
 
 
 def _render_profile(profile: UserProfile) -> str:
@@ -90,7 +91,7 @@ def _build_frontmatter(
 
 
 def strip_header_block(md: str) -> str:
-    """Remove name/contact header if Claude included one despite instructions."""
+    """Remove name/contact header if LLM included one despite instructions."""
     lines = md.splitlines()
     i = 0
     if lines and lines[0].strip() == "---":
@@ -104,19 +105,19 @@ def strip_header_block(md: str) -> str:
         line = lines[i].strip()
         if line.startswith("## "):
             break
-        if i >= 10:  # bail if no section heading found in preamble
+        if i >= 10:
             break
         i += 1
     return "\n".join(lines[i:])
 
 
-def call_claude(prompt: str, client: Any) -> str:
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
+def call_claude(prompt: str, client: Any, model: str) -> str:
+    response = client.chat.completions.create(
+        model=model,
         max_tokens=2048,
         messages=[{"role": "user", "content": prompt}],
     )
-    return message.content[0].text.strip()
+    return response.choices[0].message.content.strip()
 
 
 def render_pdf(md_path: Path, pdf_path: Path, template_path: Path) -> None:
@@ -141,14 +142,15 @@ def _get_page_count(pdf_path: Path) -> int:
     raise RuntimeError(f"Could not determine page count for {pdf_path.name}")
 
 
-def render_resume_pdf(md_path: Path, pdf_path: Path, job_key: str) -> None:
+def render_resume_pdf(md_path: Path, pdf_path: Path, job_key: str, template_path: Optional[Path] = None) -> None:
     """Render resume PDF, reducing font/margins to fit one page if needed."""
+    tpl = template_path or _DEFAULT_RESUME_TEMPLATE
     attempts = [
         {"fontsize": "11pt", "top": "1.0in", "bottom": "1.0in"},
         {"fontsize": "10pt", "top": "1.0in", "bottom": "1.0in"},
         {"fontsize": "10pt", "top": "0.8in", "bottom": "0.8in"},
     ]
-    template_text = RESUME_TEMPLATE_PATH.read_text(encoding="utf-8")
+    template_text = tpl.read_text(encoding="utf-8")
     for s in attempts:
         modified = re.sub(
             r"\\documentclass\[\d+pt\]",
@@ -179,17 +181,19 @@ def render_resume_pdf(md_path: Path, pdf_path: Path, job_key: str) -> None:
 def generate_job(
     job_key: str,
     db: Optional[Session] = None,
-    client: Optional[anthropic.Anthropic] = None,
+    client: Optional[Any] = None,
+    model: Optional[str] = None,
 ) -> None:
-    """Generate resume and cover letter for an approved job. Thread entry point."""
+    """Generate resume and cover letter for an approved job."""
     own_db = db is None
     if own_db:
         db = SessionLocal()
-    if client is None:
-        client = anthropic.Anthropic()
 
     job = None
     try:
+        if client is None or model is None:
+            client, model = get_openai_client(db)
+
         job = db.query(Job).filter_by(job_key=job_key).first()
         if job is None:
             return
@@ -218,25 +222,29 @@ def generate_job(
             website=_cfg("resume_website"),
         )
 
+        resume_tpl_path = Path(_cfg("resume_template_path")) if _cfg("resume_template_path") else None
+        cover_tpl_path = Path(_cfg("cover_template_path")) if _cfg("cover_template_path") else _DEFAULT_COVER_TEMPLATE
+
         outputs = _OUTPUTS_DIR
         outputs.mkdir(parents=True, exist_ok=True)
 
         resume_md_path = outputs / f"{job_key}_resume.md"
         resume_pdf_path = outputs / f"{job_key}_resume.pdf"
         resume_md = strip_header_block(
-            call_claude(build_resume_prompt(job, profile, resume_tpl.value), client)
+            call_claude(build_resume_prompt(job, profile, resume_tpl.value), client, model)
         )
         resume_md_path.write_text(frontmatter + resume_md, encoding="utf-8")
-        render_resume_pdf(resume_md_path, resume_pdf_path, job_key)
+        render_resume_pdf(resume_md_path, resume_pdf_path, job_key, resume_tpl_path)
 
         cover_md_path = outputs / f"{job_key}_cover.md"
         cover_pdf_path = outputs / f"{job_key}_cover.pdf"
-        cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client)
+        cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client, model)
         cover_md_path.write_text(frontmatter + cover_md, encoding="utf-8")
-        render_pdf(cover_md_path, cover_pdf_path, COVER_TEMPLATE_PATH)
+        render_pdf(cover_md_path, cover_pdf_path, cover_tpl_path)
 
         job.resume_path = str(resume_pdf_path)
         job.cover_path = str(cover_pdf_path)
+        job.state = JobState.GENERATED.value
         db.commit()
 
     except Exception as e:
@@ -248,128 +256,6 @@ def generate_job(
                 db.commit()
         except Exception:
             pass
-    finally:
-        if own_db:
-            db.close()
-
-
-def generate_resume_for_job(
-    job_key: str,
-    db: Optional[Session] = None,
-    client: Optional[anthropic.Anthropic] = None,
-) -> None:
-    """Generate resume only for a job. Updates job.resume_path and commits."""
-    own_db = db is None
-    if own_db:
-        db = SessionLocal()
-    if client is None:
-        client = anthropic.Anthropic()
-
-    try:
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        if job is None:
-            raise ValueError(f"Job not found: {job_key}")
-
-        row = db.query(UserProfileModel).first()
-        if not row:
-            raise RuntimeError("No user profile found in DB.")
-        data = json.loads(row.data)
-        data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
-        data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
-        profile = UserProfile(**data)
-
-        resume_tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
-        if not resume_tpl:
-            raise RuntimeError("resume_prompt_template not seeded in config table.")
-
-        def _cfg(key: str) -> str:
-            r = db.query(Config).filter_by(key=key).first()
-            return r.value if r else ""
-
-        frontmatter = _build_frontmatter(
-            profile,
-            github=_cfg("resume_github"),
-            linkedin=_cfg("resume_linkedin"),
-            website=_cfg("resume_website"),
-        )
-
-        outputs = _OUTPUTS_DIR
-        outputs.mkdir(parents=True, exist_ok=True)
-
-        resume_md_path = outputs / f"{job_key}_resume.md"
-        resume_pdf_path = outputs / f"{job_key}_resume.pdf"
-        resume_md = strip_header_block(
-            call_claude(build_resume_prompt(job, profile, resume_tpl.value), client)
-        )
-        resume_md_path.write_text(frontmatter + resume_md, encoding="utf-8")
-        render_resume_pdf(resume_md_path, resume_pdf_path, job_key)
-
-        job.resume_path = str(resume_pdf_path)
-        db.commit()
-
-    except Exception as e:
-        print(f"[generator] ERROR generating resume for {job_key}: {e}", file=sys.stderr)
-        raise
-    finally:
-        if own_db:
-            db.close()
-
-
-def generate_cover_for_job(
-    job_key: str,
-    db: Optional[Session] = None,
-    client: Optional[anthropic.Anthropic] = None,
-) -> None:
-    """Generate cover letter only for a job. Updates job.cover_path and commits."""
-    own_db = db is None
-    if own_db:
-        db = SessionLocal()
-    if client is None:
-        client = anthropic.Anthropic()
-
-    try:
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        if job is None:
-            raise ValueError(f"Job not found: {job_key}")
-
-        row = db.query(UserProfileModel).first()
-        if not row:
-            raise RuntimeError("No user profile found in DB.")
-        data = json.loads(row.data)
-        data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
-        data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
-        profile = UserProfile(**data)
-
-        cover_tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
-        if not cover_tpl:
-            raise RuntimeError("cover_prompt_template not seeded in config table.")
-
-        def _cfg(key: str) -> str:
-            r = db.query(Config).filter_by(key=key).first()
-            return r.value if r else ""
-
-        frontmatter = _build_frontmatter(
-            profile,
-            github=_cfg("resume_github"),
-            linkedin=_cfg("resume_linkedin"),
-            website=_cfg("resume_website"),
-        )
-
-        outputs = _OUTPUTS_DIR
-        outputs.mkdir(parents=True, exist_ok=True)
-
-        cover_md_path = outputs / f"{job_key}_cover.md"
-        cover_pdf_path = outputs / f"{job_key}_cover.pdf"
-        cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client)
-        cover_md_path.write_text(frontmatter + cover_md, encoding="utf-8")
-        render_pdf(cover_md_path, cover_pdf_path, COVER_TEMPLATE_PATH)
-
-        job.cover_path = str(cover_pdf_path)
-        db.commit()
-
-    except Exception as e:
-        print(f"[generator] ERROR generating cover for {job_key}: {e}", file=sys.stderr)
-        raise
     finally:
         if own_db:
             db.close()

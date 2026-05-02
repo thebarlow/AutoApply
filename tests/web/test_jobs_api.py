@@ -207,7 +207,7 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
 
     _make_job(db_session, "job_score")
 
-    def mock_score_job(job, profile, config, claude_client, db):
+    def mock_score_job(job, profile, config, llm_client, model, db):
         job.desirability_score = 0.9
         job.fit_score = 0.8
         job.final_score = 0.85
@@ -217,7 +217,7 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
     monkeypatch.setattr(jobs_router, "_score_job", mock_score_job)
     monkeypatch.setattr(jobs_router, "_load_user_profile", lambda db: None)
     monkeypatch.setattr(jobs_router, "_load_config", lambda db: {})
-    monkeypatch.setattr(jobs_router, "_make_anthropic_client", lambda: None)
+    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
 
     resp = client.post("/api/jobs/job_score/score")
     assert resp.status_code == 200
@@ -231,49 +231,29 @@ def test_score_job_endpoint_not_found(client):
     assert resp.status_code == 404
 
 
-def test_generate_resume_endpoint(client, db_session, monkeypatch):
+def test_generate_job_endpoint(client, db_session, monkeypatch):
     import web.routers.jobs as jobs_router
 
-    _make_job(db_session, "job_genresume")
+    _make_job(db_session, "job_generate")
 
-    def mock_generate_resume(job_key, db, client):
+    def mock_generate_job(job_key, db, client, model):
         job = db.query(Job).filter_by(job_key=job_key).first()
         job.resume_path = f"/outputs/{job_key}_resume.pdf"
-        db.commit()
-
-    monkeypatch.setattr(jobs_router, "_generate_resume_for_job", mock_generate_resume)
-    monkeypatch.setattr(jobs_router, "_make_anthropic_client", lambda: None)
-
-    resp = client.post("/api/jobs/job_genresume/generate/resume")
-    assert resp.status_code == 200
-    assert resp.json()["resume_path"] == "/outputs/job_genresume_resume.pdf"
-
-
-def test_generate_cover_endpoint(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
-
-    _make_job(db_session, "job_gencover")
-
-    def mock_generate_cover(job_key, db, client):
-        job = db.query(Job).filter_by(job_key=job_key).first()
         job.cover_path = f"/outputs/{job_key}_cover.pdf"
         db.commit()
 
-    monkeypatch.setattr(jobs_router, "_generate_cover_for_job", mock_generate_cover)
-    monkeypatch.setattr(jobs_router, "_make_anthropic_client", lambda: None)
+    monkeypatch.setattr(jobs_router, "_generate_job", mock_generate_job)
+    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
 
-    resp = client.post("/api/jobs/job_gencover/generate/cover")
+    resp = client.post("/api/jobs/job_generate/generate")
     assert resp.status_code == 200
-    assert resp.json()["cover_path"] == "/outputs/job_gencover_cover.pdf"
+    data = resp.json()
+    assert data["resume_path"] == "/outputs/job_generate_resume.pdf"
+    assert data["cover_path"] == "/outputs/job_generate_cover.pdf"
 
 
-def test_generate_resume_not_found(client):
-    resp = client.post("/api/jobs/nonexistent/generate/resume")
-    assert resp.status_code == 404
-
-
-def test_generate_cover_not_found(client):
-    resp = client.post("/api/jobs/nonexistent/generate/cover")
+def test_generate_job_not_found(client):
+    resp = client.post("/api/jobs/nonexistent/generate")
     assert resp.status_code == 404
 
 

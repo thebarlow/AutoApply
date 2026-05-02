@@ -3,10 +3,14 @@ from core.types import JobState, SearchConfig, UserProfile
 
 def test_job_state_values():
     assert JobState.PENDING == "pending"
+    assert JobState.SCRAPED == "scraped"
+    assert JobState.APPROVED == "approved"
+    assert JobState.PENDING_REVIEW == "pending_review"
+    assert JobState.GENERATED == "generated"
     assert JobState.APPLIED == "applied"
     assert JobState.REJECTED == "rejected"
     assert JobState.FAILED == "failed"
-    assert len(JobState) == 4
+    assert len(JobState) == 8
 
 
 def test_search_config_defaults():

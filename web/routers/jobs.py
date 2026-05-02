@@ -4,23 +4,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-import anthropic as _anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.llm import get_openai_client
 from core.scorer import load_config as _load_config
 from core.scorer import load_user_profile as _load_user_profile
 from core.scorer import score_job as _score_job
 from db.database import get_db
 from db.models import Job
-from generator.generator import generate_cover_for_job as _generate_cover_for_job
-from generator.generator import generate_resume_for_job as _generate_resume_for_job
-
-
-def _make_anthropic_client() -> _anthropic.Anthropic:
-    return _anthropic.Anthropic()
+from generator.generator import generate_job as _generate_job
 
 router = APIRouter(prefix="/api/jobs")
 
@@ -85,28 +80,19 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
 
     profile = _load_user_profile(db)
     config = _load_config(db)
-    client = _make_anthropic_client()
-    _score_job(job, profile, config, client, db)
+    client, model = get_openai_client(db)
+    _score_job(job, profile, config, client, model, db)
     db.refresh(job)
     return _serialize(job)
 
 
-@router.post("/{job_key}/generate/resume")
-def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
+@router.post("/{job_key}/generate")
+def generate_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    _generate_resume_for_job(job_key, db=db, client=_make_anthropic_client())
-    db.refresh(job)
-    return _serialize(job)
-
-
-@router.post("/{job_key}/generate/cover")
-def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    _generate_cover_for_job(job_key, db=db, client=_make_anthropic_client())
+    client, model = get_openai_client(db)
+    _generate_job(job_key, db=db, client=client, model=model)
     db.refresh(job)
     return _serialize(job)
 
