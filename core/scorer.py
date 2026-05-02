@@ -1,4 +1,4 @@
-"""Job scorer: scores SCRAPED jobs using Claude and transitions their state."""
+"""Job scorer: scores PENDING jobs using Claude and updates score fields."""
 from __future__ import annotations
 
 import argparse
@@ -22,16 +22,6 @@ def compute_final_score(w1: float, w2: float, desirability: float, fit: float) -
     """Compute weighted final score, clamped to [0.0, 1.0]."""
     return max(0.0, min(1.0, w1 * desirability + w2 * fit))
 
-
-def determine_state(
-    final: float, reject_threshold: float, approve_threshold: float
-) -> JobState:
-    """Map a final score to a JobState based on thresholds."""
-    if final < reject_threshold:
-        return JobState.REJECTED
-    if final >= approve_threshold:
-        return JobState.APPROVED
-    return JobState.PENDING_REVIEW
 
 
 def load_user_profile(db: Session) -> UserProfile:
@@ -159,8 +149,6 @@ def score_job(
         "desirability": parsed["desirability_justification"],
         "fit": parsed["fit_justification"],
     })
-    job.state = determine_state(final, config["auto_reject_threshold"], config["auto_approve_threshold"])
-
     db.commit()
 
 
@@ -169,17 +157,17 @@ def run_scorer(
     client: anthropic.Anthropic,
     job_key: Optional[str] = None,
 ) -> None:
-    """Score all SCRAPED jobs, or a single job if job_key is provided."""
+    """Score all PENDING jobs, or a single job if job_key is provided."""
     profile = load_user_profile(db)
     config = load_config(db)
 
     if job_key:
-        jobs = db.query(Job).filter_by(job_key=job_key, state=JobState.SCRAPED).all()
+        jobs = db.query(Job).filter_by(job_key=job_key, state=JobState.PENDING).all()
     else:
-        jobs = db.query(Job).filter_by(state=JobState.SCRAPED).all()
+        jobs = db.query(Job).filter_by(state=JobState.PENDING).all()
 
     if not jobs:
-        print("No SCRAPED jobs found.")
+        print("No PENDING jobs found.")
         return
 
     for job in jobs:

@@ -77,7 +77,7 @@ def test_seed_profile_upserts(db_session, tmp_path):
     assert count == 1
 
 
-from core.scorer import compute_final_score, determine_state
+from core.scorer import compute_final_score
 from core.types import JobState
 
 
@@ -91,28 +91,6 @@ def test_compute_final_score_unequal_weights():
 
 def test_compute_final_score_clamps_above_one():
     assert compute_final_score(1.0, 1.0, 1.0, 1.0) == pytest.approx(1.0)
-
-
-def test_determine_state_approved():
-    assert determine_state(0.9, reject_threshold=0.3, approve_threshold=0.8) == JobState.APPROVED
-
-
-def test_determine_state_rejected():
-    assert determine_state(0.2, reject_threshold=0.3, approve_threshold=0.8) == JobState.REJECTED
-
-
-def test_determine_state_pending_review():
-    assert determine_state(0.5, reject_threshold=0.3, approve_threshold=0.8) == JobState.PENDING_REVIEW
-
-
-def test_determine_state_boundary_reject():
-    # exactly at threshold → not rejected (< not <=)
-    assert determine_state(0.3, reject_threshold=0.3, approve_threshold=0.8) == JobState.PENDING_REVIEW
-
-
-def test_determine_state_boundary_approve():
-    # exactly at threshold → approved (>= semantics)
-    assert determine_state(0.8, reject_threshold=0.3, approve_threshold=0.8) == JobState.APPROVED
 
 
 import json as _json
@@ -174,7 +152,7 @@ def test_build_prompt_contains_job_fields():
         salary="$130k-$150k",
         description="We need a Python expert.",
         url="https://example.com/job/1",
-        state=JobState.SCRAPED,
+        state=JobState.PENDING,
     )
 
     prompt = build_prompt(job, profile)
@@ -246,7 +224,7 @@ def seeded_db(db_session):
     return db_session
 
 
-def make_job(job_key: str, state: JobState = JobState.SCRAPED) -> Job:
+def make_job(job_key: str, state: JobState = JobState.PENDING) -> Job:
     return Job(
         job_key=job_key,
         source="indeed",
@@ -268,7 +246,7 @@ def mock_client(response_text: str):
     return client
 
 
-def test_score_job_approved(seeded_db):
+def test_score_job_sets_scores_not_state(seeded_db):
     job = make_job("job_001")
     seeded_db.add(job)
     seeded_db.commit()
@@ -280,44 +258,13 @@ def test_score_job_approved(seeded_db):
     score_job(job, profile, config, client, seeded_db)
     seeded_db.refresh(job)
 
-    assert job.state == JobState.APPROVED
+    assert job.state == JobState.PENDING
     assert job.desirability_score == pytest.approx(0.85)
     assert job.fit_score == pytest.approx(0.75)
     assert job.final_score == pytest.approx(0.8)
     justification = _json.loads(job.score_justification)
     assert "desirability" in justification
     assert "fit" in justification
-
-
-def test_score_job_rejected(seeded_db):
-    job = make_job("job_002")
-    seeded_db.add(job)
-    seeded_db.commit()
-
-    profile = load_user_profile(seeded_db)
-    config = load_config(seeded_db)
-    client = mock_client(MOCK_CLAUDE_RESPONSE_LOW)
-
-    score_job(job, profile, config, client, seeded_db)
-    seeded_db.refresh(job)
-
-    assert job.state == JobState.REJECTED
-    assert job.final_score == pytest.approx(0.125)
-
-
-def test_score_job_pending_review(seeded_db):
-    job = make_job("job_003")
-    seeded_db.add(job)
-    seeded_db.commit()
-
-    profile = load_user_profile(seeded_db)
-    config = load_config(seeded_db)
-    client = mock_client(MOCK_CLAUDE_RESPONSE_MID)
-
-    score_job(job, profile, config, client, seeded_db)
-    seeded_db.refresh(job)
-
-    assert job.state == JobState.PENDING_REVIEW
 
 
 def test_malformed_claude_response(seeded_db):
@@ -332,36 +279,36 @@ def test_malformed_claude_response(seeded_db):
     score_job(job, profile, config, client, seeded_db)
     seeded_db.refresh(job)
 
-    assert job.state == JobState.SCRAPED
+    assert job.state == JobState.PENDING
     assert job.final_score is None
 
 
 from core.scorer import run_scorer
 
 
-def test_score_batch_skips_non_scraped(seeded_db):
-    scraped1 = make_job("batch_001", JobState.SCRAPED)
-    scraped2 = make_job("batch_002", JobState.SCRAPED)
-    already_approved = make_job("batch_003", JobState.APPROVED)
-    seeded_db.add_all([scraped1, scraped2, already_approved])
+def test_score_batch_skips_non_pending(seeded_db):
+    pending1 = make_job("batch_001", JobState.PENDING)
+    pending2 = make_job("batch_002", JobState.PENDING)
+    already_applied = make_job("batch_003", JobState.APPLIED)
+    seeded_db.add_all([pending1, pending2, already_applied])
     seeded_db.commit()
 
     client = mock_client(MOCK_CLAUDE_RESPONSE)
     run_scorer(seeded_db, client, job_key=None)
 
-    seeded_db.refresh(scraped1)
-    seeded_db.refresh(scraped2)
-    seeded_db.refresh(already_approved)
+    seeded_db.refresh(pending1)
+    seeded_db.refresh(pending2)
+    seeded_db.refresh(already_applied)
 
-    assert scraped1.state == JobState.APPROVED
-    assert scraped2.state == JobState.APPROVED
-    assert already_approved.state == JobState.APPROVED  # unchanged
-    assert client.messages.create.call_count == 2  # only SCRAPED jobs called Claude
+    assert pending1.state == JobState.PENDING
+    assert pending2.state == JobState.PENDING
+    assert already_applied.state == JobState.APPLIED
+    assert client.messages.create.call_count == 2
 
 
 def test_single_job_key_flag(seeded_db):
-    target = make_job("single_001", JobState.SCRAPED)
-    other = make_job("single_002", JobState.SCRAPED)
+    target = make_job("single_001", JobState.PENDING)
+    other = make_job("single_002", JobState.PENDING)
     seeded_db.add_all([target, other])
     seeded_db.commit()
 
@@ -371,6 +318,6 @@ def test_single_job_key_flag(seeded_db):
     seeded_db.refresh(target)
     seeded_db.refresh(other)
 
-    assert target.state == JobState.APPROVED
-    assert other.state == JobState.SCRAPED  # untouched
+    assert target.final_score == pytest.approx(0.8)
+    assert other.final_score is None
     assert client.messages.create.call_count == 1
