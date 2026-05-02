@@ -187,3 +187,211 @@ main { padding: 1.5rem; }
   max-height: 300px;
   overflow-y: auto;
 }
+
+/* Active nav link */
+nav a.active {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Config sections */
+details.config-section {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+details.config-section > summary {
+  padding: 1rem 1.5rem;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+details.config-section > summary::-webkit-details-marker { display: none; }
+
+details.config-section > summary::before {
+  content: '▶';
+  font-size: 0.65rem;
+  transition: transform 0.15s;
+  color: #888;
+}
+
+details.config-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.config-body {
+  padding: 0 1.5rem 1.5rem;
+}
+
+.config-body h2 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.config-label {
+  display: block;
+  font-size: 0.82rem;
+  color: #555;
+  margin: 0.65rem 0 0.2rem;
+}
+
+.config-input {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.config-input:focus { outline: none; border-color: #3a3a8c; }
+
+.config-textarea {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.82rem;
+  font-family: monospace;
+  resize: vertical;
+}
+
+.config-textarea:focus { outline: none; border-color: #3a3a8c; }
+
+.config-row {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.config-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.btn-save {
+  padding: 0.5rem 1.5rem;
+  background: #1a1a2e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-save:hover { background: #2d2d4e; }
+
+.btn-secondary {
+  padding: 0.4rem 0.9rem;
+  background: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.75rem;
+}
+
+.btn-secondary:hover { background: #eee; }
+
+.save-status {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Disabled section */
+.config-section--disabled { opacity: 0.5; pointer-events: none; }
+.coming-soon { font-size: 0.9rem; color: #777; font-style: italic; }
+
+/* Weight widget */
+.weight-widget {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.weight-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.weight-input {
+  width: 4.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  text-align: center;
+  font-family: inherit;
+}
+
+#w-slider { flex: 1; }
+
+/* LLM provider rows */
+.llm-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.llm-provider-select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.llm-model {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.llm-key {
+  width: 9rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.btn-remove-llm {
+  background: none;
+  border: none;
+  color: #e74c3c;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+
+.btn-remove-llm:hover { background: #fde8e6; }
