@@ -16,11 +16,13 @@ def seed_profile(db: Session, input_path: str) -> None:
     with open(input_path) as f:
         data = json.load(f)
 
+    name = data.get("name", "Default")
     row = db.query(UserProfileModel).first()
     if row:
+        row.name = name
         row.data = json.dumps(data)
     else:
-        db.add(UserProfileModel(data=json.dumps(data)))
+        db.add(UserProfileModel(name=name, data=json.dumps(data)))
     db.commit()
 
 

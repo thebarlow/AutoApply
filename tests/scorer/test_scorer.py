@@ -93,7 +93,7 @@ from core.scorer import load_user_profile, load_config
 
 
 def test_load_user_profile(db_session):
-    db_session.add(UserProfileModel(data=json.dumps(SAMPLE_PROFILE_DICT)))
+    db_session.add(UserProfileModel(name="Test", data=json.dumps(SAMPLE_PROFILE_DICT)))
     db_session.commit()
 
     profile = load_user_profile(db_session)
@@ -197,7 +197,7 @@ def mock_client(response_text: str) -> MagicMock:
 
 @pytest.fixture
 def seeded_db(db_session):
-    db_session.add(UserProfileModel(data=json.dumps(SAMPLE_PROFILE_DICT)))
+    db_session.add(UserProfileModel(name="Test", data=json.dumps(SAMPLE_PROFILE_DICT)))
     for key, value in [("w1", "0.5"), ("w2", "0.5"), ("auto_reject_threshold", "0.3"), ("auto_approve_threshold", "0.8")]:
         db_session.add(Config(key=key, value=value))
     db_session.commit()

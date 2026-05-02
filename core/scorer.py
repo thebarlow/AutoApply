@@ -36,10 +36,15 @@ def determine_state(
 
 
 def load_user_profile(db: Session) -> UserProfile:
-    """Load UserProfile from DB. Exits if none found."""
-    row = db.query(UserProfileModel).first()
+    """Load UserProfile from DB, respecting the active profile setting."""
+    active_raw = db.query(Config).filter_by(key="active_profile_id").first()
+    if active_raw:
+        row = db.query(UserProfileModel).filter_by(id=int(active_raw.value)).first()
+    else:
+        row = db.query(UserProfileModel).first()
+
     if not row:
-        print("No user profile found. Run scripts/seed_profile.py first.", file=sys.stderr)
+        print("No user profile found. Add one via /config.", file=sys.stderr)
         sys.exit(1)
 
     data = json.loads(row.data)
