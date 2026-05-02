@@ -5,12 +5,13 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.models import Config
+import core.profile_parser as _parser
+from db.models import Config, UserProfileModel
 
 router = APIRouter()
 
@@ -221,3 +222,90 @@ def put_llm(body: LLMBody, db: Session = Depends(get_db)) -> dict[str, Any]:
     _set(db, "llm_providers", json.dumps(to_store))
     _set(db, "llm_active_provider", body.active)
     return get_llm(db)
+
+
+# ---- User Profiles ----
+
+_EMPTY_PROFILE_DATA: dict = {
+    "email": "", "phone": "", "location": "", "skills": [],
+    "work_history": [], "education": [], "target_salary_min": None,
+    "target_salary_max": None, "target_roles": [], "resume_path": "",
+}
+
+
+class ProfileNameBody(BaseModel):
+    name: str
+
+
+class ProfileBody(BaseModel):
+    name: str
+    data: dict
+
+
+class ActiveProfileBody(BaseModel):
+    active_id: int
+
+
+@router.get("/api/config/profiles")
+def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = db.query(UserProfileModel).all()
+    active_raw = _get(db, "active_profile_id")
+    active_id = int(active_raw) if active_raw else None
+    return {
+        "profiles": [{"id": r.id, "name": r.name} for r in rows],
+        "active_id": active_id,
+    }
+
+
+@router.post("/api/config/profiles")
+def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    row = UserProfileModel(name=body.name, data=json.dumps(_EMPTY_PROFILE_DATA))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "name": row.name, "data": _EMPTY_PROFILE_DATA}
+
+
+@router.put("/api/config/profiles/active")
+def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    _set(db, "active_profile_id", str(body.active_id))
+    return {"active_id": body.active_id}
+
+
+@router.get("/api/config/profiles/{profile_id}")
+def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"id": row.id, "name": row.name, "data": json.loads(row.data)}
+
+
+@router.put("/api/config/profiles/{profile_id}")
+def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row.name = body.name
+    row.data = json.dumps(body.data)
+    db.commit()
+    return {"id": row.id, "name": row.name, "data": body.data}
+
+
+@router.delete("/api/config/profiles/{profile_id}", status_code=204)
+def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
+    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    db.delete(row)
+    db.commit()
+
+
+@router.post("/api/config/profile/parse")
+async def parse_profile(file: UploadFile = File(...)) -> dict[str, Any]:
+    contents = await file.read()
+    filename = file.filename or ""
+    if filename.lower().endswith(".pdf"):
+        md_text = _parser.pdf_to_markdown(contents)
+    else:
+        md_text = contents.decode("utf-8", errors="replace")
+    return _parser.markdown_to_profile(md_text)
