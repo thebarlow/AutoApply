@@ -149,21 +149,24 @@ def _extract_education(text: str) -> list[dict]:
 
 def pdf_to_markdown(pdf_bytes: bytes) -> str:
     """Convert raw PDF bytes to a Markdown string."""
+    if not pdf_bytes:
+        return ""
     lines: list[str] = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-            for line in text.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    lines.append("")
-                    continue
-                if stripped.isupper() and len(stripped) < 50:
-                    lines.append(f"## {stripped.title()}")
-                elif stripped.startswith(("•", "·", "-", "*")):
-                    lines.append(f"- {stripped.lstrip('•·-* ')}")
-                elif line.startswith("  ") and stripped:
-                    lines.append(f"- {stripped}")
-                else:
-                    lines.append(stripped)
+    try:
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text() or ""
+                for line in text.splitlines():
+                    stripped = line.strip()
+                    if not stripped:
+                        lines.append("")
+                        continue
+                    if stripped.isupper() and len(stripped) < 50:
+                        lines.append(f"## {stripped.title()}")
+                    elif stripped.startswith(("•", "·", "-", "*")):
+                        lines.append(f"- {stripped.lstrip('•·-* ')}")
+                    else:
+                        lines.append(stripped)
+    except Exception as exc:
+        raise ValueError(f"Could not parse PDF: {exc}") from exc
     return "\n".join(lines)

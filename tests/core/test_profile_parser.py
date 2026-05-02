@@ -1,5 +1,7 @@
 import pytest
-from core.profile_parser import markdown_to_profile
+from unittest.mock import MagicMock, patch
+
+from core.profile_parser import markdown_to_profile, pdf_to_markdown
 
 SAMPLE_MD = """
 John Doe
@@ -77,9 +79,6 @@ def test_returns_defaults_for_missing_sections():
     assert result["target_salary_max"] is None
 
 
-from unittest.mock import MagicMock, patch
-
-
 def _make_mock_pdf(pages_text: list):
     mock_pdf = MagicMock()
     mock_pages = []
@@ -94,8 +93,6 @@ def _make_mock_pdf(pages_text: list):
 
 
 def test_pdf_to_markdown_extracts_text():
-    from core.profile_parser import pdf_to_markdown
-
     page_text = "EXPERIENCE\nSoftware Engineer at Acme (2022-2024)\n• Built APIs"
     mock_pdf = _make_mock_pdf([page_text])
 
@@ -108,8 +105,6 @@ def test_pdf_to_markdown_extracts_text():
 
 
 def test_pdf_to_markdown_handles_empty_page():
-    from core.profile_parser import pdf_to_markdown
-
     mock_pdf = _make_mock_pdf([None])
     with patch("core.profile_parser.pdfplumber.open", return_value=mock_pdf):
         result = pdf_to_markdown(b"fake-pdf-bytes")
