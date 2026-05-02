@@ -154,3 +154,70 @@ def put_scoring(body: ScoringBody, db: Session = Depends(get_db)) -> dict[str, f
     _set(db, "auto_reject_threshold", str(body.auto_reject_threshold))
     _set(db, "auto_approve_threshold", str(body.auto_approve_threshold))
     return body.model_dump()
+
+
+# ---- .env helpers ----
+
+def _read_env() -> dict[str, str]:
+    if not _ENV_PATH.exists():
+        return {}
+    result: dict[str, str] = {}
+    for line in _ENV_PATH.read_text().splitlines():
+        line = line.strip()
+        if "=" in line and not line.startswith("#"):
+            k, _, v = line.partition("=")
+            result[k.strip()] = v.strip()
+    return result
+
+
+def _write_env(env: dict[str, str]) -> None:
+    lines = [f"{k}={v}" for k, v in env.items()]
+    _ENV_PATH.write_text("\n".join(lines) + "\n")
+
+
+# ---- LLM ----
+
+class LLMProviderIn(BaseModel):
+    name: str
+    model: str
+    api_key: str = ""
+
+
+class LLMBody(BaseModel):
+    providers: list[LLMProviderIn]
+    active: str
+
+
+@router.get("/api/config/llm")
+def get_llm(db: Session = Depends(get_db)) -> dict[str, Any]:
+    providers = json.loads(_get(db, "llm_providers", "[]"))
+    active = _get(db, "llm_active_provider")
+    env = _read_env()
+    result = [
+        {
+            "name": p["name"],
+            "base_url": p["base_url"],
+            "model": p["model"],
+            "has_key": bool(env.get(f"LLM_KEY_{p['name'].upper()}")),
+        }
+        for p in providers
+    ]
+    return {"providers": result, "active": active}
+
+
+@router.put("/api/config/llm")
+def put_llm(body: LLMBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    env = _read_env()
+    to_store = []
+    for p in body.providers:
+        name = p.name.lower()
+        base_url = _LLM_BASE_URLS.get(name)
+        if not base_url:
+            raise HTTPException(status_code=422, detail=f"Unknown provider: {p.name}")
+        if p.api_key:
+            env[f"LLM_KEY_{name.upper()}"] = p.api_key
+        to_store.append({"name": name, "base_url": base_url, "model": p.model})
+    _write_env(env)
+    _set(db, "llm_providers", json.dumps(to_store))
+    _set(db, "llm_active_provider", body.active)
+    return get_llm(db)

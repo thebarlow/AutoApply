@@ -132,3 +132,56 @@ def test_put_scoring_rejects_inverted_thresholds(client):
     body = {"w1": 0.5, "w2": 0.5, "auto_reject_threshold": 0.8, "auto_approve_threshold": 0.2}
     resp = client.put("/api/config/scoring", json=body)
     assert resp.status_code == 422
+
+
+def test_get_llm_empty(client):
+    resp = client.get("/api/config/llm")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["providers"] == []
+    assert data["active"] == ""
+
+
+def test_put_llm_persists_provider_and_writes_key(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
+    body = {
+        "providers": [{"name": "openrouter", "model": "anthropic/claude-sonnet-4-6", "api_key": "sk-test"}],
+        "active": "openrouter",
+    }
+    resp = client.put("/api/config/llm", json=body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["providers"]) == 1
+    assert data["providers"][0]["name"] == "openrouter"
+    assert data["providers"][0]["has_key"] is True
+    assert data["active"] == "openrouter"
+    assert "LLM_KEY_OPENROUTER=sk-test" in (tmp_path / ".env").read_text()
+
+
+def test_put_llm_blank_key_preserves_existing(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    env_path = tmp_path / ".env"
+    env_path.write_text("LLM_KEY_OPENROUTER=existing-key\n")
+    monkeypatch.setattr(config_mod, "_ENV_PATH", env_path)
+
+    body = {
+        "providers": [{"name": "openrouter", "model": "gpt-4o", "api_key": ""}],
+        "active": "openrouter",
+    }
+    resp = client.put("/api/config/llm", json=body)
+    assert resp.status_code == 200
+    assert "existing-key" in env_path.read_text()
+
+
+def test_put_llm_unknown_provider_returns_422(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
+    body = {
+        "providers": [{"name": "unknown_llm", "model": "x", "api_key": "key"}],
+        "active": "unknown_llm",
+    }
+    resp = client.put("/api/config/llm", json=body)
+    assert resp.status_code == 422
