@@ -119,3 +119,38 @@ def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[st
     _set(db, "resume_linkedin", body.linkedin)
     _set(db, "resume_website", body.website)
     return body.model_dump()
+
+
+# ---- Scoring ----
+
+class ScoringBody(BaseModel):
+    w1: float
+    w2: float
+    auto_reject_threshold: float
+    auto_approve_threshold: float
+
+
+@router.get("/api/config/scoring")
+def get_scoring(db: Session = Depends(get_db)) -> dict[str, float]:
+    return {
+        "w1": float(_get(db, "w1", "0.5")),
+        "w2": float(_get(db, "w2", "0.5")),
+        "auto_reject_threshold": float(_get(db, "auto_reject_threshold", "0.5")),
+        "auto_approve_threshold": float(_get(db, "auto_approve_threshold", "0.5")),
+    }
+
+
+@router.put("/api/config/scoring")
+def put_scoring(body: ScoringBody, db: Session = Depends(get_db)) -> dict[str, float]:
+    if abs(body.w1 + body.w2 - 1.0) > 0.001:
+        raise HTTPException(status_code=422, detail="w1 + w2 must equal 1.0")
+    if body.auto_reject_threshold >= body.auto_approve_threshold:
+        raise HTTPException(
+            status_code=422,
+            detail="auto_reject_threshold must be less than auto_approve_threshold",
+        )
+    _set(db, "w1", str(body.w1))
+    _set(db, "w2", str(body.w2))
+    _set(db, "auto_reject_threshold", str(body.auto_reject_threshold))
+    _set(db, "auto_approve_threshold", str(body.auto_approve_threshold))
+    return body.model_dump()

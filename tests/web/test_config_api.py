@@ -100,3 +100,35 @@ def test_put_templates_persists(client):
     assert data["resume_template_path"] == "/custom/resume.tex"
     assert data["github"] == "github.com/matt"
     assert data["resume_prompt_template"] == "Write a resume for {profile} applying to {job}"
+
+
+def test_get_scoring_defaults(client):
+    resp = client.get("/api/config/scoring")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["w1"] == pytest.approx(0.5)
+    assert data["w2"] == pytest.approx(0.5)
+    assert data["auto_reject_threshold"] == pytest.approx(0.5)
+    assert data["auto_approve_threshold"] == pytest.approx(0.5)
+
+
+def test_put_scoring_persists(client):
+    body = {"w1": 0.6, "w2": 0.4, "auto_reject_threshold": 0.2, "auto_approve_threshold": 0.8}
+    resp = client.put("/api/config/scoring", json=body)
+    assert resp.status_code == 200
+    resp2 = client.get("/api/config/scoring")
+    data = resp2.json()
+    assert data["w1"] == pytest.approx(0.6)
+    assert data["w2"] == pytest.approx(0.4)
+
+
+def test_put_scoring_rejects_weights_not_summing_to_one(client):
+    body = {"w1": 0.7, "w2": 0.7, "auto_reject_threshold": 0.2, "auto_approve_threshold": 0.8}
+    resp = client.put("/api/config/scoring", json=body)
+    assert resp.status_code == 422
+
+
+def test_put_scoring_rejects_inverted_thresholds(client):
+    body = {"w1": 0.5, "w2": 0.5, "auto_reject_threshold": 0.8, "auto_approve_threshold": 0.2}
+    resp = client.put("/api/config/scoring", json=body)
+    assert resp.status_code == 422
