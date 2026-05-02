@@ -37,10 +37,12 @@ def client(db_session):
 def _make_job(
     db_session,
     job_key: str,
-    state: JobState,
+    state: JobState = JobState.PENDING,
     final_score: float = 0.75,
     description: str | None = None,
     remote: bool | None = None,
+    resume_path: str | None = None,
+    cover_path: str | None = None,
 ) -> Job:
     job = Job(
         job_key=job_key,
@@ -60,6 +62,8 @@ def _make_job(
         }),
         description=description,
         remote=remote,
+        resume_path=resume_path,
+        cover_path=cover_path,
     )
     db_session.add(job)
     db_session.commit()
@@ -68,23 +72,33 @@ def _make_job(
 
 # --- GET /api/jobs ---
 
-def test_get_jobs_returns_pending_review(client, db_session):
-    _make_job(db_session, "job_a", JobState.PENDING_REVIEW)
-    _make_job(db_session, "job_b", JobState.PENDING_REVIEW)
-    _make_job(db_session, "job_c", JobState.APPROVED)
+def test_get_jobs_returns_all_states(client, db_session):
+    _make_job(db_session, "job_a", JobState.PENDING)
+    _make_job(db_session, "job_b", JobState.APPLIED)
+    _make_job(db_session, "job_c", JobState.REJECTED)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     keys = [j["job_key"] for j in resp.json()]
     assert "job_a" in keys
     assert "job_b" in keys
-    assert "job_c" not in keys
+    assert "job_c" in keys
+
+
+def test_get_jobs_includes_artifact_paths(client, db_session):
+    _make_job(db_session, "job_paths", resume_path="/outputs/job_paths_resume.pdf")
+
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    job = resp.json()[0]
+    assert job["resume_path"] == "/outputs/job_paths_resume.pdf"
+    assert job["cover_path"] is None
 
 
 def test_get_jobs_sorted_by_score(client, db_session):
-    _make_job(db_session, "low", JobState.PENDING_REVIEW, final_score=0.4)
-    _make_job(db_session, "high", JobState.PENDING_REVIEW, final_score=0.9)
-    _make_job(db_session, "mid", JobState.PENDING_REVIEW, final_score=0.65)
+    _make_job(db_session, "low", JobState.PENDING, final_score=0.4)
+    _make_job(db_session, "high", JobState.PENDING, final_score=0.9)
+    _make_job(db_session, "mid", JobState.PENDING, final_score=0.65)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -99,7 +113,7 @@ def test_get_jobs_empty(client):
 
 
 def test_get_jobs_justification_parsed(client, db_session):
-    _make_job(db_session, "job_x", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_x", JobState.PENDING)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -115,7 +129,7 @@ def test_patch_approve(client, db_session, monkeypatch):
     import types
     import web.routers.jobs as jobs_router
 
-    _make_job(db_session, "job_1", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_1", JobState.PENDING)
 
     class _NoOpThread:
         def __init__(self, **kwargs):
@@ -131,7 +145,7 @@ def test_patch_approve(client, db_session, monkeypatch):
 
 
 def test_patch_reject(client, db_session):
-    _make_job(db_session, "job_2", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_2", JobState.PENDING)
 
     resp = client.patch("/api/jobs/job_2/state", json={"state": "rejected"})
     assert resp.status_code == 200
@@ -139,7 +153,7 @@ def test_patch_reject(client, db_session):
 
 
 def test_patch_invalid_state(client, db_session):
-    _make_job(db_session, "job_3", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_3", JobState.PENDING)
 
     resp = client.patch("/api/jobs/job_3/state", json={"state": "deleted"})
     assert resp.status_code == 400
@@ -154,7 +168,7 @@ def test_approve_spawns_generation_thread(client, db_session, monkeypatch):
     import types
     import web.routers.jobs as jobs_router
 
-    _make_job(db_session, "job_gen", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_gen", JobState.PENDING)
 
     spawned = []
 
@@ -179,7 +193,7 @@ def test_reject_does_not_spawn_thread(client, db_session, monkeypatch):
     import types
     import web.routers.jobs as jobs_router
 
-    _make_job(db_session, "job_rej", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_rej", JobState.PENDING)
 
     spawned = []
 
@@ -199,7 +213,7 @@ def test_reject_does_not_spawn_thread(client, db_session, monkeypatch):
 
 
 def test_get_jobs_includes_url(client, db_session):
-    _make_job(db_session, "job_url", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_url", JobState.PENDING)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job = resp.json()[0]
@@ -208,7 +222,7 @@ def test_get_jobs_includes_url(client, db_session):
 
 
 def test_get_jobs_includes_description(client, db_session):
-    _make_job(db_session, "job_desc", JobState.PENDING_REVIEW, description="We are looking for a software engineer.")
+    _make_job(db_session, "job_desc", JobState.PENDING, description="We are looking for a software engineer.")
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -217,7 +231,7 @@ def test_get_jobs_includes_description(client, db_session):
 
 
 def test_get_jobs_remote_true_when_set(client, db_session):
-    _make_job(db_session, "job_remote", JobState.PENDING_REVIEW, remote=True)
+    _make_job(db_session, "job_remote", JobState.PENDING, remote=True)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -226,7 +240,7 @@ def test_get_jobs_remote_true_when_set(client, db_session):
 
 
 def test_get_jobs_remote_none_when_not_set(client, db_session):
-    _make_job(db_session, "job_noremote", JobState.PENDING_REVIEW)
+    _make_job(db_session, "job_noremote", JobState.PENDING)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job_data = resp.json()[0]

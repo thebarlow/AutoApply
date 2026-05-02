@@ -44,17 +44,14 @@ def _serialize(job: Job) -> dict[str, Any]:
         "fit_score": job.fit_score,
         "final_score": job.final_score,
         "score_justification": justification,
+        "resume_path": job.resume_path,
+        "cover_path": job.cover_path,
     }
 
 
 @router.get("")
-def get_jobs(state: str = JobState.PENDING.value, db: Session = Depends(get_db)):
-    jobs = (
-        db.query(Job)
-        .filter(Job.state == state)
-        .order_by(Job.final_score.desc())
-        .all()
-    )
+def get_jobs(db: Session = Depends(get_db)):
+    jobs = db.query(Job).order_by(Job.final_score.desc()).all()
     return [_serialize(j) for j in jobs]
 
 
