@@ -63,3 +63,13 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(job)
     return _serialize(job)
+
+
+@router.delete("/{job_key}")
+def delete_job(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    db.delete(job)
+    db.commit()
+    return {"deleted": job_key}

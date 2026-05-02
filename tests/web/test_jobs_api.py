@@ -179,3 +179,22 @@ def test_get_jobs_remote_none_when_not_set(client, db_session):
     job_data = resp.json()[0]
     assert "remote" in job_data
     assert job_data["remote"] is None
+
+
+# --- DELETE /api/jobs/{job_key} ---
+
+def test_delete_job(client, db_session):
+    _make_job(db_session, "job_del")
+
+    resp = client.delete("/api/jobs/job_del")
+    assert resp.status_code == 200
+    assert resp.json() == {"deleted": "job_del"}
+
+    get_resp = client.get("/api/jobs")
+    keys = [j["job_key"] for j in get_resp.json()]
+    assert "job_del" not in keys
+
+
+def test_delete_job_not_found(client):
+    resp = client.delete("/api/jobs/nonexistent")
+    assert resp.status_code == 404
