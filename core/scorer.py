@@ -1,4 +1,4 @@
-"""Job scorer: scores PENDING jobs using Claude and updates score fields."""
+"""Job scorer: scores SCRAPED jobs using the configured LLM and transitions their state."""
 from __future__ import annotations
 
 import argparse
@@ -7,12 +7,13 @@ import sys
 import warnings
 from typing import Optional
 
-import anthropic
+import openai
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 load_dotenv()
 
+from core.llm import get_openai_client
 from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
 from db.database import SessionLocal
 from db.models import Config, Job, UserProfileModel
@@ -22,6 +23,16 @@ def compute_final_score(w1: float, w2: float, desirability: float, fit: float) -
     """Compute weighted final score, clamped to [0.0, 1.0]."""
     return max(0.0, min(1.0, w1 * desirability + w2 * fit))
 
+
+def determine_state(
+    final: float, reject_threshold: float, approve_threshold: float
+) -> JobState:
+    """Map a final score to a JobState based on thresholds."""
+    if final < reject_threshold:
+        return JobState.REJECTED
+    if final >= approve_threshold:
+        return JobState.APPROVED
+    return JobState.PENDING_REVIEW
 
 
 def load_user_profile(db: Session) -> UserProfile:
@@ -48,7 +59,7 @@ def load_config(db: Session) -> dict[str, float]:
 
 
 def build_prompt(job: Job, profile: UserProfile) -> str:
-    """Build the Claude scoring prompt for a single job."""
+    """Build the scoring prompt for a single job."""
     work_history_text = "\n".join(
         f"- {e.title} at {e.company} ({e.start}–{e.end}): {e.summary}"
         for e in profile.work_history
@@ -95,7 +106,7 @@ Return only the JSON object, no other text.
 
 
 def parse_claude_response(raw: str) -> Optional[dict]:
-    """Parse Claude's JSON response. Returns None if invalid or missing keys."""
+    """Parse LLM JSON response. Returns None if invalid or missing keys."""
     required = {"desirability_score", "fit_score", "desirability_justification", "fit_justification"}
     try:
         data = json.loads(raw.strip())
@@ -110,26 +121,27 @@ def score_job(
     job: Job,
     profile: UserProfile,
     config: dict[str, float],
-    client: anthropic.Anthropic,
+    client: openai.OpenAI,
+    model: str,
     db: Session,
 ) -> None:
-    """Score a single job using Claude. Updates job in-place and commits."""
+    """Score a single job using the LLM. Updates job in-place and commits."""
     prompt = build_prompt(job, profile)
 
     try:
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
+        response = client.chat.completions.create(
+            model=model,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = message.content[0].text
+        raw = response.choices[0].message.content
     except Exception as e:
-        warnings.warn(f"Claude API error for {job.job_key}: {e}")
+        warnings.warn(f"LLM API error for {job.job_key}: {e}")
         return
 
     parsed = parse_claude_response(raw)
     if parsed is None:
-        warnings.warn(f"Unparseable Claude response for {job.job_key}: {raw!r}")
+        warnings.warn(f"Unparseable LLM response for {job.job_key}: {raw!r}")
         return
 
     desirability = max(0.0, min(1.0, float(parsed["desirability_score"])))
@@ -149,42 +161,47 @@ def score_job(
         "desirability": parsed["desirability_justification"],
         "fit": parsed["fit_justification"],
     })
+    job.state = determine_state(final, config["auto_reject_threshold"], config["auto_approve_threshold"])
+
     db.commit()
 
 
 def run_scorer(
     db: Session,
-    client: anthropic.Anthropic,
+    client: Optional[openai.OpenAI] = None,
+    model: Optional[str] = None,
     job_key: Optional[str] = None,
 ) -> None:
-    """Score all PENDING jobs, or a single job if job_key is provided."""
+    """Score all SCRAPED jobs, or a single job if job_key is provided."""
+    if client is None or model is None:
+        client, model = get_openai_client(db)
+
     profile = load_user_profile(db)
     config = load_config(db)
 
     if job_key:
-        jobs = db.query(Job).filter_by(job_key=job_key, state=JobState.PENDING).all()
+        jobs = db.query(Job).filter_by(job_key=job_key, state=JobState.SCRAPED).all()
     else:
-        jobs = db.query(Job).filter_by(state=JobState.PENDING).all()
+        jobs = db.query(Job).filter_by(state=JobState.SCRAPED).all()
 
     if not jobs:
-        print("No PENDING jobs found.")
+        print("No SCRAPED jobs found.")
         return
 
     for job in jobs:
-        score_job(job, profile, config, client, db)
+        score_job(job, profile, config, client, model, db)
         db.refresh(job)
         score_str = f"{job.final_score:.2f}" if job.final_score is not None else "N/A"
         print(f"[{job.state.upper()}] {job.job_key} (final={score_str})")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Score SCRAPED jobs using Claude.")
+    parser = argparse.ArgumentParser(description="Score SCRAPED jobs using the configured LLM.")
     parser.add_argument("--job-key", help="Score a single job by key")
     args = parser.parse_args()
 
     db = SessionLocal()
-    claude_client = anthropic.Anthropic()
     try:
-        run_scorer(db, claude_client, job_key=args.job_key)
+        run_scorer(db, job_key=args.job_key)
     finally:
         db.close()

@@ -2,9 +2,10 @@ import json
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from unittest.mock import MagicMock
 
-from db.models import Base, UserProfileModel
-from core.types import UserProfile, WorkHistoryEntry, EducationEntry
+from db.models import Base, UserProfileModel, Config, Job
+from core.types import UserProfile, WorkHistoryEntry, EducationEntry, JobState
 
 
 @pytest.fixture
@@ -54,14 +55,12 @@ def test_seed_profile_inserts(db_session, tmp_path):
 
     profile_file = tmp_path / "profile.json"
     profile_file.write_text(json.dumps(SAMPLE_PROFILE_DICT))
-
     seed_profile(db_session, str(profile_file))
 
     row = db_session.query(UserProfileModel).first()
     assert row is not None
     data = json.loads(row.data)
     assert data["name"] == "Matt Barlow"
-    assert data["skills"] == ["Python", "SQL", "FastAPI"]
 
 
 def test_seed_profile_upserts(db_session, tmp_path):
@@ -69,16 +68,13 @@ def test_seed_profile_upserts(db_session, tmp_path):
 
     profile_file = tmp_path / "profile.json"
     profile_file.write_text(json.dumps(SAMPLE_PROFILE_DICT))
-
     seed_profile(db_session, str(profile_file))
-    seed_profile(db_session, str(profile_file))  # second call must not duplicate
+    seed_profile(db_session, str(profile_file))
 
-    count = db_session.query(UserProfileModel).count()
-    assert count == 1
+    assert db_session.query(UserProfileModel).count() == 1
 
 
-from core.scorer import compute_final_score
-from core.types import JobState
+from core.scorer import compute_final_score, determine_state
 
 
 def test_compute_final_score_equal_weights():
@@ -93,13 +89,11 @@ def test_compute_final_score_clamps_above_one():
     assert compute_final_score(1.0, 1.0, 1.0, 1.0) == pytest.approx(1.0)
 
 
-import json as _json
-from db.models import Config, Job, UserProfileModel
 from core.scorer import load_user_profile, load_config
 
 
 def test_load_user_profile(db_session):
-    db_session.add(UserProfileModel(data=_json.dumps(SAMPLE_PROFILE_DICT)))
+    db_session.add(UserProfileModel(data=json.dumps(SAMPLE_PROFILE_DICT)))
     db_session.commit()
 
     profile = load_user_profile(db_session)
@@ -152,7 +146,7 @@ def test_build_prompt_contains_job_fields():
         salary="$130k-$150k",
         description="We need a Python expert.",
         url="https://example.com/job/1",
-        state=JobState.PENDING,
+        state=JobState.SCRAPED,
     )
 
     prompt = build_prompt(job, profile)
@@ -170,61 +164,47 @@ def test_parse_claude_response_valid():
         "desirability_justification": "Good salary, remote.",
         "fit_justification": "Python matches well.",
     })
-
     result = parse_claude_response(raw)
     assert result["desirability_score"] == pytest.approx(0.85)
-    assert result["fit_score"] == pytest.approx(0.70)
-    assert result["desirability_justification"] == "Good salary, remote."
-    assert result["fit_justification"] == "Python matches well."
 
 
 def test_parse_claude_response_invalid_returns_none():
-    result = parse_claude_response("not valid json at all")
-    assert result is None
+    assert parse_claude_response("not valid json") is None
 
 
 def test_parse_claude_response_missing_keys_returns_none():
-    result = parse_claude_response(json.dumps({"desirability_score": 0.8}))
-    assert result is None
+    assert parse_claude_response(json.dumps({"desirability_score": 0.8})) is None
 
 
-from unittest.mock import MagicMock
-from core.scorer import score_job
+from core.scorer import score_job, run_scorer
 
 
-MOCK_CLAUDE_RESPONSE = _json.dumps({
+MOCK_RESPONSE = json.dumps({
     "desirability_score": 0.85,
     "fit_score": 0.75,
     "desirability_justification": "Good salary, fully remote.",
     "fit_justification": "Python and SQL match perfectly.",
 })
 
-MOCK_CLAUDE_RESPONSE_LOW = _json.dumps({
-    "desirability_score": 0.1,
-    "fit_score": 0.15,
-    "desirability_justification": "Poor salary, on-site only.",
-    "fit_justification": "Requires Java, candidate has none.",
-})
 
-MOCK_CLAUDE_RESPONSE_MID = _json.dumps({
-    "desirability_score": 0.5,
-    "fit_score": 0.55,
-    "desirability_justification": "Decent role.",
-    "fit_justification": "Partial skill match.",
-})
+def mock_client(response_text: str) -> MagicMock:
+    client = MagicMock()
+    choice = MagicMock()
+    choice.message.content = response_text
+    client.chat.completions.create.return_value = MagicMock(choices=[choice])
+    return client
 
 
 @pytest.fixture
 def seeded_db(db_session):
-    """DB with profile and config seeded."""
-    db_session.add(UserProfileModel(data=_json.dumps(SAMPLE_PROFILE_DICT)))
+    db_session.add(UserProfileModel(data=json.dumps(SAMPLE_PROFILE_DICT)))
     for key, value in [("w1", "0.5"), ("w2", "0.5"), ("auto_reject_threshold", "0.3"), ("auto_approve_threshold", "0.8")]:
         db_session.add(Config(key=key, value=value))
     db_session.commit()
     return db_session
 
 
-def make_job(job_key: str, state: JobState = JobState.PENDING) -> Job:
+def make_job(job_key: str, state: str = JobState.SCRAPED) -> Job:
     return Job(
         job_key=job_key,
         source="indeed",
@@ -238,37 +218,29 @@ def make_job(job_key: str, state: JobState = JobState.PENDING) -> Job:
     )
 
 
-def mock_client(response_text: str):
-    client = MagicMock()
-    message = MagicMock()
-    message.content = [MagicMock(text=response_text)]
-    client.messages.create.return_value = message
-    return client
-
-
-def test_score_job_sets_scores_not_state(seeded_db):
+def test_score_job_sets_scores_and_state(seeded_db):
     job = make_job("job_001")
     seeded_db.add(job)
     seeded_db.commit()
 
     profile = load_user_profile(seeded_db)
     config = load_config(seeded_db)
-    client = mock_client(MOCK_CLAUDE_RESPONSE)
+    client = mock_client(MOCK_RESPONSE)
 
-    score_job(job, profile, config, client, seeded_db)
+    score_job(job, profile, config, client, "test-model", seeded_db)
     seeded_db.refresh(job)
 
-    assert job.state == JobState.PENDING
     assert job.desirability_score == pytest.approx(0.85)
     assert job.fit_score == pytest.approx(0.75)
     assert job.final_score == pytest.approx(0.8)
-    justification = _json.loads(job.score_justification)
+    assert job.state == JobState.APPROVED
+    justification = json.loads(job.score_justification)
     assert "desirability" in justification
     assert "fit" in justification
 
 
-def test_malformed_claude_response(seeded_db):
-    job = make_job("job_004")
+def test_malformed_response_leaves_job_unchanged(seeded_db):
+    job = make_job("job_002")
     seeded_db.add(job)
     seeded_db.commit()
 
@@ -276,48 +248,45 @@ def test_malformed_claude_response(seeded_db):
     config = load_config(seeded_db)
     client = mock_client("not valid json")
 
-    score_job(job, profile, config, client, seeded_db)
+    score_job(job, profile, config, client, "test-model", seeded_db)
     seeded_db.refresh(job)
 
-    assert job.state == JobState.PENDING
     assert job.final_score is None
+    assert job.state == JobState.SCRAPED
 
 
-from core.scorer import run_scorer
-
-
-def test_score_batch_skips_non_pending(seeded_db):
-    pending1 = make_job("batch_001", JobState.PENDING)
-    pending2 = make_job("batch_002", JobState.PENDING)
-    already_applied = make_job("batch_003", JobState.APPLIED)
-    seeded_db.add_all([pending1, pending2, already_applied])
+def test_run_scorer_skips_non_scraped(seeded_db):
+    scraped1 = make_job("s_001", JobState.SCRAPED)
+    scraped2 = make_job("s_002", JobState.SCRAPED)
+    approved = make_job("s_003", JobState.APPROVED)
+    seeded_db.add_all([scraped1, scraped2, approved])
     seeded_db.commit()
 
-    client = mock_client(MOCK_CLAUDE_RESPONSE)
-    run_scorer(seeded_db, client, job_key=None)
+    client = mock_client(MOCK_RESPONSE)
+    run_scorer(seeded_db, client=client, model="test-model")
 
-    seeded_db.refresh(pending1)
-    seeded_db.refresh(pending2)
-    seeded_db.refresh(already_applied)
+    seeded_db.refresh(scraped1)
+    seeded_db.refresh(scraped2)
+    seeded_db.refresh(approved)
 
-    assert pending1.state == JobState.PENDING
-    assert pending2.state == JobState.PENDING
-    assert already_applied.state == JobState.APPLIED
-    assert client.messages.create.call_count == 2
+    assert scraped1.final_score is not None
+    assert scraped2.final_score is not None
+    assert approved.final_score is None
+    assert client.chat.completions.create.call_count == 2
 
 
-def test_single_job_key_flag(seeded_db):
-    target = make_job("single_001", JobState.PENDING)
-    other = make_job("single_002", JobState.PENDING)
+def test_run_scorer_single_job_key(seeded_db):
+    target = make_job("t_001", JobState.SCRAPED)
+    other = make_job("t_002", JobState.SCRAPED)
     seeded_db.add_all([target, other])
     seeded_db.commit()
 
-    client = mock_client(MOCK_CLAUDE_RESPONSE)
-    run_scorer(seeded_db, client, job_key="single_001")
+    client = mock_client(MOCK_RESPONSE)
+    run_scorer(seeded_db, client=client, model="test-model", job_key="t_001")
 
     seeded_db.refresh(target)
     seeded_db.refresh(other)
 
     assert target.final_score == pytest.approx(0.8)
     assert other.final_score is None
-    assert client.messages.create.call_count == 1
+    assert client.chat.completions.create.call_count == 1

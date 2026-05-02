@@ -7,6 +7,9 @@ from typing import Optional
 
 class JobState(str, Enum):
     PENDING = "pending"
+    SCRAPED = "scraped"
+    APPROVED = "approved"
+    PENDING_REVIEW = "pending_review"
     APPLIED = "applied"
     REJECTED = "rejected"
     FAILED = "failed"
