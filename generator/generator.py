@@ -237,7 +237,6 @@ def generate_job(
 
         job.resume_path = str(resume_pdf_path)
         job.cover_path = str(cover_pdf_path)
-        job.state = JobState.GENERATED.value
         db.commit()
 
     except Exception as e:

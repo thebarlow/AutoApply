@@ -58,7 +58,7 @@ def save_jobs(db: Session, jobs: list[ScrapedJob]) -> int:
             salary=scraped.salary,
             remote=scraped.remote,
             posted_at=scraped.posted_at,
-            state=JobState.SCRAPED.value,
+            state=JobState.PENDING.value,
         ))
         count += 1
     db.commit()
