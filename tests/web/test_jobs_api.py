@@ -125,91 +125,24 @@ def test_get_jobs_justification_parsed(client, db_session):
 
 # --- PATCH /api/jobs/{job_key}/state ---
 
-def test_patch_approve(client, db_session, monkeypatch):
-    import types
-    import web.routers.jobs as jobs_router
+def test_patch_applied(client, db_session):
+    _make_job(db_session, "job_apply")
 
-    _make_job(db_session, "job_1", JobState.PENDING)
-
-    class _NoOpThread:
-        def __init__(self, **kwargs):
-            pass
-        def start(self):
-            pass
-
-    monkeypatch.setattr(jobs_router, "threading", types.SimpleNamespace(Thread=_NoOpThread), raising=False)
-
-    resp = client.patch("/api/jobs/job_1/state", json={"state": "approved"})
+    resp = client.patch("/api/jobs/job_apply/state", json={"state": "applied"})
     assert resp.status_code == 200
-    assert resp.json()["state"] == "approved"
+    assert resp.json()["state"] == "applied"
 
 
-def test_patch_reject(client, db_session):
-    _make_job(db_session, "job_2", JobState.PENDING)
+def test_patch_invalid_state_rejected_by_api(client, db_session):
+    _make_job(db_session, "job_bad")
 
-    resp = client.patch("/api/jobs/job_2/state", json={"state": "rejected"})
-    assert resp.status_code == 200
-    assert resp.json()["state"] == "rejected"
-
-
-def test_patch_invalid_state(client, db_session):
-    _make_job(db_session, "job_3", JobState.PENDING)
-
-    resp = client.patch("/api/jobs/job_3/state", json={"state": "deleted"})
+    resp = client.patch("/api/jobs/job_bad/state", json={"state": "approved"})
     assert resp.status_code == 400
 
 
-def test_patch_not_found(client):
-    resp = client.patch("/api/jobs/nonexistent/state", json={"state": "approved"})
+def test_patch_state_not_found(client):
+    resp = client.patch("/api/jobs/nonexistent/state", json={"state": "applied"})
     assert resp.status_code == 404
-
-
-def test_approve_spawns_generation_thread(client, db_session, monkeypatch):
-    import types
-    import web.routers.jobs as jobs_router
-
-    _make_job(db_session, "job_gen", JobState.PENDING)
-
-    spawned = []
-
-    class MockThread:
-        def __init__(self, **kwargs):
-            spawned.append({"target": kwargs["target"].__name__, "args": kwargs["args"]})
-
-        def start(self):
-            pass
-
-    mock_threading = types.SimpleNamespace(Thread=MockThread)
-    monkeypatch.setattr(jobs_router, "threading", mock_threading, raising=False)
-
-    resp = client.patch("/api/jobs/job_gen/state", json={"state": "approved"})
-    assert resp.status_code == 200
-    assert len(spawned) == 1
-    assert spawned[0]["target"] == "generate_job"
-    assert spawned[0]["args"] == ("job_gen",)
-
-
-def test_reject_does_not_spawn_thread(client, db_session, monkeypatch):
-    import types
-    import web.routers.jobs as jobs_router
-
-    _make_job(db_session, "job_rej", JobState.PENDING)
-
-    spawned = []
-
-    class MockThread:
-        def __init__(self, **kwargs):
-            spawned.append(kwargs)
-
-        def start(self):
-            pass
-
-    mock_threading = types.SimpleNamespace(Thread=MockThread)
-    monkeypatch.setattr(jobs_router, "threading", mock_threading, raising=False)
-
-    resp = client.patch("/api/jobs/job_rej/state", json={"state": "rejected"})
-    assert resp.status_code == 200
-    assert len(spawned) == 0
 
 
 def test_get_jobs_includes_url(client, db_session):

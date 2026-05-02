@@ -1,21 +1,16 @@
 from __future__ import annotations
 
 import json
-import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.types import JobState
 from db.database import get_db
 from db.models import Job
-from generator.generator import generate_job
 
 router = APIRouter(prefix="/api/jobs")
-
-_ALLOWED_PATCH_STATES = {JobState.APPLIED.value, JobState.REJECTED.value}
 
 
 class StateUpdate(BaseModel):
@@ -57,7 +52,7 @@ def get_jobs(db: Session = Depends(get_db)):
 
 @router.patch("/{job_key}/state")
 def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_db)):
-    if body.state not in _ALLOWED_PATCH_STATES:
+    if body.state != "applied":
         raise HTTPException(status_code=400, detail=f"Invalid state: {body.state!r}")
 
     job = db.query(Job).filter(Job.job_key == job_key).first()
@@ -67,9 +62,4 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     job.state = body.state
     db.commit()
     db.refresh(job)
-
-    if job.state == JobState.APPLIED.value:
-        t = threading.Thread(target=generate_job, args=(job_key,), daemon=True)
-        t.start()
-
     return _serialize(job)
