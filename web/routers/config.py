@@ -82,3 +82,40 @@ def put_search(body: SearchBody, db: Session = Depends(get_db)) -> dict[str, Any
     _set(db, "keywords_blacklist", json.dumps(body.keywords_blacklist))
     _set(db, "max_jobs_per_source", str(body.max_jobs_per_source))
     return body.model_dump()
+
+
+# ---- Templates ----
+
+class TemplatesBody(BaseModel):
+    resume_template_path: str
+    cover_template_path: str
+    resume_prompt_template: str
+    cover_prompt_template: str
+    github: str
+    linkedin: str
+    website: str
+
+
+@router.get("/api/config/templates")
+def get_templates(db: Session = Depends(get_db)) -> dict[str, str]:
+    return {
+        "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
+        "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
+        "resume_prompt_template": _get(db, "resume_prompt_template"),
+        "cover_prompt_template": _get(db, "cover_prompt_template"),
+        "github": _get(db, "resume_github"),
+        "linkedin": _get(db, "resume_linkedin"),
+        "website": _get(db, "resume_website"),
+    }
+
+
+@router.put("/api/config/templates")
+def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[str, str]:
+    _set(db, "resume_template_path", body.resume_template_path)
+    _set(db, "cover_template_path", body.cover_template_path)
+    _set(db, "resume_prompt_template", body.resume_prompt_template)
+    _set(db, "cover_prompt_template", body.cover_prompt_template)
+    _set(db, "resume_github", body.github)
+    _set(db, "resume_linkedin", body.linkedin)
+    _set(db, "resume_website", body.website)
+    return body.model_dump()

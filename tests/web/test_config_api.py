@@ -68,3 +68,35 @@ def test_put_search_persists(client):
     assert data["keywords_whitelist"] == ["Python", "FastAPI"]
     assert data["keywords_blacklist"] == ["Senior"]
     assert data["max_jobs_per_source"] == 100
+
+
+def test_get_templates_defaults(client):
+    resp = client.get("/api/config/templates")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["resume_template_path"] == "generator/resume_template.tex"
+    assert data["cover_template_path"] == "generator/cover_template.tex"
+    assert data["resume_prompt_template"] == ""
+    assert data["cover_prompt_template"] == ""
+    assert data["github"] == ""
+    assert data["linkedin"] == ""
+    assert data["website"] == ""
+
+
+def test_put_templates_persists(client):
+    body = {
+        "resume_template_path": "/custom/resume.tex",
+        "cover_template_path": "/custom/cover.tex",
+        "resume_prompt_template": "Write a resume for {profile} applying to {job}",
+        "cover_prompt_template": "Write a cover letter for {profile} applying to {job}",
+        "github": "github.com/matt",
+        "linkedin": "linkedin.com/in/matt",
+        "website": "matt.dev",
+    }
+    resp = client.put("/api/config/templates", json=body)
+    assert resp.status_code == 200
+    resp2 = client.get("/api/config/templates")
+    data = resp2.json()
+    assert data["resume_template_path"] == "/custom/resume.tex"
+    assert data["github"] == "github.com/matt"
+    assert data["resume_prompt_template"] == "Write a resume for {profile} applying to {job}"
