@@ -96,10 +96,7 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    try:
-        _generate_resume_for_job(job_key, db=db, client=_make_anthropic_client())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    _generate_resume_for_job(job_key, db=db, client=_make_anthropic_client())
     db.refresh(job)
     return _serialize(job)
 
@@ -109,10 +106,7 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    try:
-        _generate_cover_for_job(job_key, db=db, client=_make_anthropic_client())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    _generate_cover_for_job(job_key, db=db, client=_make_anthropic_client())
     db.refresh(job)
     return _serialize(job)
 
@@ -120,7 +114,9 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
 @router.get("/{job_key}/resume")
 def serve_resume(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None or not job.resume_path:
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.resume_path:
         raise HTTPException(status_code=404, detail="Resume not found")
     path = Path(job.resume_path)
     if not path.exists():
@@ -131,7 +127,9 @@ def serve_resume(job_key: str, db: Session = Depends(get_db)):
 @router.get("/{job_key}/cover")
 def serve_cover(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None or not job.cover_path:
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.cover_path:
         raise HTTPException(status_code=404, detail="Cover letter not found")
     path = Path(job.cover_path)
     if not path.exists():

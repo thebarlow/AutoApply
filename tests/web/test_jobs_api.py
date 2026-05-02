@@ -211,7 +211,6 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
         job.desirability_score = 0.9
         job.fit_score = 0.8
         job.final_score = 0.85
-        import json
         job.score_justification = json.dumps({"desirability": "Great.", "fit": "Perfect."})
         db.commit()
 
@@ -287,4 +286,26 @@ def test_serve_resume_not_found(client, db_session):
 def test_serve_cover_not_found(client, db_session):
     _make_job(db_session, "job_nocover")
     resp = client.get("/api/jobs/job_nocover/cover")
+    assert resp.status_code == 404
+
+
+def test_serve_resume_job_not_found(client):
+    resp = client.get("/api/jobs/nonexistent/resume")
+    assert resp.status_code == 404
+
+
+def test_serve_cover_job_not_found(client):
+    resp = client.get("/api/jobs/nonexistent/cover")
+    assert resp.status_code == 404
+
+
+def test_serve_resume_file_missing_on_disk(client, db_session):
+    _make_job(db_session, "job_badpath", resume_path="/nonexistent/path/resume.pdf")
+    resp = client.get("/api/jobs/job_badpath/resume")
+    assert resp.status_code == 404
+
+
+def test_serve_cover_file_missing_on_disk(client, db_session):
+    _make_job(db_session, "job_badcover", cover_path="/nonexistent/path/cover.pdf")
+    resp = client.get("/api/jobs/job_badcover/cover")
     assert resp.status_code == 404
