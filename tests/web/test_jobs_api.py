@@ -198,3 +198,35 @@ def test_delete_job(client, db_session):
 def test_delete_job_not_found(client):
     resp = client.delete("/api/jobs/nonexistent")
     assert resp.status_code == 404
+
+
+# --- POST /api/jobs/{job_key}/score ---
+
+def test_score_job_endpoint(client, db_session, monkeypatch):
+    import web.routers.jobs as jobs_router
+
+    _make_job(db_session, "job_score")
+
+    def mock_score_job(job, profile, config, claude_client, db):
+        job.desirability_score = 0.9
+        job.fit_score = 0.8
+        job.final_score = 0.85
+        import json
+        job.score_justification = json.dumps({"desirability": "Great.", "fit": "Perfect."})
+        db.commit()
+
+    monkeypatch.setattr(jobs_router, "_score_job", mock_score_job)
+    monkeypatch.setattr(jobs_router, "_load_user_profile", lambda db: None)
+    monkeypatch.setattr(jobs_router, "_load_config", lambda db: {})
+    monkeypatch.setattr(jobs_router, "_make_anthropic_client", lambda: None)
+
+    resp = client.post("/api/jobs/job_score/score")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["final_score"] == pytest.approx(0.85)
+    assert data["state"] == "pending"
+
+
+def test_score_job_endpoint_not_found(client):
+    resp = client.post("/api/jobs/nonexistent/score")
+    assert resp.status_code == 404

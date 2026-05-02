@@ -3,12 +3,20 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import anthropic as _anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.scorer import load_config as _load_config
+from core.scorer import load_user_profile as _load_user_profile
+from core.scorer import score_job as _score_job
 from db.database import get_db
 from db.models import Job
+
+
+def _make_anthropic_client() -> _anthropic.Anthropic:
+    return _anthropic.Anthropic()
 
 router = APIRouter(prefix="/api/jobs")
 
@@ -61,6 +69,20 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
 
     job.state = body.state
     db.commit()
+    db.refresh(job)
+    return _serialize(job)
+
+
+@router.post("/{job_key}/score")
+def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    profile = _load_user_profile(db)
+    config = _load_config(db)
+    client = _make_anthropic_client()
+    _score_job(job, profile, config, client, db)
     db.refresh(job)
     return _serialize(job)
 
