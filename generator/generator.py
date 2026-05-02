@@ -251,3 +251,125 @@ def generate_job(
     finally:
         if own_db:
             db.close()
+
+
+def generate_resume_for_job(
+    job_key: str,
+    db: Optional[Session] = None,
+    client: Optional[anthropic.Anthropic] = None,
+) -> None:
+    """Generate resume only for a job. Updates job.resume_path and commits."""
+    own_db = db is None
+    if own_db:
+        db = SessionLocal()
+    if client is None:
+        client = anthropic.Anthropic()
+
+    try:
+        job = db.query(Job).filter_by(job_key=job_key).first()
+        if job is None:
+            raise ValueError(f"Job not found: {job_key}")
+
+        row = db.query(UserProfileModel).first()
+        if not row:
+            raise RuntimeError("No user profile found in DB.")
+        data = json.loads(row.data)
+        data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
+        data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+        profile = UserProfile(**data)
+
+        resume_tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
+        if not resume_tpl:
+            raise RuntimeError("resume_prompt_template not seeded in config table.")
+
+        def _cfg(key: str) -> str:
+            r = db.query(Config).filter_by(key=key).first()
+            return r.value if r else ""
+
+        frontmatter = _build_frontmatter(
+            profile,
+            github=_cfg("resume_github"),
+            linkedin=_cfg("resume_linkedin"),
+            website=_cfg("resume_website"),
+        )
+
+        outputs = _OUTPUTS_DIR
+        outputs.mkdir(parents=True, exist_ok=True)
+
+        resume_md_path = outputs / f"{job_key}_resume.md"
+        resume_pdf_path = outputs / f"{job_key}_resume.pdf"
+        resume_md = strip_header_block(
+            call_claude(build_resume_prompt(job, profile, resume_tpl.value), client)
+        )
+        resume_md_path.write_text(frontmatter + resume_md, encoding="utf-8")
+        render_resume_pdf(resume_md_path, resume_pdf_path, job_key)
+
+        job.resume_path = str(resume_pdf_path)
+        db.commit()
+
+    except Exception as e:
+        print(f"[generator] ERROR generating resume for {job_key}: {e}", file=sys.stderr)
+        raise
+    finally:
+        if own_db:
+            db.close()
+
+
+def generate_cover_for_job(
+    job_key: str,
+    db: Optional[Session] = None,
+    client: Optional[anthropic.Anthropic] = None,
+) -> None:
+    """Generate cover letter only for a job. Updates job.cover_path and commits."""
+    own_db = db is None
+    if own_db:
+        db = SessionLocal()
+    if client is None:
+        client = anthropic.Anthropic()
+
+    try:
+        job = db.query(Job).filter_by(job_key=job_key).first()
+        if job is None:
+            raise ValueError(f"Job not found: {job_key}")
+
+        row = db.query(UserProfileModel).first()
+        if not row:
+            raise RuntimeError("No user profile found in DB.")
+        data = json.loads(row.data)
+        data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
+        data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+        profile = UserProfile(**data)
+
+        cover_tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
+        if not cover_tpl:
+            raise RuntimeError("cover_prompt_template not seeded in config table.")
+
+        def _cfg(key: str) -> str:
+            r = db.query(Config).filter_by(key=key).first()
+            return r.value if r else ""
+
+        frontmatter = _build_frontmatter(
+            profile,
+            github=_cfg("resume_github"),
+            linkedin=_cfg("resume_linkedin"),
+            website=_cfg("resume_website"),
+        )
+
+        outputs = _OUTPUTS_DIR
+        outputs.mkdir(parents=True, exist_ok=True)
+
+        cover_md_path = outputs / f"{job_key}_cover.md"
+        cover_pdf_path = outputs / f"{job_key}_cover.pdf"
+        cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client)
+        cover_md_path.write_text(frontmatter + cover_md, encoding="utf-8")
+        render_pdf(cover_md_path, cover_pdf_path, COVER_TEMPLATE_PATH)
+
+        job.cover_path = str(cover_pdf_path)
+        db.commit()
+
+    except Exception as e:
+        print(f"[generator] ERROR generating cover for {job_key}: {e}", file=sys.stderr)
+        raise
+    finally:
+        if own_db:
+            db.close()
