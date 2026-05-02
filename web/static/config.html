@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Apply — Config</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="/">Auto Apply</a>
+  <a href="#">Dashboard</a>
+  <a href="/">Review Queue</a>
+  <a href="/config" class="active">Config</a>
+</nav>
+
+<main>
+  <h1>Config</h1>
+
+  <!-- Section 1: API Config -->
+  <details class="config-section" open>
+    <summary>API Config</summary>
+    <div class="config-body">
+      <h2>Sources</h2>
+      <div class="config-row">
+        <label><input type="checkbox" id="src-remotive"> Remotive</label>
+        <label><input type="checkbox" id="src-remoteok"> RemoteOK</label>
+      </div>
+
+      <h2>Search</h2>
+      <label class="config-label">Keywords whitelist (comma-separated)</label>
+      <input class="config-input" type="text" id="search-whitelist" placeholder="Python, FastAPI, Data Engineer">
+      <label class="config-label">Keywords blacklist (comma-separated)</label>
+      <input class="config-input" type="text" id="search-blacklist" placeholder="Senior, Lead, Manager">
+      <label class="config-label">Max jobs per source</label>
+      <input class="config-input" type="number" id="search-max-jobs" min="1" max="500" value="50">
+
+      <div class="config-actions">
+        <button class="btn btn-save" id="save-api">Save</button>
+        <span class="save-status" id="status-api"></span>
+      </div>
+    </div>
+  </details>
+
+  <!-- Section 2: Templates -->
+  <details class="config-section">
+    <summary>Templates</summary>
+    <div class="config-body">
+      <h2>LaTeX Templates</h2>
+      <label class="config-label">Resume template path</label>
+      <input class="config-input" type="text" id="tpl-resume-path" placeholder="generator/resume_template.tex">
+      <label class="config-label">Cover letter template path</label>
+      <input class="config-input" type="text" id="tpl-cover-path" placeholder="generator/cover_template.tex">
+
+      <h2>Prompt Templates</h2>
+      <label class="config-label">Resume prompt</label>
+      <textarea class="config-textarea" id="tpl-resume-prompt" rows="10"></textarea>
+      <label class="config-label">Cover letter prompt</label>
+      <textarea class="config-textarea" id="tpl-cover-prompt" rows="10"></textarea>
+
+      <h2>Social Links</h2>
+      <label class="config-label">GitHub</label>
+      <input class="config-input" type="text" id="tpl-github" placeholder="github.com/username">
+      <label class="config-label">LinkedIn</label>
+      <input class="config-input" type="text" id="tpl-linkedin" placeholder="linkedin.com/in/username">
+      <label class="config-label">Website</label>
+      <input class="config-input" type="text" id="tpl-website" placeholder="yoursite.com">
+
+      <div class="config-actions">
+        <button class="btn btn-save" id="save-templates">Save</button>
+        <span class="save-status" id="status-templates"></span>
+      </div>
+    </div>
+  </details>
+
+  <!-- Section 3: User Profile (disabled) -->
+  <details class="config-section config-section--disabled">
+    <summary>User Profile</summary>
+    <div class="config-body">
+      <p class="coming-soon">Coming soon — will accept a PDF or Markdown file and convert it to a structured user profile.</p>
+    </div>
+  </details>
+
+  <!-- Section 4: Scoring -->
+  <details class="config-section">
+    <summary>Scoring</summary>
+    <div class="config-body">
+      <h2>Score Weights</h2>
+      <div class="weight-widget">
+        <span class="weight-label">Desirability</span>
+        <input type="number" class="weight-input" id="w1" min="0" max="1" step="0.01" value="0.50">
+        <input type="range" id="w-slider" min="0" max="1" step="0.01" value="0.50">
+        <input type="number" class="weight-input" id="w2" min="0" max="1" step="0.01" value="0.50">
+        <span class="weight-label">Fitness</span>
+      </div>
+
+      <h2>Auto-routing Thresholds</h2>
+      <label class="config-label">Auto-reject below</label>
+      <input class="config-input" type="number" id="reject-threshold" min="0" max="1" step="0.01">
+      <label class="config-label">Auto-approve at or above</label>
+      <input class="config-input" type="number" id="approve-threshold" min="0" max="1" step="0.01">
+
+      <div class="config-actions">
+        <button class="btn btn-save" id="save-scoring">Save</button>
+        <span class="save-status" id="status-scoring"></span>
+      </div>
+    </div>
+  </details>
+
+  <!-- Section 5: LLM Providers -->
+  <details class="config-section">
+    <summary>LLM Providers</summary>
+    <div class="config-body">
+      <div id="llm-provider-list"></div>
+      <button class="btn btn-secondary" id="btn-add-provider" type="button">+ Add LLM Provider</button>
+
+      <div class="config-actions">
+        <button class="btn btn-save" id="save-llm">Save</button>
+        <span class="save-status" id="status-llm"></span>
+      </div>
+    </div>
+  </details>
+
+</main>
+
+<script>
+(function () {
+
+  function showStatus(id, text, isError) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.style.color = isError ? '#e74c3c' : '#27ae60';
+    setTimeout(() => { el.textContent = ''; }, 3000);
+  }
+
+  function toList(val) {
+    return val.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  // ---- Section 1: API Config ----
+
+  async function loadApiConfig() {
+    const [src, search] = await Promise.all([
+      fetch('/api/config/sources').then(r => r.json()),
+      fetch('/api/config/search').then(r => r.json()),
+    ]);
+    document.getElementById('src-remotive').checked = src.remotive;
+    document.getElementById('src-remoteok').checked = src.remoteok;
+    document.getElementById('search-whitelist').value = search.keywords_whitelist.join(', ');
+    document.getElementById('search-blacklist').value = search.keywords_blacklist.join(', ');
+    document.getElementById('search-max-jobs').value = search.max_jobs_per_source;
+  }
+
+  document.getElementById('save-api').addEventListener('click', async () => {
+    try {
+      const [r1, r2] = await Promise.all([
+        fetch('/api/config/sources', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            remotive: document.getElementById('src-remotive').checked,
+            remoteok: document.getElementById('src-remoteok').checked,
+          }),
+        }),
+        fetch('/api/config/search', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keywords_whitelist: toList(document.getElementById('search-whitelist').value),
+            keywords_blacklist: toList(document.getElementById('search-blacklist').value),
+            max_jobs_per_source: parseInt(document.getElementById('search-max-jobs').value) || 50,
+          }),
+        }),
+      ]);
+      if (r1.ok && r2.ok) showStatus('status-api', 'Saved ✓', false);
+      else showStatus('status-api', 'Error saving', true);
+    } catch {
+      showStatus('status-api', 'Error saving', true);
+    }
+  });
+
+  // ---- Section 2: Templates ----
+
+  async function loadTemplates() {
+    const data = await fetch('/api/config/templates').then(r => r.json());
+    document.getElementById('tpl-resume-path').value = data.resume_template_path;
+    document.getElementById('tpl-cover-path').value = data.cover_template_path;
+    document.getElementById('tpl-resume-prompt').value = data.resume_prompt_template;
+    document.getElementById('tpl-cover-prompt').value = data.cover_prompt_template;
+    document.getElementById('tpl-github').value = data.github;
+    document.getElementById('tpl-linkedin').value = data.linkedin;
+    document.getElementById('tpl-website').value = data.website;
+  }
+
+  document.getElementById('save-templates').addEventListener('click', async () => {
+    try {
+      const resp = await fetch('/api/config/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_template_path: document.getElementById('tpl-resume-path').value,
+          cover_template_path: document.getElementById('tpl-cover-path').value,
+          resume_prompt_template: document.getElementById('tpl-resume-prompt').value,
+          cover_prompt_template: document.getElementById('tpl-cover-prompt').value,
+          github: document.getElementById('tpl-github').value,
+          linkedin: document.getElementById('tpl-linkedin').value,
+          website: document.getElementById('tpl-website').value,
+        }),
+      });
+      if (resp.ok) showStatus('status-templates', 'Saved ✓', false);
+      else showStatus('status-templates', 'Error saving', true);
+    } catch {
+      showStatus('status-templates', 'Error saving', true);
+    }
+  });
+
+  // ---- Section 4: Scoring ----
+
+  async function loadScoring() {
+    const data = await fetch('/api/config/scoring').then(r => r.json());
+    document.getElementById('w1').value = data.w1.toFixed(2);
+    document.getElementById('w2').value = data.w2.toFixed(2);
+    document.getElementById('w-slider').value = data.w2.toFixed(2);
+    document.getElementById('reject-threshold').value = data.auto_reject_threshold.toFixed(2);
+    document.getElementById('approve-threshold').value = data.auto_approve_threshold.toFixed(2);
+  }
+
+  const w1El = document.getElementById('w1');
+  const w2El = document.getElementById('w2');
+  const sliderEl = document.getElementById('w-slider');
+
+  // Slider represents w2 (fitness); moving right increases fitness weight
+  sliderEl.addEventListener('input', () => {
+    const w2 = parseFloat(sliderEl.value);
+    w2El.value = w2.toFixed(2);
+    w1El.value = (1 - w2).toFixed(2);
+  });
+
+  w2El.addEventListener('input', () => {
+    const w2 = Math.min(1, Math.max(0, parseFloat(w2El.value) || 0));
+    w1El.value = (1 - w2).toFixed(2);
+    sliderEl.value = w2.toFixed(2);
+  });
+
+  w1El.addEventListener('input', () => {
+    const w1 = Math.min(1, Math.max(0, parseFloat(w1El.value) || 0));
+    const w2 = 1 - w1;
+    w2El.value = w2.toFixed(2);
+    sliderEl.value = w2.toFixed(2);
+  });
+
+  document.getElementById('save-scoring').addEventListener('click', async () => {
+    const w1 = parseFloat(w1El.value);
+    const w2 = parseFloat(w2El.value);
+    const reject = parseFloat(document.getElementById('reject-threshold').value);
+    const approve = parseFloat(document.getElementById('approve-threshold').value);
+
+    if (Math.abs(w1 + w2 - 1.0) > 0.001) {
+      showStatus('status-scoring', 'Desirability + Fitness must equal 1.0', true);
+      return;
+    }
+    if (reject >= approve) {
+      showStatus('status-scoring', 'Reject threshold must be less than approve threshold', true);
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api/config/scoring', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ w1, w2, auto_reject_threshold: reject, auto_approve_threshold: approve }),
+      });
+      if (resp.ok) showStatus('status-scoring', 'Saved ✓', false);
+      else {
+        const err = await resp.json().catch(() => ({}));
+        showStatus('status-scoring', err.detail || 'Error saving', true);
+      }
+    } catch {
+      showStatus('status-scoring', 'Error saving', true);
+    }
+  });
+
+  // ---- Section 5: LLM Providers ----
+
+  const LLM_PROVIDERS = {
+    openrouter: 'OpenRouter',
+    anthropic: 'Anthropic',
+    openai: 'OpenAI',
+    gemini: 'Gemini',
+  };
+
+  function buildProviderRow(provider, isActive) {
+    const name = provider ? provider.name : Object.keys(LLM_PROVIDERS)[0];
+    const row = document.createElement('div');
+    row.className = 'llm-row';
+    const opts = Object.entries(LLM_PROVIDERS)
+      .map(([k, v]) => `<option value="${k}"${name === k ? ' selected' : ''}>${v}</option>`)
+      .join('');
+    row.innerHTML = `
+      <input type="radio" name="llm-active" class="llm-radio" value="${name}"${isActive ? ' checked' : ''}>
+      <select class="llm-provider-select">${opts}</select>
+      <input type="text" class="llm-model" placeholder="Model (e.g. anthropic/claude-sonnet-4-6)" value="${provider ? provider.model : ''}">
+      <input type="password" class="llm-key" placeholder="${provider && provider.has_key ? '***' : 'API Key'}">
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    const select = row.querySelector('.llm-provider-select');
+    const radio = row.querySelector('.llm-radio');
+    select.addEventListener('change', () => { radio.value = select.value; });
+    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  async function loadLLM() {
+    const data = await fetch('/api/config/llm').then(r => r.json());
+    const list = document.getElementById('llm-provider-list');
+    list.innerHTML = '';
+    data.providers.forEach(p => {
+      list.appendChild(buildProviderRow(p, p.name === data.active));
+    });
+  }
+
+  document.getElementById('btn-add-provider').addEventListener('click', () => {
+    document.getElementById('llm-provider-list').appendChild(buildProviderRow(null, false));
+  });
+
+  document.getElementById('save-llm').addEventListener('click', async () => {
+    const rows = document.querySelectorAll('.llm-row');
+    const activeRadio = document.querySelector('input[name="llm-active"]:checked');
+    const providers = Array.from(rows).map(row => ({
+      name: row.querySelector('.llm-provider-select').value,
+      model: row.querySelector('.llm-model').value,
+      api_key: row.querySelector('.llm-key').value,
+    }));
+    try {
+      const resp = await fetch('/api/config/llm', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providers, active: activeRadio ? activeRadio.value : '' }),
+      });
+      if (resp.ok) showStatus('status-llm', 'Saved ✓', false);
+      else {
+        const err = await resp.json().catch(() => ({}));
+        showStatus('status-llm', err.detail || 'Error saving', true);
+      }
+    } catch {
+      showStatus('status-llm', 'Error saving', true);
+    }
+  });
+
+  // ---- Init ----
+  Promise.all([loadApiConfig(), loadTemplates(), loadScoring(), loadLLM()]).catch(console.error);
+
+})();
+</script>
+
+</body>
+</html>
