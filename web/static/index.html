@@ -5,181 +5,277 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Auto Apply</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
+<body x-data="dashboard()" x-init="init()">
 
 <nav>
   <a class="brand" href="/">Auto Apply</a>
-  <a href="#">Dashboard</a>
-  <a href="/">Review Queue <span class="badge" id="nav-badge" hidden></span></a>
+  <a href="/" class="nav-active">Dashboard</a>
   <a href="#">Config</a>
 </nav>
 
 <main>
-  <h1>Review Queue</h1>
-  <div id="message"></div>
-  <div id="job-list"></div>
+  <div class="toolbar">
+    <span x-text="sortedJobs.length + ' jobs'"></span>
+  </div>
+
+  <table class="job-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Company</th>
+        <th class="sortable" @click="setSort('final_score')">
+          Score <span x-show="sortField === 'final_score'" x-text="sortDir === 'desc' ? '▼' : '▲'"></span>
+        </th>
+        <th>Location</th>
+        <th class="sortable" @click="setSort('salary')">
+          Salary <span x-show="sortField === 'salary'" x-text="sortDir === 'desc' ? '▼' : '▲'"></span>
+        </th>
+        <th class="sortable" @click="setSort('state')">
+          Status <span x-show="sortField === 'state'" x-text="sortDir === 'desc' ? '▼' : '▲'"></span>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="job in sortedJobs" :key="job.job_key">
+        <tr class="job-row" @click="selectJob(job)">
+          <td x-text="job.title || '(no title)'"></td>
+          <td x-text="job.company || ''"></td>
+          <td><span :class="'score-badge ' + scoreClass(job.final_score)" x-text="pct(job.final_score)"></span></td>
+          <td x-text="job.location || ''"></td>
+          <td x-text="job.salary || ''"></td>
+          <td><span :class="'status-badge ' + statusClass(job.state)" x-text="job.state"></span></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <p class="empty-msg" x-show="sortedJobs.length === 0 && !loadError" x-text="'No jobs in database.'"></p>
+  <p class="empty-msg error" x-show="loadError" x-text="loadError"></p>
 </main>
 
+<!-- Overlay backdrop -->
+<div class="overlay-backdrop" x-show="selectedJob !== null" @click.self="closeOverlay()">
+  <div class="overlay-panel" @keydown.escape.window="closeOverlay()">
+    <template x-if="selectedJob">
+      <div>
+        <div class="overlay-header">
+          <h2 x-text="selectedJob.title || '(no title)'"></h2>
+          <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="selectedJob.state"></span>
+        </div>
+
+        <div class="overlay-meta">
+          <span x-text="selectedJob.company || ''"></span>
+          <span :class="'score-badge ' + scoreClass(selectedJob.final_score)" x-text="pct(selectedJob.final_score)"></span>
+          <span x-text="selectedJob.location || ''"></span>
+          <span x-text="selectedJob.salary || ''"></span>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn" @click="calculateScore()">Calculate Score</button>
+
+          <!-- Resume: Generate or View dropdown -->
+          <template x-if="!selectedJob.resume_path">
+            <button class="btn" @click="generateResume()">Generate Resume</button>
+          </template>
+          <template x-if="selectedJob.resume_path">
+            <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
+              <button class="btn btn-dropdown" @click="open = !open">View Resume ▾</button>
+              <div class="dropdown-menu" x-show="open">
+                <button @click="viewResume(); open = false">View</button>
+                <button @click="generateResume(); open = false">Regenerate</button>
+              </div>
+            </div>
+          </template>
+
+          <!-- Cover: Generate or View dropdown -->
+          <template x-if="!selectedJob.cover_path">
+            <button class="btn" @click="generateCover()">Generate Cover Letter</button>
+          </template>
+          <template x-if="selectedJob.cover_path">
+            <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
+              <button class="btn btn-dropdown" @click="open = !open">View Cover Letter ▾</button>
+              <div class="dropdown-menu" x-show="open">
+                <button @click="viewCover(); open = false">View</button>
+                <button @click="generateCover(); open = false">Regenerate</button>
+              </div>
+            </div>
+          </template>
+
+          <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
+
+          <button class="btn" @click="markApplied()" :disabled="selectedJob.state === 'applied'">
+            Mark as Applied
+          </button>
+
+          <template x-if="!deleteConfirm">
+            <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
+          </template>
+          <template x-if="deleteConfirm">
+            <button class="btn btn-danger-confirm" @click="deleteJob()">Confirm Delete</button>
+          </template>
+        </div>
+
+        <hr class="overlay-divider" />
+        <div class="overlay-description" x-html="formatDesc(selectedJob.description)"></div>
+      </div>
+    </template>
+  </div>
+</div>
+
 <script>
-(function () {
-  const list = document.getElementById('job-list');
-  const msg  = document.getElementById('message');
-  const badge = document.getElementById('nav-badge');
+function dashboard() {
+  return {
+    jobs: [],
+    selectedJob: null,
+    sortField: 'final_score',
+    sortDir: 'desc',
+    deleteConfirm: false,
+    loadError: null,
 
-  function scoreClass(s) {
-    if (s == null) return 'score-none';
-    if (s >= 0.8) return 'score-green';
-    if (s >= 0.5) return 'score-amber';
-    return 'score-red';
-  }
-
-  function pct(v) {
-    return v != null ? Math.round(v * 100) + '%' : '—';
-  }
-
-  function updateBadge(count) {
-    if (count > 0) {
-      badge.textContent = count;
-      badge.hidden = false;
-    } else {
-      badge.hidden = true;
-    }
-  }
-
-  function buildCard(job) {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.dataset.key = job.job_key;
-
-    const just = job.score_justification || {};
-    const linkHtml = job.url
-      ? `<a class="job-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">View Post</a>`
-      : '';
-    const remotePill = job.remote === true
-      ? `<span class="pill pill-remote">Remote</span>`
-      : '';
-    const descHtml = job.description
-      ? `<div class="description" id="${safeId(job.job_key)}">${esc(job.description).replace(/\n/g, '<br>')}</div>
-         <button class="description-toggle" data-target="${safeId(job.job_key)}">Read more</button>`
-      : '';
-
-    card.innerHTML = `
-      <div class="card-actions">
-        <button class="btn btn-approve" data-action="approved">Approve</button>
-        <button class="btn btn-reject"  data-action="rejected">Reject</button>
-      </div>
-      <div class="card-header">
-        <span class="job-title">${esc(job.title || '(no title)')}</span>
-        <span style="display:flex;align-items:baseline;gap:0.25rem">
-          <span class="final-score ${scoreClass(job.final_score)}">${pct(job.final_score)}</span>
-          ${linkHtml}
-        </span>
-      </div>
-      <div class="card-meta">${esc(job.company || '')}${job.location ? ' · ' + esc(job.location) : ''}</div>
-      <div class="card-detail">${esc(job.salary || '')}${job.posted_at ? ' · ' + esc(job.posted_at) : ''}</div>
-      <div class="pills">
-        <span class="pill">Desirability ${pct(job.desirability_score)}</span>
-        <span class="pill">Fit ${pct(job.fit_score)}</span>
-        ${remotePill}
-      </div>
-      ${descHtml}
-      <div class="justification">
-        ${just.desirability ? '<p><strong>Desirability:</strong> ' + esc(just.desirability) + '</p>' : ''}
-        ${just.fit         ? '<p><strong>Fit:</strong> '         + esc(just.fit)         + '</p>' : ''}
-      </div>
-      <div class="card-feedback"></div>
-    `;
-
-    card.querySelectorAll('.btn[data-action]').forEach(btn => {
-      btn.addEventListener('click', () => handleAction(card, btn.dataset.action));
-    });
-
-    card.querySelectorAll('.description-toggle').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const desc = document.getElementById(btn.dataset.target);
-        if (!desc) return;
-        const expanded = desc.classList.toggle('expanded');
-        btn.textContent = expanded ? 'Show less' : 'Read more';
+    async init() {
+      await this.loadJobs();
+      document.addEventListener('click', (e) => {
+        if (this.deleteConfirm && !e.target.closest('.action-bar')) {
+          this.deleteConfirm = false;
+        }
       });
-    });
+    },
 
-    return card;
-  }
+    async loadJobs() {
+      try {
+        const resp = await fetch('/api/jobs');
+        if (!resp.ok) throw new Error('Server error');
+        this.jobs = await resp.json();
+      } catch {
+        this.loadError = 'Failed to load jobs. Is the server running?';
+      }
+    },
 
-  async function handleAction(card, state) {
-    const key = card.dataset.key;
-    const btns = card.querySelectorAll('.btn');
-    const feedback = card.querySelector('.card-feedback');
+    get sortedJobs() {
+      return [...this.jobs].sort((a, b) => {
+        let av = a[this.sortField];
+        let bv = b[this.sortField];
 
-    btns.forEach(b => b.disabled = true);
-    feedback.textContent = '';
+        if (this.sortField === 'salary') {
+          av = parseFloat(String(av || '').replace(/[^0-9.]/g, '')) || 0;
+          bv = parseFloat(String(bv || '').replace(/[^0-9.]/g, '')) || 0;
+        }
 
-    try {
-      const resp = await fetch(`/api/jobs/${encodeURIComponent(key)}/state`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state }),
+        const nullLast = this.sortDir === 'asc' ? Infinity : -Infinity;
+        if (av == null) av = nullLast;
+        if (bv == null) bv = nullLast;
+
+        if (av < bv) return this.sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return this.sortDir === 'asc' ? 1 : -1;
+        return 0;
       });
+    },
 
-      if (resp.ok || resp.status === 404) {
-        const label = state === 'approved' ? 'Approved ✓' : 'Rejected ✗';
-        feedback.className = 'card-feedback card-success';
-        feedback.textContent = label;
-        setTimeout(() => {
-          card.classList.add('fade-out');
-          setTimeout(() => {
-            card.remove();
-            const remaining = list.querySelectorAll('.card').length;
-            updateBadge(remaining);
-            if (remaining === 0) msg.textContent = 'No jobs pending review.';
-          }, 380);
-        }, 600);
+    setSort(field) {
+      if (this.sortField === field) {
+        this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
       } else {
-        feedback.className = 'card-feedback card-error';
-        feedback.textContent = 'Action failed — try again';
-        btns.forEach(b => b.disabled = false);
+        this.sortField = field;
+        this.sortDir = field === 'state' ? 'asc' : 'desc';
       }
-    } catch {
-      feedback.className = 'card-feedback card-error';
-      feedback.textContent = 'Action failed — try again';
-      btns.forEach(b => b.disabled = false);
-    }
-  }
+    },
 
-  function esc(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
+    selectJob(job) {
+      this.selectedJob = { ...job };
+      this.deleteConfirm = false;
+    },
 
-  function safeId(str) {
-    return 'desc-' + String(str).replace(/[^A-Za-z0-9_-]/g, '_');
-  }
+    closeOverlay() {
+      this.selectedJob = null;
+      this.deleteConfirm = false;
+    },
 
-  async function load() {
-    try {
-      const resp = await fetch('/api/jobs');
-      if (!resp.ok) throw new Error();
-      const jobs = await resp.json();
+    scoreClass(s) {
+      if (s == null) return 'score-none';
+      if (s >= 0.8) return 'score-green';
+      if (s >= 0.5) return 'score-amber';
+      return 'score-red';
+    },
 
-      if (jobs.length === 0) {
-        msg.textContent = 'No jobs pending review.';
-        updateBadge(0);
-        return;
-      }
+    statusClass(state) {
+      const map = { pending: 'status-pending', applied: 'status-applied', rejected: 'status-rejected', failed: 'status-failed' };
+      return map[state] || 'status-pending';
+    },
 
-      updateBadge(jobs.length);
-      jobs.forEach(job => list.appendChild(buildCard(job)));
-    } catch {
-      msg.textContent = 'Failed to load jobs. Is the server running?';
-    }
-  }
+    pct(v) {
+      return v != null ? Math.round(v * 100) + '%' : '—';
+    },
 
-  load();
-})();
+    formatDesc(desc) {
+      if (!desc) return '<em>No description available.</em>';
+      return String(desc)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+    },
+
+    _updateJob(updated) {
+      const idx = this.jobs.findIndex(j => j.job_key === updated.job_key);
+      if (idx !== -1) this.jobs[idx] = updated;
+      this.selectedJob = { ...updated };
+    },
+
+    async _post(url) {
+      const resp = await fetch(url, { method: 'POST' });
+      if (!resp.ok) throw new Error(await resp.text());
+      return resp.json();
+    },
+
+    async calculateScore() {
+      try {
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/score`));
+      } catch { alert('Failed to calculate score.'); }
+    },
+
+    async generateResume() {
+      try {
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume`));
+      } catch { alert('Failed to generate resume.'); }
+    },
+
+    async generateCover() {
+      try {
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover`));
+      } catch { alert('Failed to generate cover letter.'); }
+    },
+
+    viewResume() {
+      window.open(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/resume`, '_blank');
+    },
+
+    viewCover() {
+      window.open(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/cover`, '_blank');
+    },
+
+    async markApplied() {
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/state`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: 'applied' }),
+        });
+        if (!resp.ok) throw new Error();
+        this._updateJob(await resp.json());
+      } catch { alert('Failed to mark as applied.'); }
+    },
+
+    async deleteJob() {
+      const key = this.selectedJob.job_key;
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(key)}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error();
+        this.jobs = this.jobs.filter(j => j.job_key !== key);
+        this.closeOverlay();
+      } catch { alert('Failed to delete job.'); }
+    },
+  };
+}
 </script>
 
 </body>
