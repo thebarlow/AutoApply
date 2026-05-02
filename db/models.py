@@ -47,4 +47,5 @@ class UserProfileModel(Base):
     __tablename__ = "user_profile"
 
     id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, default="Default")
     data = Column(Text, nullable=False)
