@@ -226,7 +226,7 @@ def put_llm(body: LLMBody, db: Session = Depends(get_db)) -> dict[str, Any]:
 
 # ---- User Profiles ----
 
-_EMPTY_PROFILE_DATA: dict = {
+_EMPTY_PROFILE_DATA: dict[str, Any] = {
     "email": "", "phone": "", "location": "", "skills": [],
     "work_history": [], "education": [], "target_salary_min": None,
     "target_salary_max": None, "target_roles": [], "resume_path": "",
@@ -268,6 +268,9 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
 
 @router.put("/api/config/profiles/active")
 def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    row = db.query(UserProfileModel).filter_by(id=body.active_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
     _set(db, "active_profile_id", str(body.active_id))
     return {"active_id": body.active_id}
 
@@ -297,6 +300,9 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     db.delete(row)
+    active_raw = _get(db, "active_profile_id")
+    if active_raw and int(active_raw) == profile_id:
+        _set(db, "active_profile_id", "")
     db.commit()
 
 

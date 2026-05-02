@@ -119,6 +119,11 @@ def test_put_active_sets_config(client, db_session):
     assert int(cfg.value) == row.id
 
 
+def test_put_active_profile_not_found(client):
+    resp = client.put("/api/config/profiles/active", json={"active_id": 999})
+    assert resp.status_code == 404
+
+
 def test_parse_endpoint_md_returns_profile_dict(client, monkeypatch):
     import core.profile_parser as pp
     monkeypatch.setattr(pp, "markdown_to_profile", lambda text: {
