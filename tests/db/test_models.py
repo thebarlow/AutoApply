@@ -66,10 +66,11 @@ def test_create_and_retrieve_config(db_session):
 
 def test_create_user_profile(db_session):
     data = {"name": "Matt", "skills": ["Python", "SQL"]}
-    db_session.add(UserProfileModel(data=json.dumps(data)))
+    db_session.add(UserProfileModel(name="Matt", data=json.dumps(data)))
     db_session.commit()
 
     result = db_session.query(UserProfileModel).first()
+    assert result.name == "Matt"
     assert json.loads(result.data)["name"] == "Matt"
 
 

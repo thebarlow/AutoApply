@@ -17,19 +17,22 @@ SessionLocal = sessionmaker(bind=engine)
 
 
 def _migrate_profile_name() -> None:
+    """Add name column to user_profile table if it does not exist."""
     with engine.connect() as conn:
         cols = [r[1] for r in conn.execute(text("PRAGMA table_info(user_profile)")).fetchall()]
         if "name" not in cols:
-            conn.execute(text("ALTER TABLE user_profile ADD COLUMN name TEXT NOT NULL DEFAULT 'Default'"))
+            conn.execute(text("ALTER TABLE user_profile ADD COLUMN name TEXT DEFAULT 'Default'"))
             conn.commit()
 
 
 def init_db() -> None:
+    """Create all tables and run schema migrations."""
     Base.metadata.create_all(bind=engine)
     _migrate_profile_name()
 
 
 def get_db():
+    """FastAPI dependency that yields a database session."""
     db: Session = SessionLocal()
     try:
         yield db
