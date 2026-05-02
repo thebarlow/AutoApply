@@ -4,6 +4,7 @@ import re
 
 
 def markdown_to_profile(md_text: str) -> dict:
+    """Parse a Markdown resume string into a structured profile dict."""
     profile = {
         "name": "",
         "email": "",
@@ -26,7 +27,13 @@ def markdown_to_profile(md_text: str) -> dict:
     if phone_match:
         profile["phone"] = phone_match.group().strip()
 
-    for line in md_text.splitlines():
+    loc_match = re.search(r"\b([A-Z][a-zA-Z\s]+,\s*[A-Z]{2})\b", md_text)
+    if loc_match:
+        profile["location"] = loc_match.group(1).strip()
+
+    # Only scan lines before the first heading
+    pre_heading = md_text.split("\n#")[0]
+    for line in pre_heading.splitlines():
         stripped = line.strip()
         if (
             stripped
@@ -79,7 +86,7 @@ def _split_sections(md_text: str) -> dict[str, str]:
 def _extract_list_items(text: str) -> list[str]:
     items: list[str] = []
     for line in text.splitlines():
-        line = line.strip().lstrip("-•·* ")
+        line = re.sub(r"^[\-•·*\d.]+\s*", "", line.strip())
         if not line:
             continue
         if "," in line:
@@ -138,4 +145,5 @@ def _extract_education(text: str) -> list[dict]:
 
 
 def pdf_to_markdown(pdf_bytes: bytes) -> str:
+    """Convert raw PDF bytes to a Markdown string (not yet implemented)."""
     raise NotImplementedError

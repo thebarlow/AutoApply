@@ -26,7 +26,12 @@ def test_extracts_email():
 
 def test_extracts_phone():
     result = markdown_to_profile(SAMPLE_MD)
-    assert "555" in result["phone"]
+    assert result["phone"] == "(555) 123-4567"
+
+
+def test_extracts_location():
+    result = markdown_to_profile(SAMPLE_MD)
+    assert result["location"] == "New York, NY"
 
 
 def test_extracts_name():
