@@ -37,14 +37,30 @@ def determine_state(
 
 def load_user_profile(db: Session) -> UserProfile:
     """Load UserProfile from DB, respecting the active profile setting."""
+    row = None
     active_raw = db.query(Config).filter_by(key="active_profile_id").first()
-    if active_raw:
-        row = db.query(UserProfileModel).filter_by(id=int(active_raw.value)).first()
-    else:
+    if active_raw and active_raw.value:
+        try:
+            profile_id = int(active_raw.value)
+        except (ValueError, TypeError):
+            print(
+                f"active_profile_id config value is not a valid integer: {active_raw.value!r}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+
+    if row is None:
         row = db.query(UserProfileModel).first()
 
     if not row:
-        print("No user profile found. Add one via /config.", file=sys.stderr)
+        if active_raw and active_raw.value:
+            print(
+                f"Profile with id={active_raw.value} not found. Update active_profile_id via /config.",
+                file=sys.stderr,
+            )
+        else:
+            print("No user profile found. Add one via /config.", file=sys.stderr)
         sys.exit(1)
 
     data = json.loads(row.data)

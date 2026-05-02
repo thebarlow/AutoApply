@@ -108,6 +108,27 @@ def test_load_user_profile_missing(db_session):
         load_user_profile(db_session)
 
 
+def test_load_user_profile_uses_active_profile_id(db_session):
+    profile_a = UserProfileModel(name="Default", data=json.dumps(SAMPLE_PROFILE_DICT))
+    modified = {**SAMPLE_PROFILE_DICT, "name": "Jane Smith"}
+    profile_b = UserProfileModel(name="Alt", data=json.dumps(modified))
+    db_session.add_all([profile_a, profile_b])
+    db_session.commit()
+    db_session.add(Config(key="active_profile_id", value=str(profile_b.id)))
+    db_session.commit()
+
+    profile = load_user_profile(db_session)
+    assert profile.name == "Jane Smith"
+
+
+def test_load_user_profile_stale_active_id_exits(db_session):
+    db_session.add(Config(key="active_profile_id", value="9999"))
+    db_session.commit()
+
+    with pytest.raises(SystemExit):
+        load_user_profile(db_session)
+
+
 def test_load_config(db_session):
     for key, value in [("w1", "0.6"), ("w2", "0.4"), ("auto_reject_threshold", "0.25"), ("auto_approve_threshold", "0.75")]:
         db_session.add(Config(key=key, value=value))
