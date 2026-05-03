@@ -260,13 +260,18 @@
     const row = document.createElement('div');
     row.className = 'profile-subrow';
     row.innerHTML = `
-      <input type="text" class="config-input ph-title" placeholder="Title" value="${entry.title || ''}">
-      <input type="text" class="config-input ph-company" placeholder="Company" value="${entry.company || ''}">
-      <input type="text" class="config-input ph-start" placeholder="Start (2022-01)" value="${entry.start || ''}">
-      <input type="text" class="config-input ph-end" placeholder="End (2024-03)" value="${entry.end || ''}">
-      <input type="text" class="config-input ph-summary" placeholder="Summary" value="${entry.summary || ''}">
+      <input type="text" class="config-input ph-title" placeholder="Title">
+      <input type="text" class="config-input ph-company" placeholder="Company">
+      <input type="text" class="config-input ph-start" placeholder="Start (2022-01)">
+      <input type="text" class="config-input ph-end" placeholder="End (2024-03)">
+      <input type="text" class="config-input ph-summary" placeholder="Summary">
       <button class="btn-remove-llm" type="button">✕</button>
     `;
+    row.querySelector('.ph-title').value = entry.title || '';
+    row.querySelector('.ph-company').value = entry.company || '';
+    row.querySelector('.ph-start').value = entry.start || '';
+    row.querySelector('.ph-end').value = entry.end || '';
+    row.querySelector('.ph-summary').value = entry.summary || '';
     row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
     return row;
   }
@@ -276,13 +281,18 @@
     const row = document.createElement('div');
     row.className = 'profile-subrow';
     row.innerHTML = `
-      <input type="text" class="config-input ph-institution" placeholder="Institution" value="${entry.institution || ''}">
-      <input type="text" class="config-input ph-degree" placeholder="Degree" value="${entry.degree || ''}">
-      <input type="text" class="config-input ph-field" placeholder="Field" value="${entry.field || ''}">
-      <input type="text" class="config-input ph-graduated" placeholder="Graduated (2018)" value="${entry.graduated || ''}">
-      <input type="text" class="config-input ph-gpa" placeholder="GPA" value="${entry.gpa || ''}">
+      <input type="text" class="config-input ph-institution" placeholder="Institution">
+      <input type="text" class="config-input ph-degree" placeholder="Degree">
+      <input type="text" class="config-input ph-field" placeholder="Field">
+      <input type="text" class="config-input ph-graduated" placeholder="Graduated (2018)">
+      <input type="text" class="config-input ph-gpa" placeholder="GPA">
       <button class="btn-remove-llm" type="button">✕</button>
     `;
+    row.querySelector('.ph-institution').value = entry.institution || '';
+    row.querySelector('.ph-degree').value = entry.degree || '';
+    row.querySelector('.ph-field').value = entry.field || '';
+    row.querySelector('.ph-graduated').value = entry.graduated || '';
+    row.querySelector('.ph-gpa').value = entry.gpa || '';
     row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
     return row;
   }
@@ -345,9 +355,10 @@
     row.dataset.id = profile.id;
     row.innerHTML = `
       <input type="radio" name="profile-active" value="${profile.id}"${isActive ? ' checked' : ''}>
-      <span class="weight-label" style="flex:1;cursor:pointer">${profile.name}</span>
+      <span class="weight-label" style="flex:1;cursor:pointer"></span>
       <button class="btn-remove-llm" type="button">✕</button>
     `;
+    row.querySelector('.weight-label').textContent = profile.name;
     row.querySelector('input[type=radio]').addEventListener('change', function() {
       selectProfile(profile.id);
     });
@@ -356,7 +367,8 @@
       selectProfile(profile.id);
     });
     row.querySelector('.btn-remove-llm').addEventListener('click', async function() {
-      await fetch('/api/config/profiles/' + profile.id, { method: 'DELETE' });
+      const resp = await fetch('/api/config/profiles/' + profile.id, { method: 'DELETE' });
+      if (!resp.ok) { showStatus('status-profile', 'Delete failed', true); return; }
       row.remove();
       if (_selectedProfileId === profile.id) {
         document.getElementById('profile-edit-form').style.display = 'none';
@@ -390,15 +402,20 @@
   document.getElementById('btn-add-profile').addEventListener('click', async function() {
     const name = prompt('Profile name (e.g. "Software Engineer"):');
     if (!name) return;
-    const resp = await fetch('/api/config/profiles', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name }),
-    });
-    const profile = await resp.json();
-    document.getElementById('profile-list').appendChild(buildProfileRow(profile, false));
-    document.querySelector('input[name="profile-active"][value="' + profile.id + '"]').checked = true;
-    selectProfile(profile.id);
+    try {
+      const resp = await fetch('/api/config/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name }),
+      });
+      if (!resp.ok) { showStatus('status-profile', 'Failed to create profile', true); return; }
+      const profile = await resp.json();
+      document.getElementById('profile-list').appendChild(buildProfileRow(profile, false));
+      document.querySelector('input[name="profile-active"][value="' + profile.id + '"]').checked = true;
+      selectProfile(profile.id);
+    } catch (e) {
+      showStatus('status-profile', 'Error creating profile', true);
+    }
   });
 
   document.getElementById('profile-file').addEventListener('change', function(e) {
