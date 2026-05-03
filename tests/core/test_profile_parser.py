@@ -93,13 +93,14 @@ def _make_mock_pdf(pages_text: list):
 
 
 def test_pdf_to_markdown_extracts_text():
-    page_text = "EXPERIENCE\nSoftware Engineer at Acme (2022-2024)\n• Built APIs"
+    # Use a multi-word all-caps heading so the heuristic (2–7 words) triggers
+    page_text = "WORK EXPERIENCE\nSoftware Engineer at Acme (2022-2024)\n• Built APIs"
     mock_pdf = _make_mock_pdf([page_text])
 
     with patch("core.profile_parser.pdfplumber.open", return_value=mock_pdf):
         result = pdf_to_markdown(b"fake-pdf-bytes")
 
-    assert "## Experience" in result
+    assert "## Work Experience" in result
     assert "Software Engineer" in result
     assert "- Built APIs" in result
 

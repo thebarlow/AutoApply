@@ -266,6 +266,8 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
     return {"id": row.id, "name": row.name, "data": _EMPTY_PROFILE_DATA}
 
 
+# IMPORTANT: /active must be registered before /{profile_id} so FastAPI does not
+# attempt to coerce the literal string "active" to an integer profile_id.
 @router.put("/api/config/profiles/active")
 def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
     row = db.query(UserProfileModel).filter_by(id=body.active_id).first()
@@ -296,19 +298,28 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
 
 @router.delete("/api/config/profiles/{profile_id}", status_code=204)
 def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
+    """Delete a profile and clear active_profile_id if it pointed to this profile."""
     row = db.query(UserProfileModel).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     db.delete(row)
     active_raw = _get(db, "active_profile_id")
     if active_raw and int(active_raw) == profile_id:
-        _set(db, "active_profile_id", "")
+        cfg = db.query(Config).filter_by(key="active_profile_id").first()
+        if cfg:
+            cfg.value = ""
+        else:
+            db.add(Config(key="active_profile_id", value=""))
     db.commit()
 
 
 @router.post("/api/config/profile/parse")
-async def parse_profile(file: UploadFile = File(...)) -> dict[str, Any]:
-    contents = await file.read()
+def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Parse an uploaded PDF or Markdown resume into a profile dict."""
+    MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+    contents = file.file.read()
+    if len(contents) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
     filename = file.filename or ""
     if filename.lower().endswith(".pdf"):
         md_text = _parser.pdf_to_markdown(contents)

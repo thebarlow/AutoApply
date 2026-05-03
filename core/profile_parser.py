@@ -161,7 +161,7 @@ def pdf_to_markdown(pdf_bytes: bytes) -> str:
                     if not stripped:
                         lines.append("")
                         continue
-                    if stripped.isupper() and len(stripped) < 50:
+                    if stripped.isupper() and 2 <= len(stripped.split()) < 8:
                         lines.append(f"## {stripped.title()}")
                     elif stripped.startswith(("•", "·", "-", "*")):
                         lines.append(f"- {stripped.lstrip('•·-* ')}")
