@@ -10,8 +10,7 @@
 
 <nav>
   <a class="brand" href="/">Auto Apply</a>
-  <a href="#">Dashboard</a>
-  <a href="/">Review Queue</a>
+  <a href="/">Dashboard</a>
   <a href="/config" class="active">Config</a>
 </nav>
 
@@ -74,11 +73,48 @@
     </div>
   </details>
 
-  <!-- Section 3: User Profile (disabled) -->
-  <details class="config-section config-section--disabled">
+  <!-- Section 3: User Profile -->
+  <details class="config-section">
     <summary>User Profile</summary>
     <div class="config-body">
-      <p class="coming-soon">Coming soon — will accept a PDF or Markdown file and convert it to a structured user profile.</p>
+
+      <h2>Profiles</h2>
+      <div id="profile-list"></div>
+      <button class="btn btn-secondary" id="btn-add-profile" type="button">+ Add User</button>
+
+      <div id="profile-edit-form" style="display:none">
+        <h2>Upload Resume</h2>
+        <div class="config-row">
+          <input type="file" id="profile-file" accept=".pdf,.md">
+          <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled>Parse</button>
+        </div>
+
+        <h2>Details</h2>
+        <label class="config-label">Name</label>
+        <input class="config-input" type="text" id="profile-name">
+        <label class="config-label">Email</label>
+        <input class="config-input" type="text" id="profile-email">
+        <label class="config-label">Phone</label>
+        <input class="config-input" type="text" id="profile-phone">
+        <label class="config-label">Location</label>
+        <input class="config-input" type="text" id="profile-location">
+        <label class="config-label">Skills (comma-separated)</label>
+        <input class="config-input" type="text" id="profile-skills">
+
+        <h2>Work History</h2>
+        <div id="work-history-list"></div>
+        <button class="btn btn-secondary" id="btn-add-work" type="button">+ Add Work History</button>
+
+        <h2>Education</h2>
+        <div id="education-list"></div>
+        <button class="btn btn-secondary" id="btn-add-education" type="button">+ Add Education</button>
+
+        <div class="config-actions">
+          <button class="btn btn-save" id="save-profile">Save</button>
+          <span class="save-status" id="status-profile"></span>
+        </div>
+      </div>
+
     </div>
   </details>
 
@@ -212,6 +248,214 @@
       else showStatus('status-templates', 'Error saving', true);
     } catch {
       showStatus('status-templates', 'Error saving', true);
+    }
+  });
+
+  // ---- Section 3: User Profile ----
+
+  let _selectedProfileId = null;
+
+  function buildWorkRow(entry) {
+    entry = entry || {};
+    const row = document.createElement('div');
+    row.className = 'profile-subrow';
+    row.innerHTML = `
+      <input type="text" class="config-input ph-title" placeholder="Title" value="${entry.title || ''}">
+      <input type="text" class="config-input ph-company" placeholder="Company" value="${entry.company || ''}">
+      <input type="text" class="config-input ph-start" placeholder="Start (2022-01)" value="${entry.start || ''}">
+      <input type="text" class="config-input ph-end" placeholder="End (2024-03)" value="${entry.end || ''}">
+      <input type="text" class="config-input ph-summary" placeholder="Summary" value="${entry.summary || ''}">
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function buildEducationRow(entry) {
+    entry = entry || {};
+    const row = document.createElement('div');
+    row.className = 'profile-subrow';
+    row.innerHTML = `
+      <input type="text" class="config-input ph-institution" placeholder="Institution" value="${entry.institution || ''}">
+      <input type="text" class="config-input ph-degree" placeholder="Degree" value="${entry.degree || ''}">
+      <input type="text" class="config-input ph-field" placeholder="Field" value="${entry.field || ''}">
+      <input type="text" class="config-input ph-graduated" placeholder="Graduated (2018)" value="${entry.graduated || ''}">
+      <input type="text" class="config-input ph-gpa" placeholder="GPA" value="${entry.gpa || ''}">
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function populateEditForm(data) {
+    document.getElementById('profile-name').value = data.name || '';
+    document.getElementById('profile-email').value = data.email || '';
+    document.getElementById('profile-phone').value = data.phone || '';
+    document.getElementById('profile-location').value = data.location || '';
+    document.getElementById('profile-skills').value = (data.skills || []).join(', ');
+
+    const wl = document.getElementById('work-history-list');
+    wl.innerHTML = '';
+    (data.work_history || []).forEach(function(e) { wl.appendChild(buildWorkRow(e)); });
+
+    const el = document.getElementById('education-list');
+    el.innerHTML = '';
+    (data.education || []).forEach(function(e) { el.appendChild(buildEducationRow(e)); });
+  }
+
+  function collectEditForm(profileLabel) {
+    return {
+      name: profileLabel,
+      data: {
+        name: document.getElementById('profile-name').value,
+        email: document.getElementById('profile-email').value,
+        phone: document.getElementById('profile-phone').value,
+        location: document.getElementById('profile-location').value,
+        skills: document.getElementById('profile-skills').value
+          .split(',').map(function(s) { return s.trim(); }).filter(Boolean),
+        work_history: Array.from(document.querySelectorAll('#work-history-list .profile-subrow')).map(function(r) {
+          return {
+            title: r.querySelector('.ph-title').value,
+            company: r.querySelector('.ph-company').value,
+            start: r.querySelector('.ph-start').value,
+            end: r.querySelector('.ph-end').value,
+            summary: r.querySelector('.ph-summary').value,
+          };
+        }),
+        education: Array.from(document.querySelectorAll('#education-list .profile-subrow')).map(function(r) {
+          return {
+            institution: r.querySelector('.ph-institution').value,
+            degree: r.querySelector('.ph-degree').value,
+            field: r.querySelector('.ph-field').value,
+            graduated: r.querySelector('.ph-graduated').value,
+            gpa: parseFloat(r.querySelector('.ph-gpa').value) || 0,
+          };
+        }),
+        target_salary_min: null,
+        target_salary_max: null,
+        target_roles: [],
+        resume_path: '',
+      },
+    };
+  }
+
+  function buildProfileRow(profile, isActive) {
+    const row = document.createElement('div');
+    row.className = 'llm-row';
+    row.dataset.id = profile.id;
+    row.innerHTML = `
+      <input type="radio" name="profile-active" value="${profile.id}"${isActive ? ' checked' : ''}>
+      <span class="weight-label" style="flex:1;cursor:pointer">${profile.name}</span>
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    row.querySelector('input[type=radio]').addEventListener('change', function() {
+      selectProfile(profile.id);
+    });
+    row.querySelector('.weight-label').addEventListener('click', function() {
+      row.querySelector('input[type=radio]').checked = true;
+      selectProfile(profile.id);
+    });
+    row.querySelector('.btn-remove-llm').addEventListener('click', async function() {
+      await fetch('/api/config/profiles/' + profile.id, { method: 'DELETE' });
+      row.remove();
+      if (_selectedProfileId === profile.id) {
+        document.getElementById('profile-edit-form').style.display = 'none';
+        _selectedProfileId = null;
+      }
+    });
+    return row;
+  }
+
+  async function selectProfile(id) {
+    _selectedProfileId = id;
+    const resp = await fetch('/api/config/profiles/' + id);
+    const data = await resp.json();
+    populateEditForm(Object.assign({ name: data.name }, data.data));
+    document.getElementById('profile-edit-form').style.display = '';
+  }
+
+  async function loadProfiles() {
+    const resp = await fetch('/api/config/profiles');
+    const data = await resp.json();
+    const list = document.getElementById('profile-list');
+    list.innerHTML = '';
+    data.profiles.forEach(function(p) {
+      list.appendChild(buildProfileRow(p, p.id === data.active_id));
+    });
+    if (data.active_id) {
+      selectProfile(data.active_id);
+    }
+  }
+
+  document.getElementById('btn-add-profile').addEventListener('click', async function() {
+    const name = prompt('Profile name (e.g. "Software Engineer"):');
+    if (!name) return;
+    const resp = await fetch('/api/config/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name }),
+    });
+    const profile = await resp.json();
+    document.getElementById('profile-list').appendChild(buildProfileRow(profile, false));
+    document.querySelector('input[name="profile-active"][value="' + profile.id + '"]').checked = true;
+    selectProfile(profile.id);
+  });
+
+  document.getElementById('profile-file').addEventListener('change', function(e) {
+    document.getElementById('btn-parse-profile').disabled = !e.target.files.length;
+  });
+
+  document.getElementById('btn-parse-profile').addEventListener('click', async function() {
+    const file = document.getElementById('profile-file').files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const resp = await fetch('/api/config/profile/parse', { method: 'POST', body: form });
+      if (!resp.ok) { showStatus('status-profile', 'Parse failed', true); return; }
+      const data = await resp.json();
+      populateEditForm(data);
+    } catch (e) {
+      showStatus('status-profile', 'Parse error', true);
+    }
+  });
+
+  document.getElementById('btn-add-work').addEventListener('click', function() {
+    document.getElementById('work-history-list').appendChild(buildWorkRow());
+  });
+
+  document.getElementById('btn-add-education').addEventListener('click', function() {
+    document.getElementById('education-list').appendChild(buildEducationRow());
+  });
+
+  document.getElementById('save-profile').addEventListener('click', async function() {
+    if (!_selectedProfileId) { showStatus('status-profile', 'Select a profile first', true); return; }
+    const row = document.querySelector('#profile-list .llm-row[data-id="' + _selectedProfileId + '"]');
+    const profileLabel = row ? row.querySelector('.weight-label').textContent : 'Default';
+    const body = collectEditForm(profileLabel);
+    const activeRadio = document.querySelector('input[name="profile-active"]:checked');
+    const newActiveId = activeRadio ? parseInt(activeRadio.value) : null;
+
+    try {
+      const saves = [
+        fetch('/api/config/profiles/' + _selectedProfileId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+      ];
+      if (newActiveId) {
+        saves.push(fetch('/api/config/profiles/active', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active_id: newActiveId }),
+        }));
+      }
+      const results = await Promise.all(saves);
+      if (results.every(function(r) { return r.ok; })) showStatus('status-profile', 'Saved ✓', false);
+      else showStatus('status-profile', 'Error saving', true);
+    } catch (e) {
+      showStatus('status-profile', 'Error saving', true);
     }
   });
 
@@ -349,7 +593,7 @@
   });
 
   // ---- Init ----
-  Promise.all([loadApiConfig(), loadTemplates(), loadScoring(), loadLLM()]).catch(console.error);
+  Promise.all([loadApiConfig(), loadTemplates(), loadProfiles(), loadScoring(), loadLLM()]).catch(console.error);
 
 })();
 </script>

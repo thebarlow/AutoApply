@@ -395,3 +395,17 @@ details.config-section[open] > summary::before {
 }
 
 .btn-remove-llm:hover { background: #fde8e6; }
+
+/* Profile sub-rows (work history, education) */
+.profile-subrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.profile-subrow .config-input {
+  flex: 1;
+  min-width: 6rem;
+}
