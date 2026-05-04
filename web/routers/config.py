@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -339,6 +340,26 @@ def serve_profile_file(
     if not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FileResponse(path, media_type=media_type)
+
+
+_PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
+
+
+@router.post("/api/config/profile/upload")
+def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
+    """Save an uploaded resume file to the profiles/ directory and return its absolute path."""
+    MAX_BYTES = 10 * 1024 * 1024
+    contents = file.file.read()
+    if len(contents) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    filename = file.filename or "resume"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in (".pdf", ".md"):
+        raise HTTPException(status_code=400, detail="Only .pdf and .md files are accepted")
+    _PROFILES_DIR.mkdir(exist_ok=True)
+    dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
+    dest.write_bytes(contents)
+    return {"path": str(dest.resolve())}
 
 
 @router.post("/api/config/profile/parse")
