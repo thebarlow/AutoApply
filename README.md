@@ -21,7 +21,7 @@ cd auto_apply
 python setup.py
 ```
 
-This creates a virtual environment at `.venv/`, installs dependencies, and initialises the SQLite database.
+This creates a virtual environment at `.venv/`, installs dependencies, copies `.env.example` to `.env`, and initialises the SQLite database.
 
 ---
 
