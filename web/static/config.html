@@ -760,8 +760,12 @@
     form.append('file', file);
     try {
       const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
-      if (!resp.ok) { showStatus('status-profile-modal', 'Upload failed', true); return; }
+      if (!resp.ok) { showStatus('status-profile-modal', 'Upload failed: ' + await resp.text(), true); return; }
       const result = await resp.json();
+      if (!result.path) {
+        showStatus('status-profile-modal', 'Upload error: server returned no path', true);
+        return;
+      }
       if (file.name.toLowerCase().endsWith('.pdf')) {
         _modalFilePaths.resume_path = result.path;
         _modalFilePaths.md_path = '';
@@ -782,7 +786,7 @@
     form.append('file', file);
     try {
       const resp = await fetch('/api/config/profile/parse', { method: 'POST', body: form });
-      if (!resp.ok) { showStatus('status-profile-modal', 'Parse failed', true); return; }
+      if (!resp.ok) { showStatus('status-profile-modal', 'Parse failed: ' + await resp.text(), true); return; }
       const data = await resp.json();
       document.getElementById('profile-modal-name').value = data.name || '';
       populateEditForm(Object.assign({ name: data.name }, data));
