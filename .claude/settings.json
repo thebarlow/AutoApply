@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest *)",
+      "Bash(python -m pytest -q 2>&1)",
+      "Bash(python -m pytest -v 2>&1 | tail -40)",
+      "Bash(python -m pytest -q)"
+    ]
+  }
+}

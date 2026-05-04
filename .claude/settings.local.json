@@ -31,7 +31,10 @@
       "Bash(pytest *)",
       "Bash(sqlite3 *)",
       "Bash(git -C \"C:/Users/barlo/Projects/auto_apply\" add tests/web/test_jobs_api.py)",
-      "Bash(git -C \"C:/Users/barlo/Projects/auto_apply\" commit -m \"[test] Split description/remote tests and extend _make_job helper\")"
+      "Bash(git -C \"C:/Users/barlo/Projects/auto_apply\" commit -m \"[test] Split description/remote tests and extend _make_job helper\")",
+      "Bash(git *)",
+      "Bash(py *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest --tb=short -q 2>&1 | Select-Object -Last 20)"
     ]
   }
 }

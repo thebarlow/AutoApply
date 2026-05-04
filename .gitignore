@@ -5,15 +5,6 @@
 jobs/
 generator/outputs/
 
-# Trigger.dev
-.trigger
-.mcp.json
-node_modules/
-package.json
-package-lock.json
-trigger.config.ts
-src/
-.github/
 
 # Python
 __pycache__/
@@ -35,4 +26,9 @@ auto_apply.db
 
 # OS
 .DS_Store
-Thumbs.db.superpowers/
+Thumbs.db
+.superpowers/
+.mcp.json
+
+# Superpowers docs
+docs/superpowers/*
