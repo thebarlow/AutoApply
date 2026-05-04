@@ -242,3 +242,14 @@ def test_serve_profile_file_md_ok(client, db_session, tmp_path):
     resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
     assert resp.status_code == 200
     assert "text/plain" in resp.headers["content-type"]
+
+
+def test_serve_profile_file_invalid_type(client, db_session):
+    from db.models import UserProfileModel
+    data = {"resume_path": "", "md_path": ""}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}/file?type=xml")
+    assert resp.status_code == 400
