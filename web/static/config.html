@@ -549,6 +549,74 @@
     }
   });
 
+  // ---- Profile Modal ----
+
+  let _modalProfileId = null;
+
+  function openProfileModal(id) {
+    _modalProfileId = id;
+    const backdrop = document.getElementById('profile-modal-backdrop');
+    backdrop.classList.add('is-open');
+    loadModalContent(id);
+  }
+
+  function closeProfileModal() {
+    _modalProfileId = null;
+    document.getElementById('profile-modal-backdrop').classList.remove('is-open');
+    document.getElementById('profile-pdf-frame').src = 'about:blank';
+    document.getElementById('profile-md-viewer').value = '';
+  }
+
+  document.getElementById('profile-modal-close').addEventListener('click', closeProfileModal);
+
+  document.getElementById('profile-modal-backdrop').addEventListener('click', function(e) {
+    if (e.target === this) closeProfileModal();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('profile-modal-backdrop').classList.contains('is-open')) {
+      closeProfileModal();
+    }
+  });
+
+  // Tab switching
+  document.querySelectorAll('.profile-tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-panel-' + tab).classList.add('active');
+    });
+  });
+
+  document.getElementById('profile-file').addEventListener('change', function(e) {
+    document.getElementById('btn-parse-profile').disabled = !e.target.files.length;
+  });
+
+  document.getElementById('btn-parse-profile').addEventListener('click', async function() {
+    const file = document.getElementById('profile-file').files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const resp = await fetch('/api/config/profile/parse', { method: 'POST', body: form });
+      if (!resp.ok) { showStatus('status-profile-modal', 'Parse failed', true); return; }
+      const data = await resp.json();
+      populateEditForm(Object.assign({ name: data.name }, data));
+    } catch (e) {
+      showStatus('status-profile-modal', 'Parse error', true);
+    }
+  });
+
+  document.getElementById('btn-add-work').addEventListener('click', function() {
+    document.getElementById('work-history-list').appendChild(buildWorkRow());
+  });
+
+  document.getElementById('btn-add-education').addEventListener('click', function() {
+    document.getElementById('education-list').appendChild(buildEducationRow());
+  });
+
   // ---- Section 4: Scoring ----
 
   async function loadScoring() {
@@ -687,6 +755,67 @@
 
 })();
 </script>
+
+<!-- Profile Modal -->
+<div class="profile-modal-backdrop" id="profile-modal-backdrop">
+  <div class="profile-modal-panel" id="profile-modal-panel">
+    <div class="profile-modal-header">
+      <h2 id="profile-modal-title">Profile</h2>
+      <button class="btn-remove-llm" id="profile-modal-close" type="button" style="font-size:1.2rem">✕</button>
+    </div>
+
+    <div class="profile-tab-bar" id="profile-tab-bar">
+      <button class="profile-tab-btn" id="tab-btn-pdf" data-tab="pdf">PDF</button>
+      <button class="profile-tab-btn" id="tab-btn-md" data-tab="md">Markdown</button>
+      <button class="profile-tab-btn active" id="tab-btn-edit" data-tab="edit">Edit</button>
+    </div>
+
+    <!-- PDF tab -->
+    <div class="profile-tab-panel" id="tab-panel-pdf">
+      <iframe class="profile-pdf-frame" id="profile-pdf-frame" src="about:blank"></iframe>
+    </div>
+
+    <!-- Markdown tab -->
+    <div class="profile-tab-panel" id="tab-panel-md">
+      <textarea class="profile-md-viewer" id="profile-md-viewer" readonly></textarea>
+    </div>
+
+    <!-- Edit tab -->
+    <div class="profile-tab-panel active" id="tab-panel-edit">
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Upload Resume</h2>
+      <div class="config-row">
+        <input type="file" id="profile-file" accept=".pdf,.md">
+        <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled style="margin-top:0">Parse</button>
+      </div>
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Details</h2>
+      <label class="config-label">Name</label>
+      <input class="config-input" type="text" id="profile-name">
+      <label class="config-label">Email</label>
+      <input class="config-input" type="text" id="profile-email">
+      <label class="config-label">Phone</label>
+      <input class="config-input" type="text" id="profile-phone">
+      <label class="config-label">Location</label>
+      <input class="config-input" type="text" id="profile-location">
+      <label class="config-label">Skills (comma-separated)</label>
+      <input class="config-input" type="text" id="profile-skills">
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Work History</h2>
+      <div id="work-history-list"></div>
+      <button class="btn btn-secondary" id="btn-add-work" type="button">+ Add Work History</button>
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Education</h2>
+      <div id="education-list"></div>
+      <button class="btn btn-secondary" id="btn-add-education" type="button">+ Add Education</button>
+
+      <div class="config-actions" style="margin-top:1rem">
+        <button class="btn btn-save" id="save-profile-modal">Save</button>
+        <span class="save-status" id="status-profile-modal"></span>
+      </div>
+    </div>
+
+  </div>
+</div>
 
 </body>
 </html>
