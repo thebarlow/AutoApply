@@ -238,10 +238,7 @@
     });
   }
 
-  function initDropZoneProfile(zoneId, fileInputId, labelId, initialResumePath, initialMdPath) {
-    const zone = document.getElementById(zoneId);
-    const input = document.getElementById(fileInputId);
-    const label = document.getElementById(labelId);
+  function initDropZoneProfile(zone, input, label, initialResumePath, initialMdPath) {
 
     const displayPath = initialResumePath || initialMdPath || '';
     zone.dataset.resumePath = initialResumePath || '';
@@ -433,7 +430,13 @@
     const nameInput = row.querySelector('.profile-name-input');
     nameInput.value = profile.name || '';
 
-    initDropZoneProfile(zoneId, fileInputId, labelId, profile.resume_path || '', profile.md_path || '');
+    initDropZoneProfile(
+      row.querySelector('.file-drop-zone--inline'),
+      row.querySelector('input[type=file]'),
+      row.querySelector('.drop-label'),
+      profile.resume_path || '',
+      profile.md_path || ''
+    );
 
     row.querySelector('input[type=radio]').addEventListener('change', function () {
       _selectedProfileId = profile.id;
