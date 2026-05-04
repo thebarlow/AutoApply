@@ -559,6 +559,8 @@
       const profile = await resp.json();
       const row = buildProfileRow({ id: profile.id, name: profile.name }, false);
       document.getElementById('profile-list').appendChild(row);
+      _selectedProfileId = profile.id;
+      openProfileModal(profile.id, true);
     } catch (e) {
       showStatus('status-profile', 'Error creating profile', true);
     }
@@ -701,14 +703,10 @@
 
   document.getElementById('save-profile-modal').addEventListener('click', async function() {
     if (!_modalProfileId) return;
-    const row = document.querySelector('#profile-list .llm-row[data-id="' + _modalProfileId + '"]');
-    const profileLabel = row ? (row.querySelector('.profile-name-input').value.trim() || 'Default') : 'Default';
-    const body = collectEditForm(profileLabel);
-    const zone = row ? row.querySelector('.file-drop-zone') : null;
-    if (zone) {
-      body.data.resume_path = zone.dataset.resumePath || '';
-      body.data.md_path = zone.dataset.mdPath || '';
-    }
+    const profileName = document.getElementById('profile-modal-name').value.trim() || 'New Profile';
+    const body = collectEditForm(profileName);
+    body.data.resume_path = _modalFilePaths.resume_path;
+    body.data.md_path = _modalFilePaths.md_path;
     try {
       const resp = await fetch('/api/config/profiles/' + _modalProfileId, {
         method: 'PUT',
@@ -716,9 +714,11 @@
         body: JSON.stringify(body),
       });
       if (resp.ok) {
+        _modalIsNew = false;
+        document.getElementById('profile-modal-title').textContent = profileName;
+        const row = document.querySelector('#profile-list .llm-row[data-id="' + _modalProfileId + '"]');
+        if (row) row.querySelector('.profile-name-label').textContent = profileName;
         showStatus('status-profile-modal', 'Saved ✓', false);
-        document.getElementById('profile-modal-title').textContent = profileLabel;
-        if (row) row.querySelector('.profile-name-input').value = profileLabel;
       } else {
         showStatus('status-profile-modal', 'Error saving', true);
       }
