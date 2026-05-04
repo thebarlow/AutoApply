@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -312,6 +313,32 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
         else:
             db.add(Config(key="active_profile_id", value=""))
     db.commit()
+
+
+@router.get("/api/config/profiles/{profile_id}/file")
+def serve_profile_file(
+    profile_id: int,
+    type: str = "pdf",
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    data = json.loads(row.data)
+    if type == "pdf":
+        file_path = data.get("resume_path", "")
+        media_type = "application/pdf"
+    elif type == "md":
+        file_path = data.get("md_path", "")
+        media_type = "text/plain"
+    else:
+        raise HTTPException(status_code=400, detail="type must be 'pdf' or 'md'")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="File path not set")
+    path = Path(file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FileResponse(path, media_type=media_type)
 
 
 @router.post("/api/config/profile/parse")

@@ -165,3 +165,80 @@ def test_parse_endpoint_pdf_calls_pdf_to_markdown(client, monkeypatch):
     )
     assert resp.status_code == 200
     assert len(pdf_calls) == 1
+
+
+def test_serve_profile_file_pdf_not_set(client, db_session):
+    from db.models import UserProfileModel
+    data = {"resume_path": "", "md_path": ""}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}/file?type=pdf")
+    assert resp.status_code == 404
+
+
+def test_serve_profile_file_md_not_set(client, db_session):
+    from db.models import UserProfileModel
+    data = {"resume_path": "", "md_path": ""}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
+    assert resp.status_code == 404
+
+
+def test_serve_profile_file_pdf_missing_on_disk(client, db_session):
+    from db.models import UserProfileModel
+    data = {"resume_path": "/nonexistent/resume.pdf", "md_path": ""}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}/file?type=pdf")
+    assert resp.status_code == 404
+
+
+def test_serve_profile_file_md_missing_on_disk(client, db_session):
+    from db.models import UserProfileModel
+    data = {"resume_path": "", "md_path": "/nonexistent/resume.md"}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
+    assert resp.status_code == 404
+
+
+def test_serve_profile_file_profile_not_found(client, db_session):
+    resp = client.get("/api/config/profiles/99999/file?type=pdf")
+    assert resp.status_code == 404
+
+
+def test_serve_profile_file_pdf_ok(client, db_session, tmp_path):
+    from db.models import UserProfileModel
+    pdf_file = tmp_path / "resume.pdf"
+    pdf_file.write_bytes(b"%PDF-1.4 fake")
+    data = {"resume_path": str(pdf_file), "md_path": ""}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}/file?type=pdf")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+
+
+def test_serve_profile_file_md_ok(client, db_session, tmp_path):
+    from db.models import UserProfileModel
+    md_file = tmp_path / "resume.md"
+    md_file.write_text("# Resume\nHello", encoding="utf-8")
+    data = {"resume_path": "", "md_path": str(md_file)}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
+    assert resp.status_code == 200
+    assert "text/plain" in resp.headers["content-type"]
