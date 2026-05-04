@@ -18,7 +18,7 @@
   <h1>Config</h1>
 
   <!-- Section 1: API Config -->
-  <details class="config-section" open>
+  <details class="config-section">
     <summary>API Config</summary>
     <div class="config-body">
       <h2>Sources</h2>
@@ -47,10 +47,16 @@
     <summary>Templates</summary>
     <div class="config-body">
       <h2>LaTeX Templates</h2>
-      <label class="config-label">Resume template path</label>
-      <input class="config-input" type="text" id="tpl-resume-path" placeholder="generator/resume_template.tex">
-      <label class="config-label">Cover letter template path</label>
-      <input class="config-input" type="text" id="tpl-cover-path" placeholder="generator/cover_template.tex">
+      <label class="config-label">Resume template</label>
+      <div class="file-drop-zone" id="drop-resume">
+        <input type="file" accept=".tex" id="tpl-resume-file" style="display:none">
+        <span class="drop-label" id="tpl-resume-label">Drop .tex file or click to browse</span>
+      </div>
+      <label class="config-label">Cover letter template</label>
+      <div class="file-drop-zone" id="drop-cover">
+        <input type="file" accept=".tex" id="tpl-cover-file" style="display:none">
+        <span class="drop-label" id="tpl-cover-label">Drop .tex file or click to browse</span>
+      </div>
 
       <h2>Prompt Templates</h2>
       <label class="config-label">Resume prompt</label>
