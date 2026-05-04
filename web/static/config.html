@@ -526,13 +526,7 @@
     const meta = await resp.json();
     const list = document.getElementById('profile-list');
     list.innerHTML = '';
-    const details = await Promise.all(
-      meta.profiles.map(function(p) {
-        return fetch('/api/config/profiles/' + p.id).then(r => r.json());
-      })
-    );
-    meta.profiles.forEach(function(p, i) {
-      const detail = details[i];
+    meta.profiles.forEach(function(p) {
       const row = buildProfileRow(
         { id: p.id, name: p.name },
         p.id === meta.active_id
