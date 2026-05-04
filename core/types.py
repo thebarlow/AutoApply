@@ -58,3 +58,4 @@ class UserProfile:
     target_salary_max: Optional[int] = None
     target_roles: list[str] = field(default_factory=list)
     resume_path: str = ""
+    md_path: str = ""

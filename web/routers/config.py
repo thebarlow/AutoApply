@@ -230,6 +230,7 @@ _EMPTY_PROFILE_DATA: dict[str, Any] = {
     "email": "", "phone": "", "location": "", "skills": [],
     "work_history": [], "education": [], "target_salary_min": None,
     "target_salary_max": None, "target_roles": [], "resume_path": "",
+    "md_path": "",
 }
 
 
