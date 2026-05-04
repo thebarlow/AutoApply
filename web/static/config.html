@@ -557,6 +557,7 @@
       });
       if (!resp.ok) { showStatus('status-profile', 'Failed to create profile', true); return; }
       const profile = await resp.json();
+      if (!profile.id) { showStatus('status-profile', 'Invalid response from server', true); return; }
       const row = buildProfileRow({ id: profile.id, name: profile.name }, false);
       document.getElementById('profile-list').appendChild(row);
       _selectedProfileId = profile.id;
