@@ -307,59 +307,6 @@
     });
   }
 
-  function initDropZoneProfile(zone, input, label, initialResumePath, initialMdPath) {
-
-    const displayPath = initialResumePath || initialMdPath || '';
-    zone.dataset.resumePath = initialResumePath || '';
-    zone.dataset.mdPath = initialMdPath || '';
-
-    async function setFile(file) {
-      if (!file) {
-        label.textContent = 'Drop resume (.pdf/.md) or click';
-        label.classList.remove('has-file');
-        return;
-      }
-      label.textContent = file.name + ' (uploading…)';
-      label.classList.add('has-file');
-      const form = new FormData();
-      form.append('file', file);
-      let serverPath = '';
-      try {
-        const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
-        if (!resp.ok) throw new Error(await resp.text());
-        serverPath = (await resp.json()).path;
-      } catch (err) {
-        label.textContent = 'Upload failed: ' + err.message;
-        label.classList.remove('has-file');
-        return;
-      }
-      label.textContent = file.name;
-      if (file.name.toLowerCase().endsWith('.pdf')) {
-        zone.dataset.resumePath = serverPath;
-        zone.dataset.mdPath = '';
-      } else {
-        zone.dataset.mdPath = serverPath;
-        zone.dataset.resumePath = '';
-      }
-    }
-
-    if (displayPath) {
-      label.textContent = displayPath.split(/[\\/]/).pop();
-      label.classList.add('has-file');
-    }
-
-    zone.addEventListener('click', () => input.click());
-    input.addEventListener('change', () => { if (input.files.length) setFile(input.files[0]); });
-    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
-    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-    zone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      zone.classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file) setFile(file);
-    });
-  }
-
   // ---- Section 2: Templates ----
 
   async function loadTemplates() {
@@ -526,10 +473,6 @@
     return row;
   }
 
-  async function selectProfile(id) {
-    _selectedProfileId = id;
-  }
-
   async function loadProfiles() {
     const resp = await fetch('/api/config/profiles');
     if (!resp.ok) { showStatus('status-profile', 'Failed to load profiles', true); return; }
@@ -568,49 +511,23 @@
   });
 
   document.getElementById('save-profile').addEventListener('click', async function() {
-    if (!_selectedProfileId) { showStatus('status-profile', 'Select a profile first', true); return; }
-
-    const row = document.querySelector('#profile-list .llm-row[data-id="' + _selectedProfileId + '"]');
-    if (!row) { showStatus('status-profile', 'Profile row not found', true); return; }
-
-    const nameInput = row.querySelector('.profile-name-input');
-    const zone = row.querySelector('.file-drop-zone');
-    const newName = nameInput ? nameInput.value.trim() : 'Default';
-    const resumePath = zone ? (zone.dataset.resumePath || '') : '';
-    const mdPath = zone ? (zone.dataset.mdPath || '') : '';
-
     const activeRadio = document.querySelector('input[name="profile-active"]:checked');
-    const newActiveId = activeRadio ? parseInt(activeRadio.value) : null;
-
+    if (!activeRadio) { showStatus('status-profile', 'Select a profile first', true); return; }
+    const activeId = parseInt(activeRadio.value);
     try {
-      const detailResp = await fetch('/api/config/profiles/' + _selectedProfileId);
-      if (!detailResp.ok) { showStatus('status-profile', 'Error loading profile', true); return; }
-      const existing = await detailResp.json();
-      const updatedData = Object.assign({}, existing.data, { resume_path: resumePath, md_path: mdPath });
-
-      const saves = [
-        fetch('/api/config/profiles/' + _selectedProfileId, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: newName, data: updatedData }),
-        }),
-      ];
-      if (newActiveId) {
-        saves.push(fetch('/api/config/profiles/active', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ active_id: newActiveId }),
-        }));
-      }
-      const results = await Promise.all(saves);
-      if (results.every(function(r) { return r.ok; })) {
-        row.querySelector('.profile-name-input').value = newName;
-        showStatus('status-profile', 'Saved ✓', false);
+      const resp = await fetch('/api/config/profiles/active', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active_id: activeId }),
+      });
+      if (resp.ok) {
+        _selectedProfileId = activeId;
+        showStatus('status-profile', 'Active profile set ✓', false);
       } else {
-        showStatus('status-profile', 'Error saving', true);
+        showStatus('status-profile', 'Error setting active profile', true);
       }
     } catch (e) {
-      showStatus('status-profile', 'Error saving', true);
+      showStatus('status-profile', 'Error setting active profile', true);
     }
   });
 
