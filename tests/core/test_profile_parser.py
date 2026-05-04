@@ -1,83 +1,104 @@
+import json
 import pytest
 from unittest.mock import MagicMock, patch
 
 from core.profile_parser import markdown_to_profile, pdf_to_markdown
 
-SAMPLE_MD = """
-John Doe
-john@example.com | (555) 123-4567 | New York, NY
 
-## Skills
-Python, SQL, FastAPI, Docker
-
-## Experience
-Software Engineer at Acme Corp (2022-01–2024-03)
-- Built internal APIs using FastAPI.
-- Reduced query time by 40%.
-
-## Education
-B.S. in Computer Science, Columbia University (2018)
-GPA: 3.7
-"""
+SAMPLE_PROFILE = {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "phone": "(555) 123-4567",
+    "location": "New York, NY",
+    "skills": ["Python", "SQL"],
+    "work_history": [
+        {"title": "Engineer", "company": "Acme", "start": "2022-01", "end": "2024-03", "summary": "Built APIs."}
+    ],
+    "education": [
+        {"institution": "Columbia University", "degree": "B.S.", "field": "Computer Science", "graduated": "2018", "gpa": 3.7}
+    ],
+}
 
 
-def test_extracts_email():
-    result = markdown_to_profile(SAMPLE_MD)
+def _make_db():
+    return MagicMock()
+
+
+def _make_llm_response(content: str):
+    """Build a mock openai ChatCompletion response."""
+    choice = MagicMock()
+    choice.message.content = content
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def test_returns_llm_parsed_fields():
+    db = _make_db()
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = _make_llm_response(json.dumps(SAMPLE_PROFILE))
+
+    with patch("core.profile_parser.get_openai_client", return_value=(mock_client, "test-model")):
+        result = markdown_to_profile("resume text", db)
+
+    assert result["name"] == "John Doe"
+    assert result["email"] == "john@example.com"
+    assert "Python" in result["skills"]
+    assert result["work_history"][0]["company"] == "Acme"
+    assert result["education"][0]["institution"] == "Columbia University"
+
+
+def test_includes_default_fields_not_in_llm_response():
+    db = _make_db()
+    partial = {"name": "Jane", "email": "j@j.com", "phone": "", "location": "",
+               "skills": [], "work_history": [], "education": []}
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = _make_llm_response(json.dumps(partial))
+
+    with patch("core.profile_parser.get_openai_client", return_value=(mock_client, "test-model")):
+        result = markdown_to_profile("resume text", db)
+
+    assert result["target_salary_min"] is None
+    assert result["target_salary_max"] is None
+    assert result["target_roles"] == []
+    assert result["resume_path"] == ""
+    assert result["md_path"] == ""
+    assert result["name"] == "Jane"
+    assert result["email"] == "j@j.com"
+
+
+def test_raises_value_error_on_invalid_json():
+    db = _make_db()
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = _make_llm_response("not json at all")
+
+    with patch("core.profile_parser.get_openai_client", return_value=(mock_client, "test-model")):
+        with pytest.raises(ValueError, match="LLM returned invalid JSON"):
+            markdown_to_profile("resume text", db)
+
+
+def test_raises_runtime_error_when_no_provider():
+    db = _make_db()
+    with patch("core.profile_parser.get_openai_client", side_effect=RuntimeError("No active LLM provider configured")):
+        with pytest.raises(RuntimeError, match="No active LLM provider"):
+            markdown_to_profile("resume text", db)
+
+
+def test_strips_markdown_fences_from_llm_response():
+    """LLMs sometimes wrap JSON in ```json ... ``` fences."""
+    db = _make_db()
+    fenced = f"```json\n{json.dumps(SAMPLE_PROFILE)}\n```"
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = _make_llm_response(fenced)
+
+    with patch("core.profile_parser.get_openai_client", return_value=(mock_client, "test-model")):
+        result = markdown_to_profile("resume text", db)
+
+    assert result["name"] == "John Doe"
     assert result["email"] == "john@example.com"
 
 
-def test_extracts_phone():
-    result = markdown_to_profile(SAMPLE_MD)
-    assert result["phone"] == "(555) 123-4567"
-
-
-def test_extracts_location():
-    result = markdown_to_profile(SAMPLE_MD)
-    assert result["location"] == "New York, NY"
-
-
-def test_extracts_name():
-    result = markdown_to_profile(SAMPLE_MD)
-    assert result["name"] == "John Doe"
-
-
-def test_extracts_skills():
-    result = markdown_to_profile(SAMPLE_MD)
-    assert "Python" in result["skills"]
-    assert "SQL" in result["skills"]
-
-
-def test_extracts_work_history():
-    result = markdown_to_profile(SAMPLE_MD)
-    assert len(result["work_history"]) == 1
-    entry = result["work_history"][0]
-    assert entry["title"] == "Software Engineer"
-    assert entry["company"] == "Acme Corp"
-    assert entry["start"] == "2022-01"
-    assert entry["end"] == "2024-03"
-    assert "FastAPI" in entry["summary"]
-
-
-def test_extracts_education():
-    result = markdown_to_profile(SAMPLE_MD)
-    assert len(result["education"]) == 1
-    edu = result["education"][0]
-    assert edu["institution"] == "Columbia University"
-    assert edu["degree"] == "B.S."
-    assert edu["field"] == "Computer Science"
-    assert edu["graduated"] == "2018"
-    assert edu["gpa"] == pytest.approx(3.7)
-
-
-def test_returns_defaults_for_missing_sections():
-    result = markdown_to_profile("Jane Smith\njane@example.com")
-    assert result["skills"] == []
-    assert result["work_history"] == []
-    assert result["education"] == []
-    assert result["target_roles"] == []
-    assert result["target_salary_min"] is None
-    assert result["target_salary_max"] is None
-
+# ---- pdf_to_markdown (unchanged) ----
 
 def _make_mock_pdf(pages_text: list):
     mock_pdf = MagicMock()
@@ -93,7 +114,6 @@ def _make_mock_pdf(pages_text: list):
 
 
 def test_pdf_to_markdown_extracts_text():
-    # Use a multi-word all-caps heading so the heuristic (2–7 words) triggers
     page_text = "WORK EXPERIENCE\nSoftware Engineer at Acme (2022-2024)\n• Built APIs"
     mock_pdf = _make_mock_pdf([page_text])
 
