@@ -60,9 +60,15 @@
 
       <h2>Prompt Templates</h2>
       <label class="config-label">Resume prompt</label>
-      <textarea class="config-textarea" id="tpl-resume-prompt" rows="10"></textarea>
+      <div class="file-drop-zone" id="drop-resume-prompt">
+        <input type="file" accept=".md,.txt" id="tpl-resume-prompt-file" style="display:none">
+        <span class="drop-label" id="tpl-resume-prompt-label">Drop .md or .txt file or click to browse</span>
+      </div>
       <label class="config-label">Cover letter prompt</label>
-      <textarea class="config-textarea" id="tpl-cover-prompt" rows="10"></textarea>
+      <div class="file-drop-zone" id="drop-cover-prompt">
+        <input type="file" accept=".md,.txt" id="tpl-cover-prompt-file" style="display:none">
+        <span class="drop-label" id="tpl-cover-prompt-label">Drop .md or .txt file or click to browse</span>
+      </div>
 
       <h2>Social Links</h2>
       <label class="config-label">GitHub</label>
