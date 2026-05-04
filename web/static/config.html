@@ -492,10 +492,11 @@
 
     row.innerHTML = `
       <input type="radio" name="profile-active" value="${profile.id}"${isActive ? ' checked' : ''}>
-      <span class="profile-name-label">${profile.name || 'New Profile'}</span>
+      <span class="profile-name-label"></span>
       <button class="btn-edit-profile btn btn-secondary" type="button" title="Edit profile">Edit</button>
       <button class="btn-remove-llm" type="button" title="Delete profile">✕</button>
     `;
+    row.querySelector('.profile-name-label').textContent = profile.name || 'New Profile';
 
     row.querySelector('input[type=radio]').addEventListener('change', function () {
       _selectedProfileId = profile.id;
@@ -523,6 +524,7 @@
 
   async function loadProfiles() {
     const resp = await fetch('/api/config/profiles');
+    if (!resp.ok) { showStatus('status-profile', 'Failed to load profiles', true); return; }
     const meta = await resp.json();
     const list = document.getElementById('profile-list');
     list.innerHTML = '';
