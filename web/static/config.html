@@ -667,15 +667,16 @@
 
     try {
       const resp = await fetch('/api/config/profiles/' + id);
-      if (!resp.ok) return;
+      if (!resp.ok) { showStatus('status-profile-modal', 'Failed to load profile', true); return; }
       const profile = await resp.json();
 
       document.getElementById('profile-modal-title').textContent = profile.name || 'Profile';
       document.getElementById('profile-modal-name').value = profile.name || '';
-      populateEditForm(Object.assign({ name: profile.name }, profile.data));
+      const data = profile.data || {};
+      populateEditForm(Object.assign({ name: profile.name }, data));
 
-      _modalFilePaths.resume_path = profile.data.resume_path || '';
-      _modalFilePaths.md_path = profile.data.md_path || '';
+      _modalFilePaths.resume_path = data.resume_path || '';
+      _modalFilePaths.md_path = data.md_path || '';
 
       const resumePath = _modalFilePaths.resume_path;
       const hasPdf = resumePath.toLowerCase().endsWith('.pdf');
