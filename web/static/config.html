@@ -94,37 +94,9 @@
       <div id="profile-list"></div>
       <button class="btn btn-secondary" id="btn-add-profile" type="button">+ Add User</button>
 
-      <div id="profile-edit-form" style="display:none">
-        <h2>Upload Resume</h2>
-        <div class="config-row">
-          <input type="file" id="profile-file" accept=".pdf,.md">
-          <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled>Parse</button>
-        </div>
-
-        <h2>Details</h2>
-        <label class="config-label">Name</label>
-        <input class="config-input" type="text" id="profile-name">
-        <label class="config-label">Email</label>
-        <input class="config-input" type="text" id="profile-email">
-        <label class="config-label">Phone</label>
-        <input class="config-input" type="text" id="profile-phone">
-        <label class="config-label">Location</label>
-        <input class="config-input" type="text" id="profile-location">
-        <label class="config-label">Skills (comma-separated)</label>
-        <input class="config-input" type="text" id="profile-skills">
-
-        <h2>Work History</h2>
-        <div id="work-history-list"></div>
-        <button class="btn btn-secondary" id="btn-add-work" type="button">+ Add Work History</button>
-
-        <h2>Education</h2>
-        <div id="education-list"></div>
-        <button class="btn btn-secondary" id="btn-add-education" type="button">+ Add Education</button>
-
-        <div class="config-actions">
-          <button class="btn btn-save" id="save-profile">Save</button>
-          <span class="save-status" id="status-profile"></span>
-        </div>
+      <div class="config-actions">
+        <button class="btn btn-save" id="save-profile">Save</button>
+        <span class="save-status" id="status-profile"></span>
       </div>
 
     </div>
@@ -266,6 +238,45 @@
     });
   }
 
+  function initDropZoneProfile(zoneId, fileInputId, labelId, initialResumePath, initialMdPath) {
+    const zone = document.getElementById(zoneId);
+    const input = document.getElementById(fileInputId);
+    const label = document.getElementById(labelId);
+
+    const displayPath = initialResumePath || initialMdPath || '';
+    zone.dataset.resumePath = initialResumePath || '';
+    zone.dataset.mdPath = initialMdPath || '';
+
+    function setFile(file) {
+      const name = file ? file.name : '';
+      label.textContent = name || 'Drop resume (.pdf/.md) or click';
+      label.classList.toggle('has-file', !!name);
+      if (name.toLowerCase().endsWith('.pdf')) {
+        zone.dataset.resumePath = name;
+        zone.dataset.mdPath = '';
+      } else if (name.toLowerCase().endsWith('.md')) {
+        zone.dataset.mdPath = name;
+        zone.dataset.resumePath = '';
+      }
+    }
+
+    if (displayPath) {
+      label.textContent = displayPath.split(/[\\/]/).pop();
+      label.classList.add('has-file');
+    }
+
+    zone.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => { if (input.files.length) setFile(input.files[0]); });
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) setFile(file);
+    });
+  }
+
   // ---- Section 2: Templates ----
 
   async function loadTemplates() {
@@ -403,112 +414,120 @@
     const row = document.createElement('div');
     row.className = 'llm-row';
     row.dataset.id = profile.id;
+
+    const zoneId = 'profile-drop-' + profile.id;
+    const fileInputId = 'profile-file-input-' + profile.id;
+    const labelId = 'profile-file-label-' + profile.id;
+
     row.innerHTML = `
       <input type="radio" name="profile-active" value="${profile.id}"${isActive ? ' checked' : ''}>
-      <span class="weight-label" style="flex:1;cursor:pointer"></span>
-      <button class="btn-remove-llm" type="button">✕</button>
+      <input type="text" class="profile-name-input" value="" placeholder="Profile name">
+      <div class="file-drop-zone file-drop-zone--inline" id="${zoneId}">
+        <input type="file" accept=".pdf,.md" id="${fileInputId}" style="display:none">
+        <span class="drop-label" id="${labelId}">Drop resume (.pdf/.md) or click</span>
+      </div>
+      <button class="btn-edit-profile" type="button" title="Edit profile">✏</button>
+      <button class="btn-remove-llm" type="button" title="Delete profile">✕</button>
     `;
-    row.querySelector('.weight-label').textContent = profile.name;
-    row.querySelector('input[type=radio]').addEventListener('change', function() {
-      selectProfile(profile.id);
+
+    const nameInput = row.querySelector('.profile-name-input');
+    nameInput.value = profile.name || '';
+
+    initDropZoneProfile(zoneId, fileInputId, labelId, profile.resume_path || '', profile.md_path || '');
+
+    row.querySelector('input[type=radio]').addEventListener('change', function () {
+      _selectedProfileId = profile.id;
     });
-    row.querySelector('.weight-label').addEventListener('click', function() {
+
+    row.querySelector('.btn-edit-profile').addEventListener('click', function () {
+      _selectedProfileId = profile.id;
       row.querySelector('input[type=radio]').checked = true;
-      selectProfile(profile.id);
+      openProfileModal(profile.id);
     });
-    row.querySelector('.btn-remove-llm').addEventListener('click', async function() {
+
+    row.querySelector('.btn-remove-llm').addEventListener('click', async function () {
       const resp = await fetch('/api/config/profiles/' + profile.id, { method: 'DELETE' });
       if (!resp.ok) { showStatus('status-profile', 'Delete failed', true); return; }
       row.remove();
       if (_selectedProfileId === profile.id) {
-        document.getElementById('profile-edit-form').style.display = 'none';
         _selectedProfileId = null;
       }
     });
+
     return row;
   }
 
   async function selectProfile(id) {
     _selectedProfileId = id;
-    const resp = await fetch('/api/config/profiles/' + id);
-    const data = await resp.json();
-    populateEditForm(Object.assign({ name: data.name }, data.data));
-    document.getElementById('profile-edit-form').style.display = '';
   }
 
   async function loadProfiles() {
     const resp = await fetch('/api/config/profiles');
-    const data = await resp.json();
+    const meta = await resp.json();
     const list = document.getElementById('profile-list');
     list.innerHTML = '';
-    data.profiles.forEach(function(p) {
-      list.appendChild(buildProfileRow(p, p.id === data.active_id));
+    const details = await Promise.all(
+      meta.profiles.map(function(p) {
+        return fetch('/api/config/profiles/' + p.id).then(r => r.json());
+      })
+    );
+    meta.profiles.forEach(function(p, i) {
+      const detail = details[i];
+      const row = buildProfileRow(
+        { id: p.id, name: p.name, resume_path: detail.data.resume_path || '', md_path: detail.data.md_path || '' },
+        p.id === meta.active_id
+      );
+      list.appendChild(row);
     });
-    if (data.active_id) {
-      selectProfile(data.active_id);
+    if (meta.active_id) {
+      _selectedProfileId = meta.active_id;
     }
   }
 
   document.getElementById('btn-add-profile').addEventListener('click', async function() {
-    const name = prompt('Profile name (e.g. "Software Engineer"):');
-    if (!name) return;
     try {
       const resp = await fetch('/api/config/profiles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name }),
+        body: JSON.stringify({ name: 'New Profile' }),
       });
       if (!resp.ok) { showStatus('status-profile', 'Failed to create profile', true); return; }
       const profile = await resp.json();
-      document.getElementById('profile-list').appendChild(buildProfileRow(profile, false));
-      document.querySelector('input[name="profile-active"][value="' + profile.id + '"]').checked = true;
-      selectProfile(profile.id);
+      const row = buildProfileRow({ id: profile.id, name: profile.name, resume_path: '', md_path: '' }, false);
+      document.getElementById('profile-list').appendChild(row);
+      row.querySelector('.profile-name-input').focus();
+      row.querySelector('.profile-name-input').select();
     } catch (e) {
       showStatus('status-profile', 'Error creating profile', true);
     }
   });
 
-  document.getElementById('profile-file').addEventListener('change', function(e) {
-    document.getElementById('btn-parse-profile').disabled = !e.target.files.length;
-  });
-
-  document.getElementById('btn-parse-profile').addEventListener('click', async function() {
-    const file = document.getElementById('profile-file').files[0];
-    if (!file) return;
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const resp = await fetch('/api/config/profile/parse', { method: 'POST', body: form });
-      if (!resp.ok) { showStatus('status-profile', 'Parse failed', true); return; }
-      const data = await resp.json();
-      populateEditForm(data);
-    } catch (e) {
-      showStatus('status-profile', 'Parse error', true);
-    }
-  });
-
-  document.getElementById('btn-add-work').addEventListener('click', function() {
-    document.getElementById('work-history-list').appendChild(buildWorkRow());
-  });
-
-  document.getElementById('btn-add-education').addEventListener('click', function() {
-    document.getElementById('education-list').appendChild(buildEducationRow());
-  });
-
   document.getElementById('save-profile').addEventListener('click', async function() {
     if (!_selectedProfileId) { showStatus('status-profile', 'Select a profile first', true); return; }
+
     const row = document.querySelector('#profile-list .llm-row[data-id="' + _selectedProfileId + '"]');
-    const profileLabel = row ? row.querySelector('.weight-label').textContent : 'Default';
-    const body = collectEditForm(profileLabel);
+    if (!row) { showStatus('status-profile', 'Profile row not found', true); return; }
+
+    const nameInput = row.querySelector('.profile-name-input');
+    const zone = row.querySelector('.file-drop-zone');
+    const newName = nameInput ? nameInput.value.trim() : 'Default';
+    const resumePath = zone ? (zone.dataset.resumePath || '') : '';
+    const mdPath = zone ? (zone.dataset.mdPath || '') : '';
+
     const activeRadio = document.querySelector('input[name="profile-active"]:checked');
     const newActiveId = activeRadio ? parseInt(activeRadio.value) : null;
 
     try {
+      const detailResp = await fetch('/api/config/profiles/' + _selectedProfileId);
+      if (!detailResp.ok) { showStatus('status-profile', 'Error loading profile', true); return; }
+      const existing = await detailResp.json();
+      const updatedData = Object.assign({}, existing.data, { resume_path: resumePath, md_path: mdPath });
+
       const saves = [
         fetch('/api/config/profiles/' + _selectedProfileId, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ name: newName, data: updatedData }),
         }),
       ];
       if (newActiveId) {
@@ -519,8 +538,12 @@
         }));
       }
       const results = await Promise.all(saves);
-      if (results.every(function(r) { return r.ok; })) showStatus('status-profile', 'Saved ✓', false);
-      else showStatus('status-profile', 'Error saving', true);
+      if (results.every(function(r) { return r.ok; })) {
+        row.querySelector('.profile-name-input').value = newName;
+        showStatus('status-profile', 'Saved ✓', false);
+      } else {
+        showStatus('status-profile', 'Error saving', true);
+      }
     } catch (e) {
       showStatus('status-profile', 'Error saving', true);
     }
