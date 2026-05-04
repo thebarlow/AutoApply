@@ -441,3 +441,129 @@ details.config-section[open] > summary::before {
 .file-drop-zone .drop-label.has-file {
   color: #e0e0e0;
 }
+
+/* Inline file drop zone (used in profile rows) */
+.file-drop-zone--inline {
+  margin-bottom: 0;
+  padding: 6px 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-drop-zone--inline .drop-label {
+  font-size: 0.8rem;
+}
+
+/* Profile row name input */
+.profile-name-input {
+  width: 10rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+/* Profile row edit button */
+.btn-edit-profile {
+  background: none;
+  border: none;
+  color: #3a3a8c;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+
+.btn-edit-profile:hover { background: #eeeeff; }
+
+/* Profile modal — wider than job overlay to accommodate PDF iframe */
+.profile-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 60px;
+  z-index: 200;
+}
+
+.profile-modal-backdrop.is-open {
+  display: flex;
+}
+
+.profile-modal-panel {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  width: min(860px, 95vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.profile-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.profile-modal-header h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* Tab bar */
+.profile-tab-bar {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid #e9ecef;
+  margin-bottom: 1rem;
+}
+
+.profile-tab-btn {
+  padding: 0.45rem 1rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.profile-tab-btn.active {
+  color: #3a3a8c;
+  border-bottom-color: #3a3a8c;
+}
+
+.profile-tab-btn:hover:not(.active) { color: #333; }
+
+/* Tab panels */
+.profile-tab-panel { display: none; }
+.profile-tab-panel.active { display: block; }
+
+/* PDF iframe */
+.profile-pdf-frame {
+  width: 100%;
+  height: 520px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+/* MD viewer */
+.profile-md-viewer {
+  width: 100%;
+  height: 480px;
+  font-family: monospace;
+  font-size: 0.82rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: vertical;
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
