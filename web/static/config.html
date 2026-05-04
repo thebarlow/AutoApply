@@ -144,6 +144,67 @@
 
 </main>
 
+<!-- Profile Modal -->
+<div class="profile-modal-backdrop" id="profile-modal-backdrop">
+  <div class="profile-modal-panel" id="profile-modal-panel">
+    <div class="profile-modal-header">
+      <h2 id="profile-modal-title">Profile</h2>
+      <button class="btn-remove-llm" id="profile-modal-close" type="button" style="font-size:1.2rem">✕</button>
+    </div>
+
+    <div class="profile-tab-bar" id="profile-tab-bar">
+      <button class="profile-tab-btn" id="tab-btn-pdf" data-tab="pdf">PDF</button>
+      <button class="profile-tab-btn" id="tab-btn-md" data-tab="md">Markdown</button>
+      <button class="profile-tab-btn active" id="tab-btn-edit" data-tab="edit">Edit</button>
+    </div>
+
+    <!-- PDF tab -->
+    <div class="profile-tab-panel" id="tab-panel-pdf">
+      <iframe class="profile-pdf-frame" id="profile-pdf-frame" src="about:blank"></iframe>
+    </div>
+
+    <!-- Markdown tab -->
+    <div class="profile-tab-panel" id="tab-panel-md">
+      <textarea class="profile-md-viewer" id="profile-md-viewer" readonly></textarea>
+    </div>
+
+    <!-- Edit tab -->
+    <div class="profile-tab-panel active" id="tab-panel-edit">
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Upload Resume</h2>
+      <div class="config-row">
+        <input type="file" id="profile-file" accept=".pdf,.md">
+        <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled style="margin-top:0">Parse</button>
+      </div>
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Details</h2>
+      <label class="config-label">Name</label>
+      <input class="config-input" type="text" id="profile-name">
+      <label class="config-label">Email</label>
+      <input class="config-input" type="text" id="profile-email">
+      <label class="config-label">Phone</label>
+      <input class="config-input" type="text" id="profile-phone">
+      <label class="config-label">Location</label>
+      <input class="config-input" type="text" id="profile-location">
+      <label class="config-label">Skills (comma-separated)</label>
+      <input class="config-input" type="text" id="profile-skills">
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Work History</h2>
+      <div id="work-history-list"></div>
+      <button class="btn btn-secondary" id="btn-add-work" type="button">+ Add Work History</button>
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Education</h2>
+      <div id="education-list"></div>
+      <button class="btn btn-secondary" id="btn-add-education" type="button">+ Add Education</button>
+
+      <div class="config-actions" style="margin-top:1rem">
+        <button class="btn btn-save" id="save-profile-modal">Save</button>
+        <span class="save-status" id="status-profile-modal"></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <script>
 (function () {
 
@@ -827,67 +888,6 @@
 
 })();
 </script>
-
-<!-- Profile Modal -->
-<div class="profile-modal-backdrop" id="profile-modal-backdrop">
-  <div class="profile-modal-panel" id="profile-modal-panel">
-    <div class="profile-modal-header">
-      <h2 id="profile-modal-title">Profile</h2>
-      <button class="btn-remove-llm" id="profile-modal-close" type="button" style="font-size:1.2rem">✕</button>
-    </div>
-
-    <div class="profile-tab-bar" id="profile-tab-bar">
-      <button class="profile-tab-btn" id="tab-btn-pdf" data-tab="pdf">PDF</button>
-      <button class="profile-tab-btn" id="tab-btn-md" data-tab="md">Markdown</button>
-      <button class="profile-tab-btn active" id="tab-btn-edit" data-tab="edit">Edit</button>
-    </div>
-
-    <!-- PDF tab -->
-    <div class="profile-tab-panel" id="tab-panel-pdf">
-      <iframe class="profile-pdf-frame" id="profile-pdf-frame" src="about:blank"></iframe>
-    </div>
-
-    <!-- Markdown tab -->
-    <div class="profile-tab-panel" id="tab-panel-md">
-      <textarea class="profile-md-viewer" id="profile-md-viewer" readonly></textarea>
-    </div>
-
-    <!-- Edit tab -->
-    <div class="profile-tab-panel active" id="tab-panel-edit">
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Upload Resume</h2>
-      <div class="config-row">
-        <input type="file" id="profile-file" accept=".pdf,.md">
-        <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled style="margin-top:0">Parse</button>
-      </div>
-
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Details</h2>
-      <label class="config-label">Name</label>
-      <input class="config-input" type="text" id="profile-name">
-      <label class="config-label">Email</label>
-      <input class="config-input" type="text" id="profile-email">
-      <label class="config-label">Phone</label>
-      <input class="config-input" type="text" id="profile-phone">
-      <label class="config-label">Location</label>
-      <input class="config-input" type="text" id="profile-location">
-      <label class="config-label">Skills (comma-separated)</label>
-      <input class="config-input" type="text" id="profile-skills">
-
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Work History</h2>
-      <div id="work-history-list"></div>
-      <button class="btn btn-secondary" id="btn-add-work" type="button">+ Add Work History</button>
-
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Education</h2>
-      <div id="education-list"></div>
-      <button class="btn btn-secondary" id="btn-add-education" type="button">+ Add Education</button>
-
-      <div class="config-actions" style="margin-top:1rem">
-        <button class="btn btn-save" id="save-profile-modal">Save</button>
-        <span class="save-status" id="status-profile-modal"></span>
-      </div>
-    </div>
-
-  </div>
-</div>
 
 </body>
 </html>
