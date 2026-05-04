@@ -409,3 +409,35 @@ details.config-section[open] > summary::before {
   flex: 1;
   min-width: 6rem;
 }
+
+.file-drop-zone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 2px dashed #555;
+  border-radius: 6px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: #1e1e2e;
+  margin-bottom: 12px;
+}
+
+.file-drop-zone:hover,
+.file-drop-zone.drag-over {
+  border-color: #7c9cbf;
+  background: #252535;
+}
+
+.file-drop-zone .drop-label {
+  font-size: 0.875rem;
+  color: #aaa;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-drop-zone .drop-label.has-file {
+  color: #e0e0e0;
+}
