@@ -222,12 +222,50 @@
     }
   });
 
+  // ---- Drop zone helper ----
+
+  const _dropValues = { resume: '', cover: '' };
+
+  function initDropZone(zoneId, fileInputId, labelId, key, initialValue) {
+    const zone = document.getElementById(zoneId);
+    const input = document.getElementById(fileInputId);
+    const label = document.getElementById(labelId);
+
+    function setFile(name) {
+      _dropValues[key] = name;
+      label.textContent = name || 'Drop .tex file or click to browse';
+      label.classList.toggle('has-file', !!name);
+    }
+
+    setFile(initialValue || '');
+
+    zone.addEventListener('click', () => input.click());
+
+    input.addEventListener('change', () => {
+      if (input.files.length) setFile(input.files[0].name);
+    });
+
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      zone.classList.add('drag-over');
+    });
+
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) setFile(file.name);
+    });
+  }
+
   // ---- Section 2: Templates ----
 
   async function loadTemplates() {
     const data = await fetch('/api/config/templates').then(r => r.json());
-    document.getElementById('tpl-resume-path').value = data.resume_template_path;
-    document.getElementById('tpl-cover-path').value = data.cover_template_path;
+    initDropZone('drop-resume', 'tpl-resume-file', 'tpl-resume-label', 'resume', data.resume_template_path);
+    initDropZone('drop-cover', 'tpl-cover-file', 'tpl-cover-label', 'cover', data.cover_template_path);
     document.getElementById('tpl-resume-prompt').value = data.resume_prompt_template;
     document.getElementById('tpl-cover-prompt').value = data.cover_prompt_template;
     document.getElementById('tpl-github').value = data.github;
@@ -241,8 +279,8 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          resume_template_path: document.getElementById('tpl-resume-path').value,
-          cover_template_path: document.getElementById('tpl-cover-path').value,
+          resume_template_path: _dropValues.resume,
+          cover_template_path: _dropValues.cover,
           resume_prompt_template: document.getElementById('tpl-resume-prompt').value,
           cover_prompt_template: document.getElementById('tpl-cover-prompt').value,
           github: document.getElementById('tpl-github').value,
