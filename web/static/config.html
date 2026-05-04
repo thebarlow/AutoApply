@@ -617,21 +617,30 @@
   let _modalIsNew = false;
   let _modalFilePaths = { resume_path: '', md_path: '' };
 
-  function openProfileModal(id) {
+  function openProfileModal(id, isNew) {
     _modalProfileId = id;
-    const backdrop = document.getElementById('profile-modal-backdrop');
-    backdrop.classList.add('is-open');
-    loadModalContent(id);
+    _modalIsNew = isNew;
+    _modalFilePaths = { resume_path: '', md_path: '' };
+    document.getElementById('profile-modal-backdrop').classList.add('is-open');
+    loadModalContent(id, isNew);
   }
 
-  function closeProfileModal() {
+  async function closeProfileModal() {
+    if (_modalIsNew) {
+      await fetch('/api/config/profiles/' + _modalProfileId, { method: 'DELETE' });
+      const row = document.querySelector('#profile-list .llm-row[data-id="' + _modalProfileId + '"]');
+      if (row) row.remove();
+      if (_selectedProfileId === _modalProfileId) _selectedProfileId = null;
+    }
     _modalProfileId = null;
+    _modalIsNew = false;
+    _modalFilePaths = { resume_path: '', md_path: '' };
     document.getElementById('profile-modal-backdrop').classList.remove('is-open');
     document.getElementById('profile-pdf-frame').src = 'about:blank';
     document.getElementById('profile-md-viewer').value = '';
   }
 
-  async function loadModalContent(id) {
+  async function loadModalContent(id, isNew) {
     // Reset to Edit tab
     document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
