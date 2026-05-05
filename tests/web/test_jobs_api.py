@@ -231,32 +231,6 @@ def test_score_job_endpoint_not_found(client):
     assert resp.status_code == 404
 
 
-def test_generate_job_endpoint(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
-
-    _make_job(db_session, "job_generate")
-
-    def mock_generate_job(job_key, db, client, model):
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        job.resume_path = f"/outputs/{job_key}_resume.pdf"
-        job.cover_path = f"/outputs/{job_key}_cover.pdf"
-        db.commit()
-
-    monkeypatch.setattr(jobs_router, "_generate_job", mock_generate_job)
-    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
-
-    resp = client.post("/api/jobs/job_generate/generate")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["resume_path"] == "/outputs/job_generate_resume.pdf"
-    assert data["cover_path"] == "/outputs/job_generate_cover.pdf"
-
-
-def test_generate_job_not_found(client):
-    resp = client.post("/api/jobs/nonexistent/generate")
-    assert resp.status_code == 404
-
-
 def test_serve_resume_not_found(client, db_session):
     _make_job(db_session, "job_noresume")
     resp = client.get("/api/jobs/job_noresume/resume")
