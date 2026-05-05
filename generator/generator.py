@@ -134,7 +134,7 @@ def strip_header_block(md: str) -> str:
 def call_claude(prompt: str, client: Any, model: str) -> str:
     response = client.chat.completions.create(
         model=model,
-        max_tokens=4096,
+        max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
     choice = response.choices[0]

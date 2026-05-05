@@ -567,3 +567,11 @@ details.config-section[open] > summary::before {
   padding: 0.75rem;
   box-sizing: border-box;
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spin-steps {
+  to { transform: rotate(360deg); }
+}

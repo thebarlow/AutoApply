@@ -61,7 +61,21 @@
     <template x-if="selectedJob">
       <div>
         <div class="overlay-header">
-          <h2 x-text="selectedJob.title || '(no title)'"></h2>
+          <h2>
+            <span x-text="selectedJob.title || '(no title)'"></span>
+            <span x-show="generating" style="display:inline-flex;align-items:center;margin-left:0.5rem;font-size:0.85rem;color:#888;font-weight:400;vertical-align:middle">
+              <svg viewBox="0 0 20 20" width="14" height="14" style="margin-right:0.4em;flex-shrink:0;display:block">
+                <g>
+                  <circle cx="10" cy="10" r="7" fill="none" stroke="#3a3a3a" stroke-width="2.5" stroke-dasharray="9.5 1.5"/>
+                  <circle cx="10" cy="10" r="7" fill="none" stroke="#aaa" stroke-width="2.5" stroke-dasharray="9.5 34.5"/>
+                  <animateTransform attributeName="transform" type="rotate"
+                    values="-90 10 10;0 10 10;90 10 10;180 10 10"
+                    dur="2s" calcMode="discrete" repeatCount="indefinite"/>
+                </g>
+              </svg>
+              <span x-text="generating === 'resume' ? 'Generating resume…' : 'Generating cover letter…'"></span>
+            </span>
+          </h2>
           <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="selectedJob.state"></span>
         </div>
 
@@ -77,28 +91,28 @@
 
           <!-- Resume: Generate or View dropdown -->
           <template x-if="!selectedJob.resume_path">
-            <button class="btn" @click="generateResume()">Generate Resume</button>
+            <button class="btn" @click="generateResume()" :disabled="!!generating">Generate Resume</button>
           </template>
           <template x-if="selectedJob.resume_path">
             <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
-              <button class="btn btn-dropdown" @click="open = !open">View Resume ▾</button>
+              <button class="btn btn-dropdown" @click="open = !open" :disabled="!!generating">View Resume ▾</button>
               <div class="dropdown-menu" x-show="open">
                 <button @click="viewResume(); open = false">View</button>
-                <button @click="generateResume(); open = false">Regenerate</button>
+                <button @click="generateResume(); open = false" :disabled="!!generating">Regenerate</button>
               </div>
             </div>
           </template>
 
           <!-- Cover: Generate or View dropdown -->
           <template x-if="!selectedJob.cover_path">
-            <button class="btn" @click="generateCover()">Generate Cover Letter</button>
+            <button class="btn" @click="generateCover()" :disabled="!!generating">Generate Cover Letter</button>
           </template>
           <template x-if="selectedJob.cover_path">
             <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
-              <button class="btn btn-dropdown" @click="open = !open">View Cover Letter ▾</button>
+              <button class="btn btn-dropdown" @click="open = !open" :disabled="!!generating">View Cover Letter ▾</button>
               <div class="dropdown-menu" x-show="open">
                 <button @click="viewCover(); open = false">View</button>
-                <button @click="generateCover(); open = false">Regenerate</button>
+                <button @click="generateCover(); open = false" :disabled="!!generating">Regenerate</button>
               </div>
             </div>
           </template>
@@ -133,6 +147,7 @@ function dashboard() {
     sortDir: 'desc',
     deleteConfirm: false,
     loadError: null,
+    generating: null,
 
     async init() {
       await this.loadJobs();
@@ -234,15 +249,19 @@ function dashboard() {
     },
 
     async generateResume() {
+      this.generating = 'resume';
       try {
         this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume`));
       } catch { alert('Failed to generate resume.'); }
+      finally { this.generating = null; }
     },
 
     async generateCover() {
+      this.generating = 'cover';
       try {
         this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover`));
       } catch { alert('Failed to generate cover letter.'); }
+      finally { this.generating = null; }
     },
 
     viewResume() {
