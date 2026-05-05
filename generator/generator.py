@@ -207,8 +207,7 @@ def generate_resume(
         profile = UserProfile(**data)
 
         resume_tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
-        cover_tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
-        if not resume_tpl or not cover_tpl:
+        if not resume_tpl:
             raise RuntimeError("Prompt templates not seeded in config table.")
 
         def _cfg(key: str) -> str:
