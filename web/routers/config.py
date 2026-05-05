@@ -364,7 +364,7 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
 
 @router.post("/api/config/profile/parse")
 def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Parse an uploaded PDF or Markdown resume into a profile dict."""
+    """Parse an uploaded PDF or Markdown resume into a profile dict using the active LLM."""
     MAX_BYTES = 10 * 1024 * 1024  # 10 MB
     contents = file.file.read()
     if len(contents) > MAX_BYTES:
@@ -374,4 +374,7 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
         md_text = _parser.pdf_to_markdown(contents)
     else:
         md_text = contents.decode("utf-8", errors="replace")
-    return _parser.markdown_to_profile(md_text)
+    try:
+        return _parser.markdown_to_profile(md_text, db)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))

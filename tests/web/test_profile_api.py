@@ -126,11 +126,11 @@ def test_put_active_profile_not_found(client):
 
 def test_parse_endpoint_md_returns_profile_dict(client, monkeypatch):
     import core.profile_parser as pp
-    monkeypatch.setattr(pp, "markdown_to_profile", lambda text: {
+    monkeypatch.setattr(pp, "markdown_to_profile", lambda text, db: {
         "name": "Test User", "email": "t@t.com", "phone": "", "location": "",
         "skills": ["Python"], "work_history": [], "education": [],
         "target_salary_min": None, "target_salary_max": None,
-        "target_roles": [], "resume_path": "",
+        "target_roles": [], "resume_path": "", "md_path": "",
     })
 
     resp = client.post(
@@ -152,11 +152,11 @@ def test_parse_endpoint_pdf_calls_pdf_to_markdown(client, monkeypatch):
         return "# Resume"
 
     monkeypatch.setattr(pp, "pdf_to_markdown", fake_pdf_to_md)
-    monkeypatch.setattr(pp, "markdown_to_profile", lambda t: {
+    monkeypatch.setattr(pp, "markdown_to_profile", lambda t, db: {
         "name": "", "email": "", "phone": "", "location": "",
         "skills": [], "work_history": [], "education": [],
         "target_salary_min": None, "target_salary_max": None,
-        "target_roles": [], "resume_path": "",
+        "target_roles": [], "resume_path": "", "md_path": "",
     })
 
     resp = client.post(
@@ -253,3 +253,35 @@ def test_serve_profile_file_invalid_type(client, db_session):
 
     resp = client.get(f"/api/config/profiles/{row.id}/file?type=xml")
     assert resp.status_code == 400
+
+
+def test_parse_endpoint_surfaces_no_provider_error(client, monkeypatch):
+    import core.profile_parser as pp
+
+    def _raise(*_):
+        raise RuntimeError("No active LLM provider configured")
+
+    monkeypatch.setattr(pp, "markdown_to_profile", _raise)
+
+    resp = client.post(
+        "/api/config/profile/parse",
+        files={"file": ("resume.md", io.BytesIO(b"# Test"), "text/plain")},
+    )
+    assert resp.status_code == 422
+    assert "No active LLM provider" in resp.json()["detail"]
+
+
+def test_parse_endpoint_surfaces_bad_json_error(client, monkeypatch):
+    import core.profile_parser as pp
+
+    def _raise(*_):
+        raise ValueError("LLM returned invalid JSON: ...")
+
+    monkeypatch.setattr(pp, "markdown_to_profile", _raise)
+
+    resp = client.post(
+        "/api/config/profile/parse",
+        files={"file": ("resume.md", io.BytesIO(b"# Test"), "text/plain")},
+    )
+    assert resp.status_code == 422
+    assert "LLM returned invalid JSON" in resp.json()["detail"]
