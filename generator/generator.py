@@ -54,12 +54,32 @@ def _render_job(job: Job) -> str:
     )
 
 
+def _load_master_resume(profile: UserProfile) -> str:
+    if profile.md_path:
+        p = Path(profile.md_path)
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+    return _render_profile(profile)
+
+
 def build_resume_prompt(job: Job, profile: UserProfile, template: str) -> str:
-    return template.format(profile=_render_profile(profile), job=_render_job(job))
+    return template.format(
+        master_resume=_load_master_resume(profile),
+        title=job.title or "",
+        company=job.company or "",
+        location=job.location or "Not specified",
+        description=job.description or "Not provided",
+    )
 
 
 def build_cover_prompt(job: Job, profile: UserProfile, template: str) -> str:
-    return template.format(profile=_render_profile(profile), job=_render_job(job))
+    return template.format(
+        master_resume=_load_master_resume(profile),
+        title=job.title or "",
+        company=job.company or "",
+        location=job.location or "Not specified",
+        description=job.description or "Not provided",
+    )
 
 
 def _build_frontmatter(
@@ -114,10 +134,14 @@ def strip_header_block(md: str) -> str:
 def call_claude(prompt: str, client: Any, model: str) -> str:
     response = client.chat.completions.create(
         model=model,
-        max_tokens=2048,
+        max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.choices[0].message.content.strip()
+    choice = response.choices[0]
+    content = choice.message.content
+    if not content:
+        raise RuntimeError(f"LLM returned empty response (finish_reason={choice.finish_reason!r})")
+    return content.strip()
 
 
 def render_pdf(md_path: Path, pdf_path: Path, template_path: Path) -> None:

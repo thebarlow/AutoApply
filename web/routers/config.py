@@ -92,8 +92,6 @@ def put_search(body: SearchBody, db: Session = Depends(get_db)) -> dict[str, Any
 class TemplatesBody(BaseModel):
     resume_template_path: str
     cover_template_path: str
-    resume_prompt_template: str
-    cover_prompt_template: str
     github: str
     linkedin: str
     website: str
@@ -104,8 +102,6 @@ def get_templates(db: Session = Depends(get_db)) -> dict[str, str]:
     return {
         "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
         "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
-        "resume_prompt_template": _get(db, "resume_prompt_template"),
-        "cover_prompt_template": _get(db, "cover_prompt_template"),
         "github": _get(db, "resume_github"),
         "linkedin": _get(db, "resume_linkedin"),
         "website": _get(db, "resume_website"),
@@ -116,12 +112,113 @@ def get_templates(db: Session = Depends(get_db)) -> dict[str, str]:
 def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[str, str]:
     _set(db, "resume_template_path", body.resume_template_path)
     _set(db, "cover_template_path", body.cover_template_path)
-    _set(db, "resume_prompt_template", body.resume_prompt_template)
-    _set(db, "cover_prompt_template", body.cover_prompt_template)
     _set(db, "resume_github", body.github)
     _set(db, "resume_linkedin", body.linkedin)
     _set(db, "resume_website", body.website)
     return body.model_dump()
+
+
+# ---- Prompt Templates ----
+
+class PromptBody(BaseModel):
+    name: str
+    content: str
+
+
+class ActivePromptBody(BaseModel):
+    active_id: str
+
+
+def _get_prompts(db: Session, type_: str) -> list[dict]:
+    return json.loads(_get(db, f"{type_}_prompts", "[]"))
+
+
+def _set_prompts(db: Session, type_: str, prompts: list[dict]) -> None:
+    _set(db, f"{type_}_prompts", json.dumps(prompts))
+
+
+def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[dict]) -> None:
+    """Keep the legacy template key in sync so the generator always reads current content."""
+    legacy_key = f"{type_}_prompt_template"
+    match = next((p for p in prompts if p["id"] == active_id), None)
+    _set(db, legacy_key, match["content"] if match else "")
+
+
+@router.get("/api/config/prompts/{type_}")
+def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if type_ not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="type must be resume or cover")
+    prompts = _get_prompts(db, type_)
+    active_id = _get(db, f"active_{type_}_prompt_id")
+    return {"prompts": [{"id": p["id"], "name": p["name"]} for p in prompts], "active_id": active_id}
+
+
+@router.post("/api/config/prompts/{type_}")
+def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if type_ not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="type must be resume or cover")
+    prompts = _get_prompts(db, type_)
+    new_id = uuid.uuid4().hex
+    prompts.append({"id": new_id, "name": body.name, "content": body.content})
+    _set_prompts(db, type_, prompts)
+    return {"id": new_id, "name": body.name}
+
+
+# IMPORTANT: /active must be registered before /{prompt_id} to avoid the literal
+# string "active" matching the {prompt_id} path parameter.
+@router.put("/api/config/prompts/{type_}/active")
+def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if type_ not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="type must be resume or cover")
+    prompts = _get_prompts(db, type_)
+    if not any(p["id"] == body.active_id for p in prompts):
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    _set(db, f"active_{type_}_prompt_id", body.active_id)
+    _sync_active_prompt(db, type_, body.active_id, prompts)
+    return {"active_id": body.active_id}
+
+
+@router.get("/api/config/prompts/{type_}/{prompt_id}")
+def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if type_ not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="type must be resume or cover")
+    prompts = _get_prompts(db, type_)
+    match = next((p for p in prompts if p["id"] == prompt_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return match
+
+
+@router.put("/api/config/prompts/{type_}/{prompt_id}")
+def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if type_ not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="type must be resume or cover")
+    prompts = _get_prompts(db, type_)
+    match = next((p for p in prompts if p["id"] == prompt_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    match["name"] = body.name
+    match["content"] = body.content
+    _set_prompts(db, type_, prompts)
+    active_id = _get(db, f"active_{type_}_prompt_id")
+    if active_id == prompt_id:
+        _sync_active_prompt(db, type_, prompt_id, prompts)
+    return {"id": prompt_id, "name": body.name}
+
+
+@router.delete("/api/config/prompts/{type_}/{prompt_id}", status_code=204)
+def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> None:
+    if type_ not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="type must be resume or cover")
+    prompts = _get_prompts(db, type_)
+    remaining = [p for p in prompts if p["id"] != prompt_id]
+    if len(remaining) == len(prompts):
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    _set_prompts(db, type_, remaining)
+    active_id = _get(db, f"active_{type_}_prompt_id")
+    if active_id == prompt_id:
+        _set(db, f"active_{type_}_prompt_id", "")
+        _sync_active_prompt(db, type_, "", remaining)
 
 
 # ---- Scoring ----
