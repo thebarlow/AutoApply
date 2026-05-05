@@ -166,6 +166,7 @@
         <input type="file" id="profile-file" accept=".pdf,.md">
         <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled style="margin-top:0">Parse</button>
       </div>
+      <span class="save-status" id="status-parse"></span>
     </div>
 
     <!-- PDF tab -->
@@ -700,11 +701,18 @@
   document.getElementById('btn-parse-profile').addEventListener('click', async function() {
     const file = document.getElementById('profile-file').files[0];
     if (!file) return;
+    const btn = document.getElementById('btn-parse-profile');
+    btn.disabled = true;
+    btn.textContent = 'Parsing…';
     const form = new FormData();
     form.append('file', file);
     try {
       const resp = await fetch('/api/config/profile/parse', { method: 'POST', body: form });
-      if (!resp.ok) { showStatus('status-profile-modal', 'Parse failed: ' + await resp.text(), true); return; }
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        showStatus('status-parse', 'Parse failed: ' + (err && err.detail ? err.detail : resp.statusText), true);
+        return;
+      }
       const data = await resp.json();
       document.getElementById('profile-modal-name').value = data.name || '';
       populateEditForm(Object.assign({ name: data.name }, data));
@@ -714,7 +722,10 @@
       document.getElementById('tab-btn-edit').classList.add('active');
       document.getElementById('tab-panel-edit').classList.add('active');
     } catch (e) {
-      showStatus('status-profile-modal', 'Parse error', true);
+      showStatus('status-parse', 'Parse error: ' + e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Parse';
     }
   });
 

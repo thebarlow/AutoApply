@@ -376,5 +376,5 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
         md_text = contents.decode("utf-8", errors="replace")
     try:
         return _parser.markdown_to_profile(md_text, db)
-    except (RuntimeError, ValueError) as exc:
+    except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
