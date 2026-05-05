@@ -107,6 +107,8 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     client, model = get_openai_client(db)
     _generate_resume(job_key, db=db, client=client, model=model)
     db.refresh(job)
+    if job.state == "failed":
+        raise HTTPException(status_code=500, detail="Resume generation failed")
     return _serialize(job)
 
 
@@ -120,6 +122,8 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     client, model = get_openai_client(db)
     _generate_cover(job_key, db=db, client=client, model=model)
     db.refresh(job)
+    if job.cover_path is None:
+        raise HTTPException(status_code=500, detail="Cover letter generation failed")
     return _serialize(job)
 
 

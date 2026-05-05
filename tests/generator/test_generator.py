@@ -301,4 +301,5 @@ def test_generate_cover_sets_failed_on_error(db_session, monkeypatch, tmp_path):
 
     db_session.expire_all()
     job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.state == JobState.FAILED.value
+    assert job.cover_path is None
+    assert job.state == JobState.SCRAPED.value  # cover failure does not change job state

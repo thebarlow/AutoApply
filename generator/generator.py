@@ -311,13 +311,6 @@ def generate_cover(
 
     except Exception as e:
         print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
-        try:
-            job = db.query(Job).filter_by(job_key=job_key).first()
-            if job:
-                job.state = JobState.FAILED.value
-                db.commit()
-        except Exception:
-            pass
     finally:
         if own_db:
             db.close()
