@@ -47,13 +47,18 @@ _DEFAULTS: dict[str, object] = {
 
 
 def markdown_to_profile(md_text: str, db: Session) -> dict:
-    """Parse resume text into a structured profile dict using the active LLM provider."""
+    """Parse resume text into a structured profile dict using the active LLM provider.
+
+Returns a dict conforming to the profile schema. ``resume_path`` and ``md_path``
+are always present but empty — the caller fills them after file placement.
+"""
     client, model = get_openai_client(db)
 
     response = client.chat.completions.create(
         model=model,
         temperature=0,
         timeout=30,
+        max_tokens=1500,
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": md_text},
@@ -70,6 +75,14 @@ def markdown_to_profile(md_text: str, db: Session) -> dict:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise ValueError(f"LLM returned invalid JSON: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM returned unexpected JSON shape")
+
+    # Coerce list fields defensively — LLMs occasionally return wrong types on poor input
+    for key in ("skills", "work_history", "education", "target_roles"):
+        if not isinstance(parsed.get(key), list):
+            parsed[key] = []
 
     return {**_DEFAULTS, **parsed}
 
