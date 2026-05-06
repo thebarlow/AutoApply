@@ -613,6 +613,71 @@ details.config-section[open] > summary::before {
 .setup-optional { color: #b0b0b0; font-size: 11px; font-weight: 400; }
 .setup-required-note { font-size: 11px; color: #b0b0b0; margin-top: 0.15rem; }
 
+/* Pill (tag) input */
+.setup-field-row--top { align-items: flex-start; padding-top: 2px; }
+.setup-field-row--top .setup-icon,
+.setup-field-row--top .setup-field-label { padding-top: 5px; }
+
+.pill-input-wrap {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  min-height: 34px;
+  cursor: text;
+  transition: border-color 0.15s;
+  background: #fff;
+}
+.pill-input-wrap:focus-within { border-color: #888; outline: none; }
+
+.pill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 10px;
+  background: #e8f0fe;
+  color: #1a56db;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.pill-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #5a80d0;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.1s, color 0.1s;
+}
+.pill-chip-x:hover { background: #c0d0f8; color: #0a3bb0; }
+
+.pill-text-input {
+  flex: 1;
+  min-width: 160px;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  font-family: inherit;
+  background: transparent;
+  padding: 2px 0;
+  color: #333;
+}
+.pill-text-input::placeholder { color: #bbb; }
+
 /* Setup page — inline data tables (Profiles, Job Searches) */
 .setup-data-table {
   width: 100%;

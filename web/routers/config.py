@@ -97,10 +97,20 @@ class TemplatesBody(BaseModel):
     github: str
     linkedin: str
     website: str
+    primary_skills: list[str] = []
+    primary_technologies: list[str] = []
 
 
 @router.get("/api/config/templates")
-def get_templates(db: Session = Depends(get_db)) -> dict[str, str]:
+def get_templates(db: Session = Depends(get_db)) -> dict:
+    def _get_json_list(key: str) -> list[str]:
+        raw = _get(db, key)
+        try:
+            val = json.loads(raw)
+            return val if isinstance(val, list) else []
+        except (ValueError, TypeError):
+            return []
+
     return {
         "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
         "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
@@ -109,11 +119,13 @@ def get_templates(db: Session = Depends(get_db)) -> dict[str, str]:
         "github": _get(db, "resume_github"),
         "linkedin": _get(db, "resume_linkedin"),
         "website": _get(db, "resume_website"),
+        "primary_skills": _get_json_list("primary_skills"),
+        "primary_technologies": _get_json_list("primary_technologies"),
     }
 
 
 @router.put("/api/config/templates")
-def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[str, str]:
+def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict:
     _set(db, "resume_template_path", body.resume_template_path)
     _set(db, "cover_template_path", body.cover_template_path)
     _set(db, "resume_prompt_template", body.resume_prompt_template)
@@ -121,6 +133,8 @@ def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[st
     _set(db, "resume_github", body.github)
     _set(db, "resume_linkedin", body.linkedin)
     _set(db, "resume_website", body.website)
+    _set(db, "primary_skills", json.dumps(body.primary_skills))
+    _set(db, "primary_technologies", json.dumps(body.primary_technologies))
     return body.model_dump()
 
 

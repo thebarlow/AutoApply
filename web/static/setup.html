@@ -42,6 +42,20 @@
           <label class="setup-field-label">Portfolio <span class="setup-optional">(optional)</span></label>
           <input class="setup-field-input" type="text" id="setup-website" placeholder="yoursite.com">
         </div>
+        <div class="setup-field-row setup-field-row--top">
+          <span class="setup-icon">⭐</span>
+          <label class="setup-field-label">Primary Skills <span class="setup-optional">(optional)</span></label>
+          <div class="pill-input-wrap" id="skills-wrap" role="group" aria-label="Primary skills">
+            <input class="pill-text-input" id="skills-input" type="text" placeholder="Type a skill and press Enter…" autocomplete="off">
+          </div>
+        </div>
+        <div class="setup-field-row setup-field-row--top">
+          <span class="setup-icon">⚙️</span>
+          <label class="setup-field-label">Technologies <span class="setup-optional">(optional)</span></label>
+          <div class="pill-input-wrap" id="tech-wrap" role="group" aria-label="Primary technologies">
+            <input class="pill-text-input" id="tech-input" type="text" placeholder="Type a technology and press Enter…" autocomplete="off">
+          </div>
+        </div>
         <p class="setup-required-note"><span class="setup-required">*</span> Required</p>
         <span class="save-status" id="status-your-info"></span>
       </div>
@@ -140,7 +154,76 @@
     catch { return ''; }
   }
 
+  // ---- Pill input component ----
+  // Returns { getValues, setValues } for a pill-box container + text input pair.
+  function makePillBox(wrapId, inputId, onChangeFn) {
+    var wrap = document.getElementById(wrapId);
+    var input = document.getElementById(inputId);
+
+    function addPill(label) {
+      label = label.trim();
+      if (!label) return false;
+      // Prevent exact duplicates (case-insensitive)
+      var existing = Array.from(wrap.querySelectorAll('.pill-chip')).map(function(p) {
+        return p.dataset.label.toLowerCase();
+      });
+      if (existing.indexOf(label.toLowerCase()) !== -1) return false;
+
+      var chip = document.createElement('span');
+      chip.className = 'pill-chip';
+      chip.dataset.label = label;
+      chip.innerHTML = escHtml(label) + '<button class="pill-chip-x" type="button" aria-label="Remove ' + escHtml(label) + '">×</button>';
+      chip.querySelector('.pill-chip-x').addEventListener('click', function() {
+        chip.remove();
+        onChangeFn();
+      });
+      wrap.insertBefore(chip, input);
+      return true;
+    }
+
+    function commit() {
+      var val = input.value.trim().replace(/,$/, '');
+      if (addPill(val)) {
+        input.value = '';
+        onChangeFn();
+      }
+    }
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        commit();
+      } else if (e.key === 'Backspace' && input.value === '') {
+        var chips = wrap.querySelectorAll('.pill-chip');
+        if (chips.length > 0) {
+          chips[chips.length - 1].remove();
+          onChangeFn();
+        }
+      }
+    });
+
+    input.addEventListener('blur', function() {
+      if (input.value.trim()) commit();
+    });
+
+    wrap.addEventListener('click', function(e) {
+      if (e.target === wrap) input.focus();
+    });
+
+    return {
+      getValues: function() {
+        return Array.from(wrap.querySelectorAll('.pill-chip')).map(function(p) { return p.dataset.label; });
+      },
+      setValues: function(arr) {
+        wrap.querySelectorAll('.pill-chip').forEach(function(p) { p.remove(); });
+        (arr || []).forEach(addPill);
+      },
+    };
+  }
+
   // ---- Your Information ----
+
+  var _skillBox, _techBox;
 
   function updateYourInfoLight() {
     var linkedin = document.getElementById('setup-linkedin').value.trim();
@@ -162,6 +245,8 @@
           resume_prompt_template: data.resume_prompt_template || '',
           cover_prompt_template: data.cover_prompt_template || '',
           github: github, linkedin: linkedin, website: website,
+          primary_skills: _skillBox ? _skillBox.getValues() : [],
+          primary_technologies: _techBox ? _techBox.getValues() : [],
         }),
       });
       updateYourInfoLight();
@@ -174,9 +259,14 @@
       document.getElementById('setup-github').value = data.github || '';
       document.getElementById('setup-linkedin').value = data.linkedin || '';
       document.getElementById('setup-website').value = data.website || '';
+      if (_skillBox) _skillBox.setValues(data.primary_skills || []);
+      if (_techBox) _techBox.setValues(data.primary_technologies || []);
       updateYourInfoLight();
     } catch { showStatus('status-your-info', 'Failed to load', true); }
   }
+
+  _skillBox = makePillBox('skills-wrap', 'skills-input', saveYourInfoSafe);
+  _techBox  = makePillBox('tech-wrap',   'tech-input',   saveYourInfoSafe);
 
   ['setup-github', 'setup-linkedin', 'setup-website'].forEach(function(id) {
     var el = document.getElementById(id);
