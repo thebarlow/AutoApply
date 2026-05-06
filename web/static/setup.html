@@ -52,6 +52,7 @@
       <div class="setup-step-header">
         <span class="traffic-light" id="tl-profiles">🔴</span>
         <h2>Profiles</h2>
+        <button class="setup-add-header-btn" id="btn-add-profile">+ Add Profile</button>
       </div>
       <div class="setup-step-body" style="padding:0">
         <table class="setup-data-table">
@@ -77,7 +78,6 @@
           </thead>
           <tbody id="setup-profile-list"></tbody>
         </table>
-        <button class="setup-add-row-btn" id="btn-add-profile">+ Add Profile</button>
         <span class="save-status" id="status-setup-profiles" style="font-size:12px;display:block;padding:0.3rem 0.75rem 0.5rem"></span>
       </div>
     </div>
@@ -87,6 +87,7 @@
       <div class="setup-step-header">
         <span class="traffic-light" id="tl-searches">🔴</span>
         <h2>Job Searches</h2>
+        <button class="setup-add-header-btn" id="btn-add-search">+ Add Search</button>
       </div>
       <div class="setup-step-body" style="padding:0">
         <table class="setup-data-table">
@@ -106,7 +107,6 @@
           </thead>
           <tbody id="setup-search-list"></tbody>
         </table>
-        <button class="setup-add-row-btn" id="btn-add-search">+ Add Search</button>
         <span class="save-status" id="status-searches" style="font-size:12px;display:block;padding:0.3rem 0.75rem 0.5rem"></span>
       </div>
     </div>
@@ -359,7 +359,7 @@
       var meta = await fetch('/api/config/profiles').then(function(r) { return r.json(); });
       var tbody = document.getElementById('setup-profile-list');
       tbody.innerHTML = '';
-      var profiles = (meta.profiles && meta.profiles.length > 0) ? meta.profiles : [{}];
+      var profiles = meta.profiles || [];
       profiles.forEach(function(p) { tbody.appendChild(buildProfileRow(p)); });
       updateProfilesLight();
     } catch { showStatus('status-setup-profiles', 'Failed to load profiles', true); }
@@ -425,7 +425,7 @@
       '<td class="setup-row-del-cell"><button class="setup-row-del" type="button" title="Delete row">✕</button></td>',
     ].join('');
 
-    tr.querySelector('.setup-search-name').addEventListener('input', function() { scheduleSave(); });
+    tr.querySelector('.setup-search-name').addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
     tr.querySelector('.setup-search-name').addEventListener('blur', saveJobSearches);
     tr.querySelector('.setup-search-desc').addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
     tr.querySelector('.setup-search-desc').addEventListener('blur', saveJobSearches);
@@ -465,9 +465,7 @@
       var data = await fetch('/api/config/job_searches').then(function(r) { return r.json(); });
       var tbody = document.getElementById('setup-search-list');
       tbody.innerHTML = '';
-      var searches = (data.searches && data.searches.length > 0)
-        ? data.searches
-        : [{ id: 's-default', title: '', description: '' }];
+      var searches = data.searches || [];
       searches.forEach(function(s, i) { tbody.appendChild(buildSearchRow(s, i)); });
       updateSearchesLight();
     } catch { showStatus('status-searches', 'Failed to load searches', true); }

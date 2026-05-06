@@ -738,6 +738,20 @@ details.config-section[open] > summary::before {
 .setup-row-del:hover { color: #e74c3c; background: #fde8e6; }
 
 /* "Add row" button below table — Airtable-style */
+.setup-add-header-btn {
+  margin-left: auto;
+  padding: 3px 10px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  color: #555;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.setup-add-header-btn:hover { color: #111; border-color: #888; background: #f7f7f7; }
+
 .setup-add-row-btn {
   display: block;
   width: 100%;
