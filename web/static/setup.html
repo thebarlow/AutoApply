@@ -52,29 +52,32 @@
         <span class="traffic-light" id="tl-profiles">🔴</span>
         <h2>Profiles</h2>
       </div>
-      <div class="setup-step-body" style="padding-bottom:0.75rem">
+      <div class="setup-step-body" style="padding:0">
         <table class="setup-data-table">
           <colgroup>
-            <col style="width:20%">
-            <col style="width:14%">
-            <col style="width:9%">
-            <col style="width:14%">
-            <col style="width:9%">
+            <col style="width:18%">
+            <col style="width:13%">
+            <col style="width:8%">
+            <col style="width:13%">
+            <col style="width:8%">
             <col>
+            <col style="width:32px">
           </colgroup>
           <thead>
             <tr>
               <th>Profile Name</th>
               <th>Resume</th>
-              <th>Uploaded</th>
+              <th>Resume<br>Date</th>
               <th>Cover Letter</th>
-              <th>Uploaded</th>
+              <th>Cover<br>Date</th>
+              <th></th>
               <th></th>
             </tr>
           </thead>
           <tbody id="setup-profile-list"></tbody>
         </table>
-        <span class="save-status" id="status-setup-profiles" style="font-size:12px;display:block;margin-top:0.35rem;padding-left:0.5rem"></span>
+        <button class="setup-add-row-btn" id="btn-add-profile">+ Add Profile</button>
+        <span class="save-status" id="status-setup-profiles" style="font-size:12px;display:block;padding:0.3rem 0.75rem 0.5rem"></span>
       </div>
     </div>
 
@@ -84,25 +87,26 @@
         <span class="traffic-light" id="tl-searches">🔴</span>
         <h2>Job Searches</h2>
       </div>
-      <div class="setup-step-body" style="padding-bottom:0.75rem">
+      <div class="setup-step-body" style="padding:0">
         <table class="setup-data-table">
           <colgroup>
             <col style="width:30px">
-            <col style="width:160px">
+            <col style="width:150px">
             <col>
-            <col style="width:56px">
+            <col style="width:32px">
           </colgroup>
           <thead>
             <tr>
               <th>#</th>
-              <th>Title</th>
+              <th>Name</th>
               <th>Description</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="setup-search-list"></tbody>
         </table>
-        <span class="save-status" id="status-searches" style="font-size:12px;display:block;margin-top:0.35rem;padding-left:0.5rem"></span>
+        <button class="setup-add-row-btn" id="btn-add-search">+ Add Search</button>
+        <span class="save-status" id="status-searches" style="font-size:12px;display:block;padding:0.3rem 0.75rem 0.5rem"></span>
       </div>
     </div>
 
@@ -113,7 +117,7 @@
 (function () {
 
   function showStatus(id, text, isError) {
-    const el = document.getElementById(id);
+    var el = document.getElementById(id);
     el.textContent = text;
     el.style.color = isError ? '#e74c3c' : '#27ae60';
     setTimeout(function() { el.textContent = ''; }, 2500);
@@ -138,7 +142,7 @@
   // ---- Your Information ----
 
   function updateYourInfoLight() {
-    const vals = [
+    var vals = [
       document.getElementById('setup-github').value.trim(),
       document.getElementById('setup-linkedin').value.trim(),
       document.getElementById('setup-website').value.trim(),
@@ -148,10 +152,10 @@
 
   async function saveYourInfoSafe() {
     try {
-      const data = await fetch('/api/config/templates').then(r => r.json());
-      const github = document.getElementById('setup-github').value.trim();
-      const linkedin = document.getElementById('setup-linkedin').value.trim();
-      const website = document.getElementById('setup-website').value.trim();
+      var data = await fetch('/api/config/templates').then(function(r) { return r.json(); });
+      var github = document.getElementById('setup-github').value.trim();
+      var linkedin = document.getElementById('setup-linkedin').value.trim();
+      var website = document.getElementById('setup-website').value.trim();
       await fetch('/api/config/templates', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -160,7 +164,7 @@
           cover_template_path: data.cover_template_path || '',
           resume_prompt_template: data.resume_prompt_template || '',
           cover_prompt_template: data.cover_prompt_template || '',
-          github, linkedin, website,
+          github: github, linkedin: linkedin, website: website,
         }),
       });
       updateYourInfoLight();
@@ -169,7 +173,7 @@
 
   async function loadYourInfo() {
     try {
-      const data = await fetch('/api/config/templates').then(r => r.json());
+      var data = await fetch('/api/config/templates').then(function(r) { return r.json(); });
       document.getElementById('setup-github').value = data.github || '';
       document.getElementById('setup-linkedin').value = data.linkedin || '';
       document.getElementById('setup-website').value = data.website || '';
@@ -185,22 +189,27 @@
 
   // ---- Profiles ----
 
-  function updateProfilesLight() {
-    var real = Array.from(document.querySelectorAll('#setup-profile-list tr[data-id]')).filter(function(r) { return !!r.dataset.id; });
-    document.getElementById('tl-profiles').textContent = real.length > 0 ? '🟢' : '🔴';
+  // A row is "valid" if it has been saved to DB and has at least one file.
+  function rowHasFile(tr) {
+    return tr.dataset.hasFile === 'true';
   }
 
-  async function ensureProfileRow(row) {
-    if (row.dataset.id) return row.dataset.id;
-    var name = row.querySelector('.setup-row-name').value.trim() || 'New Profile';
+  function updateProfilesLight() {
+    var valid = Array.from(document.querySelectorAll('#setup-profile-list tr')).filter(rowHasFile);
+    document.getElementById('tl-profiles').textContent = valid.length > 0 ? '🟢' : '🔴';
+  }
+
+  async function ensureProfileRow(tr) {
+    if (tr.dataset.id) return tr.dataset.id;
+    var name = tr.querySelector('.setup-row-name').value.trim() || 'Default Profile';
     var resp = await fetch('/api/config/profiles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name: name }),
     });
     if (!resp.ok) throw new Error('Failed to create profile');
     var p = await resp.json();
-    row.dataset.id = String(p.id);
+    tr.dataset.id = String(p.id);
     updateProfilesLight();
     return String(p.id);
   }
@@ -214,7 +223,7 @@
     await fetch('/api/config/profiles/' + profileId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, data }),
+      body: JSON.stringify({ name: name, data: data }),
     });
   }
 
@@ -222,44 +231,41 @@
     p = p || {};
     var tr = document.createElement('tr');
     tr.dataset.id = p.id ? String(p.id) : '';
+    tr.dataset.hasFile = String(!!(p.resume_path || p.cover_letter_path));
 
-    var resumeBasename = (p.resume_path || '').split('/').pop();
-    var coverBasename = (p.cover_letter_path || '').split('/').pop();
+    var resumeName = (p.resume_path || '').split('/').pop();
+    var coverName = (p.cover_letter_path || '').split('/').pop();
     var hasResume = !!(p.resume_path);
-    var hasParseTarget = hasResume; // parse is available if resume exists
 
     tr.innerHTML = [
-      '<td><input class="setup-row-input setup-row-name" type="text" placeholder="Profile name" value="' + escHtml(p.name || '') + '"></td>',
-      '<td><span class="setup-row-filename' + (resumeBasename ? '' : ' setup-row-filename--empty') + '">' + escHtml(resumeBasename || 'No file') + '</span></td>',
+      '<td><input class="setup-row-input setup-row-name" type="text" placeholder="Default Profile" value="' + escHtml(p.name || '') + '"></td>',
+      '<td><span class="setup-row-filename' + (resumeName ? '' : ' setup-row-filename--empty') + '">' + escHtml(resumeName || 'No file') + '</span></td>',
       '<td><span class="setup-row-filedate">' + escHtml(fmtDate(p.resume_uploaded_at)) + '</span></td>',
-      '<td><span class="setup-row-filename' + (coverBasename ? '' : ' setup-row-filename--empty') + '">' + escHtml(coverBasename || 'No file') + '</span></td>',
+      '<td><span class="setup-row-filename' + (coverName ? '' : ' setup-row-filename--empty') + '">' + escHtml(coverName || 'No file') + '</span></td>',
       '<td><span class="setup-row-filedate">' + escHtml(fmtDate(p.cover_uploaded_at)) + '</span></td>',
       '<td class="setup-row-actions-cell">',
-        '<label class="setup-row-btn" title="Upload resume (.pdf or .md)">Resume<input type="file" class="setup-resume-input" accept=".pdf,.md" style="display:none"></label>',
-        '<label class="setup-row-btn" title="Upload cover letter (.pdf)">Cover<input type="file" class="setup-cover-input" accept=".pdf" style="display:none"></label>',
-        '<button class="setup-row-btn setup-parse-btn" type="button"' + (hasParseTarget ? '' : ' disabled') + '>Parse</button>',
-        '<button class="setup-row-nav-btn" type="button" data-action="add" title="Add row">+</button>',
-        '<button class="setup-row-nav-btn" type="button" data-action="remove" title="Remove row">−</button>',
+        '<label class="setup-row-btn">Upload Resume<input type="file" class="setup-resume-input" accept=".pdf,.md" style="display:none"></label>',
+        '<label class="setup-row-btn">Upload Cover Letter<input type="file" class="setup-cover-input" accept=".pdf" style="display:none"></label>',
+        '<button class="setup-row-btn setup-parse-btn" type="button"' + (hasResume ? '' : ' disabled') + '>Parse</button>',
       '</td>',
+      '<td class="setup-row-del-cell"><button class="setup-row-del" type="button" title="Delete row">✕</button></td>',
     ].join('');
 
-    var nameInput = tr.querySelector('.setup-row-name');
+    var nameInput   = tr.querySelector('.setup-row-name');
     var resumeInput = tr.querySelector('.setup-resume-input');
-    var coverInput = tr.querySelector('.setup-cover-input');
-    var parseBtn = tr.querySelector('.setup-parse-btn');
-    var tds = tr.querySelectorAll('td');
+    var coverInput  = tr.querySelector('.setup-cover-input');
+    var parseBtn    = tr.querySelector('.setup-parse-btn');
+    var tds         = tr.querySelectorAll('td');
 
-    // Name — create/update on blur
     nameInput.addEventListener('blur', async function() {
       var name = nameInput.value.trim();
       if (!name) return;
       try {
         var id = await ensureProfileRow(tr);
-        await mergeAndSaveProfile(id, { name });
+        await mergeAndSaveProfile(id, { name: name });
       } catch { showStatus('status-setup-profiles', 'Save failed', true); }
     });
 
-    // Resume upload
     resumeInput.addEventListener('change', async function() {
       var file = resumeInput.files[0];
       if (!file) return;
@@ -280,10 +286,11 @@
         tds[1].querySelector('.setup-row-filename').classList.remove('setup-row-filename--empty');
         tds[2].querySelector('.setup-row-filedate').textContent = fmtDate(today);
         parseBtn.disabled = false;
+        tr.dataset.hasFile = 'true';
+        updateProfilesLight();
       } catch { showStatus('status-setup-profiles', 'Upload failed', true); }
     });
 
-    // Cover letter upload
     coverInput.addEventListener('change', async function() {
       var file = coverInput.files[0];
       if (!file) return;
@@ -300,10 +307,11 @@
         tds[3].querySelector('.setup-row-filename').textContent = filePath.split('/').pop();
         tds[3].querySelector('.setup-row-filename').classList.remove('setup-row-filename--empty');
         tds[4].querySelector('.setup-row-filedate').textContent = fmtDate(today);
+        tr.dataset.hasFile = 'true';
+        updateProfilesLight();
       } catch { showStatus('status-setup-profiles', 'Upload failed', true); }
     });
 
-    // Parse — calls server-side parse on the stored resume
     parseBtn.addEventListener('click', async function() {
       var id = tr.dataset.id;
       if (!id) return;
@@ -313,28 +321,17 @@
         var resp = await fetch('/api/config/profiles/' + id + '/parse', { method: 'POST' });
         if (!resp.ok) {
           var err = await resp.json().catch(function() { return null; });
-          showStatus('status-setup-profiles', 'Parse failed: ' + (err && err.detail ? err.detail : ''), true);
+          showStatus('status-setup-profiles', 'Parse failed' + (err && err.detail ? ': ' + err.detail : ''), true);
           return;
         }
         var result = await resp.json();
         if (result.name) nameInput.value = result.name;
         showStatus('status-setup-profiles', 'Parsed ✓', false);
       } catch { showStatus('status-setup-profiles', 'Parse error', true); }
-      finally {
-        parseBtn.disabled = false;
-        parseBtn.textContent = 'Parse';
-      }
+      finally { parseBtn.disabled = false; parseBtn.textContent = 'Parse'; }
     });
 
-    // + add row below
-    tr.querySelector('[data-action="add"]').addEventListener('click', function() {
-      var newRow = buildProfileRow({});
-      tr.insertAdjacentElement('afterend', newRow);
-      newRow.querySelector('.setup-row-name').focus();
-    });
-
-    // − remove row
-    tr.querySelector('[data-action="remove"]').addEventListener('click', async function() {
+    tr.querySelector('.setup-row-del').addEventListener('click', async function() {
       var id = tr.dataset.id;
       if (id) await fetch('/api/config/profiles/' + id, { method: 'DELETE' });
       tr.remove();
@@ -344,12 +341,27 @@
     return tr;
   }
 
+  document.getElementById('btn-add-profile').addEventListener('click', function() {
+    var rows = document.querySelectorAll('#setup-profile-list tr');
+    if (rows.length > 0) {
+      var last = rows[rows.length - 1];
+      if (!rowHasFile(last)) {
+        showStatus('status-setup-profiles', 'Upload a resume or cover letter to the current row first', true);
+        last.querySelector('.setup-row-name').focus();
+        return;
+      }
+    }
+    var newRow = buildProfileRow({});
+    document.getElementById('setup-profile-list').appendChild(newRow);
+    newRow.querySelector('.setup-row-name').focus();
+  });
+
   async function loadSetupProfiles() {
     try {
       var meta = await fetch('/api/config/profiles').then(function(r) { return r.json(); });
       var tbody = document.getElementById('setup-profile-list');
       tbody.innerHTML = '';
-      var profiles = meta.profiles && meta.profiles.length > 0 ? meta.profiles : [{}];
+      var profiles = (meta.profiles && meta.profiles.length > 0) ? meta.profiles : [{}];
       profiles.forEach(function(p) { tbody.appendChild(buildProfileRow(p)); });
       updateProfilesLight();
     } catch { showStatus('status-setup-profiles', 'Failed to load profiles', true); }
@@ -370,8 +382,8 @@
 
   function renumberSearches() {
     document.querySelectorAll('#setup-search-list tr').forEach(function(tr, i) {
-      var numEl = tr.querySelector('.setup-row-num');
-      if (numEl) numEl.textContent = i + 1;
+      var el = tr.querySelector('.setup-row-num');
+      if (el) el.textContent = i + 1;
     });
   }
 
@@ -379,8 +391,8 @@
     return Array.from(document.querySelectorAll('#setup-search-list tr')).map(function(tr) {
       return {
         id: tr.dataset.id,
-        title: tr.querySelector('.setup-search-title') ? tr.querySelector('.setup-search-title').value : '',
-        description: tr.querySelector('.setup-search-desc') ? tr.querySelector('.setup-search-desc').value : '',
+        title: (tr.querySelector('.setup-search-name') || { value: '' }).value,
+        description: (tr.querySelector('.setup-search-desc') || { value: '' }).value,
       };
     });
   }
@@ -407,29 +419,17 @@
 
     tr.innerHTML = [
       '<td class="setup-row-num-cell"><span class="setup-row-num">' + (index + 1) + '</span></td>',
-      '<td><input class="setup-row-input setup-search-title" type="text" placeholder="Title" value="' + escHtml(search.title || '') + '"></td>',
+      '<td><input class="setup-row-input setup-search-name" type="text" placeholder="Name" value="' + escHtml(search.title || '') + '"></td>',
       '<td><input class="setup-row-input setup-search-desc" type="text" placeholder="Describe the type of job you are looking for" value="' + escHtml(search.description || '') + '"></td>',
-      '<td class="setup-row-actions-cell">',
-        '<button class="setup-row-nav-btn" type="button" data-action="add" title="Add row">+</button>',
-        '<button class="setup-row-nav-btn" type="button" data-action="remove" title="Remove row">−</button>',
-      '</td>',
+      '<td class="setup-row-del-cell"><button class="setup-row-del" type="button" title="Delete row">✕</button></td>',
     ].join('');
 
-    tr.querySelector('.setup-search-title').addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
-    tr.querySelector('.setup-search-title').addEventListener('blur', saveJobSearches);
+    tr.querySelector('.setup-search-name').addEventListener('input', function() { scheduleSave(); });
+    tr.querySelector('.setup-search-name').addEventListener('blur', saveJobSearches);
     tr.querySelector('.setup-search-desc').addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
     tr.querySelector('.setup-search-desc').addEventListener('blur', saveJobSearches);
 
-    tr.querySelector('[data-action="add"]').addEventListener('click', async function() {
-      var count = document.querySelectorAll('#setup-search-list tr').length;
-      var newRow = buildSearchRow({ id: 's-' + Date.now() }, count);
-      tr.insertAdjacentElement('afterend', newRow);
-      renumberSearches();
-      newRow.querySelector('.setup-search-title').focus();
-      await saveJobSearches();
-    });
-
-    tr.querySelector('[data-action="remove"]').addEventListener('click', async function() {
+    tr.querySelector('.setup-row-del').addEventListener('click', async function() {
       tr.remove();
       renumberSearches();
       updateSearchesLight();
@@ -439,12 +439,32 @@
     return tr;
   }
 
+  document.getElementById('btn-add-search').addEventListener('click', async function() {
+    var rows = document.querySelectorAll('#setup-search-list tr');
+    if (rows.length > 0) {
+      var last = rows[rows.length - 1];
+      var desc = last.querySelector('.setup-search-desc');
+      if (!desc || !desc.value.trim()) {
+        showStatus('status-searches', 'Fill in the current row first', true);
+        desc && desc.focus();
+        return;
+      }
+    }
+    var count = document.querySelectorAll('#setup-search-list tr').length;
+    var newRow = buildSearchRow({ id: 's-' + Date.now() }, count);
+    document.getElementById('setup-search-list').appendChild(newRow);
+    newRow.querySelector('.setup-search-name').focus();
+    await saveJobSearches();
+  });
+
   async function loadJobSearches() {
     try {
       var data = await fetch('/api/config/job_searches').then(function(r) { return r.json(); });
       var tbody = document.getElementById('setup-search-list');
       tbody.innerHTML = '';
-      var searches = data.searches && data.searches.length > 0 ? data.searches : [{ id: 's-default', title: '', description: '' }];
+      var searches = (data.searches && data.searches.length > 0)
+        ? data.searches
+        : [{ id: 's-default', title: '', description: '' }];
       searches.forEach(function(s, i) { tbody.appendChild(buildSearchRow(s, i)); });
       updateSearchesLight();
     } catch { showStatus('status-searches', 'Failed to load searches', true); }
