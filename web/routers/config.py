@@ -233,6 +233,7 @@ _EMPTY_PROFILE_DATA: dict[str, Any] = {
     "work_history": [], "education": [], "target_salary_min": None,
     "target_salary_max": None, "target_roles": [], "resume_path": "",
     "md_path": "", "cover_letter_path": "",
+    "resume_uploaded_at": "", "cover_uploaded_at": "",
 }
 
 
@@ -262,6 +263,10 @@ def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
             "name": r.name,
             "has_resume": bool(data.get("resume_path")),
             "has_cover": bool(data.get("cover_letter_path")),
+            "resume_path": data.get("resume_path", ""),
+            "cover_letter_path": data.get("cover_letter_path", ""),
+            "resume_uploaded_at": data.get("resume_uploaded_at", ""),
+            "cover_uploaded_at": data.get("cover_uploaded_at", ""),
         })
     return {"profiles": profiles, "active_id": active_id}
 
@@ -351,6 +356,40 @@ def serve_profile_file(
     return FileResponse(path, media_type=media_type)
 
 
+@router.post("/api/config/profiles/{profile_id}/parse")
+def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Parse the already-uploaded resume for a profile and merge extracted data back into it."""
+    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    data = json.loads(row.data) if row.data else {}
+    resume_path = data.get("resume_path") or data.get("md_path")
+    if not resume_path:
+        raise HTTPException(status_code=400, detail="No resume uploaded for this profile")
+    path = Path(resume_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Resume file not found on disk")
+    if path.suffix.lower() == ".pdf":
+        md_text = _parser.pdf_to_markdown(path.read_bytes())
+    else:
+        md_text = path.read_text(errors="replace")
+    try:
+        parsed = _parser.markdown_to_profile(md_text, db)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    merged = {**_EMPTY_PROFILE_DATA, **parsed}
+    merged["resume_path"] = data.get("resume_path", "")
+    merged["md_path"] = data.get("md_path", "")
+    merged["cover_letter_path"] = data.get("cover_letter_path", "")
+    merged["resume_uploaded_at"] = data.get("resume_uploaded_at", "")
+    merged["cover_uploaded_at"] = data.get("cover_uploaded_at", "")
+    name = parsed.get("name") or row.name
+    row.name = name
+    row.data = json.dumps(merged)
+    db.commit()
+    return {"id": row.id, "name": name}
+
+
 _PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
 
 
@@ -375,6 +414,7 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
 
 class JobSearchItem(BaseModel):
     id: str
+    title: str = ""
     description: str
 
 
