@@ -38,6 +38,8 @@ async def lifespan(app: FastAPI):
     t = threading.Thread(target=_warm_lazy_imports, daemon=True)
     t.start()
 
+    print("[startup] Open http://localhost:8080 in your browser  (0.0.0.0 in the line above is the bind address, not the URL)")
+
     yield  # server is live from here
 
     print("[shutdown] Waiting for background thread...")
