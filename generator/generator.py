@@ -8,16 +8,12 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
-import openai
-from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from core.llm import get_openai_client
 from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
 from db.database import SessionLocal
 from db.models import Config, Job, UserProfileModel
-
-load_dotenv()
 
 _GENERATOR_DIR = Path(__file__).parent
 _OUTPUTS_DIR = _GENERATOR_DIR / "outputs"
