@@ -705,6 +705,8 @@ details.config-section[open] > summary::before {
 
 .setup-data-table tbody tr:last-child td { border-bottom: none; }
 .setup-data-table tbody tr:hover td { background: #fafafa; }
+.setup-search-keywords-cell { padding: 0.25rem 0.5rem; vertical-align: middle; }
+.setup-search-keywords-cell .pill-input-wrap { min-height: 30px; }
 
 .setup-row-input {
   width: 100%;

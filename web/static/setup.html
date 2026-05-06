@@ -115,7 +115,7 @@
             <tr>
               <th>#</th>
               <th>Name</th>
-              <th>Description</th>
+              <th>Keywords</th>
               <th></th>
             </tr>
           </thead>
@@ -157,8 +157,8 @@
   // ---- Pill input component ----
   // Returns { getValues, setValues } for a pill-box container + text input pair.
   function makePillBox(wrapId, inputId, onChangeFn) {
-    var wrap = document.getElementById(wrapId);
-    var input = document.getElementById(inputId);
+    var wrap  = typeof wrapId  === 'string' ? document.getElementById(wrapId)  : wrapId;
+    var input = typeof inputId === 'string' ? document.getElementById(inputId) : inputId;
 
     function addPill(label) {
       label = label.trim();
@@ -461,8 +461,9 @@
 
   function searchRowValid(tr) {
     var name = tr.querySelector('.setup-search-name');
-    var desc = tr.querySelector('.setup-search-desc');
-    return !!(name && name.value.trim() && desc && desc.value.trim());
+    var hasName = name && name.value.trim();
+    var hasKeywords = tr._pillBox && tr._pillBox.getValues().length > 0;
+    return !!(hasName && hasKeywords);
   }
 
   function updateSearchesLight() {
@@ -483,7 +484,7 @@
       return {
         id: tr.dataset.id,
         title: (tr.querySelector('.setup-search-name') || { value: '' }).value,
-        description: (tr.querySelector('.setup-search-desc') || { value: '' }).value,
+        description: JSON.stringify(tr._pillBox ? tr._pillBox.getValues() : []),
       };
     });
   }
@@ -511,14 +512,22 @@
     tr.innerHTML = [
       '<td class="setup-row-num-cell"><span class="setup-row-num">' + (index + 1) + '</span></td>',
       '<td><input class="setup-row-input setup-search-name" type="text" placeholder="e.g. Senior Python roles" value="' + escHtml(search.title || '') + '"></td>',
-      '<td><input class="setup-row-input setup-search-desc" type="text" placeholder="Describe the type of job you are looking for" value="' + escHtml(search.description || '') + '"></td>',
+      '<td class="setup-search-keywords-cell"><div class="pill-input-wrap setup-search-keywords-wrap"><input class="pill-text-input" placeholder="Type a keyword and press Enter…" autocomplete="off"></div></td>',
       '<td class="setup-row-del-cell"><button class="setup-row-del" type="button" title="Delete row">✕</button></td>',
     ].join('');
 
+    var pillWrap  = tr.querySelector('.setup-search-keywords-wrap');
+    var pillInput = pillWrap.querySelector('.pill-text-input');
+    tr._pillBox = makePillBox(pillWrap, pillInput, function() { updateSearchesLight(); scheduleSave(); });
+
+    // Load saved keywords — stored as JSON array; fall back gracefully for old plain-string data
+    var savedKeywords = [];
+    try { savedKeywords = JSON.parse(search.description || '[]'); } catch {}
+    if (!Array.isArray(savedKeywords)) savedKeywords = [];
+    tr._pillBox.setValues(savedKeywords);
+
     tr.querySelector('.setup-search-name').addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
     tr.querySelector('.setup-search-name').addEventListener('blur', saveJobSearches);
-    tr.querySelector('.setup-search-desc').addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
-    tr.querySelector('.setup-search-desc').addEventListener('blur', saveJobSearches);
 
     tr.querySelector('.setup-row-del').addEventListener('click', async function() {
       tr.remove();
@@ -535,11 +544,10 @@
     if (rows.length > 0) {
       var last = rows[rows.length - 1];
       if (!searchRowValid(last)) {
-        showStatus('status-searches', 'Complete the Name and Description on the current row first', true);
-        var firstEmpty = last.querySelector('.setup-search-name').value.trim()
-          ? last.querySelector('.setup-search-desc')
-          : last.querySelector('.setup-search-name');
-        firstEmpty && firstEmpty.focus();
+        showStatus('status-searches', 'Complete the Name and add at least one keyword on the current row first', true);
+        var nameEl = last.querySelector('.setup-search-name');
+        var focusEl = nameEl.value.trim() ? last.querySelector('.pill-text-input') : nameEl;
+        focusEl && focusEl.focus();
         return;
       }
     }
