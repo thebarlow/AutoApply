@@ -4,7 +4,6 @@ import io
 import json
 import re
 
-import pdfplumber
 from sqlalchemy.orm import Session
 
 from core.llm import get_openai_client
@@ -89,6 +88,7 @@ are always present but empty — the caller fills them after file placement.
 
 def pdf_to_markdown(pdf_bytes: bytes) -> str:
     """Convert raw PDF bytes to a Markdown string."""
+    import pdfplumber  # lazy — adds ~1s to startup on WSL2
     if not pdf_bytes:
         return ""
     lines: list[str] = []
