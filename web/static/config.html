@@ -1064,7 +1064,7 @@
   });
 
   document.getElementById('save-llm').addEventListener('click', async () => {
-    const rows = document.querySelectorAll('.llm-row');
+    const rows = document.querySelectorAll('#llm-provider-list .llm-row');
     const activeRadio = document.querySelector('input[name="llm-active"]:checked');
     const providers = Array.from(rows).map(row => ({
       name: row.querySelector('.llm-provider-select').value,
