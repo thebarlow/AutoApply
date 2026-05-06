@@ -28,20 +28,21 @@
       </div>
       <div class="setup-step-body">
         <div class="setup-field-row">
-          <span class="setup-icon">🐙</span>
-          <label class="setup-field-label">GitHub</label>
-          <input class="setup-field-input" type="text" id="setup-github" placeholder="github.com/username">
-        </div>
-        <div class="setup-field-row">
           <span class="setup-icon">💼</span>
-          <label class="setup-field-label">LinkedIn</label>
+          <label class="setup-field-label">LinkedIn <span class="setup-required">*</span></label>
           <input class="setup-field-input" type="text" id="setup-linkedin" placeholder="linkedin.com/in/username">
         </div>
         <div class="setup-field-row">
+          <span class="setup-icon">🐙</span>
+          <label class="setup-field-label">GitHub <span class="setup-optional">(optional)</span></label>
+          <input class="setup-field-input" type="text" id="setup-github" placeholder="github.com/username">
+        </div>
+        <div class="setup-field-row">
           <span class="setup-icon">🌐</span>
-          <label class="setup-field-label">Portfolio Website</label>
+          <label class="setup-field-label">Portfolio <span class="setup-optional">(optional)</span></label>
           <input class="setup-field-input" type="text" id="setup-website" placeholder="yoursite.com">
         </div>
+        <p class="setup-required-note"><span class="setup-required">*</span> Required</p>
         <span class="save-status" id="status-your-info"></span>
       </div>
     </div>
@@ -142,12 +143,8 @@
   // ---- Your Information ----
 
   function updateYourInfoLight() {
-    var vals = [
-      document.getElementById('setup-github').value.trim(),
-      document.getElementById('setup-linkedin').value.trim(),
-      document.getElementById('setup-website').value.trim(),
-    ];
-    document.getElementById('tl-your-info').textContent = trafficLight(vals.filter(Boolean).length, 3);
+    var linkedin = document.getElementById('setup-linkedin').value.trim();
+    document.getElementById('tl-your-info').textContent = linkedin ? '🟢' : '🔴';
   }
 
   async function saveYourInfoSafe() {
@@ -372,13 +369,16 @@
 
   var _searchSaveTimer = null;
 
+  function searchRowValid(tr) {
+    var name = tr.querySelector('.setup-search-name');
+    var desc = tr.querySelector('.setup-search-desc');
+    return !!(name && name.value.trim() && desc && desc.value.trim());
+  }
+
   function updateSearchesLight() {
     var rows = document.querySelectorAll('#setup-search-list tr');
-    var hasContent = Array.from(rows).some(function(r) {
-      var desc = r.querySelector('.setup-search-desc');
-      return desc && desc.value.trim();
-    });
-    document.getElementById('tl-searches').textContent = hasContent ? '🟢' : '🔴';
+    var hasValid = Array.from(rows).some(searchRowValid);
+    document.getElementById('tl-searches').textContent = hasValid ? '🟢' : '🔴';
   }
 
   function renumberSearches() {
@@ -420,7 +420,7 @@
 
     tr.innerHTML = [
       '<td class="setup-row-num-cell"><span class="setup-row-num">' + (index + 1) + '</span></td>',
-      '<td><input class="setup-row-input setup-search-name" type="text" placeholder="Name" value="' + escHtml(search.title || '') + '"></td>',
+      '<td><input class="setup-row-input setup-search-name" type="text" placeholder="e.g. Senior Python roles" value="' + escHtml(search.title || '') + '"></td>',
       '<td><input class="setup-row-input setup-search-desc" type="text" placeholder="Describe the type of job you are looking for" value="' + escHtml(search.description || '') + '"></td>',
       '<td class="setup-row-del-cell"><button class="setup-row-del" type="button" title="Delete row">✕</button></td>',
     ].join('');
@@ -444,10 +444,12 @@
     var rows = document.querySelectorAll('#setup-search-list tr');
     if (rows.length > 0) {
       var last = rows[rows.length - 1];
-      var desc = last.querySelector('.setup-search-desc');
-      if (!desc || !desc.value.trim()) {
-        showStatus('status-searches', 'Fill in the current row first', true);
-        desc && desc.focus();
+      if (!searchRowValid(last)) {
+        showStatus('status-searches', 'Complete the Name and Description on the current row first', true);
+        var firstEmpty = last.querySelector('.setup-search-name').value.trim()
+          ? last.querySelector('.setup-search-desc')
+          : last.querySelector('.setup-search-name');
+        firstEmpty && firstEmpty.focus();
         return;
       }
     }

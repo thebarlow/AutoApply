@@ -608,6 +608,11 @@ details.config-section[open] > summary::before {
 }
 .setup-field-input:focus { outline: none; border-color: #888; }
 
+/* Required / optional field markers */
+.setup-required { color: #e05252; font-size: 11px; font-weight: 600; }
+.setup-optional { color: #b0b0b0; font-size: 11px; font-weight: 400; }
+.setup-required-note { font-size: 11px; color: #b0b0b0; margin-top: 0.15rem; }
+
 /* Setup page — inline data tables (Profiles, Job Searches) */
 .setup-data-table {
   width: 100%;
