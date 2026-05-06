@@ -232,7 +232,7 @@ _EMPTY_PROFILE_DATA: dict[str, Any] = {
     "email": "", "phone": "", "location": "", "skills": [],
     "work_history": [], "education": [], "target_salary_min": None,
     "target_salary_max": None, "target_roles": [], "resume_path": "",
-    "md_path": "",
+    "md_path": "", "cover_letter_path": "",
 }
 
 
@@ -254,10 +254,16 @@ def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
     rows = db.query(UserProfileModel).all()
     active_raw = _get(db, "active_profile_id")
     active_id = int(active_raw) if active_raw else None
-    return {
-        "profiles": [{"id": r.id, "name": r.name} for r in rows],
-        "active_id": active_id,
-    }
+    profiles = []
+    for r in rows:
+        data = json.loads(r.data) if r.data else {}
+        profiles.append({
+            "id": r.id,
+            "name": r.name,
+            "has_resume": bool(data.get("resume_path")),
+            "has_cover": bool(data.get("cover_letter_path")),
+        })
+    return {"profiles": profiles, "active_id": active_id}
 
 
 @router.post("/api/config/profiles")
@@ -332,8 +338,11 @@ def serve_profile_file(
     elif type == "md":
         file_path = data.get("md_path", "")
         media_type = "text/plain"
+    elif type == "cover":
+        file_path = data.get("cover_letter_path", "")
+        media_type = "application/pdf"
     else:
-        raise HTTPException(status_code=400, detail="type must be 'pdf' or 'md'")
+        raise HTTPException(status_code=400, detail="type must be 'pdf', 'md', or 'cover'")
     if not file_path:
         raise HTTPException(status_code=404, detail="File path not set")
     path = Path(file_path)
@@ -360,6 +369,29 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
     dest.write_bytes(contents)
     return {"path": str(dest.resolve())}
+
+
+# ---- Job Searches ----
+
+class JobSearchItem(BaseModel):
+    id: str
+    description: str
+
+
+class JobSearchesBody(BaseModel):
+    searches: list[JobSearchItem]
+
+
+@router.get("/api/config/job_searches")
+def get_job_searches(db: Session = Depends(get_db)) -> dict[str, Any]:
+    raw = _get(db, "job_searches", "[]")
+    return {"searches": json.loads(raw)}
+
+
+@router.put("/api/config/job_searches")
+def put_job_searches(body: JobSearchesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]))
+    return body.model_dump()
 
 
 @router.post("/api/config/profile/parse")

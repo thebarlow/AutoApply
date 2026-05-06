@@ -46,8 +46,117 @@
       </div>
     </div>
 
+    <!-- Step: Profiles -->
+    <div class="setup-step" id="step-profiles">
+      <div class="setup-step-header">
+        <span class="traffic-light" id="tl-profiles">🔴</span>
+        <h2>Profiles</h2>
+      </div>
+      <div class="setup-step-body">
+        <div class="setup-profile-grid" id="setup-profile-list"></div>
+        <button class="btn btn-secondary" id="btn-setup-add-profile" type="button" style="margin-top:0">+ Add Profile</button>
+        <span class="save-status" id="status-setup-profiles"></span>
+      </div>
+    </div>
+
+    <!-- Step: Job Searches -->
+    <div class="setup-step" id="step-searches">
+      <div class="setup-step-header">
+        <span class="traffic-light" id="tl-searches">🔴</span>
+        <h2>Job Searches</h2>
+      </div>
+      <div class="setup-step-body">
+        <div class="setup-search-list" id="setup-search-list"></div>
+        <button class="btn btn-secondary" id="btn-setup-add-search" type="button" style="margin-top:0">+ Add Search</button>
+        <span class="save-status" id="status-searches"></span>
+      </div>
+    </div>
+
   </div>
 </main>
+
+<!-- Profile Modal -->
+<div class="profile-modal-backdrop" id="profile-modal-backdrop">
+  <div class="profile-modal-panel" id="profile-modal-panel">
+    <div class="profile-modal-header">
+      <h2 id="profile-modal-title">Profile</h2>
+      <button class="btn-remove-llm" id="profile-modal-close" type="button" style="font-size:1.2rem">✕</button>
+    </div>
+
+    <div class="profile-tab-bar" id="profile-tab-bar">
+      <button class="profile-tab-btn active" id="tab-btn-upload" data-tab="upload">Upload</button>
+      <button class="profile-tab-btn" id="tab-btn-pdf" data-tab="pdf">Resume PDF</button>
+      <button class="profile-tab-btn" id="tab-btn-md" data-tab="md">Markdown</button>
+      <button class="profile-tab-btn" id="tab-btn-cover" data-tab="cover">Cover Letter</button>
+      <button class="profile-tab-btn" id="tab-btn-edit" data-tab="edit">Edit</button>
+    </div>
+
+    <!-- Upload tab -->
+    <div class="profile-tab-panel active" id="tab-panel-upload">
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Upload Resume</h2>
+      <div class="config-row">
+        <input type="file" id="profile-file" accept=".pdf,.md">
+        <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled style="margin-top:0">Parse</button>
+      </div>
+      <span class="save-status" id="status-parse"></span>
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1rem 0 0.5rem">Upload Cover Letter</h2>
+      <div class="config-row">
+        <input type="file" id="profile-cover-file" accept=".pdf">
+      </div>
+      <span class="save-status" id="status-cover-upload"></span>
+    </div>
+
+    <!-- Resume PDF tab -->
+    <div class="profile-tab-panel" id="tab-panel-pdf">
+      <iframe class="profile-pdf-frame" id="profile-pdf-frame" src="about:blank"></iframe>
+    </div>
+
+    <!-- Markdown tab -->
+    <div class="profile-tab-panel" id="tab-panel-md">
+      <textarea class="profile-md-viewer" id="profile-md-viewer" readonly></textarea>
+    </div>
+
+    <!-- Cover Letter tab -->
+    <div class="profile-tab-panel" id="tab-panel-cover">
+      <p id="cover-pending-msg" style="font-size:13px;color:#888;margin-bottom:0.75rem;display:none">Cover letter uploaded — save profile to enable preview.</p>
+      <iframe class="profile-pdf-frame" id="profile-cover-frame" src="about:blank"></iframe>
+    </div>
+
+    <!-- Edit tab -->
+    <div class="profile-tab-panel" id="tab-panel-edit">
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Profile</h2>
+      <label class="config-label">Profile Name</label>
+      <input class="config-input" type="text" id="profile-modal-name">
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Details</h2>
+      <label class="config-label">Full Name</label>
+      <input class="config-input" type="text" id="profile-name">
+      <label class="config-label">Email</label>
+      <input class="config-input" type="text" id="profile-email">
+      <label class="config-label">Phone</label>
+      <input class="config-input" type="text" id="profile-phone">
+      <label class="config-label">Location</label>
+      <input class="config-input" type="text" id="profile-location">
+      <label class="config-label">Skills (comma-separated)</label>
+      <input class="config-input" type="text" id="profile-skills">
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Work History</h2>
+      <div id="work-history-list"></div>
+      <button class="btn btn-secondary" id="btn-add-work" type="button">+ Add Work History</button>
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Education</h2>
+      <div id="education-list"></div>
+      <button class="btn btn-secondary" id="btn-add-education" type="button">+ Add Education</button>
+
+      <div class="config-actions" style="margin-top:1rem">
+        <button class="btn btn-save" id="save-profile-modal">Save</button>
+        <span class="save-status" id="status-profile-modal"></span>
+      </div>
+    </div>
+
+  </div>
+</div>
 
 <script>
 (function () {
@@ -65,6 +174,8 @@
     return '🔴';
   }
 
+  // ---- Your Information ----
+
   function updateYourInfoLight() {
     const vals = [
       document.getElementById('setup-github').value.trim(),
@@ -75,46 +186,7 @@
     document.getElementById('tl-your-info').textContent = trafficLight(filled, 3);
   }
 
-  async function saveYourInfo() {
-    const github = document.getElementById('setup-github').value.trim();
-    const linkedin = document.getElementById('setup-linkedin').value.trim();
-    const website = document.getElementById('setup-website').value.trim();
-    try {
-      const resp = await fetch('/api/config/templates', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resume_template_path: '',
-          cover_template_path: '',
-          resume_prompt_template: '',
-          cover_prompt_template: '',
-          github,
-          linkedin,
-          website,
-        }),
-      });
-      // Re-fetch to get current template paths so we don't clobber them
-      updateYourInfoLight();
-      if (!resp.ok) showStatus('status-your-info', 'Error saving', true);
-    } catch {
-      showStatus('status-your-info', 'Error saving', true);
-    }
-  }
-
-  async function loadYourInfo() {
-    try {
-      const data = await fetch('/api/config/templates').then(r => r.json());
-      document.getElementById('setup-github').value = data.github || '';
-      document.getElementById('setup-linkedin').value = data.linkedin || '';
-      document.getElementById('setup-website').value = data.website || '';
-      updateYourInfoLight();
-    } catch {
-      showStatus('status-your-info', 'Failed to load', true);
-    }
-  }
-
   async function saveYourInfoSafe() {
-    // Load current template values first, then save to avoid clobbering
     try {
       const data = await fetch('/api/config/templates').then(r => r.json());
       const github = document.getElementById('setup-github').value.trim();
@@ -140,13 +212,521 @@
     }
   }
 
+  async function loadYourInfo() {
+    try {
+      const data = await fetch('/api/config/templates').then(r => r.json());
+      document.getElementById('setup-github').value = data.github || '';
+      document.getElementById('setup-linkedin').value = data.linkedin || '';
+      document.getElementById('setup-website').value = data.website || '';
+      updateYourInfoLight();
+    } catch {
+      showStatus('status-your-info', 'Failed to load', true);
+    }
+  }
+
   ['setup-github', 'setup-linkedin', 'setup-website'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener('input', updateYourInfoLight);
     el.addEventListener('blur', saveYourInfoSafe);
   });
 
+  // ---- Profiles ----
+
+  function updateProfilesLight() {
+    const cards = document.querySelectorAll('.setup-profile-card');
+    const tl = document.getElementById('tl-profiles');
+    if (cards.length === 0) { tl.textContent = '🔴'; return; }
+    const anyWithResume = Array.from(cards).some(c => c.dataset.hasResume === 'true');
+    tl.textContent = anyWithResume ? '🟢' : '🟡';
+  }
+
+  function cardTl(hasResume, hasCover) {
+    if (hasResume && hasCover) return '🟢';
+    if (hasResume || hasCover) return '🟡';
+    return '🔴';
+  }
+
+  function buildSetupProfileCard(profile) {
+    const hasResume = !!profile.has_resume;
+    const hasCover = !!profile.has_cover;
+    const card = document.createElement('div');
+    card.className = 'setup-profile-card';
+    card.dataset.id = profile.id;
+    card.dataset.hasResume = String(hasResume);
+    card.dataset.hasCover = String(hasCover);
+
+    card.innerHTML = `
+      <button class="setup-profile-card__delete" type="button" title="Delete">✕</button>
+      <div class="setup-profile-card__header">
+        <span class="setup-profile-card__tl">${cardTl(hasResume, hasCover)}</span>
+        <span class="setup-profile-card__name">${escHtml(profile.name || 'New Profile')}</span>
+      </div>
+      <div class="setup-profile-card__files">
+        <div class="setup-profile-card__file ${hasResume ? 'setup-profile-card__file--ok' : 'setup-profile-card__file--missing'}">
+          <span>Resume</span><span>${hasResume ? '✓' : '—'}</span>
+        </div>
+        <div class="setup-profile-card__file ${hasCover ? 'setup-profile-card__file--ok' : 'setup-profile-card__file--missing'}">
+          <span>Cover Letter</span><span>${hasCover ? '✓' : '—'}</span>
+        </div>
+      </div>
+    `;
+
+    card.addEventListener('click', function(e) {
+      if (!e.target.closest('.setup-profile-card__delete')) openProfileModal(profile.id, false);
+    });
+
+    card.querySelector('.setup-profile-card__delete').addEventListener('click', async function(e) {
+      e.stopPropagation();
+      const resp = await fetch('/api/config/profiles/' + profile.id, { method: 'DELETE' });
+      if (resp.ok) { card.remove(); updateProfilesLight(); }
+      else showStatus('status-setup-profiles', 'Delete failed', true);
+    });
+
+    return card;
+  }
+
+  function refreshCard(profileId, name, hasResume, hasCover) {
+    const card = document.querySelector('.setup-profile-card[data-id="' + profileId + '"]');
+    if (!card) return;
+    card.dataset.hasResume = String(hasResume);
+    card.dataset.hasCover = String(hasCover);
+    card.querySelector('.setup-profile-card__tl').textContent = cardTl(hasResume, hasCover);
+    card.querySelector('.setup-profile-card__name').textContent = name || 'New Profile';
+    const rows = card.querySelectorAll('.setup-profile-card__file');
+    rows[0].className = 'setup-profile-card__file ' + (hasResume ? 'setup-profile-card__file--ok' : 'setup-profile-card__file--missing');
+    rows[0].querySelector('span:last-child').textContent = hasResume ? '✓' : '—';
+    rows[1].className = 'setup-profile-card__file ' + (hasCover ? 'setup-profile-card__file--ok' : 'setup-profile-card__file--missing');
+    rows[1].querySelector('span:last-child').textContent = hasCover ? '✓' : '—';
+    updateProfilesLight();
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  async function loadSetupProfiles() {
+    try {
+      const meta = await fetch('/api/config/profiles').then(r => r.json());
+      const list = document.getElementById('setup-profile-list');
+      list.innerHTML = '';
+      meta.profiles.forEach(p => list.appendChild(buildSetupProfileCard(p)));
+      updateProfilesLight();
+    } catch {
+      showStatus('status-setup-profiles', 'Failed to load profiles', true);
+    }
+  }
+
+  document.getElementById('btn-setup-add-profile').addEventListener('click', async function() {
+    try {
+      const resp = await fetch('/api/config/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New Profile' }),
+      });
+      if (!resp.ok) { showStatus('status-setup-profiles', 'Failed to create profile', true); return; }
+      const profile = await resp.json();
+      if (!profile.id) { showStatus('status-setup-profiles', 'Invalid response from server', true); return; }
+      const card = buildSetupProfileCard({ id: profile.id, name: profile.name, has_resume: false, has_cover: false });
+      document.getElementById('setup-profile-list').appendChild(card);
+      updateProfilesLight();
+      openProfileModal(profile.id, true);
+    } catch {
+      showStatus('status-setup-profiles', 'Error creating profile', true);
+    }
+  });
+
+  // ---- Profile Modal ----
+
+  let _modalProfileId = null;
+  let _modalIsNew = false;
+  let _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
+
+  function openProfileModal(id, isNew) {
+    _modalProfileId = id;
+    _modalIsNew = isNew;
+    _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
+    document.getElementById('profile-modal-backdrop').classList.add('is-open');
+    loadModalContent(id, isNew);
+  }
+
+  async function closeProfileModal() {
+    if (_modalIsNew) {
+      await fetch('/api/config/profiles/' + _modalProfileId, { method: 'DELETE' });
+      const card = document.querySelector('.setup-profile-card[data-id="' + _modalProfileId + '"]');
+      if (card) card.remove();
+      updateProfilesLight();
+    }
+    _modalProfileId = null;
+    _modalIsNew = false;
+    _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
+    document.getElementById('profile-modal-backdrop').classList.remove('is-open');
+    document.getElementById('profile-pdf-frame').src = 'about:blank';
+    document.getElementById('profile-cover-frame').src = 'about:blank';
+    document.getElementById('profile-md-viewer').value = '';
+  }
+
+  async function loadModalContent(id, isNew) {
+    document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('profile-file').value = '';
+    document.getElementById('btn-parse-profile').disabled = true;
+    document.getElementById('profile-cover-file').value = '';
+
+    if (isNew) {
+      document.getElementById('tab-btn-upload').classList.add('active');
+      document.getElementById('tab-panel-upload').classList.add('active');
+      document.getElementById('profile-modal-title').textContent = 'New Profile';
+      document.getElementById('profile-modal-name').value = '';
+      document.getElementById('tab-btn-pdf').style.display = 'none';
+      document.getElementById('tab-btn-md').style.display = 'none';
+      document.getElementById('tab-btn-cover').style.display = 'none';
+      populateEditForm({});
+      return;
+    }
+
+    document.getElementById('tab-btn-edit').classList.add('active');
+    document.getElementById('tab-panel-edit').classList.add('active');
+
+    try {
+      const resp = await fetch('/api/config/profiles/' + id);
+      if (!resp.ok) { showStatus('status-profile-modal', 'Failed to load profile', true); return; }
+      const profile = await resp.json();
+
+      document.getElementById('profile-modal-title').textContent = profile.name || 'Profile';
+      document.getElementById('profile-modal-name').value = profile.name || '';
+      const data = profile.data || {};
+      populateEditForm(Object.assign({ name: profile.name }, data));
+
+      _modalFilePaths.resume_path = data.resume_path || '';
+      _modalFilePaths.md_path = data.md_path || '';
+      _modalFilePaths.cover_letter_path = data.cover_letter_path || '';
+
+      const hasPdf = (_modalFilePaths.resume_path || '').toLowerCase().endsWith('.pdf');
+      document.getElementById('tab-btn-pdf').style.display = hasPdf ? '' : 'none';
+      if (hasPdf) document.getElementById('profile-pdf-frame').src = '/api/config/profiles/' + id + '/file?type=pdf';
+
+      const hasMd = !!_modalFilePaths.md_path;
+      document.getElementById('tab-btn-md').style.display = hasMd ? '' : 'none';
+      if (hasMd) {
+        fetch('/api/config/profiles/' + id + '/file?type=md')
+          .then(r => r.text())
+          .then(text => { document.getElementById('profile-md-viewer').value = text; })
+          .catch(() => { document.getElementById('profile-md-viewer').value = '(Failed to load)'; });
+      }
+
+      const hasCover = !!_modalFilePaths.cover_letter_path;
+      document.getElementById('tab-btn-cover').style.display = hasCover ? '' : 'none';
+      document.getElementById('cover-pending-msg').style.display = 'none';
+      if (hasCover) document.getElementById('profile-cover-frame').src = '/api/config/profiles/' + id + '/file?type=cover';
+    } catch {
+      showStatus('status-profile-modal', 'Failed to load profile', true);
+    }
+  }
+
+  function buildWorkRow(entry) {
+    entry = entry || {};
+    const row = document.createElement('div');
+    row.className = 'profile-subrow';
+    row.innerHTML = `
+      <input type="text" class="config-input ph-title" placeholder="Title">
+      <input type="text" class="config-input ph-company" placeholder="Company">
+      <input type="text" class="config-input ph-start" placeholder="Start (2022-01)">
+      <input type="text" class="config-input ph-end" placeholder="End (2024-03)">
+      <input type="text" class="config-input ph-summary" placeholder="Summary">
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    row.querySelector('.ph-title').value = entry.title || '';
+    row.querySelector('.ph-company').value = entry.company || '';
+    row.querySelector('.ph-start').value = entry.start || '';
+    row.querySelector('.ph-end').value = entry.end || '';
+    row.querySelector('.ph-summary').value = entry.summary || '';
+    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function buildEducationRow(entry) {
+    entry = entry || {};
+    const row = document.createElement('div');
+    row.className = 'profile-subrow';
+    row.innerHTML = `
+      <input type="text" class="config-input ph-institution" placeholder="Institution">
+      <input type="text" class="config-input ph-degree" placeholder="Degree">
+      <input type="text" class="config-input ph-field" placeholder="Field">
+      <input type="text" class="config-input ph-graduated" placeholder="Graduated (2018)">
+      <input type="text" class="config-input ph-gpa" placeholder="GPA">
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    row.querySelector('.ph-institution').value = entry.institution || '';
+    row.querySelector('.ph-degree').value = entry.degree || '';
+    row.querySelector('.ph-field').value = entry.field || '';
+    row.querySelector('.ph-graduated').value = entry.graduated || '';
+    row.querySelector('.ph-gpa').value = entry.gpa || '';
+    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function populateEditForm(data) {
+    document.getElementById('profile-name').value = data.name || '';
+    document.getElementById('profile-email').value = data.email || '';
+    document.getElementById('profile-phone').value = data.phone || '';
+    document.getElementById('profile-location').value = data.location || '';
+    document.getElementById('profile-skills').value = (data.skills || []).join(', ');
+
+    const wl = document.getElementById('work-history-list');
+    wl.innerHTML = '';
+    (data.work_history || []).forEach(e => wl.appendChild(buildWorkRow(e)));
+
+    const el = document.getElementById('education-list');
+    el.innerHTML = '';
+    (data.education || []).forEach(e => el.appendChild(buildEducationRow(e)));
+  }
+
+  function collectEditForm(profileLabel) {
+    return {
+      name: profileLabel,
+      data: {
+        name: document.getElementById('profile-name').value,
+        email: document.getElementById('profile-email').value,
+        phone: document.getElementById('profile-phone').value,
+        location: document.getElementById('profile-location').value,
+        skills: document.getElementById('profile-skills').value.split(',').map(s => s.trim()).filter(Boolean),
+        work_history: Array.from(document.querySelectorAll('#work-history-list .profile-subrow')).map(r => ({
+          title: r.querySelector('.ph-title').value,
+          company: r.querySelector('.ph-company').value,
+          start: r.querySelector('.ph-start').value,
+          end: r.querySelector('.ph-end').value,
+          summary: r.querySelector('.ph-summary').value,
+        })),
+        education: Array.from(document.querySelectorAll('#education-list .profile-subrow')).map(r => ({
+          institution: r.querySelector('.ph-institution').value,
+          degree: r.querySelector('.ph-degree').value,
+          field: r.querySelector('.ph-field').value,
+          graduated: r.querySelector('.ph-graduated').value,
+          gpa: parseFloat(r.querySelector('.ph-gpa').value) || 0,
+        })),
+        target_salary_min: null,
+        target_salary_max: null,
+        target_roles: [],
+        resume_path: '',
+      },
+    };
+  }
+
+  document.getElementById('save-profile-modal').addEventListener('click', async function() {
+    if (!_modalProfileId) return;
+    const profileName = document.getElementById('profile-modal-name').value.trim() || 'New Profile';
+    const body = collectEditForm(profileName);
+    body.data.resume_path = _modalFilePaths.resume_path;
+    body.data.md_path = _modalFilePaths.md_path;
+    body.data.cover_letter_path = _modalFilePaths.cover_letter_path;
+    try {
+      const resp = await fetch('/api/config/profiles/' + _modalProfileId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        _modalIsNew = false;
+        document.getElementById('profile-modal-title').textContent = profileName;
+        refreshCard(_modalProfileId, profileName, !!body.data.resume_path, !!body.data.cover_letter_path);
+        showStatus('status-profile-modal', 'Saved ✓', false);
+      } else {
+        showStatus('status-profile-modal', 'Error saving', true);
+      }
+    } catch {
+      showStatus('status-profile-modal', 'Error saving', true);
+    }
+  });
+
+  document.getElementById('profile-modal-close').addEventListener('click', closeProfileModal);
+
+  document.getElementById('profile-modal-backdrop').addEventListener('click', function(e) {
+    if (e.target === this) closeProfileModal();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('profile-modal-backdrop').classList.contains('is-open')) {
+      closeProfileModal();
+    }
+  });
+
+  document.querySelectorAll('.profile-tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-panel-' + tab).classList.add('active');
+    });
+  });
+
+  document.getElementById('profile-file').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) { document.getElementById('btn-parse-profile').disabled = true; return; }
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
+      if (!resp.ok) { showStatus('status-profile-modal', 'Upload failed: ' + await resp.text(), true); return; }
+      const result = await resp.json();
+      if (!result.path) { showStatus('status-profile-modal', 'Upload error: server returned no path', true); return; }
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        _modalFilePaths.resume_path = result.path;
+        _modalFilePaths.md_path = '';
+      } else {
+        _modalFilePaths.md_path = result.path;
+        _modalFilePaths.resume_path = '';
+      }
+      document.getElementById('btn-parse-profile').disabled = false;
+    } catch (err) {
+      showStatus('status-profile-modal', 'Upload error: ' + err.message, true);
+    }
+  });
+
+  document.getElementById('profile-cover-file').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
+      if (!resp.ok) { showStatus('status-cover-upload', 'Upload failed', true); return; }
+      const result = await resp.json();
+      if (!result.path) { showStatus('status-cover-upload', 'Upload error: no path returned', true); return; }
+      _modalFilePaths.cover_letter_path = result.path;
+      showStatus('status-cover-upload', 'Uploaded ✓', false);
+      document.getElementById('tab-btn-cover').style.display = '';
+      document.getElementById('cover-pending-msg').style.display = '';
+      document.getElementById('profile-cover-frame').src = 'about:blank';
+    } catch (err) {
+      showStatus('status-cover-upload', 'Upload error: ' + err.message, true);
+    }
+  });
+
+  document.getElementById('btn-parse-profile').addEventListener('click', async function() {
+    const file = document.getElementById('profile-file').files[0];
+    if (!file) return;
+    const btn = document.getElementById('btn-parse-profile');
+    btn.disabled = true;
+    btn.textContent = 'Parsing…';
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const resp = await fetch('/api/config/profile/parse', { method: 'POST', body: form });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        showStatus('status-parse', 'Parse failed: ' + (err && err.detail ? err.detail : resp.statusText), true);
+        return;
+      }
+      const data = await resp.json();
+      document.getElementById('profile-modal-name').value = data.name || '';
+      populateEditForm(Object.assign({ name: data.name }, data));
+      document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('tab-btn-edit').classList.add('active');
+      document.getElementById('tab-panel-edit').classList.add('active');
+    } catch (e) {
+      showStatus('status-parse', 'Parse error: ' + e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Parse';
+    }
+  });
+
+  document.getElementById('btn-add-work').addEventListener('click', function() {
+    document.getElementById('work-history-list').appendChild(buildWorkRow());
+  });
+
+  document.getElementById('btn-add-education').addEventListener('click', function() {
+    document.getElementById('education-list').appendChild(buildEducationRow());
+  });
+
+  // ---- Job Searches ----
+
+  let _searchSaveTimer = null;
+
+  function updateSearchesLight() {
+    const items = document.querySelectorAll('.setup-search-textarea');
+    const hasContent = Array.from(items).some(t => t.value.trim());
+    document.getElementById('tl-searches').textContent = hasContent ? '🟢' : '🔴';
+  }
+
+  function collectSearches() {
+    return Array.from(document.querySelectorAll('.setup-search-item')).map(item => ({
+      id: item.dataset.id,
+      description: item.querySelector('.setup-search-textarea').value,
+    }));
+  }
+
+  async function saveJobSearches() {
+    try {
+      await fetch('/api/config/job_searches', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searches: collectSearches() }),
+      });
+    } catch { /* silent */ }
+  }
+
+  function scheduleSave() {
+    clearTimeout(_searchSaveTimer);
+    _searchSaveTimer = setTimeout(saveJobSearches, 600);
+  }
+
+  function buildSearchItem(search) {
+    const item = document.createElement('div');
+    item.className = 'setup-search-item';
+    item.dataset.id = search.id;
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'setup-search-textarea';
+    textarea.placeholder = 'Describe the type of job you are looking for';
+    textarea.value = search.description || '';
+    textarea.addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
+    textarea.addEventListener('blur', saveJobSearches);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn-remove-llm';
+    del.textContent = '✕';
+    del.title = 'Remove search';
+    del.style.marginTop = '0.4rem';
+    del.addEventListener('click', async function() {
+      item.remove();
+      updateSearchesLight();
+      await saveJobSearches();
+    });
+
+    item.appendChild(textarea);
+    item.appendChild(del);
+    return item;
+  }
+
+  async function loadJobSearches() {
+    try {
+      const data = await fetch('/api/config/job_searches').then(r => r.json());
+      const list = document.getElementById('setup-search-list');
+      list.innerHTML = '';
+      (data.searches || []).forEach(s => list.appendChild(buildSearchItem(s)));
+      updateSearchesLight();
+    } catch {
+      showStatus('status-searches', 'Failed to load searches', true);
+    }
+  }
+
+  document.getElementById('btn-setup-add-search').addEventListener('click', async function() {
+    const id = 'search-' + Date.now();
+    const item = buildSearchItem({ id, description: '' });
+    document.getElementById('setup-search-list').appendChild(item);
+    item.querySelector('.setup-search-textarea').focus();
+    updateSearchesLight();
+    await saveJobSearches();
+  });
+
+  // ---- Init ----
   loadYourInfo();
+  loadSetupProfiles();
+  loadJobSearches();
 
 })();
 </script>
