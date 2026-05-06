@@ -233,8 +233,8 @@
     tr.dataset.id = p.id ? String(p.id) : '';
     tr.dataset.hasFile = String(!!(p.resume_path || p.cover_letter_path));
 
-    var resumeName = (p.resume_path || '').split('/').pop();
-    var coverName = (p.cover_letter_path || '').split('/').pop();
+    var resumeName = p.resume_filename || (p.resume_path || '').split('/').pop();
+    var coverName = p.cover_filename || (p.cover_letter_path || '').split('/').pop();
     var hasResume = !!(p.resume_path);
 
     tr.innerHTML = [
@@ -280,9 +280,10 @@
         var today = new Date().toISOString();
         var isPdf = file.name.toLowerCase().endsWith('.pdf');
         await mergeAndSaveProfile(id, {
-          data: { resume_path: isPdf ? filePath : '', md_path: isPdf ? '' : filePath, resume_uploaded_at: today },
+          data: { resume_path: isPdf ? filePath : '', md_path: isPdf ? '' : filePath,
+                  resume_uploaded_at: today, resume_filename: file.name },
         });
-        tds[1].querySelector('.setup-row-filename').textContent = filePath.split('/').pop();
+        tds[1].querySelector('.setup-row-filename').textContent = file.name;
         tds[1].querySelector('.setup-row-filename').classList.remove('setup-row-filename--empty');
         tds[2].querySelector('.setup-row-filedate').textContent = fmtDate(today);
         parseBtn.disabled = false;
@@ -303,8 +304,8 @@
         var result = await up.json();
         var filePath = result.path;
         var today = new Date().toISOString();
-        await mergeAndSaveProfile(id, { data: { cover_letter_path: filePath, cover_uploaded_at: today } });
-        tds[3].querySelector('.setup-row-filename').textContent = filePath.split('/').pop();
+        await mergeAndSaveProfile(id, { data: { cover_letter_path: filePath, cover_uploaded_at: today, cover_filename: file.name } });
+        tds[3].querySelector('.setup-row-filename').textContent = file.name;
         tds[3].querySelector('.setup-row-filename').classList.remove('setup-row-filename--empty');
         tds[4].querySelector('.setup-row-filedate').textContent = fmtDate(today);
         tr.dataset.hasFile = 'true';

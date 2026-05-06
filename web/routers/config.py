@@ -234,6 +234,7 @@ _EMPTY_PROFILE_DATA: dict[str, Any] = {
     "target_salary_max": None, "target_roles": [], "resume_path": "",
     "md_path": "", "cover_letter_path": "",
     "resume_uploaded_at": "", "cover_uploaded_at": "",
+    "resume_filename": "", "cover_filename": "",
 }
 
 
@@ -267,6 +268,8 @@ def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
             "cover_letter_path": data.get("cover_letter_path", ""),
             "resume_uploaded_at": data.get("resume_uploaded_at", ""),
             "cover_uploaded_at": data.get("cover_uploaded_at", ""),
+            "resume_filename": data.get("resume_filename", ""),
+            "cover_filename": data.get("cover_filename", ""),
         })
     return {"profiles": profiles, "active_id": active_id}
 
@@ -383,6 +386,8 @@ def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) ->
     merged["cover_letter_path"] = data.get("cover_letter_path", "")
     merged["resume_uploaded_at"] = data.get("resume_uploaded_at", "")
     merged["cover_uploaded_at"] = data.get("cover_uploaded_at", "")
+    merged["resume_filename"] = data.get("resume_filename", "")
+    merged["cover_filename"] = data.get("cover_filename", "")
     name = parsed.get("name") or row.name
     row.name = name
     row.data = json.dumps(merged)
@@ -407,7 +412,7 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     _PROFILES_DIR.mkdir(exist_ok=True)
     dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
     dest.write_bytes(contents)
-    return {"path": str(dest.resolve())}
+    return {"path": str(dest.resolve()), "filename": filename}
 
 
 # ---- Job Searches ----
