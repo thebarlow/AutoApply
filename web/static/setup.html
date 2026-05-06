@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Apply — Setup</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="/">Auto Apply</a>
+  <a href="/">Dashboard</a>
+  <a href="/config">Config</a>
+  <a href="/setup" class="nav-active">Setup</a>
+</nav>
+
+<main>
+  <h1>Setup</h1>
+
+  <div class="setup-steps">
+
+    <!-- Step: Your Information -->
+    <div class="setup-step" id="step-your-info">
+      <div class="setup-step-header">
+        <span class="traffic-light" id="tl-your-info">🔴</span>
+        <h2>Your Information</h2>
+      </div>
+      <div class="setup-step-body">
+        <div class="setup-field-row">
+          <span class="setup-icon">🐙</span>
+          <label class="setup-field-label">GitHub</label>
+          <input class="setup-field-input" type="text" id="setup-github" placeholder="github.com/username">
+        </div>
+        <div class="setup-field-row">
+          <span class="setup-icon">💼</span>
+          <label class="setup-field-label">LinkedIn</label>
+          <input class="setup-field-input" type="text" id="setup-linkedin" placeholder="linkedin.com/in/username">
+        </div>
+        <div class="setup-field-row">
+          <span class="setup-icon">🌐</span>
+          <label class="setup-field-label">Portfolio Website</label>
+          <input class="setup-field-input" type="text" id="setup-website" placeholder="yoursite.com">
+        </div>
+        <span class="save-status" id="status-your-info"></span>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+(function () {
+
+  function showStatus(id, text, isError) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.style.color = isError ? '#e74c3c' : '#27ae60';
+    setTimeout(() => { el.textContent = ''; }, 2000);
+  }
+
+  function trafficLight(filled, total) {
+    if (filled === total) return '🟢';
+    if (filled > 0) return '🟡';
+    return '🔴';
+  }
+
+  function updateYourInfoLight() {
+    const vals = [
+      document.getElementById('setup-github').value.trim(),
+      document.getElementById('setup-linkedin').value.trim(),
+      document.getElementById('setup-website').value.trim(),
+    ];
+    const filled = vals.filter(Boolean).length;
+    document.getElementById('tl-your-info').textContent = trafficLight(filled, 3);
+  }
+
+  async function saveYourInfo() {
+    const github = document.getElementById('setup-github').value.trim();
+    const linkedin = document.getElementById('setup-linkedin').value.trim();
+    const website = document.getElementById('setup-website').value.trim();
+    try {
+      const resp = await fetch('/api/config/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_template_path: '',
+          cover_template_path: '',
+          resume_prompt_template: '',
+          cover_prompt_template: '',
+          github,
+          linkedin,
+          website,
+        }),
+      });
+      // Re-fetch to get current template paths so we don't clobber them
+      updateYourInfoLight();
+      if (!resp.ok) showStatus('status-your-info', 'Error saving', true);
+    } catch {
+      showStatus('status-your-info', 'Error saving', true);
+    }
+  }
+
+  async function loadYourInfo() {
+    try {
+      const data = await fetch('/api/config/templates').then(r => r.json());
+      document.getElementById('setup-github').value = data.github || '';
+      document.getElementById('setup-linkedin').value = data.linkedin || '';
+      document.getElementById('setup-website').value = data.website || '';
+      updateYourInfoLight();
+    } catch {
+      showStatus('status-your-info', 'Failed to load', true);
+    }
+  }
+
+  async function saveYourInfoSafe() {
+    // Load current template values first, then save to avoid clobbering
+    try {
+      const data = await fetch('/api/config/templates').then(r => r.json());
+      const github = document.getElementById('setup-github').value.trim();
+      const linkedin = document.getElementById('setup-linkedin').value.trim();
+      const website = document.getElementById('setup-website').value.trim();
+      const resp = await fetch('/api/config/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_template_path: data.resume_template_path || '',
+          cover_template_path: data.cover_template_path || '',
+          resume_prompt_template: data.resume_prompt_template || '',
+          cover_prompt_template: data.cover_prompt_template || '',
+          github,
+          linkedin,
+          website,
+        }),
+      });
+      updateYourInfoLight();
+      if (!resp.ok) showStatus('status-your-info', 'Error saving', true);
+    } catch {
+      showStatus('status-your-info', 'Error saving', true);
+    }
+  }
+
+  ['setup-github', 'setup-linkedin', 'setup-website'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', updateYourInfoLight);
+    el.addEventListener('blur', saveYourInfoSafe);
+  });
+
+  loadYourInfo();
+
+})();
+</script>
+
+</body>
+</html>

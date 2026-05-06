@@ -28,3 +28,8 @@ def index():
 @app.get("/config")
 def config_page():
     return FileResponse(_STATIC / "config.html")
+
+
+@app.get("/setup")
+def setup_page():
+    return FileResponse(_STATIC / "setup.html")
