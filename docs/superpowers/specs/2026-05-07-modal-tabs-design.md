@@ -12,13 +12,15 @@
 │ Header (title, status badge, spinner)        │
 │ Meta (company, score, location, salary)      │
 │ Action bar                                   │
-│ [Overview] [Resume ⊞] [Cover Letter ⊞]      │
-│─────────────────────────────────────────────│
-│ Tab content                                  │
-└─────────────────────────────────────────────┘
+├───────────────┬─────────────────────────────┤
+│ Overview      │                             │
+│ Resume        │   Tab content               │
+│ Cover Letter  │                             │
+│               │                             │
+└───────────────┴─────────────────────────────┘
 ```
 
-The tab selector row sits below the action bar. The `⊞` icon on Resume and Cover Letter tabs indicates a MD/PDF toggle inside the tab content (not a dropdown on the selector itself).
+Below the action bar the panel splits into two columns: a narrow left sidebar containing the vertical tab selectors, and a main content area on the right. The MD/PDF toggle pill lives inside the tab content area (top of Resume or Cover Letter content), not on the selector itself.
 
 ---
 
