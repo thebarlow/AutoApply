@@ -4,7 +4,6 @@ import json
 import os
 from dataclasses import dataclass
 
-import openai
 from sqlalchemy.orm import Session
 
 from db.models import Config
@@ -35,8 +34,9 @@ def get_active_provider(db: Session) -> LLMProvider:
     )
 
 
-def get_openai_client(db: Session) -> tuple[openai.OpenAI, str]:
+def get_openai_client(db: Session) -> tuple:
     """Returns (client, model_name) for the active provider."""
+    import openai  # lazy — openai adds ~10s to startup on WSL2
     provider = get_active_provider(db)
     api_key = os.getenv(f"LLM_KEY_{provider.name.upper()}")
     if not api_key:

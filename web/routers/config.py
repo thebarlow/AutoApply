@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -95,26 +94,40 @@ class TemplatesBody(BaseModel):
     github: str
     linkedin: str
     website: str
+    primary_skills: list[str] = []
+    primary_technologies: list[str] = []
 
 
 @router.get("/api/config/templates")
-def get_templates(db: Session = Depends(get_db)) -> dict[str, str]:
+def get_templates(db: Session = Depends(get_db)) -> dict:
+    def _get_json_list(key: str) -> list[str]:
+        raw = _get(db, key)
+        try:
+            val = json.loads(raw)
+            return val if isinstance(val, list) else []
+        except (ValueError, TypeError):
+            return []
+
     return {
         "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
         "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
         "github": _get(db, "resume_github"),
         "linkedin": _get(db, "resume_linkedin"),
         "website": _get(db, "resume_website"),
+        "primary_skills": _get_json_list("primary_skills"),
+        "primary_technologies": _get_json_list("primary_technologies"),
     }
 
 
 @router.put("/api/config/templates")
-def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[str, str]:
+def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict:
     _set(db, "resume_template_path", body.resume_template_path)
     _set(db, "cover_template_path", body.cover_template_path)
     _set(db, "resume_github", body.github)
     _set(db, "resume_linkedin", body.linkedin)
     _set(db, "resume_website", body.website)
+    _set(db, "primary_skills", json.dumps(body.primary_skills))
+    _set(db, "primary_technologies", json.dumps(body.primary_technologies))
     return body.model_dump()
 
 
@@ -329,7 +342,9 @@ _EMPTY_PROFILE_DATA: dict[str, Any] = {
     "email": "", "phone": "", "location": "", "skills": [],
     "work_history": [], "education": [], "target_salary_min": None,
     "target_salary_max": None, "target_roles": [], "resume_path": "",
-    "md_path": "",
+    "md_path": "", "cover_letter_path": "",
+    "resume_uploaded_at": "", "cover_uploaded_at": "",
+    "resume_filename": "", "cover_filename": "",
 }
 
 
@@ -351,10 +366,22 @@ def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
     rows = db.query(UserProfileModel).all()
     active_raw = _get(db, "active_profile_id")
     active_id = int(active_raw) if active_raw else None
-    return {
-        "profiles": [{"id": r.id, "name": r.name} for r in rows],
-        "active_id": active_id,
-    }
+    profiles = []
+    for r in rows:
+        data = json.loads(r.data) if r.data else {}
+        profiles.append({
+            "id": r.id,
+            "name": r.name,
+            "has_resume": bool(data.get("resume_path")),
+            "has_cover": bool(data.get("cover_letter_path")),
+            "resume_path": data.get("resume_path", ""),
+            "cover_letter_path": data.get("cover_letter_path", ""),
+            "resume_uploaded_at": data.get("resume_uploaded_at", ""),
+            "cover_uploaded_at": data.get("cover_uploaded_at", ""),
+            "resume_filename": data.get("resume_filename", ""),
+            "cover_filename": data.get("cover_filename", ""),
+        })
+    return {"profiles": profiles, "active_id": active_id}
 
 
 @router.post("/api/config/profiles")
@@ -429,14 +456,53 @@ def serve_profile_file(
     elif type == "md":
         file_path = data.get("md_path", "")
         media_type = "text/plain"
+    elif type == "cover":
+        file_path = data.get("cover_letter_path", "")
+        media_type = "application/pdf"
     else:
-        raise HTTPException(status_code=400, detail="type must be 'pdf' or 'md'")
+        raise HTTPException(status_code=400, detail="type must be 'pdf', 'md', or 'cover'")
     if not file_path:
         raise HTTPException(status_code=404, detail="File path not set")
     path = Path(file_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FileResponse(path, media_type=media_type)
+
+
+@router.post("/api/config/profiles/{profile_id}/parse")
+def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Parse the already-uploaded resume for a profile and merge extracted data back into it."""
+    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    data = json.loads(row.data) if row.data else {}
+    resume_path = data.get("resume_path") or data.get("md_path")
+    if not resume_path:
+        raise HTTPException(status_code=400, detail="No resume uploaded for this profile")
+    path = Path(resume_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Resume file not found on disk")
+    if path.suffix.lower() == ".pdf":
+        md_text = _parser.pdf_to_markdown(path.read_bytes())
+    else:
+        md_text = path.read_text(errors="replace")
+    try:
+        parsed = _parser.markdown_to_profile(md_text, db)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    merged = {**_EMPTY_PROFILE_DATA, **parsed}
+    merged["resume_path"] = data.get("resume_path", "")
+    merged["md_path"] = data.get("md_path", "")
+    merged["cover_letter_path"] = data.get("cover_letter_path", "")
+    merged["resume_uploaded_at"] = data.get("resume_uploaded_at", "")
+    merged["cover_uploaded_at"] = data.get("cover_uploaded_at", "")
+    merged["resume_filename"] = data.get("resume_filename", "")
+    merged["cover_filename"] = data.get("cover_filename", "")
+    name = parsed.get("name") or row.name
+    row.name = name
+    row.data = json.dumps(merged)
+    db.commit()
+    return {"id": row.id, "name": name}
 
 
 _PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
@@ -456,7 +522,31 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     _PROFILES_DIR.mkdir(exist_ok=True)
     dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
     dest.write_bytes(contents)
-    return {"path": str(dest.resolve())}
+    return {"path": str(dest.resolve()), "filename": filename}
+
+
+# ---- Job Searches ----
+
+class JobSearchItem(BaseModel):
+    id: str
+    title: str = ""
+    description: str
+
+
+class JobSearchesBody(BaseModel):
+    searches: list[JobSearchItem]
+
+
+@router.get("/api/config/job_searches")
+def get_job_searches(db: Session = Depends(get_db)) -> dict[str, Any]:
+    raw = _get(db, "job_searches", "[]")
+    return {"searches": json.loads(raw)}
+
+
+@router.put("/api/config/job_searches")
+def put_job_searches(body: JobSearchesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]))
+    return body.model_dump()
 
 
 @router.post("/api/config/profile/parse")

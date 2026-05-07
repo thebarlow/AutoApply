@@ -1,9 +1,84 @@
 // Source modules call registerSource() on load. injector.js runs first (manifest order).
 let _source = null;
+let _viewSource = null;
 
 function registerSource(config) {
   _source = config;
   _init();
+}
+
+function registerViewSource(config) {
+  _viewSource = config;
+  _initView();
+}
+
+async function _initView() {
+  const ready = await _waitForSelector(_viewSource.detailReadySelector, 10000);
+  if (!ready) return;
+  _injectViewButton();
+}
+
+function _injectViewButton() {
+  if (document.getElementById('autoapply-view-btn')) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'autoapply-view-btn';
+  btn.textContent = 'Scrape';
+  btn.style.cssText = [
+    'position:fixed', 'top:80px', 'right:20px', 'z-index:9999',
+    'padding:6px 14px', 'font-size:13px', 'font-weight:600',
+    'cursor:pointer', 'background:#0a66c2', 'color:#fff',
+    'border:none', 'border-radius:4px', 'line-height:1.4',
+    'box-shadow:0 2px 6px rgba(0,0,0,0.3)',
+  ].join(';');
+  document.body.appendChild(btn);
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await _handleViewScrape(btn);
+  });
+}
+
+async function _handleViewScrape(btn) {
+  btn.disabled = true;
+  btn.textContent = 'Scraping…';
+
+  try {
+    const jobData = _viewSource.getJobData();
+    if (!jobData.title || !jobData.url) {
+      btn.textContent = '✗ Parse error';
+      return;
+    }
+
+    const { isDuplicate } = await _msg({ type: 'CHECK_DEDUP', job_key: jobData.job_key });
+    if (isDuplicate) {
+      btn.textContent = '✓ Already staged';
+      return;
+    }
+
+    const description = _viewSource.getDescription();
+    const payload = {
+      ...jobData,
+      description,
+      remote: /remote/i.test(jobData.location || ''),
+      salary: '',
+      posted_at: '',
+      scraped_at: new Date().toISOString(),
+    };
+
+    const result = await _msg({ type: 'SCRAPE_JOB', payload });
+
+    if (!result.ok) {
+      btn.textContent = '✗ Server error';
+      return;
+    }
+
+    btn.textContent = result.status === 'duplicate' ? '✓ Already staged' : '✓ Scraped';
+  } catch (err) {
+    console.error('[job-scraper] view scrape failed:', err);
+    btn.textContent = '✗ Server error';
+  }
 }
 
 function _init() {

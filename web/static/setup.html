@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Apply — Setup</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="/">Auto Apply</a>
+  <a href="/">Dashboard</a>
+  <a href="/config">Config</a>
+  <a href="/setup" class="nav-active">Setup</a>
+  <a href="/help" class="nav-right">Help</a>
+</nav>
+
+<main>
+  <h1>Setup</h1>
+
+  <div class="setup-steps">
+
+    <!-- Step: Your Information -->
+    <div class="setup-step" id="step-your-info">
+      <div class="setup-step-header">
+        <span class="traffic-light" id="tl-your-info">🔴</span>
+        <h2>Your Information</h2>
+      </div>
+      <div class="setup-step-body">
+        <div class="setup-field-row">
+          <span class="setup-icon">💼</span>
+          <label class="setup-field-label">LinkedIn <span class="setup-required">*</span></label>
+          <input class="setup-field-input" type="text" id="setup-linkedin" placeholder="linkedin.com/in/username">
+        </div>
+        <div class="setup-field-row">
+          <span class="setup-icon">🐙</span>
+          <label class="setup-field-label">GitHub <span class="setup-optional">(optional)</span></label>
+          <input class="setup-field-input" type="text" id="setup-github" placeholder="github.com/username">
+        </div>
+        <div class="setup-field-row">
+          <span class="setup-icon">🌐</span>
+          <label class="setup-field-label">Portfolio <span class="setup-optional">(optional)</span></label>
+          <input class="setup-field-input" type="text" id="setup-website" placeholder="yoursite.com">
+        </div>
+        <div class="setup-field-row setup-field-row--top">
+          <span class="setup-icon">⭐</span>
+          <label class="setup-field-label">Primary Skills <span class="setup-optional">(optional)</span></label>
+          <div class="pill-input-wrap" id="skills-wrap" role="group" aria-label="Primary skills">
+            <input class="pill-text-input" id="skills-input" type="text" placeholder="Type a skill and press Enter…" autocomplete="off">
+          </div>
+        </div>
+        <div class="setup-field-row setup-field-row--top">
+          <span class="setup-icon">⚙️</span>
+          <label class="setup-field-label">Technologies <span class="setup-optional">(optional)</span></label>
+          <div class="pill-input-wrap" id="tech-wrap" role="group" aria-label="Primary technologies">
+            <input class="pill-text-input" id="tech-input" type="text" placeholder="Type a technology and press Enter…" autocomplete="off">
+          </div>
+        </div>
+        <p class="setup-required-note"><span class="setup-required">*</span> Required</p>
+        <span class="save-status" id="status-your-info"></span>
+      </div>
+    </div>
+
+    <!-- Step: Profiles -->
+    <div class="setup-step" id="step-profiles">
+      <div class="setup-step-header">
+        <span class="traffic-light" id="tl-profiles">🔴</span>
+        <h2>Profiles</h2>
+        <button class="setup-add-header-btn" id="btn-add-profile">+ Add Profile</button>
+      </div>
+      <div class="setup-step-body" style="padding:0">
+        <table class="setup-data-table">
+          <colgroup>
+            <col style="width:18%">
+            <col style="width:13%">
+            <col style="width:8%">
+            <col style="width:13%">
+            <col style="width:8%">
+            <col>
+            <col style="width:32px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Profile Name</th>
+              <th>Resume</th>
+              <th>Resume<br>Date</th>
+              <th>Cover Letter</th>
+              <th>Cover<br>Date</th>
+              <th></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="setup-profile-list"></tbody>
+        </table>
+        <span class="save-status" id="status-setup-profiles" style="font-size:12px;display:block;padding:0.3rem 0.75rem 0.5rem"></span>
+      </div>
+    </div>
+
+    <!-- Step: Job Searches -->
+    <div class="setup-step" id="step-searches">
+      <div class="setup-step-header">
+        <span class="traffic-light" id="tl-searches">🔴</span>
+        <h2>Job Searches</h2>
+        <button class="setup-add-header-btn" id="btn-add-search">+ Add Search</button>
+      </div>
+      <div class="setup-step-body" style="padding:0">
+        <table class="setup-data-table">
+          <colgroup>
+            <col style="width:30px">
+            <col style="width:150px">
+            <col>
+            <col style="width:32px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Keywords</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="setup-search-list"></tbody>
+        </table>
+        <span class="save-status" id="status-searches" style="font-size:12px;display:block;padding:0.3rem 0.75rem 0.5rem"></span>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+(function () {
+
+  function showStatus(id, text, isError) {
+    var el = document.getElementById(id);
+    el.textContent = text;
+    el.style.color = isError ? '#e74c3c' : '#27ae60';
+    setTimeout(function() { el.textContent = ''; }, 2500);
+  }
+
+  function trafficLight(filled, total) {
+    if (filled === total) return '🟢';
+    if (filled > 0) return '🟡';
+    return '🔴';
+  }
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }); }
+    catch { return ''; }
+  }
+
+  // ---- Pill input component ----
+  // Returns { getValues, setValues } for a pill-box container + text input pair.
+  function makePillBox(wrapId, inputId, onChangeFn) {
+    var wrap  = typeof wrapId  === 'string' ? document.getElementById(wrapId)  : wrapId;
+    var input = typeof inputId === 'string' ? document.getElementById(inputId) : inputId;
+
+    function addPill(label) {
+      label = label.trim();
+      if (!label) return false;
+      // Prevent exact duplicates (case-insensitive)
+      var existing = Array.from(wrap.querySelectorAll('.pill-chip')).map(function(p) {
+        return p.dataset.label.toLowerCase();
+      });
+      if (existing.indexOf(label.toLowerCase()) !== -1) return false;
+
+      var chip = document.createElement('span');
+      chip.className = 'pill-chip';
+      chip.dataset.label = label;
+      chip.innerHTML = escHtml(label) + '<button class="pill-chip-x" type="button" aria-label="Remove ' + escHtml(label) + '">×</button>';
+      chip.querySelector('.pill-chip-x').addEventListener('click', function() {
+        chip.remove();
+        onChangeFn();
+      });
+      wrap.insertBefore(chip, input);
+      return true;
+    }
+
+    function commit() {
+      var val = input.value.trim().replace(/,$/, '');
+      if (addPill(val)) {
+        input.value = '';
+        onChangeFn();
+      }
+    }
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        commit();
+      } else if (e.key === 'Backspace' && input.value === '') {
+        var chips = wrap.querySelectorAll('.pill-chip');
+        if (chips.length > 0) {
+          chips[chips.length - 1].remove();
+          onChangeFn();
+        }
+      }
+    });
+
+    input.addEventListener('blur', function() {
+      if (input.value.trim()) commit();
+    });
+
+    wrap.addEventListener('click', function(e) {
+      if (e.target === wrap) input.focus();
+    });
+
+    return {
+      getValues: function() {
+        return Array.from(wrap.querySelectorAll('.pill-chip')).map(function(p) { return p.dataset.label; });
+      },
+      setValues: function(arr) {
+        wrap.querySelectorAll('.pill-chip').forEach(function(p) { p.remove(); });
+        (arr || []).forEach(addPill);
+      },
+    };
+  }
+
+  // ---- Your Information ----
+
+  var _skillBox, _techBox;
+
+  function updateYourInfoLight() {
+    var linkedin = document.getElementById('setup-linkedin').value.trim();
+    document.getElementById('tl-your-info').textContent = linkedin ? '🟢' : '🔴';
+  }
+
+  async function saveYourInfoSafe() {
+    try {
+      var data = await fetch('/api/config/templates').then(function(r) { return r.json(); });
+      var github = document.getElementById('setup-github').value.trim();
+      var linkedin = document.getElementById('setup-linkedin').value.trim();
+      var website = document.getElementById('setup-website').value.trim();
+      await fetch('/api/config/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_template_path: data.resume_template_path || '',
+          cover_template_path: data.cover_template_path || '',
+          resume_prompt_template: data.resume_prompt_template || '',
+          cover_prompt_template: data.cover_prompt_template || '',
+          github: github, linkedin: linkedin, website: website,
+          primary_skills: _skillBox ? _skillBox.getValues() : [],
+          primary_technologies: _techBox ? _techBox.getValues() : [],
+        }),
+      });
+      updateYourInfoLight();
+    } catch { showStatus('status-your-info', 'Error saving', true); }
+  }
+
+  async function loadYourInfo() {
+    try {
+      var data = await fetch('/api/config/templates').then(function(r) { return r.json(); });
+      document.getElementById('setup-github').value = data.github || '';
+      document.getElementById('setup-linkedin').value = data.linkedin || '';
+      document.getElementById('setup-website').value = data.website || '';
+      if (_skillBox) _skillBox.setValues(data.primary_skills || []);
+      if (_techBox) _techBox.setValues(data.primary_technologies || []);
+      updateYourInfoLight();
+    } catch { showStatus('status-your-info', 'Failed to load', true); }
+  }
+
+  _skillBox = makePillBox('skills-wrap', 'skills-input', saveYourInfoSafe);
+  _techBox  = makePillBox('tech-wrap',   'tech-input',   saveYourInfoSafe);
+
+  ['setup-github', 'setup-linkedin', 'setup-website'].forEach(function(id) {
+    var el = document.getElementById(id);
+    el.addEventListener('input', updateYourInfoLight);
+    el.addEventListener('blur', saveYourInfoSafe);
+  });
+
+  // ---- Profiles ----
+
+  // A row is "valid" if it has been saved to DB and has at least one file.
+  function rowHasFile(tr) {
+    return tr.dataset.hasFile === 'true';
+  }
+
+  function updateProfilesLight() {
+    var valid = Array.from(document.querySelectorAll('#setup-profile-list tr')).filter(rowHasFile);
+    document.getElementById('tl-profiles').textContent = valid.length > 0 ? '🟢' : '🔴';
+  }
+
+  async function ensureProfileRow(tr) {
+    if (tr.dataset.id) return tr.dataset.id;
+    var name = tr.querySelector('.setup-row-name').value.trim() || 'Default Profile';
+    var resp = await fetch('/api/config/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name }),
+    });
+    if (!resp.ok) throw new Error('Failed to create profile');
+    var p = await resp.json();
+    tr.dataset.id = String(p.id);
+    updateProfilesLight();
+    return String(p.id);
+  }
+
+  async function mergeAndSaveProfile(profileId, updates) {
+    var resp = await fetch('/api/config/profiles/' + profileId);
+    if (!resp.ok) return;
+    var profile = await resp.json();
+    var data = Object.assign({}, profile.data || {}, updates.data || {});
+    var name = updates.name !== undefined ? updates.name : profile.name;
+    await fetch('/api/config/profiles/' + profileId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, data: data }),
+    });
+  }
+
+  function buildProfileRow(p) {
+    p = p || {};
+    var tr = document.createElement('tr');
+    tr.dataset.id = p.id ? String(p.id) : '';
+    tr.dataset.hasFile = String(!!(p.resume_path || p.cover_letter_path));
+
+    var resumeName = p.resume_filename || (p.resume_path || '').split('/').pop();
+    var coverName = p.cover_filename || (p.cover_letter_path || '').split('/').pop();
+    var hasResume = !!(p.resume_path);
+
+    tr.innerHTML = [
+      '<td><input class="setup-row-input setup-row-name" type="text" placeholder="Default Profile" value="' + escHtml(p.name || '') + '"></td>',
+      '<td><span class="setup-row-filename' + (resumeName ? '' : ' setup-row-filename--empty') + '">' + escHtml(resumeName || 'No file') + '</span></td>',
+      '<td><span class="setup-row-filedate">' + escHtml(fmtDate(p.resume_uploaded_at)) + '</span></td>',
+      '<td><span class="setup-row-filename' + (coverName ? '' : ' setup-row-filename--empty') + '">' + escHtml(coverName || 'No file') + '</span></td>',
+      '<td><span class="setup-row-filedate">' + escHtml(fmtDate(p.cover_uploaded_at)) + '</span></td>',
+      '<td class="setup-row-actions-cell">',
+        '<label class="setup-row-btn">Upload Resume<input type="file" class="setup-resume-input" accept=".pdf,.md" style="display:none"></label>',
+        '<label class="setup-row-btn">Upload Cover Letter<input type="file" class="setup-cover-input" accept=".pdf" style="display:none"></label>',
+        '<button class="setup-row-btn setup-parse-btn" type="button"' + (hasResume ? '' : ' disabled') + '>Parse</button>',
+      '</td>',
+      '<td class="setup-row-del-cell"><button class="setup-row-del" type="button" title="Delete row">✕</button></td>',
+    ].join('');
+
+    var nameInput   = tr.querySelector('.setup-row-name');
+    var resumeInput = tr.querySelector('.setup-resume-input');
+    var coverInput  = tr.querySelector('.setup-cover-input');
+    var parseBtn    = tr.querySelector('.setup-parse-btn');
+    var tds         = tr.querySelectorAll('td');
+
+    nameInput.addEventListener('blur', async function() {
+      var name = nameInput.value.trim();
+      if (!name) return;
+      try {
+        var id = await ensureProfileRow(tr);
+        await mergeAndSaveProfile(id, { name: name });
+      } catch { showStatus('status-setup-profiles', 'Save failed', true); }
+    });
+
+    resumeInput.addEventListener('change', async function() {
+      var file = resumeInput.files[0];
+      if (!file) return;
+      try {
+        var id = await ensureProfileRow(tr);
+        var form = new FormData();
+        form.append('file', file);
+        var up = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
+        if (!up.ok) { showStatus('status-setup-profiles', 'Upload failed', true); return; }
+        var result = await up.json();
+        var filePath = result.path;
+        var today = new Date().toISOString();
+        var isPdf = file.name.toLowerCase().endsWith('.pdf');
+        await mergeAndSaveProfile(id, {
+          data: { resume_path: isPdf ? filePath : '', md_path: isPdf ? '' : filePath,
+                  resume_uploaded_at: today, resume_filename: file.name },
+        });
+        tds[1].querySelector('.setup-row-filename').textContent = file.name;
+        tds[1].querySelector('.setup-row-filename').classList.remove('setup-row-filename--empty');
+        tds[2].querySelector('.setup-row-filedate').textContent = fmtDate(today);
+        parseBtn.disabled = false;
+        tr.dataset.hasFile = 'true';
+        updateProfilesLight();
+      } catch { showStatus('status-setup-profiles', 'Upload failed', true); }
+    });
+
+    coverInput.addEventListener('change', async function() {
+      var file = coverInput.files[0];
+      if (!file) return;
+      try {
+        var id = await ensureProfileRow(tr);
+        var form = new FormData();
+        form.append('file', file);
+        var up = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
+        if (!up.ok) { showStatus('status-setup-profiles', 'Upload failed', true); return; }
+        var result = await up.json();
+        var filePath = result.path;
+        var today = new Date().toISOString();
+        await mergeAndSaveProfile(id, { data: { cover_letter_path: filePath, cover_uploaded_at: today, cover_filename: file.name } });
+        tds[3].querySelector('.setup-row-filename').textContent = file.name;
+        tds[3].querySelector('.setup-row-filename').classList.remove('setup-row-filename--empty');
+        tds[4].querySelector('.setup-row-filedate').textContent = fmtDate(today);
+        tr.dataset.hasFile = 'true';
+        updateProfilesLight();
+      } catch { showStatus('status-setup-profiles', 'Upload failed', true); }
+    });
+
+    parseBtn.addEventListener('click', async function() {
+      var id = tr.dataset.id;
+      if (!id) return;
+      parseBtn.disabled = true;
+      parseBtn.textContent = 'Parsing…';
+      try {
+        var resp = await fetch('/api/config/profiles/' + id + '/parse', { method: 'POST' });
+        if (!resp.ok) {
+          var err = await resp.json().catch(function() { return null; });
+          showStatus('status-setup-profiles', 'Parse failed' + (err && err.detail ? ': ' + err.detail : ''), true);
+          return;
+        }
+        var result = await resp.json();
+        if (result.name) nameInput.value = result.name;
+        showStatus('status-setup-profiles', 'Parsed ✓', false);
+      } catch { showStatus('status-setup-profiles', 'Parse error', true); }
+      finally { parseBtn.disabled = false; parseBtn.textContent = 'Parse'; }
+    });
+
+    tr.querySelector('.setup-row-del').addEventListener('click', async function() {
+      var id = tr.dataset.id;
+      if (id) await fetch('/api/config/profiles/' + id, { method: 'DELETE' });
+      tr.remove();
+      updateProfilesLight();
+    });
+
+    return tr;
+  }
+
+  document.getElementById('btn-add-profile').addEventListener('click', function() {
+    var rows = document.querySelectorAll('#setup-profile-list tr');
+    if (rows.length > 0) {
+      var last = rows[rows.length - 1];
+      if (!rowHasFile(last)) {
+        showStatus('status-setup-profiles', 'Upload a resume or cover letter to the current row first', true);
+        last.querySelector('.setup-row-name').focus();
+        return;
+      }
+    }
+    var newRow = buildProfileRow({});
+    document.getElementById('setup-profile-list').appendChild(newRow);
+    newRow.querySelector('.setup-row-name').focus();
+  });
+
+  async function loadSetupProfiles() {
+    try {
+      var meta = await fetch('/api/config/profiles').then(function(r) { return r.json(); });
+      var tbody = document.getElementById('setup-profile-list');
+      tbody.innerHTML = '';
+      var profiles = meta.profiles || [];
+      profiles.forEach(function(p) { tbody.appendChild(buildProfileRow(p)); });
+      updateProfilesLight();
+    } catch { showStatus('status-setup-profiles', 'Failed to load profiles', true); }
+  }
+
+  // ---- Job Searches ----
+
+  var _searchSaveTimer = null;
+
+  function searchRowValid(tr) {
+    var name = tr.querySelector('.setup-search-name');
+    var hasName = name && name.value.trim();
+    var hasKeywords = tr._pillBox && tr._pillBox.getValues().length > 0;
+    return !!(hasName && hasKeywords);
+  }
+
+  function updateSearchesLight() {
+    var rows = document.querySelectorAll('#setup-search-list tr');
+    var hasValid = Array.from(rows).some(searchRowValid);
+    document.getElementById('tl-searches').textContent = hasValid ? '🟢' : '🔴';
+  }
+
+  function renumberSearches() {
+    document.querySelectorAll('#setup-search-list tr').forEach(function(tr, i) {
+      var el = tr.querySelector('.setup-row-num');
+      if (el) el.textContent = i + 1;
+    });
+  }
+
+  function collectSearches() {
+    return Array.from(document.querySelectorAll('#setup-search-list tr')).map(function(tr) {
+      return {
+        id: tr.dataset.id,
+        title: (tr.querySelector('.setup-search-name') || { value: '' }).value,
+        description: JSON.stringify(tr._pillBox ? tr._pillBox.getValues() : []),
+      };
+    });
+  }
+
+  async function saveJobSearches() {
+    try {
+      await fetch('/api/config/job_searches', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searches: collectSearches() }),
+      });
+    } catch {}
+  }
+
+  function scheduleSave() {
+    clearTimeout(_searchSaveTimer);
+    _searchSaveTimer = setTimeout(saveJobSearches, 600);
+  }
+
+  function buildSearchRow(search, index) {
+    search = search || {};
+    var tr = document.createElement('tr');
+    tr.dataset.id = search.id || ('s-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+
+    tr.innerHTML = [
+      '<td class="setup-row-num-cell"><span class="setup-row-num">' + (index + 1) + '</span></td>',
+      '<td><input class="setup-row-input setup-search-name" type="text" placeholder="e.g. Senior Python roles" value="' + escHtml(search.title || '') + '"></td>',
+      '<td class="setup-search-keywords-cell"><div class="pill-input-wrap setup-search-keywords-wrap"><input class="pill-text-input" placeholder="Type a keyword and press Enter…" autocomplete="off"></div></td>',
+      '<td class="setup-row-del-cell"><button class="setup-row-del" type="button" title="Delete row">✕</button></td>',
+    ].join('');
+
+    var pillWrap  = tr.querySelector('.setup-search-keywords-wrap');
+    var pillInput = pillWrap.querySelector('.pill-text-input');
+    tr._pillBox = makePillBox(pillWrap, pillInput, function() { updateSearchesLight(); scheduleSave(); });
+
+    // Load saved keywords — stored as JSON array; fall back gracefully for old plain-string data
+    var savedKeywords = [];
+    try { savedKeywords = JSON.parse(search.description || '[]'); } catch {}
+    if (!Array.isArray(savedKeywords)) savedKeywords = [];
+    tr._pillBox.setValues(savedKeywords);
+
+    tr.querySelector('.setup-search-name').addEventListener('input', function() { updateSearchesLight(); scheduleSave(); });
+    tr.querySelector('.setup-search-name').addEventListener('blur', saveJobSearches);
+
+    tr.querySelector('.setup-row-del').addEventListener('click', async function() {
+      tr.remove();
+      renumberSearches();
+      updateSearchesLight();
+      await saveJobSearches();
+    });
+
+    return tr;
+  }
+
+  document.getElementById('btn-add-search').addEventListener('click', async function() {
+    var rows = document.querySelectorAll('#setup-search-list tr');
+    if (rows.length > 0) {
+      var last = rows[rows.length - 1];
+      if (!searchRowValid(last)) {
+        showStatus('status-searches', 'Complete the Name and add at least one keyword on the current row first', true);
+        var nameEl = last.querySelector('.setup-search-name');
+        var focusEl = nameEl.value.trim() ? last.querySelector('.pill-text-input') : nameEl;
+        focusEl && focusEl.focus();
+        return;
+      }
+    }
+    var count = document.querySelectorAll('#setup-search-list tr').length;
+    var newRow = buildSearchRow({ id: 's-' + Date.now() }, count);
+    document.getElementById('setup-search-list').appendChild(newRow);
+    newRow.querySelector('.setup-search-name').focus();
+    await saveJobSearches();
+  });
+
+  async function loadJobSearches() {
+    try {
+      var data = await fetch('/api/config/job_searches').then(function(r) { return r.json(); });
+      var tbody = document.getElementById('setup-search-list');
+      tbody.innerHTML = '';
+      var searches = data.searches || [];
+      searches.forEach(function(s, i) { tbody.appendChild(buildSearchRow(s, i)); });
+      updateSearchesLight();
+    } catch { showStatus('status-searches', 'Failed to load searches', true); }
+  }
+
+  // ---- Init ----
+  loadYourInfo();
+  loadSetupProfiles();
+  loadJobSearches();
+
+})();
+</script>
+
+</body>
+</html>

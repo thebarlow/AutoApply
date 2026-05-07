@@ -5,13 +5,9 @@ import argparse
 import json
 import sys
 import warnings
-from typing import Optional
+from typing import Any, Optional
 
-import openai
-from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-
-load_dotenv()
 
 from core.llm import get_openai_client
 from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
@@ -142,7 +138,7 @@ def score_job(
     job: Job,
     profile: UserProfile,
     config: dict[str, float],
-    client: openai.OpenAI,
+    client: Any,
     model: str,
     db: Session,
 ) -> None:
@@ -189,7 +185,7 @@ def score_job(
 
 def run_scorer(
     db: Session,
-    client: Optional[openai.OpenAI] = None,
+    client: Optional[Any] = None,
     model: Optional[str] = None,
     job_key: Optional[str] = None,
 ) -> None:

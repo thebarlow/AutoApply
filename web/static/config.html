@@ -12,6 +12,8 @@
   <a class="brand" href="/">Auto Apply</a>
   <a href="/">Dashboard</a>
   <a href="/config" class="active">Config</a>
+  <a href="/setup">Setup</a>
+  <a href="/help" class="nav-right">Help</a>
 </nav>
 
 <main>
@@ -151,8 +153,9 @@
 
     <div class="profile-tab-bar" id="profile-tab-bar">
       <button class="profile-tab-btn active" id="tab-btn-upload" data-tab="upload">Upload</button>
-      <button class="profile-tab-btn" id="tab-btn-pdf" data-tab="pdf">PDF</button>
+      <button class="profile-tab-btn" id="tab-btn-pdf" data-tab="pdf">Resume PDF</button>
       <button class="profile-tab-btn" id="tab-btn-md" data-tab="md">Markdown</button>
+      <button class="profile-tab-btn" id="tab-btn-cover" data-tab="cover">Cover Letter</button>
       <button class="profile-tab-btn" id="tab-btn-edit" data-tab="edit">Edit</button>
     </div>
 
@@ -164,9 +167,15 @@
         <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled style="margin-top:0">Parse</button>
       </div>
       <span class="save-status" id="status-parse"></span>
+
+      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1rem 0 0.5rem">Upload Cover Letter</h2>
+      <div class="config-row">
+        <input type="file" id="profile-cover-file" accept=".pdf">
+      </div>
+      <span class="save-status" id="status-cover-upload"></span>
     </div>
 
-    <!-- PDF tab -->
+    <!-- Resume PDF tab -->
     <div class="profile-tab-panel" id="tab-panel-pdf">
       <iframe class="profile-pdf-frame" id="profile-pdf-frame" src="about:blank"></iframe>
     </div>
@@ -174,6 +183,12 @@
     <!-- Markdown tab -->
     <div class="profile-tab-panel" id="tab-panel-md">
       <textarea class="profile-md-viewer" id="profile-md-viewer" readonly></textarea>
+    </div>
+
+    <!-- Cover Letter tab -->
+    <div class="profile-tab-panel" id="tab-panel-cover">
+      <p id="cover-pending-msg" style="font-size:13px;color:#888;margin-bottom:0.75rem;display:none">Cover letter uploaded — save profile to enable preview.</p>
+      <iframe class="profile-pdf-frame" id="profile-cover-frame" src="about:blank"></iframe>
     </div>
 
     <!-- Edit tab -->
@@ -753,12 +768,12 @@
 
   let _modalProfileId = null;
   let _modalIsNew = false;
-  let _modalFilePaths = { resume_path: '', md_path: '' };
+  let _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
 
   function openProfileModal(id, isNew) {
     _modalProfileId = id;
     _modalIsNew = isNew;
-    _modalFilePaths = { resume_path: '', md_path: '' };
+    _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
     document.getElementById('profile-modal-backdrop').classList.add('is-open');
     loadModalContent(id, isNew);
   }
@@ -772,9 +787,10 @@
     }
     _modalProfileId = null;
     _modalIsNew = false;
-    _modalFilePaths = { resume_path: '', md_path: '' };
+    _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
     document.getElementById('profile-modal-backdrop').classList.remove('is-open');
     document.getElementById('profile-pdf-frame').src = 'about:blank';
+    document.getElementById('profile-cover-frame').src = 'about:blank';
     document.getElementById('profile-md-viewer').value = '';
   }
 
@@ -783,10 +799,11 @@
     document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
 
-    // Reset file input and parse button
+    // Reset file inputs and parse button
     const fileInput = document.getElementById('profile-file');
     fileInput.value = '';
     document.getElementById('btn-parse-profile').disabled = true;
+    document.getElementById('profile-cover-file').value = '';
 
     if (isNew) {
       document.getElementById('tab-btn-upload').classList.add('active');
@@ -795,6 +812,7 @@
       document.getElementById('profile-modal-name').value = '';
       document.getElementById('tab-btn-pdf').style.display = 'none';
       document.getElementById('tab-btn-md').style.display = 'none';
+      document.getElementById('tab-btn-cover').style.display = 'none';
       populateEditForm({});
       return;
     }
@@ -815,6 +833,7 @@
 
       _modalFilePaths.resume_path = data.resume_path || '';
       _modalFilePaths.md_path = data.md_path || '';
+      _modalFilePaths.cover_letter_path = data.cover_letter_path || '';
 
       const resumePath = _modalFilePaths.resume_path;
       const hasPdf = resumePath.toLowerCase().endsWith('.pdf');
@@ -832,6 +851,13 @@
           .then(text => { document.getElementById('profile-md-viewer').value = text; })
           .catch(() => { document.getElementById('profile-md-viewer').value = '(Failed to load)'; });
       }
+
+      const hasCover = !!_modalFilePaths.cover_letter_path;
+      document.getElementById('tab-btn-cover').style.display = hasCover ? '' : 'none';
+      document.getElementById('cover-pending-msg').style.display = 'none';
+      if (hasCover) {
+        document.getElementById('profile-cover-frame').src = '/api/config/profiles/' + id + '/file?type=cover';
+      }
     } catch (e) {
       showStatus('status-profile-modal', 'Failed to load profile', true);
     }
@@ -843,6 +869,7 @@
     const body = collectEditForm(profileName);
     body.data.resume_path = _modalFilePaths.resume_path;
     body.data.md_path = _modalFilePaths.md_path;
+    body.data.cover_letter_path = _modalFilePaths.cover_letter_path;
     try {
       const resp = await fetch('/api/config/profiles/' + _modalProfileId, {
         method: 'PUT',
@@ -912,6 +939,26 @@
       document.getElementById('btn-parse-profile').disabled = false;
     } catch (err) {
       showStatus('status-profile-modal', 'Upload error: ' + err.message, true);
+    }
+  });
+
+  document.getElementById('profile-cover-file').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
+      if (!resp.ok) { showStatus('status-cover-upload', 'Upload failed', true); return; }
+      const result = await resp.json();
+      if (!result.path) { showStatus('status-cover-upload', 'Upload error: no path returned', true); return; }
+      _modalFilePaths.cover_letter_path = result.path;
+      showStatus('status-cover-upload', 'Uploaded ✓', false);
+      document.getElementById('tab-btn-cover').style.display = '';
+      document.getElementById('cover-pending-msg').style.display = '';
+      document.getElementById('profile-cover-frame').src = 'about:blank';
+    } catch (err) {
+      showStatus('status-cover-upload', 'Upload error: ' + err.message, true);
     }
   });
 
