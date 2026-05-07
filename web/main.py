@@ -69,3 +69,8 @@ def config_page():
 @app.get("/setup")
 def setup_page():
     return FileResponse(_STATIC / "setup.html")
+
+
+@app.get("/help")
+def help_page():
+    return FileResponse(Path(__file__).parent.parent / "docs" / "index.html")

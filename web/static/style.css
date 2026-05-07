@@ -21,6 +21,7 @@ nav a { color: #ccc; text-decoration: none; font-size: 14px; }
 nav a:hover { color: #fff; }
 nav a.nav-active { color: #fff; font-weight: 600; }
 nav .brand { font-weight: 700; font-size: 15px; color: #fff; margin-right: auto; }
+nav .nav-right { margin-left: auto; }
 
 /* Main */
 main { padding: 1.5rem; }

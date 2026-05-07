@@ -1,5 +1,34 @@
-const _IS_SEARCH = /^\/jobs\//.test(location.pathname);
-const _IS_SAVED = /^\/my-items\/saved-jobs/.test(location.pathname);
+const _IS_VIEW   = /^\/jobs\/view\//.test(location.pathname);
+const _IS_SEARCH = !_IS_VIEW && /^\/jobs\//.test(location.pathname);
+const _IS_SAVED  = /^\/my-items\/saved-jobs/.test(location.pathname);
+
+if (_IS_VIEW) {
+  registerViewSource({
+    detailReadySelector: '.jobs-description__content, #job-details, .jobs-description-content__text',
+
+    getJobData() {
+      const jobIdMatch = location.pathname.match(/\/view\/(\d+)/);
+      const job_key = jobIdMatch ? `linkedin_${jobIdMatch[1]}` : `linkedin_${Date.now()}`;
+      const url = location.href.split('?')[0];
+      const title = document.querySelector(
+        'h1.job-details-jobs-unified-top-card__job-title, h1.jobs-unified-top-card__title, h1'
+      )?.innerText?.trim() ?? '';
+      const company = document.querySelector(
+        '.job-details-jobs-unified-top-card__company-name a, .jobs-unified-top-card__company-name a, .jobs-unified-top-card__subtitle-link'
+      )?.innerText?.trim() ?? '';
+      const jobLocation = document.querySelector(
+        '.job-details-jobs-unified-top-card__bullet, .jobs-unified-top-card__bullet'
+      )?.innerText?.trim() ?? '';
+      return { source: 'linkedin', job_key, title, company, location: jobLocation, url };
+    },
+
+    getDescription() {
+      return document.querySelector(
+        '.jobs-description__content .jobs-box__html-content, #job-details, .jobs-description-content__text'
+      )?.innerText?.trim() ?? '';
+    },
+  });
+}
 
 if (_IS_SEARCH || _IS_SAVED) {
   registerSource({
