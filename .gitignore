@@ -10,6 +10,7 @@ generator/outputs/
 __pycache__/
 *.pyc
 *.pyo
+.venv/
 
 # Test outputs
 2_generator/tests/fixtures/outputs/

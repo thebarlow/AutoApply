@@ -1,4 +1,5 @@
 """Cross-platform developer setup script."""
+import os
 import shutil
 import subprocess
 import sys
@@ -6,19 +7,25 @@ from pathlib import Path
 
 MIN_PYTHON = (3, 10)
 ROOT = Path(__file__).parent
-VENV = ROOT / ".venv"
+VENV_LINK = ROOT / ".venv"
+
+# On WSL2/Linux: put the venv on the Linux filesystem to avoid 9P cross-boundary
+# latency on imports. On Windows/Mac: use a local .venv as normal.
+def _venv_root() -> Path:
+    if sys.platform != "win32" and Path("/home").exists():
+        home = Path.home()
+        linux_venv = home / ".venvs" / ROOT.name
+        if not VENV_LINK.exists():
+            linux_venv.mkdir(parents=True, exist_ok=True)
+            # We'll create the actual venv at the Linux path and symlink it
+        return linux_venv
+    return VENV_LINK
 
 
-def _venv_python() -> Path:
+def _venv_python(venv: Path) -> Path:
     if sys.platform == "win32":
-        return VENV / "Scripts" / "python.exe"
-    return VENV / "bin" / "python"
-
-
-def _venv_pip() -> Path:
-    if sys.platform == "win32":
-        return VENV / "Scripts" / "pip.exe"
-    return VENV / "bin" / "pip"
+        return venv / "Scripts" / "python.exe"
+    return venv / "bin" / "python"
 
 
 def _run(*args: str) -> None:
@@ -37,11 +44,26 @@ def main() -> None:
         )
         sys.exit(1)
 
-    print("[setup] Creating virtual environment...")
-    _run(sys.executable, "-m", "venv", str(VENV))
+    venv = _venv_root()
+    use_linux_venv = venv != VENV_LINK
+
+    print(f"[setup] Creating virtual environment at {venv}...")
+    # Use uv if available (much faster), fall back to stdlib venv
+    if shutil.which("uv"):
+        _run("uv", "venv", str(venv), "--python", sys.executable)
+    else:
+        _run(sys.executable, "-m", "venv", str(venv))
+
+    if use_linux_venv and not VENV_LINK.exists():
+        print(f"[setup] Symlinking .venv -> {venv}")
+        VENV_LINK.symlink_to(venv)
 
     print("[setup] Installing dependencies...")
-    _run(str(_venv_pip()), "install", "-r", "requirements.txt")
+    python = str(_venv_python(venv))
+    if shutil.which("uv"):
+        _run("uv", "pip", "install", "-r", "requirements.txt", "--python", python)
+    else:
+        _run(python, "-m", "pip", "install", "-r", "requirements.txt")
 
     env_file = ROOT / ".env"
     env_example = ROOT / ".env.example"
@@ -51,7 +73,7 @@ def main() -> None:
         print("[setup] NOTE: Add your LLM API key via the Config tab after starting the server.")
 
     print("[setup] Initialising database...")
-    _run(str(_venv_python()), "-m", "db.init_db")
+    _run(python, "-m", "db.init_db")
 
     activate = (
         r".venv\Scripts\activate" if sys.platform == "win32" else "source .venv/bin/activate"
