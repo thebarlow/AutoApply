@@ -14,6 +14,8 @@ from generator.generator import (
     strip_header_block,
     call_claude,
     generate_job,
+    generate_resume,
+    generate_cover,
 )
 
 
@@ -240,3 +242,64 @@ def test_generate_job_fails_if_template_missing(db_session, monkeypatch, tmp_pat
     db_session.expire_all()
     job = db_session.query(Job).filter_by(job_key="no_tpl").first()
     assert job.state == JobState.FAILED.value
+
+
+def test_generate_resume_sets_path_and_state(db_session, monkeypatch, tmp_path):
+    _seed_db(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Profile\nContent")
+    monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
+
+    generate_resume("test_job", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.state == JobState.GENERATED.value
+    assert job.resume_path is not None
+    assert job.cover_path is None
+
+
+def test_generate_cover_sets_cover_path_only(db_session, monkeypatch, tmp_path):
+    _seed_db(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Cover\nContent")
+    monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
+
+    generate_cover("test_job", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.cover_path is not None
+    assert job.resume_path is None
+    assert job.state == JobState.SCRAPED.value  # state unchanged
+
+
+def test_generate_resume_sets_failed_on_error(db_session, monkeypatch, tmp_path):
+    _seed_db(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
+    monkeypatch.setattr("generator.generator.call_claude", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+    monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
+
+    generate_resume("test_job", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.state == JobState.FAILED.value
+
+
+def test_generate_cover_sets_failed_on_error(db_session, monkeypatch, tmp_path):
+    _seed_db(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
+    monkeypatch.setattr("generator.generator.call_claude", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+    monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
+
+    generate_cover("test_job", db=db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.cover_path is None
+    assert job.state == JobState.SCRAPED.value  # cover failure does not change job state

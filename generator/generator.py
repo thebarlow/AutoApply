@@ -50,12 +50,32 @@ def _render_job(job: Job) -> str:
     )
 
 
+def _load_master_resume(profile: UserProfile) -> str:
+    if profile.md_path:
+        p = Path(profile.md_path)
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+    return _render_profile(profile)
+
+
 def build_resume_prompt(job: Job, profile: UserProfile, template: str) -> str:
-    return template.format(profile=_render_profile(profile), job=_render_job(job))
+    return template.format(
+        master_resume=_load_master_resume(profile),
+        title=job.title or "",
+        company=job.company or "",
+        location=job.location or "Not specified",
+        description=job.description or "Not provided",
+    )
 
 
 def build_cover_prompt(job: Job, profile: UserProfile, template: str) -> str:
-    return template.format(profile=_render_profile(profile), job=_render_job(job))
+    return template.format(
+        master_resume=_load_master_resume(profile),
+        title=job.title or "",
+        company=job.company or "",
+        location=job.location or "Not specified",
+        description=job.description or "Not provided",
+    )
 
 
 def _build_frontmatter(
@@ -110,10 +130,14 @@ def strip_header_block(md: str) -> str:
 def call_claude(prompt: str, client: Any, model: str) -> str:
     response = client.chat.completions.create(
         model=model,
-        max_tokens=2048,
+        max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.choices[0].message.content.strip()
+    choice = response.choices[0]
+    content = choice.message.content
+    if not content:
+        raise RuntimeError(f"LLM returned empty response (finish_reason={choice.finish_reason!r})")
+    return content.strip()
 
 
 def render_pdf(md_path: Path, pdf_path: Path, template_path: Path) -> None:
@@ -174,13 +198,13 @@ def render_resume_pdf(md_path: Path, pdf_path: Path, job_key: str, template_path
     )
 
 
-def generate_job(
+def generate_resume(
     job_key: str,
     db: Optional[Session] = None,
     client: Optional[Any] = None,
     model: Optional[str] = None,
 ) -> None:
-    """Generate resume and cover letter for an approved job."""
+    """Generate resume for a job and set state to GENERATED."""
     own_db = db is None
     if own_db:
         db = SessionLocal()
@@ -203,8 +227,7 @@ def generate_job(
         profile = UserProfile(**data)
 
         resume_tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
-        cover_tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
-        if not resume_tpl or not cover_tpl:
+        if not resume_tpl:
             raise RuntimeError("Prompt templates not seeded in config table.")
 
         def _cfg(key: str) -> str:
@@ -219,7 +242,6 @@ def generate_job(
         )
 
         resume_tpl_path = Path(_cfg("resume_template_path")) if _cfg("resume_template_path") else None
-        cover_tpl_path = Path(_cfg("cover_template_path")) if _cfg("cover_template_path") else _DEFAULT_COVER_TEMPLATE
 
         outputs = _OUTPUTS_DIR
         outputs.mkdir(parents=True, exist_ok=True)
@@ -232,14 +254,7 @@ def generate_job(
         resume_md_path.write_text(frontmatter + resume_md, encoding="utf-8")
         render_resume_pdf(resume_md_path, resume_pdf_path, job_key, resume_tpl_path)
 
-        cover_md_path = outputs / f"{job_key}_cover.md"
-        cover_pdf_path = outputs / f"{job_key}_cover.pdf"
-        cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client, model)
-        cover_md_path.write_text(frontmatter + cover_md, encoding="utf-8")
-        render_pdf(cover_md_path, cover_pdf_path, cover_tpl_path)
-
         job.resume_path = str(resume_pdf_path)
-        job.cover_path = str(cover_pdf_path)
         job.state = JobState.GENERATED.value
         db.commit()
 
@@ -255,3 +270,78 @@ def generate_job(
     finally:
         if own_db:
             db.close()
+
+
+def generate_cover(
+    job_key: str,
+    db: Optional[Session] = None,
+    client: Optional[Any] = None,
+    model: Optional[str] = None,
+) -> None:
+    """Generate cover letter for a job."""
+    own_db = db is None
+    if own_db:
+        db = SessionLocal()
+
+    job = None
+    try:
+        if client is None or model is None:
+            client, model = get_openai_client(db)
+
+        job = db.query(Job).filter_by(job_key=job_key).first()
+        if job is None:
+            return
+
+        row = db.query(UserProfileModel).first()
+        if not row:
+            raise RuntimeError("No user profile found in DB.")
+        data = json.loads(row.data)
+        data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
+        data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+        profile = UserProfile(**data)
+
+        cover_tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
+        if not cover_tpl:
+            raise RuntimeError("Prompt templates not seeded in config table.")
+
+        def _cfg(key: str) -> str:
+            r = db.query(Config).filter_by(key=key).first()
+            return r.value if r else ""
+
+        frontmatter = _build_frontmatter(
+            profile,
+            github=_cfg("resume_github"),
+            linkedin=_cfg("resume_linkedin"),
+            website=_cfg("resume_website"),
+        )
+
+        cover_tpl_path = Path(_cfg("cover_template_path")) if _cfg("cover_template_path") else _DEFAULT_COVER_TEMPLATE
+
+        outputs = _OUTPUTS_DIR
+        outputs.mkdir(parents=True, exist_ok=True)
+
+        cover_md_path = outputs / f"{job_key}_cover.md"
+        cover_pdf_path = outputs / f"{job_key}_cover.pdf"
+        cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client, model)
+        cover_md_path.write_text(frontmatter + cover_md, encoding="utf-8")
+        render_pdf(cover_md_path, cover_pdf_path, cover_tpl_path)
+
+        job.cover_path = str(cover_pdf_path)
+        db.commit()
+
+    except Exception as e:
+        print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
+    finally:
+        if own_db:
+            db.close()
+
+
+def generate_job(
+    job_key: str,
+    db: Optional[Session] = None,
+    client: Optional[Any] = None,
+    model: Optional[str] = None,
+) -> None:
+    """Generate resume and cover letter for an approved job."""
+    generate_resume(job_key, db=db, client=client, model=model)
+    generate_cover(job_key, db=db, client=client, model=model)

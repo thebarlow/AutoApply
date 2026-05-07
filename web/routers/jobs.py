@@ -16,6 +16,8 @@ from core.scorer import score_job as _score_job
 from db.database import get_db
 from db.models import Job
 from generator.generator import generate_job as _generate_job
+from generator.generator import generate_resume as _generate_resume
+from generator.generator import generate_cover as _generate_cover
 
 router = APIRouter(prefix="/api/jobs")
 
@@ -94,6 +96,34 @@ def generate_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     client, model = get_openai_client(db)
     _generate_job(job_key, db=db, client=client, model=model)
     db.refresh(job)
+    return _serialize(job)
+
+
+@router.post("/{job_key}/generate/resume")
+def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    client, model = get_openai_client(db)
+    _generate_resume(job_key, db=db, client=client, model=model)
+    db.refresh(job)
+    if job.state == "failed":
+        raise HTTPException(status_code=500, detail="Resume generation failed")
+    return _serialize(job)
+
+
+@router.post("/{job_key}/generate/cover")
+def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.resume_path:
+        raise HTTPException(status_code=400, detail="Resume must be generated before cover letter")
+    client, model = get_openai_client(db)
+    _generate_cover(job_key, db=db, client=client, model=model)
+    db.refresh(job)
+    if job.cover_path is None:
+        raise HTTPException(status_code=500, detail="Cover letter generation failed")
     return _serialize(job)
 
 
