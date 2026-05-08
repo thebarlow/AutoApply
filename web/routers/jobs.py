@@ -127,9 +127,10 @@ def generate_resume_md_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    md_path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
+    md_path.unlink(missing_ok=True)
     client, model = get_openai_client(db)
     _generate_resume_md(job_key, db=db, client=client, model=model)
-    md_path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
     if not md_path.exists():
         raise HTTPException(status_code=500, detail="Resume markdown generation failed")
     db.refresh(job)
