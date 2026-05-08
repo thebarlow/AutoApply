@@ -18,5 +18,4 @@ conn.close()
 
 | Column | Table | Type | Added |
 |--------|-------|------|-------|
-| `extraction_md` | `jobs` | TEXT | 2026-05-08 |
 | `extraction_json` (renamed from `extraction_md`) | `jobs` | TEXT | 2026-05-08 |

@@ -152,10 +152,6 @@ def test_scraper_config_keys_seeded(db_session):
 
 
 def test_job_has_extraction_json_column(db_session):
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
     job = Job(
         job_key="test_extraction",
         source="test",
@@ -163,8 +159,7 @@ def test_job_has_extraction_json_column(db_session):
         state="draft",
         extraction_json='{"required_skills": ["Python"]}',
     )
-    session.add(job)
-    session.commit()
-    fetched = session.query(Job).filter_by(job_key="test_extraction").first()
+    db_session.add(job)
+    db_session.commit()
+    fetched = db_session.query(Job).filter_by(job_key="test_extraction").first()
     assert fetched.extraction_json == '{"required_skills": ["Python"]}'
-    session.close()

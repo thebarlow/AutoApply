@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as _html
 import json
 from pathlib import Path
 from typing import Any
@@ -334,13 +335,13 @@ def serve_description_html(job_key: str, view: str = Query("rendered", pattern="
   body {{ font-family: monospace; padding: 1.5rem; line-height: 1.6; color: #e8e8e8; background: #1a1a1a; }}
   pre {{ white-space: pre-wrap; word-wrap: break-word; }}
 </style>
-</head><body><pre>{job.extraction_json}</pre></body></html>""")
+</head><body><pre>{_html.escape(job.extraction_json)}</pre></body></html>""")
 
     # Default to rendered markdown
     try:
         data = json.loads(job.extraction_json)
     except (json.JSONDecodeError, TypeError):
-        data = {}
+        raise HTTPException(status_code=500, detail="Stored extraction is not valid JSON")
 
     markdown_content = extraction_json_to_markdown(data)
     body = _markdown.markdown(markdown_content, extensions=["extra"])
