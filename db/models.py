@@ -25,7 +25,7 @@ class Job(Base):
     url = Column(String, unique=True, nullable=False)
     posted_at = Column(String)
     scraped_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
-    state = Column(String, nullable=False, default="pending")
+    state = Column(String, nullable=False, default="draft")
     desirability_score = Column(Float)
     fit_score = Column(Float)
     final_score = Column(Float)
