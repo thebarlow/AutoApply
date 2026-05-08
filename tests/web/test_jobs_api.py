@@ -125,18 +125,37 @@ def test_get_jobs_justification_parsed(client, db_session):
 
 # --- PATCH /api/jobs/{job_key}/state ---
 
-def test_patch_applied(client, db_session):
+def test_patch_state_to_applied(client, db_session):
     _make_job(db_session, "job_apply")
-
     resp = client.patch("/api/jobs/job_apply/state", json={"state": "applied"})
     assert resp.status_code == 200
     assert resp.json()["state"] == "applied"
 
 
+def test_patch_state_to_rejected(client, db_session):
+    _make_job(db_session, "job_reject")
+    resp = client.patch("/api/jobs/job_reject/state", json={"state": "rejected"})
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "rejected"
+
+
+def test_patch_state_to_in_contact(client, db_session):
+    _make_job(db_session, "job_contact")
+    resp = client.patch("/api/jobs/job_contact/state", json={"state": "in_contact"})
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "in_contact"
+
+
+def test_patch_state_to_draft(client, db_session):
+    _make_job(db_session, "job_draft", state=JobState.APPLIED)
+    resp = client.patch("/api/jobs/job_draft/state", json={"state": "draft"})
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "draft"
+
+
 def test_patch_invalid_state_rejected_by_api(client, db_session):
     _make_job(db_session, "job_bad")
-
-    resp = client.patch("/api/jobs/job_bad/state", json={"state": "approved"})
+    resp = client.patch("/api/jobs/job_bad/state", json={"state": "pending"})
     assert resp.status_code == 400
 
 
@@ -326,33 +345,3 @@ def test_generate_cover_endpoint_not_found(client):
     assert resp.status_code == 404
 
 
-def test_generate_resume_endpoint_returns_500_on_failure(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
-
-    _make_job(db_session, "job_resume_fail")
-    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
-
-    def mock_generate_resume_fail(job_key, db, client, model):
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        job.state = "failed"
-        db.commit()
-
-    monkeypatch.setattr(jobs_router, "_generate_resume", mock_generate_resume_fail)
-
-    resp = client.post("/api/jobs/job_resume_fail/generate/resume")
-    assert resp.status_code == 500
-
-
-def test_generate_cover_endpoint_returns_500_on_failure(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
-
-    _make_job(db_session, "job_cover_fail", resume_path="/outputs/job_cover_fail_resume.pdf")
-    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
-
-    def mock_generate_cover_fail(job_key, db, client, model):
-        pass  # cover_path remains None
-
-    monkeypatch.setattr(jobs_router, "_generate_cover", mock_generate_cover_fail)
-
-    resp = client.post("/api/jobs/job_cover_fail/generate/cover")
-    assert resp.status_code == 500

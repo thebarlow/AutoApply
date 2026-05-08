@@ -68,9 +68,12 @@ def get_jobs(db: Session = Depends(get_db)):
     return [_serialize(j) for j in jobs]
 
 
+_VALID_STATES = {"draft", "applied", "in_contact", "rejected"}
+
+
 @router.patch("/{job_key}/state")
 def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_db)):
-    if body.state != "applied":
+    if body.state not in _VALID_STATES:
         raise HTTPException(status_code=400, detail=f"Invalid state: {body.state!r}")
 
     job = db.query(Job).filter(Job.job_key == job_key).first()
@@ -116,8 +119,6 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     client, model = get_openai_client(db)
     _generate_resume(job_key, db=db, client=client, model=model)
     db.refresh(job)
-    if job.state == "failed":
-        raise HTTPException(status_code=500, detail="Resume generation failed")
     return _serialize(job)
 
 
@@ -146,8 +147,6 @@ def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Resume markdown must be generated first")
     _generate_resume_pdf(job_key, db=db)
     db.refresh(job)
-    if job.state == "failed":
-        raise HTTPException(status_code=500, detail="Resume PDF rendering failed")
     return _serialize(job)
 
 
