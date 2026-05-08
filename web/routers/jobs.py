@@ -24,7 +24,7 @@ from generator.generator import generate_cover_md as _generate_cover_md
 from generator.generator import generate_cover_pdf as _generate_cover_pdf
 from generator.generator import build_resume_prompt, build_cover_prompt
 
-_GENERATOR_OUTPUTS = Path(__file__).parent.parent / "generator" / "outputs"
+_GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
 
 router = APIRouter(prefix="/api/jobs")
 
