@@ -167,6 +167,38 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     return _serialize(job)
 
 
+@router.post("/{job_key}/generate/cover/md")
+def generate_cover_md_endpoint(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
+    md_path.unlink(missing_ok=True)
+    client, model = get_openai_client(db)
+    _generate_cover_md(job_key, db=db, client=client, model=model)
+    if not md_path.exists():
+        raise HTTPException(status_code=500, detail="Cover letter markdown generation failed")
+    db.refresh(job)
+    return _serialize(job)
+
+
+@router.post("/{job_key}/generate/cover/pdf")
+def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.resume_path:
+        raise HTTPException(status_code=400, detail="Resume PDF must be generated before cover letter PDF")
+    md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
+    if not md_path.exists():
+        raise HTTPException(status_code=400, detail="Cover letter markdown must be generated first")
+    _generate_cover_pdf(job_key, db=db)
+    db.refresh(job)
+    if job.cover_path is None:
+        raise HTTPException(status_code=500, detail="Cover letter PDF rendering failed")
+    return _serialize(job)
+
+
 @router.get("/{job_key}/resume")
 def serve_resume(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
