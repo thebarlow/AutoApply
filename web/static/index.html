@@ -381,9 +381,13 @@ function dashboard() {
           this.fetchCoverMarkdown();
         }
       } else if (tab === 'details') {
-        const r = await fetch('/api/config/prompts/description');
-        const data = await r.json();
-        this.extractionHasPrompt = data.prompts.length > 0;
+        try {
+          const r = await fetch('/api/config/prompts/description');
+          if (r.ok) {
+            const data = await r.json();
+            this.extractionHasPrompt = data.prompts.length > 0;
+          }
+        } catch { /* leave extractionHasPrompt false */ }
       }
     },
 
@@ -484,6 +488,8 @@ function dashboard() {
         if (!resp.ok) throw new Error('Extraction failed');
         const updated = await resp.json();
         Object.assign(this.selectedJob, updated);
+      } catch {
+        alert('Description extraction failed. Please try again.');
       } finally {
         this.generating = null;
       }
