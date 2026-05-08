@@ -59,7 +59,7 @@
 
 <!-- Overlay backdrop -->
 <div class="overlay-backdrop" x-show="selectedJob !== null" @click.self="closeOverlay()">
-  <div class="overlay-panel" @keydown.escape.window="closeOverlay()">
+  <div class="overlay-panel" @keydown.escape.window="promptOverlay !== null ? (promptOverlay = null) : closeOverlay()">
     <template x-if="selectedJob">
       <div style="display:flex;flex-direction:column;height:100%">
 
@@ -126,7 +126,7 @@
                 </button>
                 <button class="btn" @click="generateCoverPdf()"
                   :disabled="!!generating || !selectedJob.cover_md_exists || !selectedJob.resume_path"
-                  :title="!selectedJob.resume_path ? 'Generate resume PDF first' : ''"
+                  :title="!selectedJob.cover_md_exists ? 'Generate cover MD first' : !selectedJob.resume_path ? 'Generate resume PDF first' : ''"
                   x-text="selectedJob.cover_path ? 'Regenerate PDF' : 'Generate PDF'">
                 </button>
                 <button class="btn" x-show="selectedJob.cover_md_exists"
