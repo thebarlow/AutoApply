@@ -37,7 +37,7 @@ def client(db_session):
 def _make_job(
     db_session,
     job_key: str,
-    state: JobState = JobState.PENDING,
+    state: JobState = JobState.DRAFT,
     final_score: float = 0.75,
     description: str | None = None,
     remote: bool | None = None,
@@ -73,7 +73,7 @@ def _make_job(
 # --- GET /api/jobs ---
 
 def test_get_jobs_returns_all_states(client, db_session):
-    _make_job(db_session, "job_a", JobState.PENDING)
+    _make_job(db_session, "job_a", JobState.DRAFT)
     _make_job(db_session, "job_b", JobState.APPLIED)
     _make_job(db_session, "job_c", JobState.REJECTED)
 
@@ -96,9 +96,9 @@ def test_get_jobs_includes_artifact_paths(client, db_session):
 
 
 def test_get_jobs_sorted_by_score(client, db_session):
-    _make_job(db_session, "low", JobState.PENDING, final_score=0.4)
-    _make_job(db_session, "high", JobState.PENDING, final_score=0.9)
-    _make_job(db_session, "mid", JobState.PENDING, final_score=0.65)
+    _make_job(db_session, "low", JobState.DRAFT, final_score=0.4)
+    _make_job(db_session, "high", JobState.DRAFT, final_score=0.9)
+    _make_job(db_session, "mid", JobState.DRAFT, final_score=0.65)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -113,7 +113,7 @@ def test_get_jobs_empty(client):
 
 
 def test_get_jobs_justification_parsed(client, db_session):
-    _make_job(db_session, "job_x", JobState.PENDING)
+    _make_job(db_session, "job_x", JobState.DRAFT)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -146,7 +146,7 @@ def test_patch_state_not_found(client):
 
 
 def test_get_jobs_includes_url(client, db_session):
-    _make_job(db_session, "job_url", JobState.PENDING)
+    _make_job(db_session, "job_url", JobState.DRAFT)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job = resp.json()[0]
@@ -155,7 +155,7 @@ def test_get_jobs_includes_url(client, db_session):
 
 
 def test_get_jobs_includes_description(client, db_session):
-    _make_job(db_session, "job_desc", JobState.PENDING, description="We are looking for a software engineer.")
+    _make_job(db_session, "job_desc", JobState.DRAFT, description="We are looking for a software engineer.")
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -164,7 +164,7 @@ def test_get_jobs_includes_description(client, db_session):
 
 
 def test_get_jobs_remote_true_when_set(client, db_session):
-    _make_job(db_session, "job_remote", JobState.PENDING, remote=True)
+    _make_job(db_session, "job_remote", JobState.DRAFT, remote=True)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -173,7 +173,7 @@ def test_get_jobs_remote_true_when_set(client, db_session):
 
 
 def test_get_jobs_remote_none_when_not_set(client, db_session):
-    _make_job(db_session, "job_noremote", JobState.PENDING)
+    _make_job(db_session, "job_noremote", JobState.DRAFT)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job_data = resp.json()[0]
@@ -223,7 +223,7 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["final_score"] == pytest.approx(0.85)
-    assert data["state"] == "pending"
+    assert data["state"] == "draft"
 
 
 def test_score_job_endpoint_not_found(client):

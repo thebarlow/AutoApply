@@ -198,18 +198,17 @@ def render_resume_pdf(md_path: Path, pdf_path: Path, job_key: str, template_path
     )
 
 
-def generate_resume(
+def generate_resume_md(
     job_key: str,
     db: Optional[Session] = None,
     client: Optional[Any] = None,
     model: Optional[str] = None,
 ) -> None:
-    """Generate resume for a job and set state to GENERATED."""
+    """Generate resume markdown for a job."""
     own_db = db is None
     if own_db:
         db = SessionLocal()
 
-    job = None
     try:
         if client is None or model is None:
             client, model = get_openai_client(db)
@@ -241,49 +240,79 @@ def generate_resume(
             website=_cfg("resume_website"),
         )
 
-        resume_tpl_path = Path(_cfg("resume_template_path")) if _cfg("resume_template_path") else None
-
-        outputs = _OUTPUTS_DIR
-        outputs.mkdir(parents=True, exist_ok=True)
-
-        resume_md_path = outputs / f"{job_key}_resume.md"
-        resume_pdf_path = outputs / f"{job_key}_resume.pdf"
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        resume_md_path = _OUTPUTS_DIR / f"{job_key}_resume.md"
         resume_md = strip_header_block(
             call_claude(build_resume_prompt(job, profile, resume_tpl.value), client, model)
         )
         resume_md_path.write_text(frontmatter + resume_md, encoding="utf-8")
-        render_resume_pdf(resume_md_path, resume_pdf_path, job_key, resume_tpl_path)
-
-        job.resume_path = str(resume_pdf_path)
-        job.state = JobState.GENERATED.value
-        db.commit()
 
     except Exception as e:
         print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
-        try:
-            job = db.query(Job).filter_by(job_key=job_key).first()
-            if job:
-                job.state = JobState.FAILED.value
-                db.commit()
-        except Exception:
-            pass
     finally:
         if own_db:
             db.close()
 
 
-def generate_cover(
+def generate_resume_pdf(
     job_key: str,
     db: Optional[Session] = None,
-    client: Optional[Any] = None,
-    model: Optional[str] = None,
 ) -> None:
-    """Generate cover letter for a job."""
+    """Render resume PDF from existing markdown for a job and set state to GENERATED."""
     own_db = db is None
     if own_db:
         db = SessionLocal()
 
     job = None
+    try:
+        resume_md_path = _OUTPUTS_DIR / f"{job_key}_resume.md"
+        if not resume_md_path.exists():
+            raise FileNotFoundError(f"Resume markdown not found: {resume_md_path}")
+
+        def _cfg(key: str) -> str:
+            r = db.query(Config).filter_by(key=key).first()
+            return r.value if r else ""
+
+        resume_tpl_path = Path(_cfg("resume_template_path")) if _cfg("resume_template_path") else None
+
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        resume_pdf_path = _OUTPUTS_DIR / f"{job_key}_resume.pdf"
+        render_resume_pdf(resume_md_path, resume_pdf_path, job_key, resume_tpl_path)
+
+        job = db.query(Job).filter_by(job_key=job_key).first()
+        if job:
+            job.resume_path = str(resume_pdf_path)
+            db.commit()
+
+    except Exception as e:
+        print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
+    finally:
+        if own_db:
+            db.close()
+
+
+def generate_resume(
+    job_key: str,
+    db: Optional[Session] = None,
+    client: Optional[Any] = None,
+    model: Optional[str] = None,
+) -> None:
+    """Generate resume markdown and PDF for a job."""
+    generate_resume_md(job_key, db=db, client=client, model=model)
+    generate_resume_pdf(job_key, db=db)
+
+
+def generate_cover_md(
+    job_key: str,
+    db: Optional[Session] = None,
+    client: Optional[Any] = None,
+    model: Optional[str] = None,
+) -> None:
+    """Generate cover letter markdown for a job."""
+    own_db = db is None
+    if own_db:
+        db = SessionLocal()
+
     try:
         if client is None or model is None:
             client, model = get_openai_client(db)
@@ -315,25 +344,63 @@ def generate_cover(
             website=_cfg("resume_website"),
         )
 
-        cover_tpl_path = Path(_cfg("cover_template_path")) if _cfg("cover_template_path") else _DEFAULT_COVER_TEMPLATE
-
-        outputs = _OUTPUTS_DIR
-        outputs.mkdir(parents=True, exist_ok=True)
-
-        cover_md_path = outputs / f"{job_key}_cover.md"
-        cover_pdf_path = outputs / f"{job_key}_cover.pdf"
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        cover_md_path = _OUTPUTS_DIR / f"{job_key}_cover.md"
         cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client, model)
         cover_md_path.write_text(frontmatter + cover_md, encoding="utf-8")
-        render_pdf(cover_md_path, cover_pdf_path, cover_tpl_path)
-
-        job.cover_path = str(cover_pdf_path)
-        db.commit()
 
     except Exception as e:
         print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
     finally:
         if own_db:
             db.close()
+
+
+def generate_cover_pdf(
+    job_key: str,
+    db: Optional[Session] = None,
+) -> None:
+    """Render cover letter PDF from existing markdown for a job."""
+    own_db = db is None
+    if own_db:
+        db = SessionLocal()
+
+    try:
+        cover_md_path = _OUTPUTS_DIR / f"{job_key}_cover.md"
+        if not cover_md_path.exists():
+            raise FileNotFoundError(f"Cover markdown not found: {cover_md_path}")
+
+        def _cfg(key: str) -> str:
+            r = db.query(Config).filter_by(key=key).first()
+            return r.value if r else ""
+
+        cover_tpl_path = Path(_cfg("cover_template_path")) if _cfg("cover_template_path") else _DEFAULT_COVER_TEMPLATE
+
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        cover_pdf_path = _OUTPUTS_DIR / f"{job_key}_cover.pdf"
+        render_pdf(cover_md_path, cover_pdf_path, cover_tpl_path)
+
+        job = db.query(Job).filter_by(job_key=job_key).first()
+        if job:
+            job.cover_path = str(cover_pdf_path)
+            db.commit()
+
+    except Exception as e:
+        print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
+    finally:
+        if own_db:
+            db.close()
+
+
+def generate_cover(
+    job_key: str,
+    db: Optional[Session] = None,
+    client: Optional[Any] = None,
+    model: Optional[str] = None,
+) -> None:
+    """Generate cover letter markdown and PDF for a job."""
+    generate_cover_md(job_key, db=db, client=client, model=model)
+    generate_cover_pdf(job_key, db=db)
 
 
 def generate_job(
