@@ -13,6 +13,7 @@ from core.llm import get_openai_client
 from core.scorer import load_config as _load_config
 from core.scorer import load_user_profile as _load_user_profile
 from core.scorer import score_job as _score_job
+from core.types import JobState
 from db.database import get_db
 from db.models import Config, Job
 from generator.generator import generate_job as _generate_job
@@ -68,7 +69,7 @@ def get_jobs(db: Session = Depends(get_db)):
     return [_serialize(j) for j in jobs]
 
 
-_VALID_STATES = {"draft", "applied", "in_contact", "rejected"}
+_VALID_STATES = {s.value for s in JobState}
 
 
 @router.patch("/{job_key}/state")
@@ -130,6 +131,7 @@ def generate_resume_md_endpoint(job_key: str, db: Session = Depends(get_db)):
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
     md_path.unlink(missing_ok=True)
     client, model = get_openai_client(db)
+    # Generator swallows exceptions and prints to stderr; file absence is our only failure signal.
     _generate_resume_md(job_key, db=db, client=client, model=model)
     if not md_path.exists():
         raise HTTPException(status_code=500, detail="Resume markdown generation failed")
@@ -145,6 +147,7 @@ def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
     if not md_path.exists():
         raise HTTPException(status_code=400, detail="Resume markdown must be generated first")
+    # Generator swallows exceptions; job.resume_path absence after the call indicates failure.
     _generate_resume_pdf(job_key, db=db)
     db.refresh(job)
     return _serialize(job)
@@ -173,6 +176,7 @@ def generate_cover_md_endpoint(job_key: str, db: Session = Depends(get_db)):
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
     md_path.unlink(missing_ok=True)
     client, model = get_openai_client(db)
+    # Generator swallows exceptions and prints to stderr; file absence is our only failure signal.
     _generate_cover_md(job_key, db=db, client=client, model=model)
     if not md_path.exists():
         raise HTTPException(status_code=500, detail="Cover letter markdown generation failed")
@@ -192,6 +196,7 @@ def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
     if not md_path.exists():
         raise HTTPException(status_code=400, detail="Cover letter markdown must be generated first")
+    # Generator swallows exceptions; job.cover_path absence after the call indicates failure.
     _generate_cover_pdf(job_key, db=db)
     db.refresh(job)
     if job.cover_path is None:
