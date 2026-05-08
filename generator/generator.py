@@ -83,6 +83,7 @@ def build_cover_prompt(job: Job, profile: UserProfile, template: str) -> str:
 
 
 def build_description_prompt(job: Job, template: str) -> str:
+    """Renders the description extraction prompt template with job fields."""
     return template.format(
         title=job.title or "",
         company=job.company or "",

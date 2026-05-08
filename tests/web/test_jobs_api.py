@@ -405,7 +405,7 @@ def test_get_description_prompt_returns_text(client, db_session):
 def test_get_description_prompt_no_template(client, db_session):
     _make_job(db_session, "job_dprompt_notpl")
     resp = client.get("/api/jobs/job_dprompt_notpl/description/prompt")
-    assert resp.status_code == 500
+    assert resp.status_code == 400
 
 
 def test_get_description_prompt_not_found(client):

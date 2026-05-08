@@ -165,7 +165,7 @@ def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[d
 
 @router.get("/api/config/prompts/{type_}")
 def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     active_id = _get(db, f"active_{type_}_prompt_id")
@@ -174,7 +174,7 @@ def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
 
 @router.post("/api/config/prompts/{type_}")
 def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     new_id = uuid.uuid4().hex
@@ -187,7 +187,7 @@ def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -
 # string "active" matching the {prompt_id} path parameter.
 @router.put("/api/config/prompts/{type_}/active")
 def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     if not any(p["id"] == body.active_id for p in prompts):
@@ -199,7 +199,7 @@ def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(
 
 @router.get("/api/config/prompts/{type_}/{prompt_id}")
 def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     match = next((p for p in prompts if p["id"] == prompt_id), None)
@@ -210,7 +210,7 @@ def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dic
 
 @router.put("/api/config/prompts/{type_}/{prompt_id}")
 def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     match = next((p for p in prompts if p["id"] == prompt_id), None)
@@ -227,7 +227,7 @@ def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = De
 
 @router.delete("/api/config/prompts/{type_}/{prompt_id}", status_code=204)
 def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> None:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     remaining = [p for p in prompts if p["id"] != prompt_id]

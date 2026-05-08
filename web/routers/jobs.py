@@ -296,7 +296,7 @@ def get_description_prompt(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     tpl = db.query(Config).filter_by(key="description_prompt_template").first()
     if not tpl:
-        raise HTTPException(status_code=500, detail="Description extraction prompt not configured")
+        raise HTTPException(status_code=400, detail="Description extraction prompt not configured")
     return build_description_prompt(job, tpl.value)
 
 
