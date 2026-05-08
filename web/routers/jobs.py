@@ -14,11 +14,10 @@ from core.scorer import load_config as _load_config
 from core.scorer import load_user_profile as _load_user_profile
 from core.scorer import score_job as _score_job
 from db.database import get_db
-from db.models import Config, Job, UserProfileModel
+from db.models import Config, Job
 from generator.generator import generate_job as _generate_job
 from generator.generator import generate_resume as _generate_resume
 from generator.generator import generate_cover as _generate_cover
-from core.types import UserProfile, WorkHistoryEntry, EducationEntry
 from generator.generator import generate_resume_md as _generate_resume_md
 from generator.generator import generate_resume_pdf as _generate_resume_pdf
 from generator.generator import generate_cover_md as _generate_cover_md
@@ -32,16 +31,6 @@ router = APIRouter(prefix="/api/jobs")
 
 class StateUpdate(BaseModel):
     state: str
-
-
-def _load_profile(db: Session) -> UserProfile:
-    row = db.query(UserProfileModel).first()
-    if not row:
-        raise HTTPException(status_code=500, detail="No user profile found")
-    data = json.loads(row.data)
-    data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
-    data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
-    return UserProfile(**data)
 
 
 def _serialize(job: Job) -> dict[str, Any]:
@@ -262,7 +251,7 @@ def get_resume_prompt(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    profile = _load_profile(db)
+    profile = _load_user_profile(db)
     tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
     if not tpl:
         raise HTTPException(status_code=500, detail="Resume prompt template not configured")
@@ -274,7 +263,7 @@ def get_cover_prompt(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    profile = _load_profile(db)
+    profile = _load_user_profile(db)
     tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
     if not tpl:
         raise HTTPException(status_code=500, detail="Cover prompt template not configured")
