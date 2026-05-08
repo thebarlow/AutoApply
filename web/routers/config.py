@@ -94,6 +94,8 @@ class TemplatesBody(BaseModel):
     github: str
     linkedin: str
     website: str
+    resume_prompt_template: str = ""
+    cover_prompt_template: str = ""
     primary_skills: list[str] = []
     primary_technologies: list[str] = []
 
@@ -111,6 +113,8 @@ def get_templates(db: Session = Depends(get_db)) -> dict:
     return {
         "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
         "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
+        "resume_prompt_template": _get(db, "resume_prompt_template"),
+        "cover_prompt_template": _get(db, "cover_prompt_template"),
         "github": _get(db, "resume_github"),
         "linkedin": _get(db, "resume_linkedin"),
         "website": _get(db, "resume_website"),
@@ -126,6 +130,8 @@ def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict:
     _set(db, "resume_github", body.github)
     _set(db, "resume_linkedin", body.linkedin)
     _set(db, "resume_website", body.website)
+    _set(db, "resume_prompt_template", body.resume_prompt_template)
+    _set(db, "cover_prompt_template", body.cover_prompt_template)
     _set(db, "primary_skills", json.dumps(body.primary_skills))
     _set(db, "primary_technologies", json.dumps(body.primary_technologies))
     return body.model_dump()

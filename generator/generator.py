@@ -60,6 +60,8 @@ def _load_master_resume(profile: UserProfile) -> str:
 
 def build_resume_prompt(job: Job, profile: UserProfile, template: str) -> str:
     return template.format(
+        profile=_load_master_resume(profile),
+        job=_render_job(job),
         master_resume=_load_master_resume(profile),
         title=job.title or "",
         company=job.company or "",
@@ -70,6 +72,8 @@ def build_resume_prompt(job: Job, profile: UserProfile, template: str) -> str:
 
 def build_cover_prompt(job: Job, profile: UserProfile, template: str) -> str:
     return template.format(
+        profile=_load_master_resume(profile),
+        job=_render_job(job),
         master_resume=_load_master_resume(profile),
         title=job.title or "",
         company=job.company or "",

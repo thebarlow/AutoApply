@@ -117,7 +117,7 @@ def test_pdf_to_markdown_extracts_text():
     page_text = "WORK EXPERIENCE\nSoftware Engineer at Acme (2022-2024)\n• Built APIs"
     mock_pdf = _make_mock_pdf([page_text])
 
-    with patch("core.profile_parser.pdfplumber.open", return_value=mock_pdf):
+    with patch("pdfplumber.open", return_value=mock_pdf):
         result = pdf_to_markdown(b"fake-pdf-bytes")
 
     assert "## Work Experience" in result
@@ -127,6 +127,6 @@ def test_pdf_to_markdown_extracts_text():
 
 def test_pdf_to_markdown_handles_empty_page():
     mock_pdf = _make_mock_pdf([None])
-    with patch("core.profile_parser.pdfplumber.open", return_value=mock_pdf):
+    with patch("pdfplumber.open", return_value=mock_pdf):
         result = pdf_to_markdown(b"fake-pdf-bytes")
     assert result == ""
