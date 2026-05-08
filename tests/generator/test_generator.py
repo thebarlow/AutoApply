@@ -334,3 +334,57 @@ def test_build_description_prompt_substitutes_title_and_company():
     result = build_description_prompt(job, "{title} at {company}: {description}")
     assert "Backend Engineer" in result
     assert "Acme" in result
+
+
+def test_extraction_json_to_markdown_required_skills():
+    from generator.generator import extraction_json_to_markdown
+    data = {"required_skills": ["Python", "FastAPI"]}
+    result = extraction_json_to_markdown(data)
+    assert "## Required Skills" in result
+    assert "- Python" in result
+    assert "- FastAPI" in result
+
+
+def test_extraction_json_to_markdown_overview_meta():
+    from generator.generator import extraction_json_to_markdown
+    data = {
+        "seniority": "senior",
+        "domain": "fintech",
+        "work_arrangement": "remote",
+        "role_type": "IC",
+        "employment_type": "full-time",
+    }
+    result = extraction_json_to_markdown(data)
+    assert "## Overview" in result
+    assert "**Seniority:** senior" in result
+    assert "**Domain:** fintech" in result
+
+
+def test_extraction_json_to_markdown_empty_fields_omitted():
+    from generator.generator import extraction_json_to_markdown
+    data = {"required_skills": ["Python"], "preferred_skills": []}
+    result = extraction_json_to_markdown(data)
+    assert "Preferred Skills" not in result
+
+
+def test_extraction_json_to_markdown_all_sections():
+    from generator.generator import extraction_json_to_markdown
+    data = {
+        "required_skills": ["Python"],
+        "preferred_skills": ["Go"],
+        "tech_stack": ["FastAPI", "PostgreSQL"],
+        "key_responsibilities": ["Build APIs"],
+        "company_signals": ["fast-paced"],
+        "seniority": "mid",
+        "role_type": "IC",
+        "domain": "devtools",
+        "work_arrangement": "remote",
+        "employment_type": "full-time",
+    }
+    result = extraction_json_to_markdown(data)
+    assert "## Required Skills" in result
+    assert "## Preferred Skills" in result
+    assert "## Tech Stack" in result
+    assert "## Key Responsibilities" in result
+    assert "## Company Signals" in result
+    assert "## Overview" in result

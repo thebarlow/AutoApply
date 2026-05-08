@@ -92,6 +92,36 @@ def build_description_prompt(job: Job, template: str) -> str:
     )
 
 
+def extraction_json_to_markdown(data: dict) -> str:
+    """Converts structured extraction JSON to human-readable markdown."""
+    sections = []
+
+    meta = []
+    for key, label in [
+        ("seniority", "Seniority"),
+        ("role_type", "Role Type"),
+        ("domain", "Domain"),
+        ("work_arrangement", "Work Arrangement"),
+        ("employment_type", "Employment Type"),
+    ]:
+        if val := data.get(key):
+            meta.append(f"**{label}:** {val}")
+    if meta:
+        sections.append("## Overview\n\n" + "\n\n".join(meta))
+
+    for key, heading in [
+        ("required_skills", "Required Skills"),
+        ("preferred_skills", "Preferred Skills"),
+        ("tech_stack", "Tech Stack"),
+        ("key_responsibilities", "Key Responsibilities"),
+        ("company_signals", "Company Signals"),
+    ]:
+        if items := data.get(key):
+            sections.append(f"## {heading}\n" + "\n".join(f"- {item}" for item in items))
+
+    return "\n\n".join(sections)
+
+
 def _build_frontmatter(
     profile: UserProfile,
     github: str = "",
