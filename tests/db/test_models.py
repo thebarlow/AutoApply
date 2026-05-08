@@ -151,15 +151,20 @@ def test_scraper_config_keys_seeded(db_session):
     assert row2.value == "remotive,remoteok"
 
 
-def test_job_has_extraction_md_column(db_session):
+def test_job_has_extraction_json_column(db_session):
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
     job = Job(
         job_key="test_extraction",
         source="test",
         url="https://example.com/1",
         state="draft",
-        extraction_md="# Extracted\n- Python required",
+        extraction_json='{"required_skills": ["Python"]}',
     )
-    db_session.add(job)
-    db_session.commit()
-    fetched = db_session.query(Job).filter_by(job_key="test_extraction").first()
-    assert fetched.extraction_md == "# Extracted\n- Python required"
+    session.add(job)
+    session.commit()
+    fetched = session.query(Job).filter_by(job_key="test_extraction").first()
+    assert fetched.extraction_json == '{"required_skills": ["Python"]}'
+    session.close()

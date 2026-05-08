@@ -32,7 +32,7 @@ class Job(Base):
     score_justification = Column(Text)
     resume_path = Column(String)
     cover_path = Column(String)
-    extraction_md = Column(Text)
+    extraction_json = Column(Text)
     applied_at = Column(String)
     sheets_row_id = Column(String)
 
