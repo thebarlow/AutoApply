@@ -253,6 +253,12 @@ function dashboard() {
     deleteConfirm: false,
     loadError: null,
     generating: null,
+    activeTab: 'overview',
+    resumeView: 'md',
+    coverView: 'md',
+    resumeMarkdown: null,
+    coverMarkdown: null,
+    promptOverlay: null,
 
     async init() {
       await this.loadJobs();
@@ -305,11 +311,47 @@ function dashboard() {
     selectJob(job) {
       this.selectedJob = { ...job };
       this.deleteConfirm = false;
+      this.activeTab = 'overview';
+      this.resumeView = 'md';
+      this.coverView = 'md';
+      this.resumeMarkdown = null;
+      this.coverMarkdown = null;
+      this.promptOverlay = null;
     },
 
     closeOverlay() {
       this.selectedJob = null;
       this.deleteConfirm = false;
+      this.activeTab = 'overview';
+      this.resumeMarkdown = null;
+      this.coverMarkdown = null;
+      this.promptOverlay = null;
+      this.generating = null;
+    },
+
+    switchTab(tab) {
+      this.activeTab = tab;
+      if (tab === 'resume') {
+        this.resumeView = 'md';
+        if (this.selectedJob.resume_md_exists && this.resumeMarkdown === null) {
+          this.fetchResumeMarkdown();
+        }
+      } else if (tab === 'cover') {
+        this.coverView = 'md';
+        if (this.selectedJob.cover_md_exists && this.coverMarkdown === null) {
+          this.fetchCoverMarkdown();
+        }
+      }
+    },
+
+    get generatingLabel() {
+      const map = {
+        resume_md: 'Generating resume…',
+        resume_pdf: 'Rendering resume PDF…',
+        cover_md: 'Generating cover letter…',
+        cover_pdf: 'Rendering cover PDF…',
+      };
+      return this.generating ? (map[this.generating] || 'Working…') : '';
     },
 
     scoreClass(s) {
@@ -347,34 +389,71 @@ function dashboard() {
       return resp.json();
     },
 
+    async fetchResumeMarkdown() {
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/resume/markdown`);
+        if (!resp.ok) return;
+        this.resumeMarkdown = await resp.text();
+      } catch { /* silent — user sees "Loading…" */ }
+    },
+
+    async fetchCoverMarkdown() {
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/cover/markdown`);
+        if (!resp.ok) return;
+        this.coverMarkdown = await resp.text();
+      } catch { /* silent */ }
+    },
+
+    async viewPrompt(type) {
+      const url = `/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/${type === 'resume' ? 'resume' : 'cover'}/prompt`;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error();
+        this.promptOverlay = { type, text: await resp.text() };
+      } catch { alert('Failed to load prompt.'); }
+    },
+
     async calculateScore() {
       try {
         this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/score`));
       } catch { alert('Failed to calculate score.'); }
     },
 
-    async generateResume() {
-      this.generating = 'resume';
+    async generateResumeMd() {
+      this.generating = 'resume_md';
       try {
-        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume`));
-      } catch { alert('Failed to generate resume.'); }
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume/md`));
+        this.resumeMarkdown = null;
+        if (this.activeTab === 'resume') await this.fetchResumeMarkdown();
+      } catch { alert('Failed to generate resume markdown.'); }
       finally { this.generating = null; }
     },
 
-    async generateCover() {
-      this.generating = 'cover';
+    async generateResumePdf() {
+      this.generating = 'resume_pdf';
       try {
-        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover`));
-      } catch { alert('Failed to generate cover letter.'); }
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume/pdf`));
+      } catch { alert('Failed to render resume PDF.'); }
       finally { this.generating = null; }
     },
 
-    viewResume() {
-      window.open(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/resume`, '_blank');
+    async generateCoverMd() {
+      this.generating = 'cover_md';
+      try {
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover/md`));
+        this.coverMarkdown = null;
+        if (this.activeTab === 'cover') await this.fetchCoverMarkdown();
+      } catch { alert('Failed to generate cover letter markdown.'); }
+      finally { this.generating = null; }
     },
 
-    viewCover() {
-      window.open(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/cover`, '_blank');
+    async generateCoverPdf() {
+      this.generating = 'cover_pdf';
+      try {
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover/pdf`));
+      } catch { alert('Failed to render cover letter PDF.'); }
+      finally { this.generating = null; }
     },
 
     async markApplied() {
