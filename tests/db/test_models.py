@@ -149,3 +149,17 @@ def test_scraper_config_keys_seeded(db_session):
     row2 = db_session.query(Config).filter_by(key="scraper_sources").first()
     assert row2 is not None
     assert row2.value == "remotive,remoteok"
+
+
+def test_job_has_extraction_md_column(db_session):
+    job = Job(
+        job_key="test_extraction",
+        source="test",
+        url="https://example.com/1",
+        state="draft",
+        extraction_md="# Extracted\n- Python required",
+    )
+    db_session.add(job)
+    db_session.commit()
+    fetched = db_session.query(Job).filter_by(job_key="test_extraction").first()
+    assert fetched.extraction_md == "# Extracted\n- Python required"
