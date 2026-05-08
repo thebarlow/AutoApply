@@ -61,7 +61,7 @@
 <div class="overlay-backdrop" x-show="selectedJob !== null" @click.self="closeOverlay()">
   <div class="overlay-panel" @keydown.escape.window="promptOverlay !== null ? (promptOverlay = null) : closeOverlay()">
     <template x-if="selectedJob">
-      <div style="display:flex;flex-direction:column;height:100%">
+      <div style="display:flex;flex-direction:column;flex:1;min-height:0">
 
         <!-- Fixed top: header, meta, action bar -->
         <div class="overlay-top">
