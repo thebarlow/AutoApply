@@ -332,6 +332,7 @@ function dashboard() {
     },
 
     switchTab(tab) {
+      this.promptOverlay = null;
       this.activeTab = tab;
       if (tab === 'resume') {
         this.resumeView = 'md';

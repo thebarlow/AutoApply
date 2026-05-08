@@ -186,6 +186,8 @@ def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    # Cover letter PDF generation requires a resume PDF to exist first — enforced as a workflow gate
+    # to ensure the applicant has a complete resume before submitting a cover letter.
     if not job.resume_path:
         raise HTTPException(status_code=400, detail="Resume PDF must be generated before cover letter PDF")
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"

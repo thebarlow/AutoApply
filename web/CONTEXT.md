@@ -41,6 +41,11 @@ uvicorn web.main:app --reload
 - Salary sort is lexicographic when salary contains non-numeric characters (e.g., "$120k–$150k"). Values without parseable numbers sort as 0.
 - Alpine.js loaded from CDN — requires internet access.
 
+## Web Router Limitations
+
+### resume_md_exists / cover_md_exists in _serialize()
+`_serialize()` in `jobs.py` calls `Path.exists()` twice per job to derive `resume_md_exists` and `cover_md_exists`. These filesystem checks run on every call to `GET /api/jobs`, meaning a list of N jobs triggers 2N stat calls. At the current scale (<100 jobs, local filesystem) this is negligible (<5ms). If the job count grows or the API is called frequently, move these checks out of `_serialize` into a per-job endpoint and have the frontend fetch job details on modal open.
+
 ## Future Work
 
 - Config page (`/config`) for editing scoring weights, thresholds, and user profile
