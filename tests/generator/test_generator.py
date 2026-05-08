@@ -11,6 +11,7 @@ from db.models import Base, Job, Config, UserProfileModel
 from generator.generator import (
     build_resume_prompt,
     build_cover_prompt,
+    build_description_prompt,
     strip_header_block,
     call_claude,
     generate_job,
@@ -303,3 +304,33 @@ def test_generate_cover_sets_failed_on_error(db_session, monkeypatch, tmp_path):
     job = db_session.query(Job).filter_by(job_key="test_job").first()
     assert job.cover_path is None
     assert job.state == JobState.DRAFT.value  # cover failure does not change job state
+
+
+def test_build_description_prompt_substitutes_description():
+    job = Job(
+        job_key="jd_test",
+        source="test",
+        url="https://example.com",
+        state="draft",
+        title="Backend Engineer",
+        company="Acme",
+        description="We need a Python expert.",
+    )
+    result = build_description_prompt(job, "Extract insights from: {description}")
+    assert "We need a Python expert." in result
+    assert "Extract insights from:" in result
+
+
+def test_build_description_prompt_substitutes_title_and_company():
+    job = Job(
+        job_key="jd_test2",
+        source="test",
+        url="https://example.com/2",
+        state="draft",
+        title="Backend Engineer",
+        company="Acme",
+        description="Python required.",
+    )
+    result = build_description_prompt(job, "{title} at {company}: {description}")
+    assert "Backend Engineer" in result
+    assert "Acme" in result

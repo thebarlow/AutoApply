@@ -82,6 +82,15 @@ def build_cover_prompt(job: Job, profile: UserProfile, template: str) -> str:
     )
 
 
+def build_description_prompt(job: Job, template: str) -> str:
+    return template.format(
+        title=job.title or "",
+        company=job.company or "",
+        location=job.location or "Not specified",
+        description=job.description or "Not provided",
+    )
+
+
 def _build_frontmatter(
     profile: UserProfile,
     github: str = "",
