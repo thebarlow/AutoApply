@@ -150,6 +150,8 @@ def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     # Generator swallows exceptions; job.resume_path absence after the call indicates failure.
     _generate_resume_pdf(job_key, db=db)
     db.refresh(job)
+    if not job.resume_path:
+        raise HTTPException(status_code=500, detail="Resume PDF rendering failed")
     return _serialize(job)
 
 
