@@ -47,7 +47,7 @@
           <td><span :class="'score-badge ' + scoreClass(job.final_score)" x-text="pct(job.final_score)"></span></td>
           <td x-text="job.location || ''"></td>
           <td x-text="job.salary || ''"></td>
-          <td><span :class="'status-badge ' + statusClass(job.state)" x-text="job.state"></span></td>
+          <td><span :class="'status-badge ' + statusClass(job.state)" x-text="statusLabel(job.state)"></span></td>
         </tr>
       </template>
     </tbody>
@@ -81,7 +81,7 @@
                 <span x-text="generatingLabel"></span>
               </span>
             </h2>
-            <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="selectedJob.state"></span>
+            <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="statusLabel(selectedJob.state)"></span>
           </div>
 
           <div class="overlay-meta">
@@ -142,12 +142,11 @@
             <!-- Persistent actions (right) -->
             <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
 
-            <select class="status-select" :value="selectedJob.state"
-              @change="setStatus($event.target.value)">
-              <option value="draft">Draft</option>
-              <option value="applied">Applied</option>
-              <option value="in_contact">In Contact</option>
-              <option value="rejected">Rejected</option>
+            <select class="status-select" @change="setStatus($event.target.value)">
+              <option value="draft" :selected="selectedJob.state === 'draft'">Draft</option>
+              <option value="applied" :selected="selectedJob.state === 'applied'">Applied</option>
+              <option value="in_contact" :selected="selectedJob.state === 'in_contact'">In Contact</option>
+              <option value="rejected" :selected="selectedJob.state === 'rejected'">Rejected</option>
             </select>
 
             <template x-if="!deleteConfirm">
@@ -368,6 +367,10 @@ function dashboard() {
       return 'score-red';
     },
 
+    statusLabel(state) {
+      const labels = { draft: 'Draft', applied: 'Applied', in_contact: 'In Contact', rejected: 'Rejected' };
+      return labels[state] || state;
+    },
     statusClass(state) {
       const map = {
         draft: 'status-draft',
