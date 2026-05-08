@@ -136,6 +136,21 @@
               </div>
             </template>
 
+            <!-- Details -->
+            <template x-if="activeTab === 'details'">
+              <div style="display:contents">
+                <button class="btn" @click="extractDescription()"
+                  :disabled="!!generating || !extractionHasPrompt"
+                  :title="!extractionHasPrompt ? 'Configure a Description Extraction Prompt in Config first' : ''">
+                  Extract
+                </button>
+                <button class="btn" x-show="selectedJob.extraction_md_exists"
+                  @click="viewPrompt('description')" :disabled="!!generating">
+                  View Prompt
+                </button>
+              </div>
+            </template>
+
             <!-- Spacer -->
             <div class="action-bar-spacer"></div>
 
@@ -169,6 +184,8 @@
               @click="switchTab('resume')">Resume</button>
             <button class="overlay-tab-btn" :class="{ active: activeTab === 'cover' }"
               @click="switchTab('cover')">Cover Letter</button>
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'details' }"
+              @click="switchTab('details')">Details</button>
           </div>
 
           <!-- Tab content area -->
@@ -227,6 +244,19 @@
               </div>
             </div>
 
+            <!-- Details tab -->
+            <div x-show="activeTab === 'details'" style="height:100%">
+              <p class="overlay-empty-state"
+                x-show="!selectedJob.extraction_md_exists">
+                No extraction yet. Configure a Description Extraction Prompt in Config, then click Extract.
+              </p>
+              <template x-if="selectedJob.extraction_md_exists">
+                <iframe class="overlay-pdf-frame"
+                  :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/description`">
+                </iframe>
+              </template>
+            </div>
+
           </div><!-- end overlay-tab-content -->
         </div><!-- end overlay-body -->
 
@@ -234,7 +264,7 @@
         <div class="prompt-overlay" x-show="promptOverlay !== null" @click.self="promptOverlay = null">
           <div class="prompt-overlay-panel">
             <div class="prompt-overlay-header">
-              <strong x-text="promptOverlay && promptOverlay.type === 'resume' ? 'Resume Prompt' : 'Cover Letter Prompt'"></strong>
+              <strong x-text="promptOverlay ? (promptOverlay.type === 'resume' ? 'Resume Prompt' : promptOverlay.type === 'cover' ? 'Cover Letter Prompt' : 'Description Extraction Prompt') : ''"></strong>
               <button class="btn" @click="promptOverlay = null">Close</button>
             </div>
             <pre x-text="promptOverlay ? promptOverlay.text : ''"></pre>
@@ -262,6 +292,7 @@ function dashboard() {
     resumeMarkdown: null,
     coverMarkdown: null,
     promptOverlay: null,
+    extractionHasPrompt: false,
 
     async init() {
       await this.loadJobs();
@@ -320,6 +351,7 @@ function dashboard() {
       this.resumeMarkdown = null;
       this.coverMarkdown = null;
       this.promptOverlay = null;
+      this.extractionHasPrompt = false;
     },
 
     closeOverlay() {
@@ -331,6 +363,7 @@ function dashboard() {
       this.resumeMarkdown = null;
       this.coverMarkdown = null;
       this.promptOverlay = null;
+      this.extractionHasPrompt = false;
       this.generating = null;
     },
 
@@ -347,6 +380,10 @@ function dashboard() {
         if (this.selectedJob.cover_md_exists && this.coverMarkdown === null) {
           this.fetchCoverMarkdown();
         }
+      } else if (tab === 'details') {
+        const r = await fetch('/api/config/prompts/description');
+        const data = await r.json();
+        this.extractionHasPrompt = data.prompts.length > 0;
       }
     },
 
@@ -356,6 +393,7 @@ function dashboard() {
         resume_pdf: 'Rendering resume PDF…',
         cover_md: 'Generating cover letter…',
         cover_pdf: 'Rendering cover PDF…',
+        description_extract: 'Extracting insights…',
       };
       return this.generating ? (map[this.generating] || 'Working…') : '';
     },
@@ -436,6 +474,19 @@ function dashboard() {
         if (this.selectedJob?.job_key !== key) return;
         this.promptOverlay = { type, text: await resp.text() };
       } catch { alert('Failed to load prompt.'); }
+    },
+
+    async extractDescription() {
+      const key = this.selectedJob.job_key;
+      this.generating = 'description_extract';
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(key)}/description/extract`, { method: 'POST' });
+        if (!resp.ok) throw new Error('Extraction failed');
+        const updated = await resp.json();
+        Object.assign(this.selectedJob, updated);
+      } finally {
+        this.generating = null;
+      }
     },
 
     async calculateScore() {
