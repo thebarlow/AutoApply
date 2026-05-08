@@ -106,7 +106,7 @@ main { padding: 1.5rem; }
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   width: min(780px, 94vw);
-  max-height: 82vh;
+  height: 82vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
