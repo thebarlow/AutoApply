@@ -83,10 +83,19 @@ main { padding: 1.5rem; }
   font-weight: 500;
   text-transform: capitalize;
 }
-.status-pending  { background: #e9ecef; color: #555; }
-.status-applied  { background: #d4edda; color: #155724; }
-.status-rejected { background: #f8d7da; color: #721c24; }
-.status-failed   { background: #ffe5d0; color: #7d3c05; }
+.status-draft      { background: #e9ecef; color: #555; }
+.status-applied    { background: #d4edda; color: #155724; }
+.status-in-contact { background: #fff3cd; color: #856404; }
+.status-rejected   { background: #f8d7da; color: #721c24; }
+
+.status-select {
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
 
 /* Overlay backdrop */
 .overlay-backdrop {
