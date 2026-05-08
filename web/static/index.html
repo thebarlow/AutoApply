@@ -367,7 +367,7 @@ function dashboard() {
       this.generating = null;
     },
 
-    switchTab(tab) {
+    async switchTab(tab) {
       this.promptOverlay = null;
       this.activeTab = tab;
       if (tab === 'resume') {
