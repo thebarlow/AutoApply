@@ -61,6 +61,10 @@
       <div id="cover-prompt-list"></div>
       <button class="btn btn-secondary" id="btn-add-cover-prompt" type="button">+ Add Cover Letter Prompt</button>
 
+      <label class="config-label" style="margin-top:1rem">Description Extraction Prompts</label>
+      <div id="description-prompt-list"></div>
+      <button class="btn btn-secondary" id="btn-add-description-prompt" type="button">+ Add Description Extraction Prompt</button>
+
       <h2>Social Links</h2>
       <label class="config-label">GitHub</label>
       <input class="config-input" type="text" id="tpl-github" placeholder="github.com/username">
@@ -456,11 +460,16 @@
     openPromptModal('cover', null);
   });
 
+  document.getElementById('btn-add-description-prompt').addEventListener('click', function() {
+    openPromptModal('description', null);
+  });
+
   function openPromptModal(type_, id) {
     _promptModalType = type_;
     _promptModalId = id;
     _promptModalContent = '';
-    const title = (type_ === 'resume' ? 'Resume' : 'Cover Letter') + ' Prompt';
+    const titleMap = { resume: 'Resume', cover: 'Cover Letter', description: 'Description Extraction' };
+    const title = (titleMap[type_] || type_) + ' Prompt';
     document.getElementById('prompt-modal-title').textContent = id ? 'Edit ' + title : 'New ' + title;
 
     // Reset tabs
@@ -1135,7 +1144,7 @@
   });
 
   // ---- Init ----
-  Promise.all([loadTemplates(), loadProfiles(), loadLLM(), loadPrompts('resume'), loadPrompts('cover')]).catch(console.error);
+  Promise.all([loadTemplates(), loadProfiles(), loadLLM(), loadPrompts('resume'), loadPrompts('cover'), loadPrompts('description')]).catch(console.error);
 
 })();
 </script>
