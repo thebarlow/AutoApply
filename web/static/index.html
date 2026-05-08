@@ -144,7 +144,7 @@
                   :title="!extractionHasPrompt ? 'Configure a Description Extraction Prompt in Config first' : ''">
                   Extract
                 </button>
-                <button class="btn" x-show="selectedJob.extraction_md_exists"
+                <button class="btn" x-show="selectedJob.extraction_json_exists"
                   @click="viewPrompt('description')" :disabled="!!generating">
                   View Prompt
                 </button>
@@ -247,14 +247,20 @@
             <!-- Details tab -->
             <div x-show="activeTab === 'details'" style="height:100%">
               <p class="overlay-empty-state"
-                x-show="!selectedJob.extraction_md_exists">
+                x-show="!selectedJob.extraction_json_exists">
                 No extraction yet. Configure a Description Extraction Prompt in Config, then click Extract.
               </p>
-              <template x-if="selectedJob.extraction_md_exists">
-                <iframe class="overlay-pdf-frame"
-                  :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/description`">
-                </iframe>
-              </template>
+              <div x-show="selectedJob.extraction_json_exists">
+                <div class="view-toggle">
+                  <button :class="{ active: extractionView === 'rendered' }" @click="extractionView = 'rendered'">Rendered</button>
+                  <button :class="{ active: extractionView === 'json' }" @click="extractionView = 'json'">JSON</button>
+                </div>
+                <template x-if="selectedJob.extraction_json_exists">
+                  <iframe class="overlay-pdf-frame"
+                    :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/description?view=${extractionView}`">
+                  </iframe>
+                </template>
+              </div>
             </div>
 
           </div><!-- end overlay-tab-content -->
@@ -293,6 +299,7 @@ function dashboard() {
     coverMarkdown: null,
     promptOverlay: null,
     extractionHasPrompt: false,
+    extractionView: 'rendered',
 
     async init() {
       await this.loadJobs();
@@ -352,6 +359,7 @@ function dashboard() {
       this.coverMarkdown = null;
       this.promptOverlay = null;
       this.extractionHasPrompt = false;
+      this.extractionView = 'rendered';
     },
 
     closeOverlay() {
@@ -364,6 +372,7 @@ function dashboard() {
       this.coverMarkdown = null;
       this.promptOverlay = null;
       this.extractionHasPrompt = false;
+      this.extractionView = 'rendered';
       this.generating = null;
     },
 
