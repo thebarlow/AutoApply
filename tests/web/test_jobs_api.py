@@ -345,3 +345,105 @@ def test_generate_cover_endpoint_not_found(client):
     assert resp.status_code == 404
 
 
+# --- extraction_md_exists in _serialize ---
+
+def test_get_jobs_includes_extraction_md_exists_false(client, db_session):
+    _make_job(db_session, "job_noextract")
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    job = resp.json()[0]
+    assert "extraction_md_exists" in job
+    assert job["extraction_md_exists"] is False
+
+
+def test_get_jobs_includes_extraction_md_exists_true(client, db_session):
+    job = _make_job(db_session, "job_hasextract")
+    job.extraction_md = "# Skills\n- Python"
+    db_session.commit()
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    data = resp.json()[0]
+    assert data["extraction_md_exists"] is True
+
+
+# --- GET /api/jobs/{job_key}/description ---
+
+def test_get_description_html_returns_html(client, db_session):
+    job = _make_job(db_session, "job_html")
+    job.extraction_md = "# Skills\n- Python\n- FastAPI"
+    db_session.commit()
+    resp = client.get("/api/jobs/job_html/description")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "<h1>" in resp.text
+    assert "Python" in resp.text
+
+
+def test_get_description_html_not_found(client):
+    resp = client.get("/api/jobs/nonexistent/description")
+    assert resp.status_code == 404
+
+
+def test_get_description_html_no_extraction(client, db_session):
+    _make_job(db_session, "job_nohtml")
+    resp = client.get("/api/jobs/job_nohtml/description")
+    assert resp.status_code == 404
+
+
+# --- GET /api/jobs/{job_key}/description/prompt ---
+
+def test_get_description_prompt_returns_text(client, db_session):
+    from db.models import Config
+    job = _make_job(db_session, "job_dprompt", description="We need Python skills.")
+    db_session.add(Config(key="description_prompt_template", value="Extract from: {description}"))
+    db_session.commit()
+    resp = client.get("/api/jobs/job_dprompt/description/prompt")
+    assert resp.status_code == 200
+    assert "We need Python skills." in resp.text
+
+
+def test_get_description_prompt_no_template(client, db_session):
+    _make_job(db_session, "job_dprompt_notpl")
+    resp = client.get("/api/jobs/job_dprompt_notpl/description/prompt")
+    assert resp.status_code == 500
+
+
+def test_get_description_prompt_not_found(client):
+    resp = client.get("/api/jobs/nonexistent/description/prompt")
+    assert resp.status_code == 404
+
+
+# --- POST /api/jobs/{job_key}/description/extract ---
+
+def test_extract_description_stores_result(client, db_session, monkeypatch):
+    import web.routers.jobs as jobs_router
+    from db.models import Config
+
+    job = _make_job(db_session, "job_extract", description="We need Python.")
+    db_session.add(Config(key="description_prompt_template", value="Extract: {description}"))
+    db_session.commit()
+
+    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
+
+    def mock_llm_call(client, model, prompt):
+        return "# Skills\n- Python"
+
+    monkeypatch.setattr(jobs_router, "_call_llm_for_extraction", mock_llm_call)
+
+    resp = client.post("/api/jobs/job_extract/description/extract")
+    assert resp.status_code == 200
+    assert resp.json()["extraction_md_exists"] is True
+
+
+def test_extract_description_no_template(client, db_session, monkeypatch):
+    import web.routers.jobs as jobs_router
+    _make_job(db_session, "job_extract_notpl")
+    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
+    resp = client.post("/api/jobs/job_extract_notpl/description/extract")
+    assert resp.status_code == 400
+
+
+def test_extract_description_not_found(client):
+    resp = client.post("/api/jobs/nonexistent/description/extract")
+    assert resp.status_code == 404
+

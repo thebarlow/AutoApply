@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse
+import markdown as _markdown
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -23,9 +24,18 @@ from generator.generator import generate_resume_md as _generate_resume_md
 from generator.generator import generate_resume_pdf as _generate_resume_pdf
 from generator.generator import generate_cover_md as _generate_cover_md
 from generator.generator import generate_cover_pdf as _generate_cover_pdf
-from generator.generator import build_resume_prompt, build_cover_prompt
+from generator.generator import build_resume_prompt, build_cover_prompt, build_description_prompt
 
 _GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
+
+
+def _call_llm_for_extraction(client, model: str, prompt: str) -> str:
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
 
 router = APIRouter(prefix="/api/jobs")
 
@@ -60,6 +70,7 @@ def _serialize(job: Job) -> dict[str, Any]:
         "cover_path": job.cover_path,
         "resume_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_resume.md").exists(),
         "cover_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_cover.md").exists(),
+        "extraction_md_exists": bool(job.extraction_md),
     }
 
 
@@ -276,6 +287,53 @@ def get_cover_prompt(job_key: str, db: Session = Depends(get_db)):
     if not tpl:
         raise HTTPException(status_code=500, detail="Cover prompt template not configured")
     return build_cover_prompt(job, profile, tpl.value)
+
+
+@router.get("/{job_key}/description/prompt", response_class=PlainTextResponse)
+def get_description_prompt(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    tpl = db.query(Config).filter_by(key="description_prompt_template").first()
+    if not tpl:
+        raise HTTPException(status_code=500, detail="Description extraction prompt not configured")
+    return build_description_prompt(job, tpl.value)
+
+
+@router.post("/{job_key}/description/extract")
+def extract_description(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    tpl = db.query(Config).filter_by(key="description_prompt_template").first()
+    if not tpl:
+        raise HTTPException(status_code=400, detail="No description extraction prompt configured")
+    prompt = build_description_prompt(job, tpl.value)
+    client, model = get_openai_client(db)
+    job.extraction_md = _call_llm_for_extraction(client, model, prompt)
+    db.commit()
+    db.refresh(job)
+    return _serialize(job)
+
+
+@router.get("/{job_key}/description", response_class=HTMLResponse)
+def serve_description_html(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.extraction_md:
+        raise HTTPException(status_code=404, detail="No extraction available")
+    body = _markdown.markdown(job.extraction_md, extensions=["extra"])
+    return HTMLResponse(content=f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body {{ font-family: system-ui, sans-serif; padding: 1.5rem; line-height: 1.6; color: #e8e8e8; background: #1a1a1a; }}
+  h1, h2, h3 {{ color: #fff; margin-top: 1.5rem; }}
+  ul {{ padding-left: 1.5rem; }}
+  li {{ margin: 0.2rem 0; }}
+  strong {{ color: #fff; }}
+</style>
+</head><body>{body}</body></html>""")
 
 
 @router.delete("/{job_key}")
