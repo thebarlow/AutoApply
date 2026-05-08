@@ -70,7 +70,7 @@ def _serialize(job: Job) -> dict[str, Any]:
         "cover_path": job.cover_path,
         "resume_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_resume.md").exists(),
         "cover_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_cover.md").exists(),
-        "extraction_md_exists": bool(job.extraction_md),
+        "extraction_json_exists": bool(job.extraction_json),
     }
 
 
@@ -311,7 +311,7 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
     prompt = build_description_prompt(job, tpl.value)
     client, model = get_openai_client(db)
     try:
-        job.extraction_md = _call_llm_for_extraction(client, model, prompt)
+        job.extraction_json = _call_llm_for_extraction(client, model, prompt)
     except Exception:
         raise HTTPException(status_code=500, detail="Description extraction failed")
     db.commit()
@@ -320,13 +320,24 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{job_key}/description", response_class=HTMLResponse)
-def serve_description_html(job_key: str, db: Session = Depends(get_db)):
+def serve_description_html(job_key: str, view: str = "rendered", db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if not job.extraction_md:
+    if not job.extraction_json:
         raise HTTPException(status_code=404, detail="No extraction available")
-    body = _markdown.markdown(job.extraction_md, extensions=["extra"])
+
+    if view == "json":
+        return HTMLResponse(content=f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body {{ font-family: monospace; padding: 1.5rem; line-height: 1.6; color: #e8e8e8; background: #1a1a1a; }}
+  pre {{ white-space: pre-wrap; word-wrap: break-word; }}
+</style>
+</head><body><pre>{job.extraction_json}</pre></body></html>""")
+
+    # Default to rendered markdown
+    body = _markdown.markdown(job.extraction_json, extensions=["extra"])
     return HTMLResponse(content=f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
