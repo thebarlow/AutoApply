@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 import markdown as _markdown
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
@@ -24,7 +24,7 @@ from generator.generator import generate_resume_md as _generate_resume_md
 from generator.generator import generate_resume_pdf as _generate_resume_pdf
 from generator.generator import generate_cover_md as _generate_cover_md
 from generator.generator import generate_cover_pdf as _generate_cover_pdf
-from generator.generator import build_resume_prompt, build_cover_prompt, build_description_prompt
+from generator.generator import build_resume_prompt, build_cover_prompt, build_description_prompt, extraction_json_to_markdown
 
 _GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
 
@@ -320,7 +320,7 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{job_key}/description", response_class=HTMLResponse)
-def serve_description_html(job_key: str, view: str = "rendered", db: Session = Depends(get_db)):
+def serve_description_html(job_key: str, view: str = Query("rendered", pattern="^(rendered|json)$"), db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -337,7 +337,13 @@ def serve_description_html(job_key: str, view: str = "rendered", db: Session = D
 </head><body><pre>{job.extraction_json}</pre></body></html>""")
 
     # Default to rendered markdown
-    body = _markdown.markdown(job.extraction_json, extensions=["extra"])
+    try:
+        data = json.loads(job.extraction_json)
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+
+    markdown_content = extraction_json_to_markdown(data)
+    body = _markdown.markdown(markdown_content, extensions=["extra"])
     return HTMLResponse(content=f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>

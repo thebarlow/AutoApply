@@ -389,6 +389,36 @@ def test_get_description_html_no_extraction(client, db_session):
     assert resp.status_code == 404
 
 
+def test_get_description_rendered_view_converts_json(client, db_session):
+    job = _make_job(db_session, "job_rendered")
+    job.extraction_json = '{"required_skills": ["Python", "FastAPI"]}'
+    db_session.commit()
+    resp = client.get("/api/jobs/job_rendered/description")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "Required Skills" in resp.text
+    assert "Python" in resp.text
+
+
+def test_get_description_json_view_returns_raw(client, db_session):
+    job = _make_job(db_session, "job_jsonview")
+    job.extraction_json = '{"required_skills": ["Python"]}'
+    db_session.commit()
+    resp = client.get("/api/jobs/job_jsonview/description?view=json")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "required_skills" in resp.text
+    assert "<pre" in resp.text
+
+
+def test_get_description_invalid_view_param(client, db_session):
+    job = _make_job(db_session, "job_badview")
+    job.extraction_json = '{"required_skills": []}'
+    db_session.commit()
+    resp = client.get("/api/jobs/job_badview/description?view=invalid")
+    assert resp.status_code == 422
+
+
 # --- GET /api/jobs/{job_key}/description/prompt ---
 
 def test_get_description_prompt_returns_text(client, db_session):
