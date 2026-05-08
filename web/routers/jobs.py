@@ -34,6 +34,16 @@ class StateUpdate(BaseModel):
     state: str
 
 
+def _load_profile(db: Session) -> UserProfile:
+    row = db.query(UserProfileModel).first()
+    if not row:
+        raise HTTPException(status_code=500, detail="No user profile found")
+    data = json.loads(row.data)
+    data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
+    data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+    return UserProfile(**data)
+
+
 def _serialize(job: Job) -> dict[str, Any]:
     justification = job.score_justification
     if isinstance(justification, str):
@@ -223,6 +233,52 @@ def serve_cover(job_key: str, db: Session = Depends(get_db)):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Cover letter file missing")
     return FileResponse(path, media_type="application/pdf")
+
+
+@router.get("/{job_key}/resume/markdown", response_class=PlainTextResponse)
+def serve_resume_markdown(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Resume markdown not found")
+    return path.read_text(encoding="utf-8")
+
+
+@router.get("/{job_key}/cover/markdown", response_class=PlainTextResponse)
+def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Cover letter markdown not found")
+    return path.read_text(encoding="utf-8")
+
+
+@router.get("/{job_key}/resume/prompt", response_class=PlainTextResponse)
+def get_resume_prompt(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    profile = _load_profile(db)
+    tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
+    if not tpl:
+        raise HTTPException(status_code=500, detail="Resume prompt template not configured")
+    return build_resume_prompt(job, profile, tpl.value)
+
+
+@router.get("/{job_key}/cover/prompt", response_class=PlainTextResponse)
+def get_cover_prompt(job_key: str, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    profile = _load_profile(db)
+    tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
+    if not tpl:
+        raise HTTPException(status_code=500, detail="Cover prompt template not configured")
+    return build_cover_prompt(job, profile, tpl.value)
 
 
 @router.delete("/{job_key}")
