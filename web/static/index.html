@@ -142,9 +142,13 @@
             <!-- Persistent actions (right) -->
             <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
 
-            <button class="btn" @click="markApplied()" :disabled="selectedJob.state === 'applied'">
-              Mark as Applied
-            </button>
+            <select class="status-select" :value="selectedJob.state"
+              @change="setStatus($event.target.value)">
+              <option value="draft">Draft</option>
+              <option value="applied">Applied</option>
+              <option value="in_contact">In Contact</option>
+              <option value="rejected">Rejected</option>
+            </select>
 
             <template x-if="!deleteConfirm">
               <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
@@ -365,8 +369,13 @@ function dashboard() {
     },
 
     statusClass(state) {
-      const map = { pending: 'status-pending', applied: 'status-applied', rejected: 'status-rejected', failed: 'status-failed' };
-      return map[state] || 'status-pending';
+      const map = {
+        draft: 'status-draft',
+        applied: 'status-applied',
+        in_contact: 'status-in-contact',
+        rejected: 'status-rejected',
+      };
+      return map[state] || 'status-draft';
     },
 
     pct(v) {
@@ -468,16 +477,16 @@ function dashboard() {
       finally { this.generating = null; }
     },
 
-    async markApplied() {
+    async setStatus(state) {
       try {
         const resp = await fetch(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/state`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ state: 'applied' }),
+          body: JSON.stringify({ state }),
         });
         if (!resp.ok) throw new Error();
         this._updateJob(await resp.json());
-      } catch { alert('Failed to mark as applied.'); }
+      } catch { alert('Failed to update status.'); }
     },
 
     async deleteJob() {
