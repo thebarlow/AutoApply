@@ -61,80 +61,183 @@
 <div class="overlay-backdrop" x-show="selectedJob !== null" @click.self="closeOverlay()">
   <div class="overlay-panel" @keydown.escape.window="closeOverlay()">
     <template x-if="selectedJob">
-      <div>
-        <div class="overlay-header">
-          <h2>
-            <span x-text="selectedJob.title || '(no title)'"></span>
-            <span x-show="generating" style="display:inline-flex;align-items:center;margin-left:0.5rem;font-size:0.85rem;color:#888;font-weight:400;vertical-align:middle">
-              <svg viewBox="0 0 20 20" width="14" height="14" style="margin-right:0.4em;flex-shrink:0;display:block">
-                <g>
-                  <circle cx="10" cy="10" r="7" fill="none" stroke="#3a3a3a" stroke-width="2.5" stroke-dasharray="9.5 1.5"/>
-                  <circle cx="10" cy="10" r="7" fill="none" stroke="#aaa" stroke-width="2.5" stroke-dasharray="9.5 34.5"/>
-                  <animateTransform attributeName="transform" type="rotate"
-                    values="-90 10 10;0 10 10;90 10 10;180 10 10"
-                    dur="2s" calcMode="discrete" repeatCount="indefinite"/>
-                </g>
-              </svg>
-              <span x-text="generating === 'resume' ? 'Generating resume…' : 'Generating cover letter…'"></span>
-            </span>
-          </h2>
-          <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="selectedJob.state"></span>
+      <div style="display:flex;flex-direction:column;height:100%">
+
+        <!-- Fixed top: header, meta, action bar -->
+        <div class="overlay-top">
+          <div class="overlay-header">
+            <h2>
+              <span x-text="selectedJob.title || '(no title)'"></span>
+              <span x-show="generating" style="display:inline-flex;align-items:center;margin-left:0.5rem;font-size:0.85rem;color:#888;font-weight:400;vertical-align:middle">
+                <svg viewBox="0 0 20 20" width="14" height="14" style="margin-right:0.4em;flex-shrink:0;display:block">
+                  <g>
+                    <circle cx="10" cy="10" r="7" fill="none" stroke="#3a3a3a" stroke-width="2.5" stroke-dasharray="9.5 1.5"/>
+                    <circle cx="10" cy="10" r="7" fill="none" stroke="#aaa" stroke-width="2.5" stroke-dasharray="9.5 34.5"/>
+                    <animateTransform attributeName="transform" type="rotate"
+                      values="-90 10 10;0 10 10;90 10 10;180 10 10"
+                      dur="2s" calcMode="discrete" repeatCount="indefinite"/>
+                  </g>
+                </svg>
+                <span x-text="generatingLabel"></span>
+              </span>
+            </h2>
+            <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="selectedJob.state"></span>
+          </div>
+
+          <div class="overlay-meta">
+            <span x-text="selectedJob.company || ''"></span>
+            <span :class="'score-badge ' + scoreClass(selectedJob.final_score)" x-text="pct(selectedJob.final_score)"></span>
+            <span x-text="selectedJob.location || ''"></span>
+            <span x-text="selectedJob.salary || ''"></span>
+          </div>
+
+          <!-- Action bar -->
+          <div class="action-bar">
+
+            <!-- Tab-specific actions (left) -->
+
+            <!-- Overview -->
+            <template x-if="activeTab === 'overview'">
+              <button class="btn" @click="calculateScore()">Calculate Score</button>
+            </template>
+
+            <!-- Resume -->
+            <template x-if="activeTab === 'resume'">
+              <div style="display:contents">
+                <button class="btn" @click="generateResumeMd()" :disabled="!!generating"
+                  x-text="selectedJob.resume_md_exists ? 'Regenerate MD' : 'Generate MD'">
+                </button>
+                <button class="btn" @click="generateResumePdf()"
+                  :disabled="!!generating || !selectedJob.resume_md_exists"
+                  x-text="selectedJob.resume_path ? 'Regenerate PDF' : 'Generate PDF'">
+                </button>
+                <button class="btn" x-show="selectedJob.resume_md_exists"
+                  @click="viewPrompt('resume')" :disabled="!!generating">
+                  View Prompt
+                </button>
+              </div>
+            </template>
+
+            <!-- Cover Letter -->
+            <template x-if="activeTab === 'cover'">
+              <div style="display:contents">
+                <button class="btn" @click="generateCoverMd()" :disabled="!!generating"
+                  x-text="selectedJob.cover_md_exists ? 'Regenerate MD' : 'Generate MD'">
+                </button>
+                <button class="btn" @click="generateCoverPdf()"
+                  :disabled="!!generating || !selectedJob.cover_md_exists || !selectedJob.resume_path"
+                  :title="!selectedJob.resume_path ? 'Generate resume PDF first' : ''"
+                  x-text="selectedJob.cover_path ? 'Regenerate PDF' : 'Generate PDF'">
+                </button>
+                <button class="btn" x-show="selectedJob.cover_md_exists"
+                  @click="viewPrompt('cover')" :disabled="!!generating">
+                  View Prompt
+                </button>
+              </div>
+            </template>
+
+            <!-- Spacer -->
+            <div class="action-bar-spacer"></div>
+
+            <!-- Persistent actions (right) -->
+            <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
+
+            <button class="btn" @click="markApplied()" :disabled="selectedJob.state === 'applied'">
+              Mark as Applied
+            </button>
+
+            <template x-if="!deleteConfirm">
+              <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
+            </template>
+            <template x-if="deleteConfirm">
+              <button class="btn btn-danger-confirm" @click="deleteJob()">Confirm Delete</button>
+            </template>
+          </div>
         </div>
 
-        <div class="overlay-meta">
-          <span x-text="selectedJob.company || ''"></span>
-          <span :class="'score-badge ' + scoreClass(selectedJob.final_score)" x-text="pct(selectedJob.final_score)"></span>
-          <span x-text="selectedJob.location || ''"></span>
-          <span x-text="selectedJob.salary || ''"></span>
-        </div>
+        <!-- Body: sidebar + tab content -->
+        <div class="overlay-body">
 
-        <div class="action-bar">
-          <button class="btn" @click="calculateScore()">Calculate Score</button>
+          <!-- Vertical tab sidebar -->
+          <div class="overlay-tab-sidebar">
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'overview' }"
+              @click="switchTab('overview')">Overview</button>
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'resume' }"
+              @click="switchTab('resume')">Resume</button>
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'cover' }"
+              @click="switchTab('cover')">Cover Letter</button>
+          </div>
 
-          <!-- Resume: Generate or View dropdown -->
-          <template x-if="!selectedJob.resume_path">
-            <button class="btn" @click="generateResume()" :disabled="!!generating">Generate Resume</button>
-          </template>
-          <template x-if="selectedJob.resume_path">
-            <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
-              <button class="btn btn-dropdown" @click="open = !open" :disabled="!!generating">View Resume ▾</button>
-              <div class="dropdown-menu" x-show="open">
-                <button @click="viewResume(); open = false">View</button>
-                <button @click="generateResume(); open = false" :disabled="!!generating">Regenerate</button>
+          <!-- Tab content area -->
+          <div class="overlay-tab-content">
+
+            <!-- Overview tab -->
+            <div x-show="activeTab === 'overview'">
+              <div class="overlay-description" x-html="formatDesc(selectedJob.description)"></div>
+            </div>
+
+            <!-- Resume tab -->
+            <div x-show="activeTab === 'resume'">
+              <p class="overlay-empty-state"
+                x-show="!selectedJob.resume_md_exists && !selectedJob.resume_path">
+                No resume generated yet. Use "Generate MD" to create one.
+              </p>
+              <div x-show="selectedJob.resume_md_exists || !!selectedJob.resume_path">
+                <div class="view-toggle">
+                  <button :class="{ active: resumeView === 'md' }" @click="resumeView = 'md'">MD</button>
+                  <button :class="{ active: resumeView === 'pdf' }" @click="resumeView = 'pdf'"
+                    :disabled="!selectedJob.resume_path">PDF</button>
+                </div>
+                <div x-show="resumeView === 'md'">
+                  <p class="overlay-empty-state" x-show="!resumeMarkdown">Loading…</p>
+                  <pre class="overlay-md-viewer" x-show="resumeMarkdown" x-text="resumeMarkdown"></pre>
+                </div>
+                <template x-if="resumeView === 'pdf' && !!selectedJob.resume_path">
+                  <iframe class="overlay-pdf-frame"
+                    :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/resume`">
+                  </iframe>
+                </template>
               </div>
             </div>
-          </template>
 
-          <!-- Cover: Generate or View dropdown -->
-          <template x-if="!selectedJob.cover_path">
-            <button class="btn" @click="generateCover()" :disabled="!!generating">Generate Cover Letter</button>
-          </template>
-          <template x-if="selectedJob.cover_path">
-            <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
-              <button class="btn btn-dropdown" @click="open = !open" :disabled="!!generating">View Cover Letter ▾</button>
-              <div class="dropdown-menu" x-show="open">
-                <button @click="viewCover(); open = false">View</button>
-                <button @click="generateCover(); open = false" :disabled="!!generating">Regenerate</button>
+            <!-- Cover Letter tab -->
+            <div x-show="activeTab === 'cover'">
+              <p class="overlay-empty-state"
+                x-show="!selectedJob.cover_md_exists && !selectedJob.cover_path">
+                No cover letter generated yet. Use "Generate MD" to create one.
+              </p>
+              <div x-show="selectedJob.cover_md_exists || !!selectedJob.cover_path">
+                <div class="view-toggle">
+                  <button :class="{ active: coverView === 'md' }" @click="coverView = 'md'">MD</button>
+                  <button :class="{ active: coverView === 'pdf' }" @click="coverView = 'pdf'"
+                    :disabled="!selectedJob.cover_path">PDF</button>
+                </div>
+                <div x-show="coverView === 'md'">
+                  <p class="overlay-empty-state" x-show="!coverMarkdown">Loading…</p>
+                  <pre class="overlay-md-viewer" x-show="coverMarkdown" x-text="coverMarkdown"></pre>
+                </div>
+                <template x-if="coverView === 'pdf' && !!selectedJob.cover_path">
+                  <iframe class="overlay-pdf-frame"
+                    :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/cover`">
+                  </iframe>
+                </template>
               </div>
             </div>
-          </template>
 
-          <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
+          </div><!-- end overlay-tab-content -->
+        </div><!-- end overlay-body -->
 
-          <button class="btn" @click="markApplied()" :disabled="selectedJob.state === 'applied'">
-            Mark as Applied
-          </button>
-
-          <template x-if="!deleteConfirm">
-            <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
-          </template>
-          <template x-if="deleteConfirm">
-            <button class="btn btn-danger-confirm" @click="deleteJob()">Confirm Delete</button>
-          </template>
+        <!-- Prompt overlay (absolute within panel) -->
+        <div class="prompt-overlay" x-show="promptOverlay !== null" @click.self="promptOverlay = null">
+          <div class="prompt-overlay-panel">
+            <div class="prompt-overlay-header">
+              <strong x-text="promptOverlay && promptOverlay.type === 'resume' ? 'Resume Prompt' : 'Cover Letter Prompt'"></strong>
+              <button class="btn" @click="promptOverlay = null">Close</button>
+            </div>
+            <pre x-text="promptOverlay ? promptOverlay.text : ''"></pre>
+          </div>
         </div>
 
-        <hr class="overlay-divider" />
-        <div class="overlay-description" x-html="formatDesc(selectedJob.description)"></div>
       </div>
     </template>
   </div>
