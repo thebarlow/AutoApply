@@ -447,3 +447,23 @@ def test_extract_description_not_found(client):
     resp = client.post("/api/jobs/nonexistent/description/extract")
     assert resp.status_code == 404
 
+
+def test_extract_description_llm_failure_returns_500(client, db_session, monkeypatch):
+    import web.routers.jobs as jobs_router
+    from db.models import Config
+
+    _make_job(db_session, "job_extract_fail", description="We need Python.")
+    db_session.add(Config(key="description_prompt_template", value="Extract: {description}"))
+    db_session.commit()
+
+    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
+
+    def raise_error(c, m, p):
+        raise RuntimeError("LLM down")
+
+    monkeypatch.setattr(jobs_router, "_call_llm_for_extraction", raise_error)
+
+    resp = client.post("/api/jobs/job_extract_fail/description/extract")
+    assert resp.status_code == 500
+    assert "extraction failed" in resp.json()["detail"].lower()
+

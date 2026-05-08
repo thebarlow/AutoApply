@@ -310,7 +310,10 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="No description extraction prompt configured")
     prompt = build_description_prompt(job, tpl.value)
     client, model = get_openai_client(db)
-    job.extraction_md = _call_llm_for_extraction(client, model, prompt)
+    try:
+        job.extraction_md = _call_llm_for_extraction(client, model, prompt)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Description extraction failed")
     db.commit()
     db.refresh(job)
     return _serialize(job)
