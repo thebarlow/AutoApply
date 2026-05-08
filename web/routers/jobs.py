@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,10 +14,18 @@ from core.scorer import load_config as _load_config
 from core.scorer import load_user_profile as _load_user_profile
 from core.scorer import score_job as _score_job
 from db.database import get_db
-from db.models import Job
+from db.models import Config, Job, UserProfileModel
 from generator.generator import generate_job as _generate_job
 from generator.generator import generate_resume as _generate_resume
 from generator.generator import generate_cover as _generate_cover
+from core.types import UserProfile, WorkHistoryEntry, EducationEntry
+from generator.generator import generate_resume_md as _generate_resume_md
+from generator.generator import generate_resume_pdf as _generate_resume_pdf
+from generator.generator import generate_cover_md as _generate_cover_md
+from generator.generator import generate_cover_pdf as _generate_cover_pdf
+from generator.generator import build_resume_prompt, build_cover_prompt
+
+_GENERATOR_OUTPUTS = Path(__file__).parent.parent / "generator" / "outputs"
 
 router = APIRouter(prefix="/api/jobs")
 
@@ -50,6 +58,8 @@ def _serialize(job: Job) -> dict[str, Any]:
         "score_justification": justification,
         "resume_path": job.resume_path,
         "cover_path": job.cover_path,
+        "resume_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_resume.md").exists(),
+        "cover_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_cover.md").exists(),
     }
 
 
