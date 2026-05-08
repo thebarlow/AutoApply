@@ -328,33 +328,29 @@ def serve_description_html(job_key: str, view: str = Query("rendered", pattern="
     if not job.extraction_json:
         raise HTTPException(status_code=404, detail="No extraction available")
 
+    _IFRAME_STYLE = """
+      body { font-family: system-ui, sans-serif; font-size: 0.85rem; padding: 0.75rem; line-height: 1.6; color: #212529; background: #f8f9fa; margin: 0; }
+      h2 { font-size: 0.9rem; color: #212529; margin: 1rem 0 0.25rem; }
+      ul { padding-left: 1.25rem; margin: 0.25rem 0; }
+      li { margin: 0.1rem 0; }
+      strong { color: #212529; }
+      pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; }
+    """
+
     if view == "json":
         return HTMLResponse(content=f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>
-  body {{ font-family: monospace; padding: 1.5rem; line-height: 1.6; color: #e8e8e8; background: #1a1a1a; }}
-  pre {{ white-space: pre-wrap; word-wrap: break-word; }}
-</style>
-</head><body><pre>{_html.escape(job.extraction_json)}</pre></body></html>""")
+<html><head><meta charset="utf-8"><style>{_IFRAME_STYLE}</style></head>
+<body><pre>{_html.escape(job.extraction_json)}</pre></body></html>""")
 
-    # Default to rendered markdown
     try:
         data = json.loads(job.extraction_json)
     except (json.JSONDecodeError, TypeError):
         raise HTTPException(status_code=500, detail="Stored extraction is not valid JSON")
 
-    markdown_content = extraction_json_to_markdown(data)
-    body = _markdown.markdown(markdown_content, extensions=["extra"])
+    body = _markdown.markdown(extraction_json_to_markdown(data), extensions=["extra"])
     return HTMLResponse(content=f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>
-  body {{ font-family: system-ui, sans-serif; padding: 1.5rem; line-height: 1.6; color: #e8e8e8; background: #1a1a1a; }}
-  h1, h2, h3 {{ color: #fff; margin-top: 1.5rem; }}
-  ul {{ padding-left: 1.5rem; }}
-  li {{ margin: 0.2rem 0; }}
-  strong {{ color: #fff; }}
-</style>
-</head><body>{body}</body></html>""")
+<html><head><meta charset="utf-8"><style>{_IFRAME_STYLE}</style></head>
+<body>{body}</body></html>""")
 
 
 @router.delete("/{job_key}")
