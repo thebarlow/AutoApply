@@ -257,7 +257,13 @@
       <label class="config-label">Prompt Name</label>
       <input class="config-input" type="text" id="prompt-modal-name" placeholder="e.g. Software Engineer v1">
       <label class="config-label" style="margin-top:0.75rem">Content</label>
-      <textarea id="prompt-modal-content" style="width:100%;min-height:340px;font-family:monospace;font-size:0.82rem;background:#1a1a1a;color:#e0e0e0;border:1px solid #333;border-radius:4px;padding:0.6rem;resize:vertical;box-sizing:border-box"></textarea>
+      <div class="prompt-edit-layout">
+        <textarea id="prompt-modal-content" style="min-height:340px;font-family:monospace;font-size:0.82rem;background:#1a1a1a;color:#e0e0e0;border:1px solid #333;border-radius:4px;padding:0.6rem;resize:vertical;box-sizing:border-box"></textarea>
+        <div class="field-chips-sidebar" id="field-chips-sidebar">
+          <div class="field-chips-sidebar-label">Available Fields</div>
+          <div id="field-chips-container"><span class="field-chips-unavailable">Loading…</span></div>
+        </div>
+      </div>
     </div>
 
     <div class="config-actions" style="margin-top:1rem">
