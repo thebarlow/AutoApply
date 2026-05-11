@@ -576,6 +576,6 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
 # ---- Job Fields ----
 
 @router.get("/api/job-fields")
-def get_job_fields():
+def get_job_fields() -> dict[str, list[str]]:
     fields = [col.name for col in Job.__table__.columns]
     return {"fields": fields}
