@@ -409,6 +409,43 @@
 
   // ---- Prompt Templates ----
 
+  let _fieldChipsCache = null;
+
+  async function loadFieldChips() {
+    const container = document.getElementById('field-chips-container');
+    if (_fieldChipsCache) {
+      renderFieldChips(_fieldChipsCache);
+      return;
+    }
+    try {
+      const resp = await fetch('/api/job-fields');
+      if (!resp.ok) throw new Error('fetch failed');
+      const data = await resp.json();
+      _fieldChipsCache = data.fields;
+      renderFieldChips(_fieldChipsCache);
+    } catch {
+      container.innerHTML = '<span class="field-chips-unavailable">unavailable</span>';
+      document.getElementById('field-chips-sidebar').style.display = 'none';
+      document.getElementById('prompt-modal-content').style.width = '100%';
+    }
+  }
+
+  function renderFieldChips(fields) {
+    const container = document.getElementById('field-chips-container');
+    container.innerHTML = '';
+    for (const field of fields) {
+      const chip = document.createElement('span');
+      chip.className = 'field-chip';
+      chip.textContent = field;
+      chip.draggable = true;
+      chip.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', '{' + field + '}');
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      container.appendChild(chip);
+    }
+  }
+
   let _promptModalType = null;   // 'resume' or 'cover'
   let _promptModalId = null;     // null = new
   let _promptModalContent = '';
@@ -504,6 +541,7 @@
       document.getElementById('ptab-panel-upload').classList.add('active');
     }
 
+    loadFieldChips();
     document.getElementById('prompt-modal-backdrop').classList.add('is-open');
   }
 
@@ -513,6 +551,34 @@
     _promptModalContent = '';
     document.getElementById('prompt-modal-backdrop').classList.remove('is-open');
   }
+
+  const _promptTextarea = document.getElementById('prompt-modal-content');
+
+  _promptTextarea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  _promptTextarea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const text = e.dataTransfer.getData('text/plain');
+    if (!text) return;
+
+    // Find character offset at drop position
+    let dropIndex = _promptTextarea.value.length;
+    if (document.caretRangeFromPoint) {
+      const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (range) dropIndex = range.startOffset;
+    } else if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if (pos) dropIndex = pos.offset;
+    }
+
+    const val = _promptTextarea.value;
+    _promptTextarea.value = val.slice(0, dropIndex) + text + val.slice(dropIndex);
+    _promptTextarea.focus();
+    _promptTextarea.setSelectionRange(dropIndex + text.length, dropIndex + text.length);
+  });
 
   document.getElementById('prompt-modal-close').addEventListener('click', closePromptModal);
 
