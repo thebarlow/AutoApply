@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 import core.profile_parser as _parser
-from db.models import Config, UserProfileModel
+from db.models import Config, UserProfileModel, Job
 
 router = APIRouter()
 
@@ -571,3 +571,11 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
         return _parser.markdown_to_profile(md_text, db)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ---- Job Fields ----
+
+@router.get("/api/job-fields")
+def get_job_fields():
+    fields = [col.name for col in Job.__table__.columns]
+    return {"fields": fields}
