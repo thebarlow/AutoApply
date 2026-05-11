@@ -563,21 +563,11 @@
     e.preventDefault();
     const text = e.dataTransfer.getData('text/plain');
     if (!text) return;
-
-    // Find character offset at drop position
-    let dropIndex = _promptTextarea.value.length;
-    if (document.caretRangeFromPoint) {
-      const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-      if (range) dropIndex = range.startOffset;
-    } else if (document.caretPositionFromPoint) {
-      const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
-      if (pos) dropIndex = pos.offset;
-    }
-
+    const idx = _promptTextarea.selectionStart ?? _promptTextarea.value.length;
     const val = _promptTextarea.value;
-    _promptTextarea.value = val.slice(0, dropIndex) + text + val.slice(dropIndex);
+    _promptTextarea.value = val.slice(0, idx) + text + val.slice(idx);
+    _promptTextarea.setSelectionRange(idx + text.length, idx + text.length);
     _promptTextarea.focus();
-    _promptTextarea.setSelectionRange(dropIndex + text.length, dropIndex + text.length);
   });
 
   document.getElementById('prompt-modal-close').addEventListener('click', closePromptModal);
