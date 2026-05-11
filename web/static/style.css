@@ -195,6 +195,13 @@ main { padding: 1.5rem; }
 
 .overlay-tab-btn:hover:not(.active) { background: #f5f5f5; }
 
+.tab-check {
+  margin-left: 0.35rem;
+  color: #2a9d2a;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
 /* Tab content area */
 .overlay-tab-content {
   flex: 1;

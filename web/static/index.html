@@ -168,7 +168,7 @@
               <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
             </template>
             <template x-if="deleteConfirm">
-              <button class="btn btn-danger-confirm" @click="deleteJob()">Confirm Delete</button>
+              <button class="btn btn-danger-confirm" @click.stop="deleteJob()">Confirm Delete</button>
             </template>
           </div>
         </div>
@@ -181,11 +181,11 @@
             <button class="overlay-tab-btn" :class="{ active: activeTab === 'overview' }"
               @click="switchTab('overview')">Overview</button>
             <button class="overlay-tab-btn" :class="{ active: activeTab === 'resume' }"
-              @click="switchTab('resume')">Resume</button>
+              @click="switchTab('resume')">Resume<span x-show="selectedJob.resume_md_exists || !!selectedJob.resume_path" class="tab-check">✓</span></button>
             <button class="overlay-tab-btn" :class="{ active: activeTab === 'cover' }"
-              @click="switchTab('cover')">Cover Letter</button>
+              @click="switchTab('cover')">Cover Letter<span x-show="selectedJob.cover_md_exists || !!selectedJob.cover_path" class="tab-check">✓</span></button>
             <button class="overlay-tab-btn" :class="{ active: activeTab === 'details' }"
-              @click="switchTab('details')">Details</button>
+              @click="switchTab('details')">Details<span x-show="selectedJob.extraction_json_exists" class="tab-check">✓</span></button>
           </div>
 
           <!-- Tab content area -->
