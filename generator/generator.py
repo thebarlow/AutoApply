@@ -178,15 +178,11 @@ def generate_md(
     data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
     profile = UserProfile(**data)
 
-    def _cfg(key: str) -> str:
-        r = db.query(Config).filter_by(key=key).first()
-        return r.value if r else ""
-
     frontmatter = _build_frontmatter(
         profile,
-        github=_cfg("resume_github"),
-        linkedin=_cfg("resume_linkedin"),
-        website=_cfg("resume_website"),
+        github=_db_cfg(db, "resume_github"),
+        linkedin=_db_cfg(db, "resume_linkedin"),
+        website=_db_cfg(db, "resume_website"),
     )
 
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -217,12 +213,13 @@ def generate_pdf(
         render_pdf(md_path, pdf_path, template_path)
 
     job = db.query(Job).filter_by(job_key=job_key).first()
-    if job:
-        if type_ == "resume":
-            job.resume_path = str(pdf_path)
-        else:
-            job.cover_path = str(pdf_path)
-        db.commit()
+    if job is None:
+        raise RuntimeError(f"Job {job_key!r} not found after PDF render")
+    if type_ == "resume":
+        job.resume_path = str(pdf_path)
+    else:
+        job.cover_path = str(pdf_path)
+    db.commit()
 
 
 def strip_header_block(md: str) -> str:
@@ -317,14 +314,16 @@ def render_resume_pdf(md_path: Path, pdf_path: Path, job_key: str, template_path
     )
 
 
+def _db_cfg(db: Session, key: str) -> str:
+    """Read a config value from the DB; returns empty string if absent."""
+    row = db.query(Config).filter_by(key=key).first()
+    return row.value if row else ""
+
+
 def _resolve_active_prompt(db: Session, type_: str) -> dict:
     """Return the active prompt config dict for a type. Raises RuntimeError if not configured."""
-    def _cfg(key: str) -> str:
-        r = db.query(Config).filter_by(key=key).first()
-        return r.value if r else ""
-
-    active_id = _cfg(f"active_{type_}_prompt_id")
-    prompts = json.loads(_cfg(f"{type_}_prompts") or "[]")
+    active_id = _db_cfg(db, f"active_{type_}_prompt_id")
+    prompts = json.loads(_db_cfg(db, f"{type_}_prompts") or "[]")
     prompt = next((p for p in prompts if p["id"] == active_id), None)
     if not prompt:
         raise RuntimeError(f"No active {type_} prompt configured. Set one under Config → Scaffolding.")
@@ -333,13 +332,9 @@ def _resolve_active_prompt(db: Session, type_: str) -> dict:
 
 def _resolve_latex_template(db: Session, template_name: str) -> Path:
     """Return the filesystem Path for a named LaTeX template. Raises RuntimeError if not found."""
-    def _cfg(key: str) -> str:
-        r = db.query(Config).filter_by(key=key).first()
-        return r.value if r else ""
-
     if not template_name:
         raise RuntimeError("No LaTeX template configured for this prompt.")
-    templates = json.loads(_cfg("latex_templates") or "[]")
+    templates = json.loads(_db_cfg(db, "latex_templates") or "[]")
     match = next((t for t in templates if t["name"] == template_name), None)
     if not match:
         raise RuntimeError(f"LaTeX template '{template_name}' not found in config.")
@@ -368,7 +363,7 @@ def generate_cover(job_key: str, db: Session) -> None:
 
 
 def generate_job(job_key: str, db: Optional[Session] = None) -> None:
-    """Generate resume and cover letter for a job. Swallows exceptions to stderr."""
+    """Generate resume and cover letter for a job. Errors are printed to stderr."""
     own_db = db is None
     if own_db:
         db = SessionLocal()
@@ -376,6 +371,7 @@ def generate_job(job_key: str, db: Optional[Session] = None) -> None:
         generate_resume(job_key, db)
         generate_cover(job_key, db)
     except Exception as e:
+        # Swallow so the all-at-once endpoint can return a partial result
         print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
     finally:
         if own_db:
