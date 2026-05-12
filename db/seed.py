@@ -1,10 +1,27 @@
 from __future__ import annotations
 
+import json
 import textwrap
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from db.models import Config, FieldHelp
+
+_GENERATOR_DIR = Path(__file__).parent.parent / "generator"
+
+DEFAULT_LATEX_TEMPLATES = [
+    {
+        "id": "default-resume",
+        "name": "Default Resume",
+        "path": str((_GENERATOR_DIR / "resume_template.tex").resolve()),
+    },
+    {
+        "id": "default-cover",
+        "name": "Default Cover Letter",
+        "path": str((_GENERATOR_DIR / "cover_template.tex").resolve()),
+    },
+]
 
 DEFAULT_CONFIG: dict[str, str] = {
     "w1": "0.5",
@@ -149,3 +166,21 @@ def seed_default_config(db: Session) -> None:
         if not db.query(Config).filter_by(key=key).first():
             db.add(Config(key=key, value=value))
     db.commit()
+
+
+def seed_latex_templates(db: Session) -> None:
+    """Register default LaTeX templates if not already present."""
+    row = db.query(Config).filter_by(key="latex_templates").first()
+    existing: list[dict] = json.loads(row.value) if row else []
+    existing_ids = {t["id"] for t in existing}
+    added = False
+    for tpl in DEFAULT_LATEX_TEMPLATES:
+        if tpl["id"] not in existing_ids and Path(tpl["path"]).exists():
+            existing.append(tpl)
+            added = True
+    if added:
+        if row:
+            row.value = json.dumps(existing)
+        else:
+            db.add(Config(key="latex_templates", value=json.dumps(existing)))
+        db.commit()

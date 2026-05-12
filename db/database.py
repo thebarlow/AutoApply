@@ -94,11 +94,12 @@ def init_db() -> None:
     _migrate_profile_name()
     _migrate_legacy_config()
     # Seed field help descriptions for any existing DB (no-op if already present)
-    from db.seed import seed_field_help, seed_user_profile_field_help  # local import avoids circular at module level
+    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates  # local import avoids circular at module level
     db = SessionLocal()
     try:
         seed_field_help(db)
         seed_user_profile_field_help(db)
+        seed_latex_templates(db)
     finally:
         db.close()
 
