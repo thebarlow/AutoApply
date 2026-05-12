@@ -1008,10 +1008,11 @@
     for (const field of fields) {
       const name = field.name ?? field;
       const desc = field.description ?? '';
+      const shortName = name.includes('.') ? name.split('.').slice(1).join('.') : name;
       const chip = document.createElement('div');
       chip.className = 'field-chip';
       chip.draggable = true;
-      chip.innerHTML = `<span class="field-chip-label">{${name}}</span><button class="field-chip-help" type="button">?</button>`;
+      chip.innerHTML = `<span class="field-chip-label">${shortName}</span><button class="field-chip-help" type="button">?</button>`;
       chip.addEventListener('dragstart', function (e) {
         e.dataTransfer.setData('text/plain', '{' + name + '}');
         e.dataTransfer.effectAllowed = 'copy';
