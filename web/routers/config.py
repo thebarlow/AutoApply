@@ -342,6 +342,104 @@ def put_llm(body: LLMBody, db: Session = Depends(get_db)) -> dict[str, Any]:
     return get_llm(db)
 
 
+# ---- Named Providers ----
+
+_VALID_PROVIDER_TYPES = {"openrouter", "anthropic", "openai", "gemini"}
+
+
+class ProviderIn(BaseModel):
+    name: str
+    provider_type: str
+    api_key: str = ""
+
+
+class ProviderUpdateIn(BaseModel):
+    name: str
+    provider_type: str
+    api_key: str = ""
+
+
+def _get_providers(db: Session) -> list[dict]:
+    return json.loads(_get(db, "named_providers", "[]"))
+
+
+def _set_providers(db: Session, providers: list[dict]) -> None:
+    _set(db, "named_providers", json.dumps(providers))
+
+
+def _env_key_name(provider_id: str) -> str:
+    return f"LLM_KEY_{provider_id.upper().replace('-', '_')}"
+
+
+def _mask_key(key: str) -> str:
+    if not key:
+        return ""
+    visible = min(8, len(key))
+    return key[:visible] + "•" * max(0, len(key) - visible)
+
+
+@router.get("/api/config/providers")
+def get_providers(db: Session = Depends(get_db)) -> dict[str, Any]:
+    providers = _get_providers(db)
+    env = _read_env()
+    result = []
+    for p in providers:
+        raw_key = env.get(_env_key_name(p["id"]), "")
+        result.append({
+            "id": p["id"],
+            "name": p["name"],
+            "provider_type": p["provider_type"],
+            "has_key": bool(raw_key),
+            "masked_key": _mask_key(raw_key),
+        })
+    return {"providers": result}
+
+
+@router.post("/api/config/providers")
+def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if body.provider_type not in _VALID_PROVIDER_TYPES:
+        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
+    providers = _get_providers(db)
+    new_id = uuid.uuid4().hex
+    providers.append({"id": new_id, "name": body.name, "provider_type": body.provider_type})
+    _set_providers(db, providers)
+    if body.api_key:
+        env = _read_env()
+        env[_env_key_name(new_id)] = body.api_key
+        _write_env(env)
+    return {"id": new_id, "name": body.name, "provider_type": body.provider_type}
+
+
+@router.put("/api/config/providers/{provider_id}")
+def update_provider(provider_id: str, body: ProviderUpdateIn, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if body.provider_type not in _VALID_PROVIDER_TYPES:
+        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
+    providers = _get_providers(db)
+    match = next((p for p in providers if p["id"] == provider_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    match["name"] = body.name
+    match["provider_type"] = body.provider_type
+    _set_providers(db, providers)
+    if body.api_key:
+        env = _read_env()
+        env[_env_key_name(provider_id)] = body.api_key
+        _write_env(env)
+    return {"id": provider_id, "name": body.name, "provider_type": body.provider_type}
+
+
+@router.delete("/api/config/providers/{provider_id}", status_code=204)
+def delete_provider(provider_id: str, db: Session = Depends(get_db)) -> None:
+    providers = _get_providers(db)
+    remaining = [p for p in providers if p["id"] != provider_id]
+    if len(remaining) == len(providers):
+        raise HTTPException(status_code=404, detail="Provider not found")
+    _set_providers(db, remaining)
+    env = _read_env()
+    env.pop(_env_key_name(provider_id), None)
+    _write_env(env)
+
+
 # ---- User Profiles ----
 
 _EMPTY_PROFILE_DATA: dict[str, Any] = {

@@ -187,6 +187,64 @@ def test_put_llm_unknown_provider_returns_422(client, tmp_path, monkeypatch):
     assert resp.status_code == 422
 
 
+# ---- Named Providers ----
+
+def test_get_providers_empty(client):
+    resp = client.get("/api/config/providers")
+    assert resp.status_code == 200
+    assert resp.json() == {"providers": []}
+
+
+def test_create_and_list_provider(client):
+    resp = client.post("/api/config/providers", json={
+        "name": "My OpenRouter", "provider_type": "openrouter", "api_key": "sk-test-123"
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "My OpenRouter"
+    assert data["provider_type"] == "openrouter"
+    assert "id" in data
+
+    resp2 = client.get("/api/config/providers")
+    providers = resp2.json()["providers"]
+    assert len(providers) == 1
+    assert providers[0]["name"] == "My OpenRouter"
+    assert providers[0]["has_key"] is True
+    assert "masked_key" in providers[0]
+
+
+def test_update_provider(client):
+    pid = client.post("/api/config/providers", json={
+        "name": "Old Name", "provider_type": "anthropic", "api_key": "sk-ant-abc"
+    }).json()["id"]
+
+    resp = client.put(f"/api/config/providers/{pid}", json={
+        "name": "New Name", "provider_type": "anthropic", "api_key": ""
+    })
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "New Name"
+
+    resp2 = client.get("/api/config/providers")
+    assert resp2.json()["providers"][0]["name"] == "New Name"
+
+
+def test_delete_provider(client):
+    pid = client.post("/api/config/providers", json={
+        "name": "ToDelete", "provider_type": "openai", "api_key": "sk-xyz"
+    }).json()["id"]
+
+    resp = client.delete(f"/api/config/providers/{pid}")
+    assert resp.status_code == 204
+
+    resp2 = client.get("/api/config/providers")
+    assert resp2.json()["providers"] == []
+
+
+def test_delete_provider_not_found(client):
+    resp = client.delete("/api/config/providers/nonexistent-id")
+    assert resp.status_code == 404
+
+
 def test_get_job_fields(client):
     resp = client.get("/api/job-fields")
     assert resp.status_code == 200
