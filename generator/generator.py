@@ -65,23 +65,55 @@ def _load_master_resume(profile: UserProfile) -> str:
     return _render_profile(profile)
 
 
-def _apply_template(template: str, subs: dict[str, str]) -> str:
+def _field_to_str(value: Any) -> str:
+    """Render a profile/job field value to a human-readable string for prompt injection."""
+    if isinstance(value, list):
+        if not value:
+            return ""
+        first = value[0]
+        if isinstance(first, WorkHistoryEntry):
+            return "\n".join(
+                f"- {e.title} at {e.company} ({e.start}–{e.end}): {e.summary}"
+                for e in value  # type: ignore[union-attr]
+            )
+        if isinstance(first, EducationEntry):
+            return "\n".join(
+                f"- {e.degree} in {e.field} from {e.institution} ({e.graduated}), GPA {e.gpa}"
+                for e in value  # type: ignore[union-attr]
+            )
+        if isinstance(first, ProjectEntry):
+            return "\n".join(
+                f"- {e.name}: {e.description}"
+                + (f" ({e.url})" if e.url else "")
+                + (f" — {', '.join(e.technologies)}" if e.technologies else "")
+                for e in value  # type: ignore[union-attr]
+            )
+        return ", ".join(str(v) for v in value)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _apply_template(template: str, sources: dict[str, Any]) -> str:
+    """Replace {table.field} placeholders using values from sources dict."""
     def _replace(m: re.Match) -> str:
-        return subs.get(m.group(1), m.group(0))
-    return re.sub(r'\{(\w+)\}', _replace, template)
+        table, field = m.group(1), m.group(2)
+        obj = sources.get(table)
+        if obj is None:
+            return m.group(0)
+        value = getattr(obj, field, None)
+        if value is None:
+            return m.group(0)
+        return _field_to_str(value)
+    return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
 
 
 def build_prompt(job: Job, profile: UserProfile, template: str) -> str:
+    # Pre-substitute the virtual {user_profile.master_resume} placeholder, which reads
+    # from md_path if present rather than reconstructing from structured fields.
     master = _load_master_resume(profile)
-    return _apply_template(template, {
-        "profile": master,
-        "master_resume": master,
-        "job": _render_job(job),
-        "title": job.title or "",
-        "company": job.company or "",
-        "location": job.location or "Not specified",
-        "description": job.description or "Not provided",
-    })
+    template = template.replace("{user_profile.master_resume}", master)
+    return _apply_template(template, {"job": job, "user_profile": profile})
 
 
 # Keep old names as aliases — existing tests and imports continue to work
@@ -90,12 +122,7 @@ build_cover_prompt = build_prompt
 
 
 def build_description_prompt(job: Job, template: str) -> str:
-    return _apply_template(template, {
-        "title": job.title or "",
-        "company": job.company or "",
-        "location": job.location or "Not specified",
-        "description": job.description or "Not provided",
-    })
+    return _apply_template(template, {"job": job})
 
 
 def extraction_json_to_markdown(data: dict) -> str:

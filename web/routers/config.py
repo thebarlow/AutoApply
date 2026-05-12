@@ -815,7 +815,7 @@ def get_job_fields(db: Session = Depends(get_db)) -> dict:
     help_rows = db.query(FieldHelp).filter_by(table_name="jobs").all()
     descriptions = {row.column_name: row.description for row in help_rows}
     fields = [
-        {"name": col.name, "description": descriptions.get(col.name, "")}
+        {"name": f"job.{col.name}", "description": descriptions.get(col.name, "")}
         for col in Job.__table__.columns
     ]
     return {"fields": fields}
@@ -827,8 +827,12 @@ def get_user_profile_fields(db: Session = Depends(get_db)) -> dict:
     descriptions = {row.column_name: row.description for row in help_rows}
     import dataclasses
     fields = [
-        {"name": f.name, "description": descriptions.get(f.name, "")}
+        {"name": f"user_profile.{f.name}", "description": descriptions.get(f.name, "")}
         for f in dataclasses.fields(UserProfile)
         if f.name not in ("resume_path", "md_path")
     ]
+    fields.insert(0, {
+        "name": "user_profile.master_resume",
+        "description": "Full resume content loaded from md_path (or reconstructed from profile fields if md_path is not set)",
+    })
     return {"fields": fields}

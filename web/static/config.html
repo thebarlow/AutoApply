@@ -1020,7 +1020,7 @@
     const validNames = allFields.length ? new Set(allFields.map(f => f.name ?? f)) : null;
     const escaped = text
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/\{(\w+)\}/g, function (match, name) {
+      .replace(/\{(\w+\.\w+)\}/g, function (match, name) {
         if (!validNames) return match;
         return `<mark class="${validNames.has(name) ? 'fv-good' : 'fv-bad'}">${match}</mark>`;
       });
