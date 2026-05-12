@@ -122,7 +122,12 @@ build_cover_prompt = build_prompt
 
 
 def build_description_prompt(job: Job, template: str) -> str:
-    return _apply_template(template, {"job": job})
+    result = _apply_template(template, {"job": job})
+    # Also support bare {field} placeholders (e.g., {description}, {title})
+    def _bare_replace(m: re.Match) -> str:
+        value = getattr(job, m.group(1), None)
+        return _field_to_str(value) if value is not None else m.group(0)
+    return re.sub(r'\{(\w+)\}', _bare_replace, result)
 
 
 def extraction_json_to_markdown(data: dict) -> str:

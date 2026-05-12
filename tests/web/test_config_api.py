@@ -439,6 +439,6 @@ def test_get_job_fields(client):
     assert isinstance(data["fields"], list)
     # Spot-check a few columns that should always be present
     names = [f["name"] for f in data["fields"]]
-    assert "title" in names
-    assert "company" in names
-    assert "description" in names
+    assert "job.title" in names
+    assert "job.company" in names
+    assert "job.description" in names

@@ -82,7 +82,7 @@ def _make_job_obj() -> Job:
 def test_build_resume_prompt_contains_job_fields():
     job = _make_job_obj()
     profile = _make_profile()
-    template = "Profile:\n{profile}\nJob:\n{job}"
+    template = "Title: {job.title}\nCompany: {job.company}\nDesc: {job.description}"
     result = build_resume_prompt(job, profile, template)
     assert "Senior Software Engineer" in result
     assert "Acme Corp" in result
@@ -92,7 +92,7 @@ def test_build_resume_prompt_contains_job_fields():
 def test_build_resume_prompt_contains_profile_fields():
     job = _make_job_obj()
     profile = _make_profile()
-    template = "{profile}\n{job}"
+    template = "Name: {user_profile.name}\nSkills: {user_profile.skills}\nWork: {user_profile.work_history}\nEdu: {user_profile.education}"
     result = build_resume_prompt(job, profile, template)
     assert "Jane Doe" in result
     assert "Python" in result
@@ -104,7 +104,7 @@ def test_build_resume_prompt_contains_profile_fields():
 def test_build_cover_prompt_contains_job_and_profile():
     job = _make_job_obj()
     profile = _make_profile()
-    template = "{profile}\n{job}"
+    template = "Name: {user_profile.name}\nCompany: {job.company}\nDesc: {job.description}"
     result = build_cover_prompt(job, profile, template)
     assert "Jane Doe" in result
     assert "Acme Corp" in result
