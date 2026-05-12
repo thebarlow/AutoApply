@@ -52,6 +52,7 @@ class SearchConfig:
 @dataclass
 class UserProfile:
     name: str = ""
+    hero: str = ""
     email: str = ""
     phone: str = ""
     location: str = ""

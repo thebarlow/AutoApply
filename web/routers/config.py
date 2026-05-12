@@ -380,6 +380,7 @@ _VALID_PROVIDER_TYPES = {"openrouter", "anthropic", "openai", "gemini"}
 class ProviderIn(BaseModel):
     name: str
     provider_type: str
+    default_model: str = ""
     api_key: str = ""
 
 
@@ -413,6 +414,7 @@ def get_providers(db: Session = Depends(get_db)) -> dict[str, Any]:
             "id": p["id"],
             "name": p["name"],
             "provider_type": p["provider_type"],
+            "default_model": p.get("default_model", ""),
             "has_key": bool(raw_key),
             "masked_key": _mask_key(raw_key),
         })
@@ -425,7 +427,7 @@ def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str
         raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
     providers = _get_providers(db)
     new_id = uuid.uuid4().hex
-    providers.append({"id": new_id, "name": body.name, "provider_type": body.provider_type})
+    providers.append({"id": new_id, "name": body.name, "provider_type": body.provider_type, "default_model": body.default_model})
     _set_providers(db, providers)
     if body.api_key:
         env = _read_env()
@@ -444,6 +446,7 @@ def update_provider(provider_id: str, body: ProviderIn, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="Provider not found")
     match["name"] = body.name
     match["provider_type"] = body.provider_type
+    match["default_model"] = body.default_model
     _set_providers(db, providers)
     env = _read_env()
     if body.api_key:

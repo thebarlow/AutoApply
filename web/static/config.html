@@ -157,6 +157,10 @@
           <label class="config-form-label">Profile Name</label>
           <input class="config-form-input" type="text" id="profile-modal-name">
         </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Hero</label>
+          <textarea class="config-form-input" id="profile-hero" rows="4" style="resize:vertical;font-family:inherit"></textarea>
+        </div>
         <div class="config-modal-subsection-title">Contact</div>
         <div class="config-form-row">
           <div class="config-form-group">
@@ -320,6 +324,10 @@
         </select>
       </div>
       <div class="config-form-group">
+        <label class="config-form-label">Default Model</label>
+        <input class="config-form-input" type="text" id="provider-modal-default-model" placeholder="optional">
+      </div>
+      <div class="config-form-group">
         <label class="config-form-label">API Key</label>
         <input class="config-form-input" type="password" id="provider-modal-key" placeholder="sk-…">
       </div>
@@ -445,6 +453,7 @@
     if (!id) {
       document.getElementById('profile-modal-title').textContent = 'New Profile';
       document.getElementById('profile-modal-name').value = '';
+      document.getElementById('profile-hero').value = '';
       document.getElementById('profile-email').value = '';
       document.getElementById('profile-phone').value = '';
       document.getElementById('profile-location').value = '';
@@ -465,6 +474,7 @@
 
     document.getElementById('profile-modal-title').textContent = profile.name || 'Profile';
     document.getElementById('profile-modal-name').value = profile.name || '';
+    document.getElementById('profile-hero').value = data.hero || '';
     document.getElementById('profile-email').value = data.email || '';
     document.getElementById('profile-phone').value = data.phone || '';
     document.getElementById('profile-location').value = data.location || '';
@@ -506,6 +516,7 @@
     const body = {
       name,
       data: {
+        hero: document.getElementById('profile-hero').value,
         email: document.getElementById('profile-email').value,
         phone: document.getElementById('profile-phone').value,
         location: document.getElementById('profile-location').value,
@@ -811,11 +822,12 @@
     const templates = tplResp.ok ? (await tplResp.json()).templates : [];
 
     const provSelect = document.getElementById('prompt-modal-provider');
-    provSelect.innerHTML = '<option value="">— None —</option>';
+    provSelect.innerHTML = '<option value="" data-default-model="">— None —</option>';
     providers.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.name;
       opt.textContent = p.name;
+      opt.dataset.defaultModel = p.default_model || '';
       provSelect.appendChild(opt);
     });
 
@@ -1030,6 +1042,13 @@
     renderPromptBackdrop();
   });
 
+  // Auto-fill model ID from provider's default model
+  document.getElementById('prompt-modal-provider').addEventListener('change', function () {
+    const selected = this.options[this.selectedIndex];
+    const defaultModel = selected ? (selected.dataset.defaultModel || '') : '';
+    if (defaultModel) document.getElementById('prompt-modal-model').value = defaultModel;
+  });
+
   // Load field chips when Content tab is opened
   document.querySelectorAll('[data-modal="prompt"]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -1226,6 +1245,7 @@
 
     document.getElementById('provider-modal-name').value = provider.name || '';
     document.getElementById('provider-modal-type').value = provider.provider_type || 'openrouter';
+    document.getElementById('provider-modal-default-model').value = provider.default_model || '';
   }
 
   function closeProviderModal() {
@@ -1242,6 +1262,7 @@
     const body = {
       name: document.getElementById('provider-modal-name').value.trim(),
       provider_type: document.getElementById('provider-modal-type').value,
+      default_model: document.getElementById('provider-modal-default-model').value.trim(),
       api_key: document.getElementById('provider-modal-key').value,
     };
     if (!body.name) { showStatus('status-provider-modal', 'Name required', true); return; }
