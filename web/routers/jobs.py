@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.llm import get_openai_client
+from core.llm import get_client_for_named_provider as _get_client_for_named_provider
 from core.scorer import load_config as _load_config
 from core.scorer import load_user_profile as _load_user_profile
 from core.scorer import score_job as _score_job
@@ -22,10 +23,8 @@ from db.models import Config, Job
 from generator.generator import generate_job as _generate_job
 from generator.generator import generate_resume as _generate_resume
 from generator.generator import generate_cover as _generate_cover
-from generator.generator import generate_resume_md as _generate_resume_md
-from generator.generator import generate_resume_pdf as _generate_resume_pdf
-from generator.generator import generate_cover_md as _generate_cover_md
-from generator.generator import generate_cover_pdf as _generate_cover_pdf
+from generator.generator import generate_md as _generate_md
+from generator.generator import generate_pdf as _generate_pdf
 from generator.generator import build_resume_prompt, build_cover_prompt, build_description_prompt, extraction_json_to_markdown
 
 _GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
@@ -40,6 +39,41 @@ def _call_llm_for_extraction(client, model: str, prompt: str) -> str:
     content = re.sub(r"^```(?:json)?\s*", "", content.strip(), flags=re.IGNORECASE)
     content = re.sub(r"\s*```$", "", content.strip())
     return content.strip()
+
+
+def _cfg_val(db: Session, key: str) -> str:
+    row = db.query(Config).filter_by(key=key).first()
+    return row.value if row else ""
+
+
+def _resolve_prompt(db: Session, type_: str) -> dict:
+    """Return the active prompt dict for a type; raises HTTP 400 if not configured."""
+    active_id = _cfg_val(db, f"active_{type_}_prompt_id")
+    prompts = json.loads(_cfg_val(db, f"{type_}_prompts") or "[]")
+    prompt = next((p for p in prompts if p["id"] == active_id), None)
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No active {type_} prompt configured. Set one under Config → Scaffolding.",
+        )
+    return prompt
+
+
+def _resolve_template(db: Session, template_name: str) -> Path:
+    """Return Path for a named LaTeX template; raises HTTP 400 if not found."""
+    if not template_name:
+        raise HTTPException(
+            status_code=400,
+            detail="No LaTeX template assigned to this prompt. Set one under Config → Scaffolding.",
+        )
+    templates = json.loads(_cfg_val(db, "latex_templates") or "[]")
+    match = next((t for t in templates if t["name"] == template_name), None)
+    if not match:
+        raise HTTPException(status_code=400, detail=f"LaTeX template '{template_name}' not found.")
+    p = Path(match["path"])
+    if not p.exists():
+        raise HTTPException(status_code=400, detail=f"LaTeX template file missing on disk: {p}")
+    return p
 
 
 router = APIRouter(prefix="/api/jobs")
@@ -123,8 +157,7 @@ def generate_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    client, model = get_openai_client(db)
-    _generate_job(job_key, db=db, client=client, model=model)
+    _generate_job(job_key, db=db)
     db.refresh(job)
     return _serialize(job)
 
@@ -134,8 +167,10 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    client, model = get_openai_client(db)
-    _generate_resume(job_key, db=db, client=client, model=model)
+    try:
+        _generate_resume(job_key, db=db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     db.refresh(job)
     return _serialize(job)
 
@@ -145,13 +180,15 @@ def generate_resume_md_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    md_path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
-    md_path.unlink(missing_ok=True)
-    client, model = get_openai_client(db)
-    # Generator swallows exceptions and prints to stderr; file absence is our only failure signal.
-    _generate_resume_md(job_key, db=db, client=client, model=model)
-    if not md_path.exists():
-        raise HTTPException(status_code=500, detail="Resume markdown generation failed")
+    prompt = _resolve_prompt(db, "resume")
+    try:
+        client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        _generate_md(job_key, "resume", prompt["content"], client, model, db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Resume markdown generation failed: {exc}")
     db.refresh(job)
     return _serialize(job)
 
@@ -164,8 +201,12 @@ def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
     if not md_path.exists():
         raise HTTPException(status_code=400, detail="Resume markdown must be generated first")
-    # Generator swallows exceptions; job.resume_path absence after the call indicates failure.
-    _generate_resume_pdf(job_key, db=db)
+    prompt = _resolve_prompt(db, "resume")
+    template_path = _resolve_template(db, prompt.get("template_name", ""))
+    try:
+        _generate_pdf(job_key, "resume", template_path, db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Resume PDF rendering failed: {exc}")
     db.refresh(job)
     if not job.resume_path:
         raise HTTPException(status_code=500, detail="Resume PDF rendering failed")
@@ -177,13 +218,11 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if not job.resume_path:
-        raise HTTPException(status_code=400, detail="Resume must be generated before cover letter")
-    client, model = get_openai_client(db)
-    _generate_cover(job_key, db=db, client=client, model=model)
+    try:
+        _generate_cover(job_key, db=db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     db.refresh(job)
-    if job.cover_path is None:
-        raise HTTPException(status_code=500, detail="Cover letter generation failed")
     return _serialize(job)
 
 
@@ -192,13 +231,15 @@ def generate_cover_md_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
-    md_path.unlink(missing_ok=True)
-    client, model = get_openai_client(db)
-    # Generator swallows exceptions and prints to stderr; file absence is our only failure signal.
-    _generate_cover_md(job_key, db=db, client=client, model=model)
-    if not md_path.exists():
-        raise HTTPException(status_code=500, detail="Cover letter markdown generation failed")
+    prompt = _resolve_prompt(db, "cover")
+    try:
+        client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        _generate_md(job_key, "cover", prompt["content"], client, model, db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Cover letter markdown generation failed: {exc}")
     db.refresh(job)
     return _serialize(job)
 
@@ -208,15 +249,17 @@ def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    # Cover letter PDF generation requires a resume PDF to exist first — enforced as a workflow gate
-    # to ensure the applicant has a complete resume before submitting a cover letter.
     if not job.resume_path:
         raise HTTPException(status_code=400, detail="Resume PDF must be generated before cover letter PDF")
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
     if not md_path.exists():
         raise HTTPException(status_code=400, detail="Cover letter markdown must be generated first")
-    # Generator swallows exceptions; job.cover_path absence after the call indicates failure.
-    _generate_cover_pdf(job_key, db=db)
+    prompt = _resolve_prompt(db, "cover")
+    template_path = _resolve_template(db, prompt.get("template_name", ""))
+    try:
+        _generate_pdf(job_key, "cover", template_path, db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Cover letter PDF rendering failed: {exc}")
     db.refresh(job)
     if job.cover_path is None:
         raise HTTPException(status_code=500, detail="Cover letter PDF rendering failed")
@@ -277,10 +320,8 @@ def get_resume_prompt(job_key: str, db: Session = Depends(get_db)):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     profile = _load_user_profile(db)
-    tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
-    if not tpl:
-        raise HTTPException(status_code=500, detail="Resume prompt template not configured")
-    return build_resume_prompt(job, profile, tpl.value)
+    prompt = _resolve_prompt(db, "resume")
+    return build_resume_prompt(job, profile, prompt["content"])
 
 
 @router.get("/{job_key}/cover/prompt", response_class=PlainTextResponse)
@@ -289,10 +330,8 @@ def get_cover_prompt(job_key: str, db: Session = Depends(get_db)):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     profile = _load_user_profile(db)
-    tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
-    if not tpl:
-        raise HTTPException(status_code=500, detail="Cover prompt template not configured")
-    return build_cover_prompt(job, profile, tpl.value)
+    prompt = _resolve_prompt(db, "cover")
+    return build_cover_prompt(job, profile, prompt["content"])
 
 
 @router.get("/{job_key}/description/prompt", response_class=PlainTextResponse)
@@ -300,10 +339,8 @@ def get_description_prompt(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    tpl = db.query(Config).filter_by(key="description_prompt_template").first()
-    if not tpl:
-        raise HTTPException(status_code=400, detail="Description extraction prompt not configured")
-    return build_description_prompt(job, tpl.value)
+    prompt = _resolve_prompt(db, "description")
+    return build_description_prompt(job, prompt["content"])
 
 
 @router.post("/{job_key}/description/extract")
@@ -311,13 +348,14 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.job_key == job_key).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    tpl = db.query(Config).filter_by(key="description_prompt_template").first()
-    if not tpl:
-        raise HTTPException(status_code=400, detail="No description extraction prompt configured")
-    prompt = build_description_prompt(job, tpl.value)
-    client, model = get_openai_client(db)
+    prompt = _resolve_prompt(db, "description")
+    actual_prompt = build_description_prompt(job, prompt["content"])
     try:
-        job.extraction_json = _call_llm_for_extraction(client, model, prompt)
+        client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        job.extraction_json = _call_llm_for_extraction(client, model, actual_prompt)
     except Exception:
         raise HTTPException(status_code=500, detail="Description extraction failed")
     db.commit()
