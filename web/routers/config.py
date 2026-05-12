@@ -579,7 +579,7 @@ def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
         profiles.append({
             "id": r.id,
             "name": r.name,
-            "has_resume": bool(data.get("resume_path")),
+            "has_resume": bool(data.get("resume_path") or data.get("md_path")),
             "has_cover": bool(data.get("cover_letter_path")),
             "resume_path": data.get("resume_path", ""),
             "cover_letter_path": data.get("cover_letter_path", ""),
