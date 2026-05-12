@@ -45,9 +45,42 @@
       <span class="save-status" id="status-profile" style="margin-left:12px;font-size:12px"></span>
     </div>
 
-    <!-- Pane: Scaffolding (populated in Task 7–8) -->
+    <!-- Pane: Scaffolding -->
     <div class="config-pane" id="pane-scaffolding">
       <div class="config-pane-title">Scaffolding</div>
+
+      <!-- Prompts -->
+      <div class="config-subsection">
+        <div class="config-subsection-title">Prompts</div>
+        <table class="config-data-table" id="prompts-table">
+          <thead>
+            <tr><th>Name</th><th>Type</th><th>Model</th><th>Template</th></tr>
+          </thead>
+          <tbody id="prompts-tbody"></tbody>
+        </table>
+        <button class="config-btn-add" id="btn-add-prompt">+ Add Prompt</button>
+      </div>
+
+      <!-- LaTeX Templates (populated in Task 8) -->
+      <div class="config-subsection" id="subsection-latex">
+        <div class="config-subsection-title">LaTeX Templates</div>
+        <table class="config-data-table" id="latex-table">
+          <thead><tr><th>Name</th><th>File</th></tr></thead>
+          <tbody id="latex-tbody"></tbody>
+        </table>
+        <button class="config-btn-add" id="btn-add-latex">+ Upload Template</button>
+      </div>
+
+      <!-- Providers (populated in Task 8) -->
+      <div class="config-subsection" id="subsection-providers">
+        <div class="config-subsection-title">Providers</div>
+        <table class="config-data-table" id="providers-table">
+          <thead><tr><th>Name</th><th>Provider</th><th>API Key</th></tr></thead>
+          <tbody id="providers-tbody"></tbody>
+        </table>
+        <button class="config-btn-add" id="btn-add-provider">+ Add Provider</button>
+      </div>
+
     </div>
 
     <!-- Pane: API -->
@@ -157,6 +190,85 @@
       <button class="config-btn-delete" id="delete-profile-btn">Delete</button>
     </div>
   </div>
+</div>
+
+<!-- Prompt Modal -->
+<div class="config-modal-backdrop" id="prompt-modal-backdrop">
+  <div class="config-modal config-modal--wide">
+    <div class="config-modal-header">
+      <h2 id="prompt-modal-title">Prompt</h2>
+      <button class="config-modal-close" id="prompt-modal-close">✕</button>
+    </div>
+    <div class="config-modal-tabs">
+      <button class="config-modal-tab active" data-modal="prompt" data-tab="config">Config</button>
+      <button class="config-modal-tab" data-modal="prompt" data-tab="content">Content</button>
+    </div>
+    <div class="config-modal-body">
+
+      <!-- Config tab -->
+      <div class="config-modal-tab-panel active" id="prompt-tab-config">
+        <div class="config-form-group">
+          <label class="config-form-label">Prompt Name</label>
+          <input class="config-form-input" type="text" id="prompt-modal-name">
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Type</label>
+          <select class="config-form-input" id="prompt-modal-type">
+            <option value="resume">Resume</option>
+            <option value="cover">Cover Letter</option>
+            <option value="description">Description Extraction</option>
+          </select>
+        </div>
+        <div class="config-modal-subsection-title">Model</div>
+        <div class="config-form-row">
+          <div class="config-form-group">
+            <label class="config-form-label">Provider</label>
+            <select class="config-form-input" id="prompt-modal-provider"></select>
+          </div>
+          <div class="config-form-group">
+            <label class="config-form-label">Model ID</label>
+            <input class="config-form-input" type="text" id="prompt-modal-model" placeholder="e.g. anthropic/claude-sonnet-4-6">
+          </div>
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">LaTeX Template (optional)</label>
+          <select class="config-form-input" id="prompt-modal-template">
+            <option value="">— None —</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Content tab -->
+      <div class="config-modal-tab-panel" id="prompt-tab-content">
+        <div class="config-prompt-split">
+          <div class="config-prompt-split-editor">
+            <div class="config-prompt-split-backdrop" id="prompt-backdrop"></div>
+            <textarea class="config-prompt-split-textarea" id="prompt-content-textarea"></textarea>
+          </div>
+          <div class="config-prompt-split-sidebar" id="prompt-chips-sidebar">
+            <div class="field-chips-sidebar-label">Job Fields</div>
+            <div id="prompt-job-chips"><span class="field-chips-unavailable">Loading…</span></div>
+            <div class="field-chips-sidebar-label" id="prompt-user-chips-label" style="margin-top:8px;display:none">User Fields</div>
+            <div id="prompt-user-chips"></div>
+          </div>
+        </div>
+        <div class="config-prompt-hint">
+          Drag fields into the prompt. <span style="color:#16a34a">Green</span> = valid · <span style="color:#ca8a04">Yellow</span> = unrecognized.
+        </div>
+      </div>
+
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-prompt-modal">Save</button>
+      <span class="save-status" id="status-prompt-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-prompt-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="field-help-popover" id="field-help-popover">
+  <div class="field-help-popover-name" id="field-help-popover-name"></div>
+  <div id="field-help-popover-desc"></div>
 </div>
 
 </div><!-- /config-shell -->
@@ -590,8 +702,282 @@
     });
   });
 
+  // ---- Prompt Tab ----
+
+  let _promptModalId = null;
+  let _promptModalType = null;
+  let _fieldChipsCache = null;
+  let _userFieldChipsCache = null;
+
+  function buildPromptRow(prompt) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = prompt.id;
+    tr.dataset.type = prompt.type;
+    const modelDisplay = prompt.provider_name && prompt.model_id
+      ? prompt.provider_name + ' — ' + prompt.model_id
+      : prompt.model_id || '';
+    const typeLabel = { resume: 'Resume', cover: 'Cover Letter', description: 'Description' }[prompt.type] || prompt.type;
+    tr.innerHTML = `
+      <td class="config-row-name"></td>
+      <td class="config-meta"></td>
+      <td class="config-meta"></td>
+      <td class="config-meta"></td>
+    `;
+    tr.querySelectorAll('td')[0].textContent = prompt.name || 'Unnamed';
+    tr.querySelectorAll('td')[1].textContent = typeLabel;
+    tr.querySelectorAll('td')[2].textContent = modelDisplay;
+    tr.querySelectorAll('td')[3].textContent = prompt.template_name || '—';
+    if (!prompt.template_name) tr.querySelectorAll('td')[3].className = 'config-muted';
+    tr.addEventListener('click', function () { openPromptModal(prompt.type, prompt.id); });
+    return tr;
+  }
+
+  async function loadPrompts() {
+    const resp = await fetch('/api/config/prompts');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tbody = document.getElementById('prompts-tbody');
+    tbody.innerHTML = '';
+    data.prompts.forEach(p => tbody.appendChild(buildPromptRow(p)));
+  }
+
+  async function populatePromptDropdowns() {
+    const [provResp, tplResp] = await Promise.all([
+      fetch('/api/config/providers'),
+      fetch('/api/config/latex-templates'),
+    ]);
+    const providers = provResp.ok ? (await provResp.json()).providers : [];
+    const templates = tplResp.ok ? (await tplResp.json()).templates : [];
+
+    const provSelect = document.getElementById('prompt-modal-provider');
+    provSelect.innerHTML = '<option value="">— None —</option>';
+    providers.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      provSelect.appendChild(opt);
+    });
+
+    const tplSelect = document.getElementById('prompt-modal-template');
+    tplSelect.innerHTML = '<option value="">— None —</option>';
+    templates.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.name;
+      opt.textContent = t.name;
+      tplSelect.appendChild(opt);
+    });
+  }
+
+  async function openPromptModal(type_, id) {
+    _promptModalType = type_ || 'resume';
+    _promptModalId = id || null;
+    await populatePromptDropdowns();
+    switchConfigModalTab('prompt', 'config');
+    document.getElementById('prompt-modal-backdrop').classList.add('is-open');
+
+    if (!id) {
+      document.getElementById('prompt-modal-title').textContent = 'New Prompt';
+      document.getElementById('prompt-modal-name').value = '';
+      document.getElementById('prompt-modal-type').value = _promptModalType;
+      document.getElementById('prompt-modal-provider').value = '';
+      document.getElementById('prompt-modal-model').value = '';
+      document.getElementById('prompt-modal-template').value = '';
+      document.getElementById('prompt-content-textarea').value = '';
+      renderPromptBackdrop();
+      return;
+    }
+
+    const resp = await fetch('/api/config/prompts/' + type_ + '/' + id);
+    if (!resp.ok) return;
+    const prompt = await resp.json();
+
+    document.getElementById('prompt-modal-title').textContent = prompt.name || 'Prompt';
+    document.getElementById('prompt-modal-name').value = prompt.name || '';
+    document.getElementById('prompt-modal-type').value = type_;
+    document.getElementById('prompt-modal-provider').value = prompt.provider_name || '';
+    document.getElementById('prompt-modal-model').value = prompt.model_id || '';
+    document.getElementById('prompt-modal-template').value = prompt.template_name || '';
+    document.getElementById('prompt-content-textarea').value = prompt.content || '';
+    renderPromptBackdrop();
+  }
+
+  function closePromptModal() {
+    _promptModalId = null;
+    _promptModalType = null;
+    document.getElementById('prompt-modal-backdrop').classList.remove('is-open');
+    document.getElementById('field-help-popover').classList.remove('is-open');
+  }
+
+  document.getElementById('prompt-modal-close').addEventListener('click', closePromptModal);
+  document.getElementById('prompt-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closePromptModal();
+  });
+
+  document.getElementById('btn-add-prompt').addEventListener('click', function () {
+    openPromptModal('resume', null);
+  });
+
+  document.getElementById('save-prompt-modal').addEventListener('click', async function () {
+    const type_ = document.getElementById('prompt-modal-type').value;
+    const body = {
+      name: document.getElementById('prompt-modal-name').value.trim() || 'Unnamed',
+      content: document.getElementById('prompt-content-textarea').value,
+      provider_name: document.getElementById('prompt-modal-provider').value,
+      model_id: document.getElementById('prompt-modal-model').value,
+      template_name: document.getElementById('prompt-modal-template').value,
+    };
+    try {
+      let resp;
+      if (_promptModalId) {
+        resp = await fetch('/api/config/prompts/' + type_ + '/' + _promptModalId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } else {
+        resp = await fetch('/api/config/prompts/' + type_, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) _promptModalId = (await resp.json()).id;
+      }
+      if (resp && resp.ok) {
+        showStatus('status-prompt-modal', 'Saved ✓', false);
+        document.getElementById('prompt-modal-title').textContent = body.name;
+        await loadPrompts();
+      } else {
+        showStatus('status-prompt-modal', 'Error saving', true);
+      }
+    } catch { showStatus('status-prompt-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-prompt-btn').addEventListener('click', async function () {
+    if (!_promptModalId || !_promptModalType) return;
+    if (!confirm('Delete this prompt?')) return;
+    const resp = await fetch('/api/config/prompts/' + _promptModalType + '/' + _promptModalId, { method: 'DELETE' });
+    if (resp.ok) { closePromptModal(); await loadPrompts(); }
+  });
+
+  // ---- Prompt field chips / backdrop ----
+
+  const _promptTextarea = document.getElementById('prompt-content-textarea');
+
+  async function loadFieldChips() {
+    if (_fieldChipsCache && _userFieldChipsCache !== null) {
+      renderPromptChips();
+      return;
+    }
+    try {
+      const [jobResp, userResp] = await Promise.all([
+        fetch('/api/job-fields'),
+        fetch('/api/user-profile-fields'),
+      ]);
+      _fieldChipsCache = jobResp.ok ? (await jobResp.json()).fields : [];
+      _userFieldChipsCache = userResp.ok ? (await userResp.json()).fields : [];
+      renderPromptChips();
+    } catch {
+      document.getElementById('prompt-job-chips').innerHTML = '<span class="field-chips-unavailable">unavailable</span>';
+    }
+  }
+
+  function renderPromptChips() {
+    renderChipsIntoContainer(document.getElementById('prompt-job-chips'), _fieldChipsCache || []);
+    const userContainer = document.getElementById('prompt-user-chips');
+    const userLabel = document.getElementById('prompt-user-chips-label');
+    if (_userFieldChipsCache && _userFieldChipsCache.length) {
+      userLabel.style.display = '';
+      renderChipsIntoContainer(userContainer, _userFieldChipsCache);
+    }
+    renderPromptBackdrop();
+  }
+
+  function renderChipsIntoContainer(container, fields) {
+    container.innerHTML = '';
+    for (const field of fields) {
+      const name = field.name ?? field;
+      const desc = field.description ?? '';
+      const chip = document.createElement('div');
+      chip.className = 'field-chip';
+      chip.draggable = true;
+      chip.innerHTML = `<span class="field-chip-label">{${name}}</span><button class="field-chip-help" type="button">?</button>`;
+      chip.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', '{' + name + '}');
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      chip.querySelector('.field-chip-help').addEventListener('click', function (e) {
+        e.stopPropagation();
+        showFieldHelpPopover(e.currentTarget, name, desc);
+      });
+      container.appendChild(chip);
+    }
+  }
+
+  function showFieldHelpPopover(btn, name, desc) {
+    const popover = document.getElementById('field-help-popover');
+    const rect = btn.getBoundingClientRect();
+    document.getElementById('field-help-popover-name').textContent = '{' + name + '}';
+    document.getElementById('field-help-popover-desc').textContent = desc || 'No description.';
+    const popW = 220;
+    let left = rect.left - popW - 8;
+    if (left < 8) left = rect.right + 8;
+    let top = rect.top;
+    const popH = popover.offsetHeight || 80;
+    if (top + popH > window.innerHeight - 8) top = window.innerHeight - popH - 8;
+    popover.style.left = left + 'px';
+    popover.style.top = top + 'px';
+    popover.classList.add('is-open');
+  }
+
+  document.addEventListener('click', function (e) {
+    const popover = document.getElementById('field-help-popover');
+    if (!popover.contains(e.target)) popover.classList.remove('is-open');
+  });
+
+  function renderPromptBackdrop() {
+    const backdrop = document.getElementById('prompt-backdrop');
+    const text = _promptTextarea.value;
+    const allFields = [...(_fieldChipsCache || []), ...(_userFieldChipsCache || [])];
+    const validNames = allFields.length ? new Set(allFields.map(f => f.name ?? f)) : null;
+    const escaped = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\{(\w+)\}/g, function (match, name) {
+        if (!validNames) return match;
+        return `<mark class="${validNames.has(name) ? 'fv-good' : 'fv-bad'}">${match}</mark>`;
+      });
+    backdrop.innerHTML = escaped + ' ';
+    backdrop.scrollTop = _promptTextarea.scrollTop;
+  }
+
+  _promptTextarea.addEventListener('input', renderPromptBackdrop);
+  _promptTextarea.addEventListener('scroll', function () {
+    document.getElementById('prompt-backdrop').scrollTop = _promptTextarea.scrollTop;
+  });
+  _promptTextarea.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  _promptTextarea.addEventListener('drop', function (e) {
+    e.preventDefault();
+    const text = e.dataTransfer.getData('text/plain');
+    if (!text) return;
+    const idx = _promptTextarea.selectionStart ?? _promptTextarea.value.length;
+    const val = _promptTextarea.value;
+    _promptTextarea.value = val.slice(0, idx) + text + val.slice(idx);
+    _promptTextarea.setSelectionRange(idx + text.length, idx + text.length);
+    _promptTextarea.focus();
+    renderPromptBackdrop();
+  });
+
+  // Load field chips when Content tab is opened
+  document.querySelectorAll('[data-modal="prompt"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.dataset.tab === 'content') loadFieldChips();
+    });
+  });
+
   // ---- Init ----
-  Promise.all([loadApiConfig(), loadProfiles()]).catch(console.error);
+  Promise.all([loadApiConfig(), loadProfiles(), loadPrompts()]).catch(console.error);
 
 })();
 </script>
