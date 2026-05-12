@@ -142,6 +142,9 @@ def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict:
 class PromptBody(BaseModel):
     name: str
     content: str
+    provider_name: str = ""
+    model_id: str = ""
+    template_name: str = ""
 
 
 class ActivePromptBody(BaseModel):
@@ -163,6 +166,22 @@ def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[d
     _set(db, legacy_key, match["content"] if match else "")
 
 
+@router.get("/api/config/prompts")
+def get_all_prompts(db: Session = Depends(get_db)) -> dict[str, Any]:
+    all_prompts = []
+    for type_ in ("resume", "cover", "description"):
+        for p in _get_prompts(db, type_):
+            all_prompts.append({
+                "id": p["id"],
+                "name": p["name"],
+                "type": type_,
+                "provider_name": p.get("provider_name", ""),
+                "model_id": p.get("model_id", ""),
+                "template_name": p.get("template_name", ""),
+            })
+    return {"prompts": all_prompts}
+
+
 @router.get("/api/config/prompts/{type_}")
 def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
@@ -178,7 +197,14 @@ def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     new_id = uuid.uuid4().hex
-    prompts.append({"id": new_id, "name": body.name, "content": body.content})
+    prompts.append({
+        "id": new_id,
+        "name": body.name,
+        "content": body.content,
+        "provider_name": body.provider_name,
+        "model_id": body.model_id,
+        "template_name": body.template_name,
+    })
     _set_prompts(db, type_, prompts)
     return {"id": new_id, "name": body.name}
 
@@ -218,6 +244,9 @@ def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = De
         raise HTTPException(status_code=404, detail="Prompt not found")
     match["name"] = body.name
     match["content"] = body.content
+    match["provider_name"] = body.provider_name
+    match["model_id"] = body.model_id
+    match["template_name"] = body.template_name
     _set_prompts(db, type_, prompts)
     active_id = _get(db, f"active_{type_}_prompt_id")
     if active_id == prompt_id:

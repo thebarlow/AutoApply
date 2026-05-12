@@ -318,6 +318,61 @@ def test_delete_provider_not_found(client):
     assert resp.status_code == 404
 
 
+# ---- Unified Prompt List ----
+
+def test_unified_prompt_list_empty(client):
+    resp = client.get("/api/config/prompts")
+    assert resp.status_code == 200
+    assert resp.json() == {"prompts": []}
+
+
+def test_unified_prompt_list_includes_all_types(client):
+    client.post("/api/config/prompts/resume", json={"name": "R1", "content": "resume content"})
+    client.post("/api/config/prompts/cover", json={"name": "C1", "content": "cover content"})
+    client.post("/api/config/prompts/description", json={"name": "D1", "content": "desc content"})
+
+    resp = client.get("/api/config/prompts")
+    prompts = resp.json()["prompts"]
+    assert len(prompts) == 3
+    types = {p["type"] for p in prompts}
+    assert types == {"resume", "cover", "description"}
+
+
+# ---- Extended Prompt Fields ----
+
+def test_create_prompt_with_extended_fields(client):
+    resp = client.post("/api/config/prompts/resume", json={
+        "name": "Resume v1",
+        "content": "write a resume",
+        "provider_name": "My OpenRouter",
+        "model_id": "anthropic/claude-sonnet-4-6",
+        "template_name": "resume.tex",
+    })
+    assert resp.status_code == 200
+    pid = resp.json()["id"]
+
+    detail = client.get(f"/api/config/prompts/resume/{pid}").json()
+    assert detail["provider_name"] == "My OpenRouter"
+    assert detail["model_id"] == "anthropic/claude-sonnet-4-6"
+    assert detail["template_name"] == "resume.tex"
+
+
+def test_update_prompt_extended_fields(client):
+    pid = client.post("/api/config/prompts/cover", json={
+        "name": "C1", "content": "cover", "provider_name": "", "model_id": "", "template_name": "",
+    }).json()["id"]
+
+    client.put(f"/api/config/prompts/cover/{pid}", json={
+        "name": "C1", "content": "cover updated",
+        "provider_name": "Anthropic Direct",
+        "model_id": "claude-opus-4-7",
+        "template_name": "cover.tex",
+    })
+    detail = client.get(f"/api/config/prompts/cover/{pid}").json()
+    assert detail["provider_name"] == "Anthropic Direct"
+    assert detail["model_id"] == "claude-opus-4-7"
+
+
 def test_get_job_fields(client):
     resp = client.get("/api/job-fields")
     assert resp.status_code == 200
