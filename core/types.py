@@ -52,9 +52,13 @@ class SearchConfig:
 @dataclass
 class UserProfile:
     name: str = ""
+    first_name: str = ""
+    last_name: str = ""
     hero: str = ""
     email: str = ""
     phone: str = ""
+    linkedin: str = ""
+    github: str = ""
     location: str = ""
     skills: list[str] = field(default_factory=list)
     work_history: list[WorkHistoryEntry] = field(default_factory=list)
