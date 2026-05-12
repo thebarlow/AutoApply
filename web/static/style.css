@@ -1023,9 +1023,28 @@ details.config-section[open] > summary::before {
   box-sizing: border-box;
 }
 
-.prompt-edit-layout textarea {
+.prompt-editor-wrap {
   flex: 0 0 65%;
   min-width: 0;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.prompt-backdrop {
+  position: absolute;
+  inset: 0;
+  font-family: monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #f7f7fb;
+  color: #1a1a2e;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  pointer-events: none;
   box-sizing: border-box;
 }
 
@@ -1034,8 +1053,8 @@ details.config-section[open] > summary::before {
   min-width: 0;
   max-height: 340px;
   overflow-y: auto;
-  background: #111;
-  border: 1px solid #333;
+  background: #f7f7fb;
+  border: 1px solid #ddd;
   border-radius: 4px;
   padding: 0.5rem;
   box-sizing: border-box;
@@ -1057,20 +1076,20 @@ details.config-section[open] > summary::before {
 }
 
 .field-chip {
-  display: block;
-  padding: 0.2rem 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.2rem 0.3rem 0.2rem 0.45rem;
   margin-bottom: 0.25rem;
-  background: #1e1e2e;
-  border: 1px solid #444;
+  background: #eef0ff;
+  border: 1px solid #c5caff;
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.75rem;
-  color: #a8d8a8;
+  color: #3a3a8c;
   cursor: grab;
   user-select: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: 0.25rem;
 }
 
 .field-chip:active {
@@ -1078,6 +1097,107 @@ details.config-section[open] > summary::before {
 }
 
 .field-chip:hover {
-  background: #252535;
-  border-color: #555;
+  background: #e2e6ff;
+  border-color: #a8aef5;
+}
+
+.field-chip-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-chip-help {
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 1px solid #a8aef5;
+  background: #fff;
+  color: #3a3a8c;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: sans-serif;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  user-select: none;
+}
+
+.field-chip-help:hover {
+  background: #3a3a8c;
+  color: #fff;
+  border-color: #3a3a8c;
+}
+
+.field-help-popover {
+  position: fixed;
+  z-index: 500;
+  background: #fff;
+  border: 1px solid #c5caff;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(58,58,140,0.15);
+  padding: 0.6rem 0.8rem;
+  max-width: 220px;
+  font-size: 0.78rem;
+  color: #333;
+  line-height: 1.4;
+  display: none;
+}
+
+.field-help-popover.is-open {
+  display: block;
+}
+
+.field-help-popover-name {
+  font-family: monospace;
+  font-weight: 700;
+  color: #3a3a8c;
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.prompt-textarea {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 340px;
+  font-family: monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  background: transparent;
+  color: transparent;
+  caret-color: #1a1a2e;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.6rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: #3a3a8c;
+}
+
+.prompt-textarea::selection {
+  background: rgba(58, 58, 140, 0.25);
+  color: transparent;
+}
+
+.fv-good {
+  background: #c6f0d8;
+  color: inherit;
+  border-radius: 2px;
+}
+
+.fv-bad {
+  background: #fac5c0;
+  color: inherit;
+  border-radius: 2px;
 }

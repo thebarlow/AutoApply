@@ -34,7 +34,10 @@
       "Bash(git -C \"C:/Users/barlo/Projects/auto_apply\" commit -m \"[test] Split description/remote tests and extend _make_job helper\")",
       "Bash(git *)",
       "Bash(py *)",
-      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest --tb=short -q 2>&1 | Select-Object -Last 20)"
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest --tb=short -q 2>&1 | Select-Object -Last 20)",
+      "Bash(gh pr *)",
+      "Bash(Get-Content C:\\\\Users\\\\barlo\\\\Projects\\\\auto_apply\\\\.gitignore)",
+      "Bash(Select-String -Pattern \"doc\")"
     ]
   },
   "enabledPlugins": {

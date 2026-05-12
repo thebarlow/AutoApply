@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 import core.profile_parser as _parser
-from db.models import Config, UserProfileModel, Job
+from db.models import Config, UserProfileModel, Job, FieldHelp
 
 router = APIRouter()
 
@@ -576,6 +576,11 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
 # ---- Job Fields ----
 
 @router.get("/api/job-fields")
-def get_job_fields() -> dict[str, list[str]]:
-    fields = [col.name for col in Job.__table__.columns]
+def get_job_fields(db: Session = Depends(get_db)) -> dict:
+    help_rows = db.query(FieldHelp).filter_by(table_name="jobs").all()
+    descriptions = {row.column_name: row.description for row in help_rows}
+    fields = [
+        {"name": col.name, "description": descriptions.get(col.name, "")}
+        for col in Job.__table__.columns
+    ]
     return {"fields": fields}

@@ -29,6 +29,13 @@ def init_db() -> None:
     """Create all tables and run schema migrations."""
     Base.metadata.create_all(bind=engine)
     _migrate_profile_name()
+    # Seed field help descriptions for any existing DB (no-op if already present)
+    from db.seed import seed_field_help  # local import avoids circular at module level
+    db = SessionLocal()
+    try:
+        seed_field_help(db)
+    finally:
+        db.close()
 
 
 def get_db():

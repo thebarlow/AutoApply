@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html as _html
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +36,10 @@ def _call_llm_for_extraction(client, model: str, prompt: str) -> str:
         model=model,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.choices[0].message.content
+    content = response.choices[0].message.content or ""
+    content = re.sub(r"^```(?:json)?\s*", "", content.strip(), flags=re.IGNORECASE)
+    content = re.sub(r"\s*```$", "", content.strip())
+    return content.strip()
 
 
 router = APIRouter(prefix="/api/jobs")

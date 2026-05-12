@@ -4,7 +4,7 @@ import textwrap
 
 from sqlalchemy.orm import Session
 
-from db.models import Config
+from db.models import Config, FieldHelp
 
 DEFAULT_CONFIG: dict[str, str] = {
     "w1": "0.5",
@@ -82,6 +82,41 @@ DEFAULT_CONFIG: dict[str, str] = {
     "max_jobs_per_source": "50",
     "scraper_sources": "remotive,remoteok",
 }
+
+
+JOB_FIELD_DESCRIPTIONS: dict[str, str] = {
+    "id": "Internal auto-increment primary key.",
+    "job_key": "Unique identifier for the posting (source + external ID).",
+    "source": "Scraper that collected the job (e.g. remotive, remoteok, linkedin).",
+    "title": "Job title as listed in the posting.",
+    "company": "Company name.",
+    "location": "Office location or 'Remote'.",
+    "salary": "Salary or compensation range as listed.",
+    "remote": "True if the position is explicitly remote.",
+    "description": "Full job description text.",
+    "url": "Link to the original job posting.",
+    "posted_at": "When the job was originally posted (ISO string).",
+    "scraped_at": "When this job was collected by the scraper (ISO string).",
+    "state": "Current pipeline state (draft, pending, applied, rejected, etc.).",
+    "desirability_score": "How desirable the role is based on your profile (0–10).",
+    "fit_score": "How well you fit the job requirements (0–10).",
+    "final_score": "Weighted composite of desirability and fit scores (0–10).",
+    "score_justification": "Claude's reasoning for the scores.",
+    "resume_path": "Filesystem path to the generated resume PDF for this job.",
+    "cover_path": "Filesystem path to the generated cover letter PDF.",
+    "extraction_json": "Structured data extracted from the job description (JSON string).",
+    "applied_at": "When the application was submitted (ISO string).",
+    "sheets_row_id": "Google Sheets row ID for external application tracking.",
+}
+
+
+def seed_field_help(db: Session) -> None:
+    """Insert default field descriptions for the jobs table if not already present."""
+    for column_name, description in JOB_FIELD_DESCRIPTIONS.items():
+        existing = db.query(FieldHelp).filter_by(table_name="jobs", column_name=column_name).first()
+        if not existing:
+            db.add(FieldHelp(table_name="jobs", column_name=column_name, description=description))
+    db.commit()
 
 
 def seed_default_config(db: Session) -> None:

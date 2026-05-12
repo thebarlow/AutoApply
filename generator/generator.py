@@ -58,39 +58,45 @@ def _load_master_resume(profile: UserProfile) -> str:
     return _render_profile(profile)
 
 
+def _apply_template(template: str, subs: dict[str, str]) -> str:
+    def _replace(m: re.Match) -> str:
+        return subs.get(m.group(1), m.group(0))
+    return re.sub(r'\{(\w+)\}', _replace, template)
+
+
 def build_resume_prompt(job: Job, profile: UserProfile, template: str) -> str:
-    return template.format(
-        profile=_load_master_resume(profile),
-        job=_render_job(job),
-        master_resume=_load_master_resume(profile),
-        title=job.title or "",
-        company=job.company or "",
-        location=job.location or "Not specified",
-        description=job.description or "Not provided",
-    )
+    master = _load_master_resume(profile)
+    return _apply_template(template, {
+        "profile": master,
+        "master_resume": master,
+        "job": _render_job(job),
+        "title": job.title or "",
+        "company": job.company or "",
+        "location": job.location or "Not specified",
+        "description": job.description or "Not provided",
+    })
 
 
 def build_cover_prompt(job: Job, profile: UserProfile, template: str) -> str:
-    return template.format(
-        profile=_load_master_resume(profile),
-        job=_render_job(job),
-        master_resume=_load_master_resume(profile),
-        title=job.title or "",
-        company=job.company or "",
-        location=job.location or "Not specified",
-        description=job.description or "Not provided",
-    )
+    master = _load_master_resume(profile)
+    return _apply_template(template, {
+        "profile": master,
+        "master_resume": master,
+        "job": _render_job(job),
+        "title": job.title or "",
+        "company": job.company or "",
+        "location": job.location or "Not specified",
+        "description": job.description or "Not provided",
+    })
 
 
 def build_description_prompt(job: Job, template: str) -> str:
-    """Renders the description extraction prompt template with job fields."""
-    return (
-        template
-        .replace("{title}", job.title or "")
-        .replace("{company}", job.company or "")
-        .replace("{location}", job.location or "Not specified")
-        .replace("{description}", job.description or "Not provided")
-    )
+    return _apply_template(template, {
+        "title": job.title or "",
+        "company": job.company or "",
+        "location": job.location or "Not specified",
+        "description": job.description or "Not provided",
+    })
 
 
 def extraction_json_to_markdown(data: dict) -> str:

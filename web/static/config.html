@@ -258,7 +258,10 @@
       <input class="config-input" type="text" id="prompt-modal-name" placeholder="e.g. Software Engineer v1">
       <label class="config-label" style="margin-top:0.75rem">Content</label>
       <div class="prompt-edit-layout">
-        <textarea id="prompt-modal-content" style="min-height:340px;font-family:monospace;font-size:0.82rem;background:#1a1a1a;color:#e0e0e0;border:1px solid #333;border-radius:4px;padding:0.6rem;resize:vertical;box-sizing:border-box"></textarea>
+        <div class="prompt-editor-wrap">
+          <div class="prompt-backdrop" id="prompt-backdrop"></div>
+          <textarea id="prompt-modal-content" class="prompt-textarea"></textarea>
+        </div>
         <div class="field-chips-sidebar" id="field-chips-sidebar">
           <div class="field-chips-sidebar-label">Available Fields</div>
           <div id="field-chips-container"><span class="field-chips-unavailable">Loading…</span></div>
@@ -271,6 +274,11 @@
       <span class="save-status" id="status-prompt-modal"></span>
     </div>
   </div>
+</div>
+
+<div class="field-help-popover" id="field-help-popover">
+  <div class="field-help-popover-name" id="field-help-popover-name"></div>
+  <div id="field-help-popover-desc"></div>
 </div>
 
 <script>
@@ -423,6 +431,7 @@
       const data = await resp.json();
       _fieldChipsCache = data.fields;
       renderFieldChips(_fieldChipsCache);
+      renderBackdrop();
     } catch {
       container.innerHTML = '<span class="field-chips-unavailable">unavailable</span>';
       document.getElementById('field-chips-sidebar').style.display = 'none';
@@ -434,16 +443,62 @@
     const container = document.getElementById('field-chips-container');
     container.innerHTML = '';
     for (const field of fields) {
-      const chip = document.createElement('span');
+      const name = field.name ?? field;
+      const desc = field.description ?? '';
+      const chip = document.createElement('div');
       chip.className = 'field-chip';
-      chip.textContent = field;
       chip.draggable = true;
+      chip.innerHTML = `<span class="field-chip-label">${name}</span><button class="field-chip-help" type="button" title="Field info">?</button>`;
       chip.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', '{' + field + '}');
+        e.dataTransfer.setData('text/plain', '{' + name + '}');
         e.dataTransfer.effectAllowed = 'copy';
+      });
+      chip.querySelector('.field-chip-help').addEventListener('click', (e) => {
+        e.stopPropagation();
+        showFieldHelpPopover(e.currentTarget, name, desc);
       });
       container.appendChild(chip);
     }
+  }
+
+  const _helpPopover = document.getElementById('field-help-popover');
+  function showFieldHelpPopover(btn, name, desc) {
+    const rect = btn.getBoundingClientRect();
+    document.getElementById('field-help-popover-name').textContent = '{' + name + '}';
+    document.getElementById('field-help-popover-desc').textContent = desc || 'No description available.';
+    // Position to the left of the sidebar chip
+    const popW = 220;
+    let left = rect.left - popW - 8;
+    if (left < 8) left = rect.right + 8;
+    let top = rect.top;
+    const popH = _helpPopover.offsetHeight || 80;
+    if (top + popH > window.innerHeight - 8) top = window.innerHeight - popH - 8;
+    _helpPopover.style.left = left + 'px';
+    _helpPopover.style.top = top + 'px';
+    _helpPopover.classList.add('is-open');
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!_helpPopover.contains(e.target)) _helpPopover.classList.remove('is-open');
+  });
+
+  function renderBackdrop() {
+    const backdrop = document.getElementById('prompt-backdrop');
+    if (!backdrop) return;
+    const text = _promptTextarea.value;
+    const validNames = _fieldChipsCache ? new Set(_fieldChipsCache.map(f => f.name ?? f)) : null;
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\{(\w+)\}/g, (match, name) => {
+        if (!validNames) return match;
+        const cls = validNames.has(name) ? 'fv-good' : 'fv-bad';
+        return `<mark class="${cls}">${match}</mark>`;
+      });
+    // trailing space prevents browser collapsing final newline
+    backdrop.innerHTML = escaped + ' ';
+    backdrop.scrollTop = _promptTextarea.scrollTop;
   }
 
   let _promptModalType = null;   // 'resume' or 'cover'
@@ -533,6 +588,7 @@
           document.getElementById('prompt-modal-name').value = p.name || '';
           document.getElementById('prompt-modal-content').value = p.content || '';
           _promptModalContent = p.content || '';
+          renderBackdrop();
         });
       document.getElementById('ptab-btn-edit').classList.add('active');
       document.getElementById('ptab-panel-edit').classList.add('active');
@@ -551,10 +607,22 @@
     _promptModalContent = '';
     document.getElementById('field-chips-sidebar').style.display = '';
     document.getElementById('prompt-modal-content').style.width = '';
+    document.getElementById('prompt-backdrop').innerHTML = '';
+    _helpPopover.classList.remove('is-open');
     document.getElementById('prompt-modal-backdrop').classList.remove('is-open');
   }
 
   const _promptTextarea = document.getElementById('prompt-modal-content');
+
+  _promptTextarea.addEventListener('input', () => {
+    _promptModalContent = _promptTextarea.value;
+    renderBackdrop();
+  });
+
+  _promptTextarea.addEventListener('scroll', () => {
+    const backdrop = document.getElementById('prompt-backdrop');
+    if (backdrop) backdrop.scrollTop = _promptTextarea.scrollTop;
+  });
 
   _promptTextarea.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -570,6 +638,8 @@
     _promptTextarea.value = val.slice(0, idx) + text + val.slice(idx);
     _promptTextarea.setSelectionRange(idx + text.length, idx + text.length);
     _promptTextarea.focus();
+    _promptModalContent = _promptTextarea.value;
+    renderBackdrop();
   });
 
   document.getElementById('prompt-modal-close').addEventListener('click', closePromptModal);
@@ -587,10 +657,18 @@
   // Tab switching for prompt modal
   document.querySelectorAll('#prompt-tab-bar .profile-tab-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
+      // Snapshot textarea only while Edit panel is visible (hidden elements are unreliable in some browsers)
+      if (document.getElementById('ptab-panel-edit').classList.contains('active')) {
+        _promptModalContent = document.getElementById('prompt-modal-content').value;
+      }
       document.querySelectorAll('#prompt-tab-bar .profile-tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('#prompt-modal-panel .profile-tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('ptab-panel-' + btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'edit') {
+        document.getElementById('prompt-modal-content').value = _promptModalContent;
+        renderBackdrop();
+      }
     });
   });
 

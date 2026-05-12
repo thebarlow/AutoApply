@@ -37,6 +37,14 @@ class Job(Base):
     sheets_row_id = Column(String)
 
 
+class FieldHelp(Base):
+    __tablename__ = "field_help"
+
+    table_name = Column(String, primary_key=True)
+    column_name = Column(String, primary_key=True)
+    description = Column(Text, nullable=False, default="")
+
+
 class Config(Base):
     __tablename__ = "config"
 
