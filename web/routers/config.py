@@ -183,6 +183,37 @@ def get_all_prompts(db: Session = Depends(get_db)) -> dict[str, Any]:
     return {"prompts": all_prompts}
 
 
+@router.get("/api/config/prompts/active-status")
+def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
+    """Return whether each prompt type has a usable active configuration."""
+    def _has_latex_template(type_: str) -> bool:
+        active_id = _get(db, f"active_{type_}_prompt_id")
+        if not active_id:
+            return False
+        prompts = _get_prompts(db, type_)
+        prompt = next((p for p in prompts if p["id"] == active_id), None)
+        if not prompt:
+            return False
+        template_name = prompt.get("template_name", "")
+        if not template_name:
+            return False
+        templates = json.loads(_get(db, "latex_templates", "[]"))
+        match = next((t for t in templates if t["name"] == template_name), None)
+        if not match:
+            return False
+        return Path(match["path"]).exists()
+
+    active_desc_id = _get(db, "active_description_prompt_id")
+    desc_prompts = _get_prompts(db, "description")
+    has_description = bool(active_desc_id and any(p["id"] == active_desc_id for p in desc_prompts))
+
+    return {
+        "resume_has_template": _has_latex_template("resume"),
+        "cover_has_template": _has_latex_template("cover"),
+        "description_has_prompt": has_description,
+    }
+
+
 @router.get("/api/config/prompts/{type_}")
 def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):

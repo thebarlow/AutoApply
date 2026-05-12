@@ -373,6 +373,64 @@ def test_update_prompt_extended_fields(client):
     assert detail["model_id"] == "claude-opus-4-7"
 
 
+def test_active_status_all_false_by_default(client):
+    resp = client.get("/api/config/prompts/active-status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["resume_has_template"] is False
+    assert data["cover_has_template"] is False
+    assert data["description_has_prompt"] is False
+
+
+def test_active_status_description_has_prompt_true_when_active_prompt_set(client, db_session):
+    import uuid
+    pid = uuid.uuid4().hex
+    prompts = [{"id": pid, "name": "Desc", "content": "...",
+                "provider_name": "P", "model_id": "m", "template_name": ""}]
+    db_session.add(Config(key="description_prompts", value=json.dumps(prompts)))
+    db_session.add(Config(key="active_description_prompt_id", value=pid))
+    db_session.commit()
+
+    resp = client.get("/api/config/prompts/active-status")
+    assert resp.status_code == 200
+    assert resp.json()["description_has_prompt"] is True
+
+
+def test_active_status_resume_has_template_true_when_template_file_exists(client, db_session, tmp_path):
+    import uuid
+    tpl = tmp_path / "resume.tex"
+    tpl.write_text("\\documentclass{article}")
+    pid = uuid.uuid4().hex
+    prompts = [{"id": pid, "name": "R", "content": "...",
+                "provider_name": "P", "model_id": "m", "template_name": "MyTpl"}]
+    templates = [{"id": "tid", "name": "MyTpl", "path": str(tpl)}]
+    db_session.add(Config(key="resume_prompts", value=json.dumps(prompts)))
+    db_session.add(Config(key="active_resume_prompt_id", value=pid))
+    db_session.add(Config(key="latex_templates", value=json.dumps(templates)))
+    db_session.commit()
+
+    resp = client.get("/api/config/prompts/active-status")
+    assert resp.status_code == 200
+    assert resp.json()["resume_has_template"] is True
+
+
+def test_active_status_resume_has_template_false_when_template_file_missing(client, db_session, tmp_path):
+    import uuid
+    pid = uuid.uuid4().hex
+    prompts = [{"id": pid, "name": "R", "content": "...",
+                "provider_name": "P", "model_id": "m", "template_name": "MyTpl"}]
+    # Template record exists but path does not exist on disk
+    templates = [{"id": "tid", "name": "MyTpl", "path": str(tmp_path / "nonexistent.tex")}]
+    db_session.add(Config(key="resume_prompts", value=json.dumps(prompts)))
+    db_session.add(Config(key="active_resume_prompt_id", value=pid))
+    db_session.add(Config(key="latex_templates", value=json.dumps(templates)))
+    db_session.commit()
+
+    resp = client.get("/api/config/prompts/active-status")
+    assert resp.status_code == 200
+    assert resp.json()["resume_has_template"] is False
+
+
 def test_get_job_fields(client):
     resp = client.get("/api/job-fields")
     assert resp.status_code == 200
