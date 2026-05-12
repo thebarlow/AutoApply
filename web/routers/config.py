@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 import core.profile_parser as _parser
-from db.models import Config, UserProfileModel
+from db.models import Config, UserProfileModel, Job
 
 router = APIRouter()
 
@@ -94,6 +94,8 @@ class TemplatesBody(BaseModel):
     github: str
     linkedin: str
     website: str
+    resume_prompt_template: str = ""
+    cover_prompt_template: str = ""
     primary_skills: list[str] = []
     primary_technologies: list[str] = []
 
@@ -111,6 +113,8 @@ def get_templates(db: Session = Depends(get_db)) -> dict:
     return {
         "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
         "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
+        "resume_prompt_template": _get(db, "resume_prompt_template"),
+        "cover_prompt_template": _get(db, "cover_prompt_template"),
         "github": _get(db, "resume_github"),
         "linkedin": _get(db, "resume_linkedin"),
         "website": _get(db, "resume_website"),
@@ -126,6 +130,8 @@ def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict:
     _set(db, "resume_github", body.github)
     _set(db, "resume_linkedin", body.linkedin)
     _set(db, "resume_website", body.website)
+    _set(db, "resume_prompt_template", body.resume_prompt_template)
+    _set(db, "cover_prompt_template", body.cover_prompt_template)
     _set(db, "primary_skills", json.dumps(body.primary_skills))
     _set(db, "primary_technologies", json.dumps(body.primary_technologies))
     return body.model_dump()
@@ -159,7 +165,7 @@ def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[d
 
 @router.get("/api/config/prompts/{type_}")
 def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     active_id = _get(db, f"active_{type_}_prompt_id")
@@ -168,7 +174,7 @@ def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
 
 @router.post("/api/config/prompts/{type_}")
 def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     new_id = uuid.uuid4().hex
@@ -181,7 +187,7 @@ def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -
 # string "active" matching the {prompt_id} path parameter.
 @router.put("/api/config/prompts/{type_}/active")
 def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     if not any(p["id"] == body.active_id for p in prompts):
@@ -193,7 +199,7 @@ def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(
 
 @router.get("/api/config/prompts/{type_}/{prompt_id}")
 def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     match = next((p for p in prompts if p["id"] == prompt_id), None)
@@ -204,7 +210,7 @@ def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dic
 
 @router.put("/api/config/prompts/{type_}/{prompt_id}")
 def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     match = next((p for p in prompts if p["id"] == prompt_id), None)
@@ -221,7 +227,7 @@ def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = De
 
 @router.delete("/api/config/prompts/{type_}/{prompt_id}", status_code=204)
 def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> None:
-    if type_ not in ("resume", "cover"):
+    if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     remaining = [p for p in prompts if p["id"] != prompt_id]
@@ -565,3 +571,11 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
         return _parser.markdown_to_profile(md_text, db)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ---- Job Fields ----
+
+@router.get("/api/job-fields")
+def get_job_fields() -> dict[str, list[str]]:
+    fields = [col.name for col in Job.__table__.columns]
+    return {"fields": fields}

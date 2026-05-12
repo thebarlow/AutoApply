@@ -185,3 +185,15 @@ def test_put_llm_unknown_provider_returns_422(client, tmp_path, monkeypatch):
     }
     resp = client.put("/api/config/llm", json=body)
     assert resp.status_code == 422
+
+
+def test_get_job_fields(client):
+    resp = client.get("/api/job-fields")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "fields" in data
+    assert isinstance(data["fields"], list)
+    # Spot-check a few columns that should always be present
+    assert "title" in data["fields"]
+    assert "company" in data["fields"]
+    assert "description" in data["fields"]

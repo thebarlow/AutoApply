@@ -74,7 +74,7 @@ def test_seed_profile_upserts(db_session, tmp_path):
     assert db_session.query(UserProfileModel).count() == 1
 
 
-from core.scorer import compute_final_score, determine_state
+from core.scorer import compute_final_score
 
 
 def test_compute_final_score_equal_weights():
@@ -167,7 +167,7 @@ def test_build_prompt_contains_job_fields():
         salary="$130k-$150k",
         description="We need a Python expert.",
         url="https://example.com/job/1",
-        state=JobState.SCRAPED,
+        state=JobState.DRAFT,
     )
 
     prompt = build_prompt(job, profile)
@@ -225,7 +225,7 @@ def seeded_db(db_session):
     return db_session
 
 
-def make_job(job_key: str, state: str = JobState.SCRAPED) -> Job:
+def make_job(job_key: str, state: str = JobState.DRAFT) -> Job:
     return Job(
         job_key=job_key,
         source="indeed",
@@ -254,7 +254,7 @@ def test_score_job_sets_scores_and_state(seeded_db):
     assert job.desirability_score == pytest.approx(0.85)
     assert job.fit_score == pytest.approx(0.75)
     assert job.final_score == pytest.approx(0.8)
-    assert job.state == JobState.APPROVED
+    assert job.state == JobState.DRAFT
     justification = json.loads(job.score_justification)
     assert "desirability" in justification
     assert "fit" in justification
@@ -273,32 +273,32 @@ def test_malformed_response_leaves_job_unchanged(seeded_db):
     seeded_db.refresh(job)
 
     assert job.final_score is None
-    assert job.state == JobState.SCRAPED
+    assert job.state == JobState.DRAFT
 
 
-def test_run_scorer_skips_non_scraped(seeded_db):
-    scraped1 = make_job("s_001", JobState.SCRAPED)
-    scraped2 = make_job("s_002", JobState.SCRAPED)
-    approved = make_job("s_003", JobState.APPROVED)
-    seeded_db.add_all([scraped1, scraped2, approved])
+def test_run_scorer_skips_non_draft(seeded_db):
+    draft1 = make_job("s_001", JobState.DRAFT)
+    draft2 = make_job("s_002", JobState.DRAFT)
+    applied = make_job("s_003", JobState.APPLIED)
+    seeded_db.add_all([draft1, draft2, applied])
     seeded_db.commit()
 
     client = mock_client(MOCK_RESPONSE)
     run_scorer(seeded_db, client=client, model="test-model")
 
-    seeded_db.refresh(scraped1)
-    seeded_db.refresh(scraped2)
-    seeded_db.refresh(approved)
+    seeded_db.refresh(draft1)
+    seeded_db.refresh(draft2)
+    seeded_db.refresh(applied)
 
-    assert scraped1.final_score is not None
-    assert scraped2.final_score is not None
-    assert approved.final_score is None
+    assert draft1.final_score is not None
+    assert draft2.final_score is not None
+    assert applied.final_score is None
     assert client.chat.completions.create.call_count == 2
 
 
 def test_run_scorer_single_job_key(seeded_db):
-    target = make_job("t_001", JobState.SCRAPED)
-    other = make_job("t_002", JobState.SCRAPED)
+    target = make_job("t_001", JobState.DRAFT)
+    other = make_job("t_002", JobState.DRAFT)
     seeded_db.add_all([target, other])
     seeded_db.commit()
 

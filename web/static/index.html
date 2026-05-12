@@ -47,7 +47,7 @@
           <td><span :class="'score-badge ' + scoreClass(job.final_score)" x-text="pct(job.final_score)"></span></td>
           <td x-text="job.location || ''"></td>
           <td x-text="job.salary || ''"></td>
-          <td><span :class="'status-badge ' + statusClass(job.state)" x-text="job.state"></span></td>
+          <td><span :class="'status-badge ' + statusClass(job.state)" x-text="statusLabel(job.state)"></span></td>
         </tr>
       </template>
     </tbody>
@@ -59,82 +59,224 @@
 
 <!-- Overlay backdrop -->
 <div class="overlay-backdrop" x-show="selectedJob !== null" @click.self="closeOverlay()">
-  <div class="overlay-panel" @keydown.escape.window="closeOverlay()">
+  <div class="overlay-panel" @keydown.escape.window="promptOverlay !== null ? (promptOverlay = null) : closeOverlay()">
     <template x-if="selectedJob">
-      <div>
-        <div class="overlay-header">
-          <h2>
-            <span x-text="selectedJob.title || '(no title)'"></span>
-            <span x-show="generating" style="display:inline-flex;align-items:center;margin-left:0.5rem;font-size:0.85rem;color:#888;font-weight:400;vertical-align:middle">
-              <svg viewBox="0 0 20 20" width="14" height="14" style="margin-right:0.4em;flex-shrink:0;display:block">
-                <g>
-                  <circle cx="10" cy="10" r="7" fill="none" stroke="#3a3a3a" stroke-width="2.5" stroke-dasharray="9.5 1.5"/>
-                  <circle cx="10" cy="10" r="7" fill="none" stroke="#aaa" stroke-width="2.5" stroke-dasharray="9.5 34.5"/>
-                  <animateTransform attributeName="transform" type="rotate"
-                    values="-90 10 10;0 10 10;90 10 10;180 10 10"
-                    dur="2s" calcMode="discrete" repeatCount="indefinite"/>
-                </g>
-              </svg>
-              <span x-text="generating === 'resume' ? 'Generating resume…' : 'Generating cover letter…'"></span>
-            </span>
-          </h2>
-          <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="selectedJob.state"></span>
+      <div style="display:flex;flex-direction:column;height:100%">
+
+        <!-- Fixed top: header, meta, action bar -->
+        <div class="overlay-top">
+          <div class="overlay-header">
+            <h2>
+              <span x-text="selectedJob.title || '(no title)'"></span>
+              <span x-show="generating" style="display:inline-flex;align-items:center;margin-left:0.5rem;font-size:0.85rem;color:#888;font-weight:400;vertical-align:middle">
+                <svg viewBox="0 0 20 20" width="14" height="14" style="margin-right:0.4em;flex-shrink:0;display:block">
+                  <g>
+                    <circle cx="10" cy="10" r="7" fill="none" stroke="#3a3a3a" stroke-width="2.5" stroke-dasharray="9.5 1.5"/>
+                    <circle cx="10" cy="10" r="7" fill="none" stroke="#aaa" stroke-width="2.5" stroke-dasharray="9.5 34.5"/>
+                    <animateTransform attributeName="transform" type="rotate"
+                      values="-90 10 10;0 10 10;90 10 10;180 10 10"
+                      dur="2s" calcMode="discrete" repeatCount="indefinite"/>
+                  </g>
+                </svg>
+                <span x-text="generatingLabel"></span>
+              </span>
+            </h2>
+            <span :class="'status-badge ' + statusClass(selectedJob.state)" x-text="statusLabel(selectedJob.state)"></span>
+          </div>
+
+          <div class="overlay-meta">
+            <span x-text="selectedJob.company || ''"></span>
+            <span :class="'score-badge ' + scoreClass(selectedJob.final_score)" x-text="pct(selectedJob.final_score)"></span>
+            <span x-text="selectedJob.location || ''"></span>
+            <span x-text="selectedJob.salary || ''"></span>
+          </div>
+
+          <!-- Action bar -->
+          <div class="action-bar">
+
+            <!-- Tab-specific actions (left) -->
+
+            <!-- Overview -->
+            <template x-if="activeTab === 'overview'">
+              <button class="btn" @click="calculateScore()">Calculate Score</button>
+            </template>
+
+            <!-- Resume -->
+            <template x-if="activeTab === 'resume'">
+              <div style="display:contents">
+                <button class="btn" @click="generateResumeMd()" :disabled="!!generating"
+                  x-text="selectedJob.resume_md_exists ? 'Regenerate MD' : 'Generate MD'">
+                </button>
+                <button class="btn" @click="generateResumePdf()"
+                  :disabled="!!generating || !selectedJob.resume_md_exists"
+                  x-text="selectedJob.resume_path ? 'Regenerate PDF' : 'Generate PDF'">
+                </button>
+                <button class="btn" x-show="selectedJob.resume_md_exists"
+                  @click="viewPrompt('resume')" :disabled="!!generating">
+                  View Prompt
+                </button>
+              </div>
+            </template>
+
+            <!-- Cover Letter -->
+            <template x-if="activeTab === 'cover'">
+              <div style="display:contents">
+                <button class="btn" @click="generateCoverMd()" :disabled="!!generating"
+                  x-text="selectedJob.cover_md_exists ? 'Regenerate MD' : 'Generate MD'">
+                </button>
+                <button class="btn" @click="generateCoverPdf()"
+                  :disabled="!!generating || !selectedJob.cover_md_exists || !selectedJob.resume_path"
+                  :title="!selectedJob.cover_md_exists ? 'Generate cover MD first' : !selectedJob.resume_path ? 'Generate resume PDF first' : ''"
+                  x-text="selectedJob.cover_path ? 'Regenerate PDF' : 'Generate PDF'">
+                </button>
+                <button class="btn" x-show="selectedJob.cover_md_exists"
+                  @click="viewPrompt('cover')" :disabled="!!generating">
+                  View Prompt
+                </button>
+              </div>
+            </template>
+
+            <!-- Details -->
+            <template x-if="activeTab === 'details'">
+              <div style="display:contents">
+                <button class="btn" @click="extractDescription()"
+                  :disabled="!!generating || !extractionHasPrompt"
+                  :title="!extractionHasPrompt ? 'Configure a Description Extraction Prompt in Config first' : ''">
+                  Extract
+                </button>
+                <button class="btn" x-show="selectedJob.extraction_json_exists"
+                  @click="viewPrompt('description')" :disabled="!!generating">
+                  View Prompt
+                </button>
+              </div>
+            </template>
+
+            <!-- Spacer -->
+            <div class="action-bar-spacer"></div>
+
+            <!-- Persistent actions (right) -->
+            <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
+
+            <select class="status-select" @change="setStatus($event.target.value)">
+              <option value="draft" :selected="selectedJob.state === 'draft'">Draft</option>
+              <option value="applied" :selected="selectedJob.state === 'applied'">Applied</option>
+              <option value="in_contact" :selected="selectedJob.state === 'in_contact'">In Contact</option>
+              <option value="rejected" :selected="selectedJob.state === 'rejected'">Rejected</option>
+            </select>
+
+            <template x-if="!deleteConfirm">
+              <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
+            </template>
+            <template x-if="deleteConfirm">
+              <button class="btn btn-danger-confirm" @click.stop="deleteJob()">Confirm Delete</button>
+            </template>
+          </div>
         </div>
 
-        <div class="overlay-meta">
-          <span x-text="selectedJob.company || ''"></span>
-          <span :class="'score-badge ' + scoreClass(selectedJob.final_score)" x-text="pct(selectedJob.final_score)"></span>
-          <span x-text="selectedJob.location || ''"></span>
-          <span x-text="selectedJob.salary || ''"></span>
-        </div>
+        <!-- Body: sidebar + tab content -->
+        <div class="overlay-body">
 
-        <div class="action-bar">
-          <button class="btn" @click="calculateScore()">Calculate Score</button>
+          <!-- Vertical tab sidebar -->
+          <div class="overlay-tab-sidebar">
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'overview' }"
+              @click="switchTab('overview')">Overview</button>
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'resume' }"
+              @click="switchTab('resume')">Resume<span x-show="selectedJob.resume_md_exists || !!selectedJob.resume_path" class="tab-check">✓</span></button>
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'cover' }"
+              @click="switchTab('cover')">Cover Letter<span x-show="selectedJob.cover_md_exists || !!selectedJob.cover_path" class="tab-check">✓</span></button>
+            <button class="overlay-tab-btn" :class="{ active: activeTab === 'details' }"
+              @click="switchTab('details')">Details<span x-show="selectedJob.extraction_json_exists" class="tab-check">✓</span></button>
+          </div>
 
-          <!-- Resume: Generate or View dropdown -->
-          <template x-if="!selectedJob.resume_path">
-            <button class="btn" @click="generateResume()" :disabled="!!generating">Generate Resume</button>
-          </template>
-          <template x-if="selectedJob.resume_path">
-            <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
-              <button class="btn btn-dropdown" @click="open = !open" :disabled="!!generating">View Resume ▾</button>
-              <div class="dropdown-menu" x-show="open">
-                <button @click="viewResume(); open = false">View</button>
-                <button @click="generateResume(); open = false" :disabled="!!generating">Regenerate</button>
+          <!-- Tab content area -->
+          <div class="overlay-tab-content">
+
+            <!-- Overview tab -->
+            <div x-show="activeTab === 'overview'">
+              <div class="overlay-description" x-html="formatDesc(selectedJob.description)"></div>
+            </div>
+
+            <!-- Resume tab -->
+            <div x-show="activeTab === 'resume'">
+              <p class="overlay-empty-state"
+                x-show="!selectedJob.resume_md_exists && !selectedJob.resume_path">
+                No resume generated yet. Use "Generate MD" to create one.
+              </p>
+              <div x-show="selectedJob.resume_md_exists || !!selectedJob.resume_path">
+                <div class="view-toggle">
+                  <button :class="{ active: resumeView === 'md' }" @click="resumeView = 'md'">MD</button>
+                  <button :class="{ active: resumeView === 'pdf' }" @click="resumeView = 'pdf'"
+                    :disabled="!selectedJob.resume_path">PDF</button>
+                </div>
+                <div x-show="resumeView === 'md'">
+                  <p class="overlay-empty-state" x-show="!resumeMarkdown">Loading…</p>
+                  <pre class="overlay-md-viewer" x-show="resumeMarkdown" x-text="resumeMarkdown"></pre>
+                </div>
+                <template x-if="resumeView === 'pdf' && !!selectedJob.resume_path">
+                  <iframe class="overlay-pdf-frame"
+                    :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/resume`">
+                  </iframe>
+                </template>
               </div>
             </div>
-          </template>
 
-          <!-- Cover: Generate or View dropdown -->
-          <template x-if="!selectedJob.cover_path">
-            <button class="btn" @click="generateCover()" :disabled="!!generating">Generate Cover Letter</button>
-          </template>
-          <template x-if="selectedJob.cover_path">
-            <div class="dropdown" x-data="{ open: false }" @click.outside="open = false">
-              <button class="btn btn-dropdown" @click="open = !open" :disabled="!!generating">View Cover Letter ▾</button>
-              <div class="dropdown-menu" x-show="open">
-                <button @click="viewCover(); open = false">View</button>
-                <button @click="generateCover(); open = false" :disabled="!!generating">Regenerate</button>
+            <!-- Cover Letter tab -->
+            <div x-show="activeTab === 'cover'">
+              <p class="overlay-empty-state"
+                x-show="!selectedJob.cover_md_exists && !selectedJob.cover_path">
+                No cover letter generated yet. Use "Generate MD" to create one.
+              </p>
+              <div x-show="selectedJob.cover_md_exists || !!selectedJob.cover_path">
+                <div class="view-toggle">
+                  <button :class="{ active: coverView === 'md' }" @click="coverView = 'md'">MD</button>
+                  <button :class="{ active: coverView === 'pdf' }" @click="coverView = 'pdf'"
+                    :disabled="!selectedJob.cover_path">PDF</button>
+                </div>
+                <div x-show="coverView === 'md'">
+                  <p class="overlay-empty-state" x-show="!coverMarkdown">Loading…</p>
+                  <pre class="overlay-md-viewer" x-show="coverMarkdown" x-text="coverMarkdown"></pre>
+                </div>
+                <template x-if="coverView === 'pdf' && !!selectedJob.cover_path">
+                  <iframe class="overlay-pdf-frame"
+                    :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/cover`">
+                  </iframe>
+                </template>
               </div>
             </div>
-          </template>
 
-          <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
+            <!-- Details tab -->
+            <div x-show="activeTab === 'details'" style="height:100%">
+              <p class="overlay-empty-state"
+                x-show="!selectedJob.extraction_json_exists">
+                No extraction yet. Configure a Description Extraction Prompt in Config, then click Extract.
+              </p>
+              <div x-show="selectedJob.extraction_json_exists">
+                <div class="view-toggle">
+                  <button :class="{ active: extractionView === 'rendered' }" @click="extractionView = 'rendered'">Rendered</button>
+                  <button :class="{ active: extractionView === 'json' }" @click="extractionView = 'json'">JSON</button>
+                </div>
+                <template x-if="selectedJob.extraction_json_exists">
+                  <iframe class="overlay-pdf-frame"
+                    :src="`/api/jobs/${encodeURIComponent(selectedJob.job_key)}/description?view=${extractionView}`">
+                  </iframe>
+                </template>
+              </div>
+            </div>
 
-          <button class="btn" @click="markApplied()" :disabled="selectedJob.state === 'applied'">
-            Mark as Applied
-          </button>
+          </div><!-- end overlay-tab-content -->
+        </div><!-- end overlay-body -->
 
-          <template x-if="!deleteConfirm">
-            <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
-          </template>
-          <template x-if="deleteConfirm">
-            <button class="btn btn-danger-confirm" @click="deleteJob()">Confirm Delete</button>
-          </template>
+        <!-- Prompt overlay (absolute within panel) -->
+        <div class="prompt-overlay" x-show="promptOverlay !== null" @click.self="promptOverlay = null">
+          <div class="prompt-overlay-panel">
+            <div class="prompt-overlay-header">
+              <strong x-text="promptOverlay ? (promptOverlay.type === 'resume' ? 'Resume Prompt' : promptOverlay.type === 'cover' ? 'Cover Letter Prompt' : 'Description Extraction Prompt') : ''"></strong>
+              <button class="btn" @click="promptOverlay = null">Close</button>
+            </div>
+            <pre x-text="promptOverlay ? promptOverlay.text : ''"></pre>
+          </div>
         </div>
 
-        <hr class="overlay-divider" />
-        <div class="overlay-description" x-html="formatDesc(selectedJob.description)"></div>
       </div>
     </template>
   </div>
@@ -150,6 +292,14 @@ function dashboard() {
     deleteConfirm: false,
     loadError: null,
     generating: null,
+    activeTab: 'overview',
+    resumeView: 'md',
+    coverView: 'md',
+    resumeMarkdown: null,
+    coverMarkdown: null,
+    promptOverlay: null,
+    extractionHasPrompt: false,
+    extractionView: 'rendered',
 
     async init() {
       await this.loadJobs();
@@ -202,11 +352,63 @@ function dashboard() {
     selectJob(job) {
       this.selectedJob = { ...job };
       this.deleteConfirm = false;
+      this.activeTab = 'overview';
+      this.resumeView = 'md';
+      this.coverView = 'md';
+      this.resumeMarkdown = null;
+      this.coverMarkdown = null;
+      this.promptOverlay = null;
+      this.extractionHasPrompt = false;
+      this.extractionView = 'rendered';
     },
 
     closeOverlay() {
       this.selectedJob = null;
       this.deleteConfirm = false;
+      this.activeTab = 'overview';
+      this.resumeView = 'md';
+      this.coverView = 'md';
+      this.resumeMarkdown = null;
+      this.coverMarkdown = null;
+      this.promptOverlay = null;
+      this.extractionHasPrompt = false;
+      this.extractionView = 'rendered';
+      this.generating = null;
+    },
+
+    async switchTab(tab) {
+      this.promptOverlay = null;
+      this.activeTab = tab;
+      if (tab === 'resume') {
+        this.resumeView = 'md';
+        if (this.selectedJob.resume_md_exists && this.resumeMarkdown === null) {
+          this.fetchResumeMarkdown();
+        }
+      } else if (tab === 'cover') {
+        this.coverView = 'md';
+        if (this.selectedJob.cover_md_exists && this.coverMarkdown === null) {
+          this.fetchCoverMarkdown();
+        }
+      } else if (tab === 'details') {
+        try {
+          const r = await fetch('/api/config/prompts/description');
+          if (r.ok) {
+            const data = await r.json();
+            this.extractionHasPrompt = data.prompts.length > 0;
+          }
+        } catch { /* leave extractionHasPrompt false */ }
+      }
+    },
+
+    get generatingLabel() {
+      const map = {
+        resume_md: 'Generating resume…',
+        resume_pdf: 'Rendering resume PDF…',
+        cover_md: 'Generating cover letter…',
+        cover_pdf: 'Rendering cover PDF…',
+        description_extract: 'Extracting insights…',
+      };
+      return this.generating ? (map[this.generating] || 'Working…') : '';
     },
 
     scoreClass(s) {
@@ -216,9 +418,18 @@ function dashboard() {
       return 'score-red';
     },
 
+    statusLabel(state) {
+      const labels = { draft: 'Draft', applied: 'Applied', in_contact: 'In Contact', rejected: 'Rejected' };
+      return labels[state] || state;
+    },
     statusClass(state) {
-      const map = { pending: 'status-pending', applied: 'status-applied', rejected: 'status-rejected', failed: 'status-failed' };
-      return map[state] || 'status-pending';
+      const map = {
+        draft: 'status-draft',
+        applied: 'status-applied',
+        in_contact: 'status-in-contact',
+        rejected: 'status-rejected',
+      };
+      return map[state] || 'status-draft';
     },
 
     pct(v) {
@@ -244,46 +455,107 @@ function dashboard() {
       return resp.json();
     },
 
+    async fetchResumeMarkdown() {
+      const key = this.selectedJob?.job_key;
+      if (!key) return;
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(key)}/resume/markdown`);
+        if (!resp.ok) { this.resumeMarkdown = '(Failed to load)'; return; }
+        if (this.selectedJob?.job_key !== key) return;
+        this.resumeMarkdown = await resp.text();
+      } catch { this.resumeMarkdown = '(Failed to load)'; }
+    },
+
+    async fetchCoverMarkdown() {
+      const key = this.selectedJob?.job_key;
+      if (!key) return;
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(key)}/cover/markdown`);
+        if (!resp.ok) { this.coverMarkdown = '(Failed to load)'; return; }
+        if (this.selectedJob?.job_key !== key) return;
+        this.coverMarkdown = await resp.text();
+      } catch { this.coverMarkdown = '(Failed to load)'; }
+    },
+
+    async viewPrompt(type) {
+      const key = this.selectedJob?.job_key;
+      if (!key) return;
+      const url = `/api/jobs/${encodeURIComponent(key)}/${encodeURIComponent(type)}/prompt`;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error();
+        if (this.selectedJob?.job_key !== key) return;
+        this.promptOverlay = { type, text: await resp.text() };
+      } catch { alert('Failed to load prompt.'); }
+    },
+
+    async extractDescription() {
+      const key = this.selectedJob.job_key;
+      this.generating = 'description_extract';
+      try {
+        const resp = await fetch(`/api/jobs/${encodeURIComponent(key)}/description/extract`, { method: 'POST' });
+        if (!resp.ok) throw new Error('Extraction failed');
+        const updated = await resp.json();
+        Object.assign(this.selectedJob, updated);
+      } catch {
+        alert('Description extraction failed. Please try again.');
+      } finally {
+        this.generating = null;
+      }
+    },
+
     async calculateScore() {
       try {
         this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/score`));
       } catch { alert('Failed to calculate score.'); }
     },
 
-    async generateResume() {
-      this.generating = 'resume';
+    async generateResumeMd() {
+      this.generating = 'resume_md';
       try {
-        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume`));
-      } catch { alert('Failed to generate resume.'); }
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume/md`));
+        this.resumeMarkdown = null;
+        if (this.activeTab === 'resume') await this.fetchResumeMarkdown();
+      } catch { alert('Failed to generate resume markdown.'); }
       finally { this.generating = null; }
     },
 
-    async generateCover() {
-      this.generating = 'cover';
+    async generateResumePdf() {
+      this.generating = 'resume_pdf';
       try {
-        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover`));
-      } catch { alert('Failed to generate cover letter.'); }
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/resume/pdf`));
+      } catch { alert('Failed to render resume PDF.'); }
       finally { this.generating = null; }
     },
 
-    viewResume() {
-      window.open(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/resume`, '_blank');
+    async generateCoverMd() {
+      this.generating = 'cover_md';
+      try {
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover/md`));
+        this.coverMarkdown = null;
+        if (this.activeTab === 'cover') await this.fetchCoverMarkdown();
+      } catch { alert('Failed to generate cover letter markdown.'); }
+      finally { this.generating = null; }
     },
 
-    viewCover() {
-      window.open(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/cover`, '_blank');
+    async generateCoverPdf() {
+      this.generating = 'cover_pdf';
+      try {
+        this._updateJob(await this._post(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/generate/cover/pdf`));
+      } catch { alert('Failed to render cover letter PDF.'); }
+      finally { this.generating = null; }
     },
 
-    async markApplied() {
+    async setStatus(state) {
       try {
         const resp = await fetch(`/api/jobs/${encodeURIComponent(this.selectedJob.job_key)}/state`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ state: 'applied' }),
+          body: JSON.stringify({ state }),
         });
         if (!resp.ok) throw new Error();
         this._updateJob(await resp.json());
-      } catch { alert('Failed to mark as applied.'); }
+      } catch { alert('Failed to update status.'); }
     },
 
     async deleteJob() {

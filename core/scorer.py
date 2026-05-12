@@ -20,16 +20,6 @@ def compute_final_score(w1: float, w2: float, desirability: float, fit: float) -
     return max(0.0, min(1.0, w1 * desirability + w2 * fit))
 
 
-def determine_state(
-    final: float, reject_threshold: float, approve_threshold: float
-) -> JobState:
-    """Map a final score to a JobState based on thresholds."""
-    if final < reject_threshold:
-        return JobState.REJECTED
-    if final >= approve_threshold:
-        return JobState.APPROVED
-    return JobState.PENDING_REVIEW
-
 
 def load_user_profile(db: Session) -> UserProfile:
     """Load UserProfile from DB, respecting the active profile setting."""
@@ -178,8 +168,6 @@ def score_job(
         "desirability": parsed["desirability_justification"],
         "fit": parsed["fit_justification"],
     })
-    job.state = determine_state(final, config["auto_reject_threshold"], config["auto_approve_threshold"])
-
     db.commit()
 
 
@@ -197,12 +185,12 @@ def run_scorer(
     config = load_config(db)
 
     if job_key:
-        jobs = db.query(Job).filter_by(job_key=job_key, state=JobState.SCRAPED).all()
+        jobs = db.query(Job).filter_by(job_key=job_key).all()
     else:
-        jobs = db.query(Job).filter_by(state=JobState.SCRAPED).all()
+        jobs = db.query(Job).filter_by(state=JobState.DRAFT).all()
 
     if not jobs:
-        print("No SCRAPED jobs found.")
+        print("No DRAFT jobs found.")
         return
 
     for job in jobs:

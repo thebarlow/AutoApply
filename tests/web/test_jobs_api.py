@@ -37,7 +37,7 @@ def client(db_session):
 def _make_job(
     db_session,
     job_key: str,
-    state: JobState = JobState.PENDING,
+    state: JobState = JobState.DRAFT,
     final_score: float = 0.75,
     description: str | None = None,
     remote: bool | None = None,
@@ -73,7 +73,7 @@ def _make_job(
 # --- GET /api/jobs ---
 
 def test_get_jobs_returns_all_states(client, db_session):
-    _make_job(db_session, "job_a", JobState.PENDING)
+    _make_job(db_session, "job_a", JobState.DRAFT)
     _make_job(db_session, "job_b", JobState.APPLIED)
     _make_job(db_session, "job_c", JobState.REJECTED)
 
@@ -96,9 +96,9 @@ def test_get_jobs_includes_artifact_paths(client, db_session):
 
 
 def test_get_jobs_sorted_by_score(client, db_session):
-    _make_job(db_session, "low", JobState.PENDING, final_score=0.4)
-    _make_job(db_session, "high", JobState.PENDING, final_score=0.9)
-    _make_job(db_session, "mid", JobState.PENDING, final_score=0.65)
+    _make_job(db_session, "low", JobState.DRAFT, final_score=0.4)
+    _make_job(db_session, "high", JobState.DRAFT, final_score=0.9)
+    _make_job(db_session, "mid", JobState.DRAFT, final_score=0.65)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -113,7 +113,7 @@ def test_get_jobs_empty(client):
 
 
 def test_get_jobs_justification_parsed(client, db_session):
-    _make_job(db_session, "job_x", JobState.PENDING)
+    _make_job(db_session, "job_x", JobState.DRAFT)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -125,18 +125,37 @@ def test_get_jobs_justification_parsed(client, db_session):
 
 # --- PATCH /api/jobs/{job_key}/state ---
 
-def test_patch_applied(client, db_session):
+def test_patch_state_to_applied(client, db_session):
     _make_job(db_session, "job_apply")
-
     resp = client.patch("/api/jobs/job_apply/state", json={"state": "applied"})
     assert resp.status_code == 200
     assert resp.json()["state"] == "applied"
 
 
+def test_patch_state_to_rejected(client, db_session):
+    _make_job(db_session, "job_reject")
+    resp = client.patch("/api/jobs/job_reject/state", json={"state": "rejected"})
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "rejected"
+
+
+def test_patch_state_to_in_contact(client, db_session):
+    _make_job(db_session, "job_contact")
+    resp = client.patch("/api/jobs/job_contact/state", json={"state": "in_contact"})
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "in_contact"
+
+
+def test_patch_state_to_draft(client, db_session):
+    _make_job(db_session, "job_draft", state=JobState.APPLIED)
+    resp = client.patch("/api/jobs/job_draft/state", json={"state": "draft"})
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "draft"
+
+
 def test_patch_invalid_state_rejected_by_api(client, db_session):
     _make_job(db_session, "job_bad")
-
-    resp = client.patch("/api/jobs/job_bad/state", json={"state": "approved"})
+    resp = client.patch("/api/jobs/job_bad/state", json={"state": "pending"})
     assert resp.status_code == 400
 
 
@@ -146,7 +165,7 @@ def test_patch_state_not_found(client):
 
 
 def test_get_jobs_includes_url(client, db_session):
-    _make_job(db_session, "job_url", JobState.PENDING)
+    _make_job(db_session, "job_url", JobState.DRAFT)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job = resp.json()[0]
@@ -155,7 +174,7 @@ def test_get_jobs_includes_url(client, db_session):
 
 
 def test_get_jobs_includes_description(client, db_session):
-    _make_job(db_session, "job_desc", JobState.PENDING, description="We are looking for a software engineer.")
+    _make_job(db_session, "job_desc", JobState.DRAFT, description="We are looking for a software engineer.")
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -164,7 +183,7 @@ def test_get_jobs_includes_description(client, db_session):
 
 
 def test_get_jobs_remote_true_when_set(client, db_session):
-    _make_job(db_session, "job_remote", JobState.PENDING, remote=True)
+    _make_job(db_session, "job_remote", JobState.DRAFT, remote=True)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -173,7 +192,7 @@ def test_get_jobs_remote_true_when_set(client, db_session):
 
 
 def test_get_jobs_remote_none_when_not_set(client, db_session):
-    _make_job(db_session, "job_noremote", JobState.PENDING)
+    _make_job(db_session, "job_noremote", JobState.DRAFT)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job_data = resp.json()[0]
@@ -223,7 +242,7 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["final_score"] == pytest.approx(0.85)
-    assert data["state"] == "pending"
+    assert data["state"] == "draft"
 
 
 def test_score_job_endpoint_not_found(client):
@@ -326,33 +345,154 @@ def test_generate_cover_endpoint_not_found(client):
     assert resp.status_code == 404
 
 
-def test_generate_resume_endpoint_returns_500_on_failure(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
+# --- extraction_json_exists in _serialize ---
 
-    _make_job(db_session, "job_resume_fail")
+def test_get_jobs_includes_extraction_json_exists_false(client, db_session):
+    _make_job(db_session, "job_noextract")
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    job = resp.json()[0]
+    assert "extraction_json_exists" in job
+    assert job["extraction_json_exists"] is False
+
+
+def test_get_jobs_includes_extraction_json_exists_true(client, db_session):
+    job = _make_job(db_session, "job_hasextract")
+    job.extraction_json = '{"required_skills": ["Python"]}'
+    db_session.commit()
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    data = resp.json()[0]
+    assert data["extraction_json_exists"] is True
+
+
+# --- GET /api/jobs/{job_key}/description ---
+
+def test_get_description_html_returns_html(client, db_session):
+    job = _make_job(db_session, "job_html")
+    job.extraction_json = '{"required_skills": ["Python", "FastAPI"]}'
+    db_session.commit()
+    resp = client.get("/api/jobs/job_html/description")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "Python" in resp.text
+
+
+def test_get_description_html_not_found(client):
+    resp = client.get("/api/jobs/nonexistent/description")
+    assert resp.status_code == 404
+
+
+def test_get_description_html_no_extraction(client, db_session):
+    _make_job(db_session, "job_nohtml")
+    resp = client.get("/api/jobs/job_nohtml/description")
+    assert resp.status_code == 404
+
+
+def test_get_description_rendered_view_converts_json(client, db_session):
+    job = _make_job(db_session, "job_rendered")
+    job.extraction_json = '{"required_skills": ["Python", "FastAPI"]}'
+    db_session.commit()
+    resp = client.get("/api/jobs/job_rendered/description")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "Required Skills" in resp.text
+    assert "Python" in resp.text
+
+
+def test_get_description_json_view_returns_raw(client, db_session):
+    job = _make_job(db_session, "job_jsonview")
+    job.extraction_json = '{"required_skills": ["Python"]}'
+    db_session.commit()
+    resp = client.get("/api/jobs/job_jsonview/description?view=json")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "required_skills" in resp.text
+    assert "<pre" in resp.text
+
+
+def test_get_description_invalid_view_param(client, db_session):
+    job = _make_job(db_session, "job_badview")
+    job.extraction_json = '{"required_skills": []}'
+    db_session.commit()
+    resp = client.get("/api/jobs/job_badview/description?view=invalid")
+    assert resp.status_code == 422
+
+
+# --- GET /api/jobs/{job_key}/description/prompt ---
+
+def test_get_description_prompt_returns_text(client, db_session):
+    from db.models import Config
+    job = _make_job(db_session, "job_dprompt", description="We need Python skills.")
+    db_session.add(Config(key="description_prompt_template", value="Extract from: {description}"))
+    db_session.commit()
+    resp = client.get("/api/jobs/job_dprompt/description/prompt")
+    assert resp.status_code == 200
+    assert "We need Python skills." in resp.text
+
+
+def test_get_description_prompt_no_template(client, db_session):
+    _make_job(db_session, "job_dprompt_notpl")
+    resp = client.get("/api/jobs/job_dprompt_notpl/description/prompt")
+    assert resp.status_code == 400
+
+
+def test_get_description_prompt_not_found(client):
+    resp = client.get("/api/jobs/nonexistent/description/prompt")
+    assert resp.status_code == 404
+
+
+# --- POST /api/jobs/{job_key}/description/extract ---
+
+def test_extract_description_stores_result(client, db_session, monkeypatch):
+    import web.routers.jobs as jobs_router
+    from db.models import Config
+
+    job = _make_job(db_session, "job_extract", description="We need Python.")
+    db_session.add(Config(key="description_prompt_template", value="Extract: {description}"))
+    db_session.commit()
+
     monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
 
-    def mock_generate_resume_fail(job_key, db, client, model):
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        job.state = "failed"
-        db.commit()
+    def mock_llm_call(client, model, prompt):
+        return '{"required_skills": ["Python"]}'
 
-    monkeypatch.setattr(jobs_router, "_generate_resume", mock_generate_resume_fail)
+    monkeypatch.setattr(jobs_router, "_call_llm_for_extraction", mock_llm_call)
 
-    resp = client.post("/api/jobs/job_resume_fail/generate/resume")
-    assert resp.status_code == 500
+    resp = client.post("/api/jobs/job_extract/description/extract")
+    assert resp.status_code == 200
+    assert resp.json()["extraction_json_exists"] is True
 
 
-def test_generate_cover_endpoint_returns_500_on_failure(client, db_session, monkeypatch):
+def test_extract_description_no_template(client, db_session, monkeypatch):
     import web.routers.jobs as jobs_router
+    _make_job(db_session, "job_extract_notpl")
+    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
+    resp = client.post("/api/jobs/job_extract_notpl/description/extract")
+    assert resp.status_code == 400
 
-    _make_job(db_session, "job_cover_fail", resume_path="/outputs/job_cover_fail_resume.pdf")
+
+def test_extract_description_not_found(client):
+    resp = client.post("/api/jobs/nonexistent/description/extract")
+    assert resp.status_code == 404
+
+
+def test_extract_description_llm_failure_returns_500(client, db_session, monkeypatch):
+    import web.routers.jobs as jobs_router
+    from db.models import Config
+
+    _make_job(db_session, "job_extract_fail", description="We need Python.")
+    db_session.add(Config(key="description_prompt_template", value="Extract: {description}"))
+    db_session.commit()
+
     monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
 
-    def mock_generate_cover_fail(job_key, db, client, model):
-        pass  # cover_path remains None
+    def raise_error(c, m, p):
+        raise RuntimeError("LLM down")
 
-    monkeypatch.setattr(jobs_router, "_generate_cover", mock_generate_cover_fail)
+    monkeypatch.setattr(jobs_router, "_call_llm_for_extraction", raise_error)
 
-    resp = client.post("/api/jobs/job_cover_fail/generate/cover")
+    resp = client.post("/api/jobs/job_extract_fail/description/extract")
     assert resp.status_code == 500
+    assert "extraction failed" in resp.json()["detail"].lower()
+

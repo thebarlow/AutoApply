@@ -6,14 +6,10 @@ from typing import Optional
 
 
 class JobState(str, Enum):
-    PENDING = "pending"
-    SCRAPED = "scraped"
-    APPROVED = "approved"
-    PENDING_REVIEW = "pending_review"
-    GENERATED = "generated"
+    DRAFT = "draft"
     APPLIED = "applied"
+    IN_CONTACT = "in_contact"
     REJECTED = "rejected"
-    FAILED = "failed"
 
 
 @dataclass
