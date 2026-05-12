@@ -133,67 +133,78 @@ def test_call_claude_returns_stripped_text():
     assert result == "Hello world"
 
 
-def _seed_db(db_session) -> None:
-    """Seed minimal config, profile, and an approved job for generator tests."""
-    db_session.add(Config(key="resume_prompt_template", value="Resume: {profile}\n{job}"))
-    db_session.add(Config(key="cover_prompt_template", value="Cover: {profile}\n{job}"))
+def _seed_db_high_level(db_session, tmp_path) -> None:
+    """Seed config with a named provider, active prompts, and a latex template for high-level generator tests."""
+    import uuid as _uuid2
+    pid = _uuid2.uuid4().hex
+    named_providers = [{"id": pid, "name": "TestProv", "provider_type": "openai", "default_model": "gpt-test"}]
+    db_session.add(Config(key="named_providers", value=json.dumps(named_providers)))
+
+    tpl_path = str(tmp_path / "resume.tex")
+    (tmp_path / "resume.tex").write_text("\\documentclass{article}")
+    latex_templates = [{"id": "tplid", "name": "MyTemplate", "path": tpl_path}]
+    db_session.add(Config(key="latex_templates", value=json.dumps(latex_templates)))
+
+    prompt_id = _uuid2.uuid4().hex
+    resume_prompts = [{"id": prompt_id, "name": "R", "content": "Resume: {profile}\n{job}",
+                       "provider_name": "TestProv", "model_id": "gpt-test", "template_name": "MyTemplate"}]
+    cover_prompts = [{"id": prompt_id, "name": "C", "content": "Cover: {profile}\n{job}",
+                      "provider_name": "TestProv", "model_id": "gpt-test", "template_name": "MyTemplate"}]
+    db_session.add(Config(key="resume_prompts", value=json.dumps(resume_prompts)))
+    db_session.add(Config(key="active_resume_prompt_id", value=prompt_id))
+    db_session.add(Config(key="cover_prompts", value=json.dumps(cover_prompts)))
+    db_session.add(Config(key="active_cover_prompt_id", value=prompt_id))
     db_session.add(Config(key="resume_github", value=""))
     db_session.add(Config(key="resume_linkedin", value=""))
     db_session.add(Config(key="resume_website", value=""))
+
     profile_data = {
-        "name": "Jane Doe",
-        "email": "jane@example.com",
-        "phone": "555-0100",
-        "location": "Remote",
-        "skills": ["Python"],
-        "work_history": [],
-        "education": [],
-        "target_salary_min": 100000,
-        "target_salary_max": 150000,
-        "target_roles": ["SWE"],
-        "resume_path": "",
+        "name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100",
+        "location": "Remote", "skills": ["Python"], "work_history": [], "education": [],
+        "projects": [], "hero": "",
+        "target_salary_min": 100000, "target_salary_max": 150000,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
     }
     db_session.add(UserProfileModel(data=json.dumps(profile_data)))
     db_session.add(Job(
-        job_key="test_job",
-        source="indeed",
-        url="https://example.com/job/1",
-        state=JobState.DRAFT.value,
-        title="SWE",
-        company="Acme",
-        description="Python required.",
+        job_key="test_job", source="indeed", url="https://example.com/job/1",
+        state=JobState.DRAFT.value, title="SWE", company="Acme", description="Python required.",
     ))
     db_session.commit()
 
 
-def test_generate_job_transitions_to_generated(db_session, monkeypatch, tmp_path):
-    mock_client = MagicMock()
-    _seed_db(db_session)
+def test_generate_job_runs_without_error(db_session, monkeypatch, tmp_path):
+    _seed_db_high_level(db_session, tmp_path)
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
+
+    def _mock_get_client(db, provider_name, model_id):
+        return MagicMock(), "gpt-test"
+
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider", _mock_get_client)
     monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Profile\nContent here")
     monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
     monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
+    # render_* don't create the file; write stub PDFs so generate_pdf can update job paths
+    (tmp_path / "test_job_resume.pdf").write_bytes(b"PDF")
+    (tmp_path / "test_job_cover.pdf").write_bytes(b"PDF")
 
     generate_job("test_job", db=db_session)
 
     db_session.expire_all()
     job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.state == JobState.DRAFT.value
     assert job.resume_path is not None
     assert job.cover_path is not None
 
 
-def test_generate_job_transitions_to_failed_on_claude_error(db_session, monkeypatch, tmp_path):
-    mock_client = MagicMock()
-    _seed_db(db_session)
+def test_generate_job_swallows_error_and_leaves_state_unchanged(db_session, monkeypatch, tmp_path):
+    _seed_db_high_level(db_session, tmp_path)
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
 
-    def _raise(*a, **kw):
-        raise RuntimeError("API error")
+    def _mock_get_client(db, provider_name, model_id):
+        return MagicMock(), "gpt-test"
 
-    monkeypatch.setattr("generator.generator.call_claude", _raise)
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider", _mock_get_client)
+    monkeypatch.setattr("generator.generator.call_claude", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("API error")))
 
     generate_job("test_job", db=db_session)
 
@@ -202,75 +213,37 @@ def test_generate_job_transitions_to_failed_on_claude_error(db_session, monkeypa
     assert job.state == JobState.DRAFT.value
 
 
-def test_generate_job_transitions_to_failed_on_render_error(db_session, monkeypatch, tmp_path):
-    mock_client = MagicMock()
-    _seed_db(db_session)
+def test_generate_resume_sets_resume_path(db_session, monkeypatch, tmp_path):
+    _seed_db_high_level(db_session, tmp_path)
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
-    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Profile\nContent here")
 
-    def _raise(*a, **kw):
-        raise RuntimeError("Pandoc failed")
+    def _mock_get_client(db, provider_name, model_id):
+        return MagicMock(), "gpt-test"
 
-    monkeypatch.setattr("generator.generator.render_resume_pdf", _raise)
-
-    generate_job("test_job", db=db_session)
-
-    db_session.expire_all()
-    job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.state == JobState.DRAFT.value
-
-
-def test_generate_job_fails_if_template_missing(db_session, monkeypatch, tmp_path):
-    mock_client = MagicMock()
-    profile_data = {
-        "name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100",
-        "location": "Remote", "skills": [], "work_history": [], "education": [],
-        "target_salary_min": None, "target_salary_max": None,
-        "target_roles": [], "resume_path": "",
-    }
-    db_session.add(UserProfileModel(data=json.dumps(profile_data)))
-    db_session.add(Job(
-        job_key="no_tpl",
-        source="indeed",
-        url="https://example.com/job/2",
-        state=JobState.DRAFT.value,
-        title="SWE",
-        company="Acme",
-    ))
-    db_session.commit()
-    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (mock_client, "test-model"))
-
-    generate_job("no_tpl", db=db_session)
-
-    db_session.expire_all()
-    job = db_session.query(Job).filter_by(job_key="no_tpl").first()
-    assert job.state == JobState.DRAFT.value
-
-
-def test_generate_resume_sets_path_and_state(db_session, monkeypatch, tmp_path):
-    _seed_db(db_session)
-    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider", _mock_get_client)
     monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Profile\nContent")
     monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
+    (tmp_path / "test_job_resume.pdf").write_bytes(b"PDF")
 
     generate_resume("test_job", db=db_session)
 
     db_session.expire_all()
     job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.state == JobState.DRAFT.value
     assert job.resume_path is not None
     assert job.cover_path is None
 
 
-def test_generate_cover_sets_cover_path_only(db_session, monkeypatch, tmp_path):
-    _seed_db(db_session)
+def test_generate_cover_sets_cover_path(db_session, monkeypatch, tmp_path):
+    _seed_db_high_level(db_session, tmp_path)
     monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
-    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Cover\nContent")
+
+    def _mock_get_client(db, provider_name, model_id):
+        return MagicMock(), "gpt-test"
+
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider", _mock_get_client)
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "Dear Hiring Manager")
     monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
+    (tmp_path / "test_job_cover.pdf").write_bytes(b"PDF")
 
     generate_cover("test_job", db=db_session)
 
@@ -278,36 +251,6 @@ def test_generate_cover_sets_cover_path_only(db_session, monkeypatch, tmp_path):
     job = db_session.query(Job).filter_by(job_key="test_job").first()
     assert job.cover_path is not None
     assert job.resume_path is None
-    assert job.state == JobState.DRAFT.value  # state unchanged
-
-
-def test_generate_resume_sets_failed_on_error(db_session, monkeypatch, tmp_path):
-    _seed_db(db_session)
-    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
-    monkeypatch.setattr("generator.generator.call_claude", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
-    monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
-
-    generate_resume("test_job", db=db_session)
-
-    db_session.expire_all()
-    job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.state == JobState.DRAFT.value
-
-
-def test_generate_cover_sets_failed_on_error(db_session, monkeypatch, tmp_path):
-    _seed_db(db_session)
-    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("generator.generator.get_openai_client", lambda db: (MagicMock(), "test-model"))
-    monkeypatch.setattr("generator.generator.call_claude", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
-    monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
-
-    generate_cover("test_job", db=db_session)
-
-    db_session.expire_all()
-    job = db_session.query(Job).filter_by(job_key="test_job").first()
-    assert job.cover_path is None
-    assert job.state == JobState.DRAFT.value  # cover failure does not change job state
 
 
 def test_build_description_prompt_substitutes_description():

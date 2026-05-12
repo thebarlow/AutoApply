@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from core.llm import get_openai_client
+from core.llm import get_openai_client, get_client_for_named_provider
 from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry, ProjectEntry
 from db.database import SessionLocal
 from db.models import Config, Job, UserProfileModel
@@ -317,219 +317,66 @@ def render_resume_pdf(md_path: Path, pdf_path: Path, job_key: str, template_path
     )
 
 
-def generate_resume_md(
-    job_key: str,
-    db: Optional[Session] = None,
-    client: Optional[Any] = None,
-    model: Optional[str] = None,
-) -> None:
-    """Generate resume markdown for a job."""
+def _resolve_active_prompt(db: Session, type_: str) -> dict:
+    """Return the active prompt config dict for a type. Raises RuntimeError if not configured."""
+    def _cfg(key: str) -> str:
+        r = db.query(Config).filter_by(key=key).first()
+        return r.value if r else ""
+
+    active_id = _cfg(f"active_{type_}_prompt_id")
+    prompts = json.loads(_cfg(f"{type_}_prompts") or "[]")
+    prompt = next((p for p in prompts if p["id"] == active_id), None)
+    if not prompt:
+        raise RuntimeError(f"No active {type_} prompt configured. Set one under Config → Scaffolding.")
+    return prompt
+
+
+def _resolve_latex_template(db: Session, template_name: str) -> Path:
+    """Return the filesystem Path for a named LaTeX template. Raises RuntimeError if not found."""
+    def _cfg(key: str) -> str:
+        r = db.query(Config).filter_by(key=key).first()
+        return r.value if r else ""
+
+    if not template_name:
+        raise RuntimeError("No LaTeX template configured for this prompt.")
+    templates = json.loads(_cfg("latex_templates") or "[]")
+    match = next((t for t in templates if t["name"] == template_name), None)
+    if not match:
+        raise RuntimeError(f"LaTeX template '{template_name}' not found in config.")
+    p = Path(match["path"])
+    if not p.exists():
+        raise RuntimeError(f"LaTeX template file missing: {p}")
+    return p
+
+
+def generate_resume(job_key: str, db: Session) -> None:
+    """Resolve active resume prompt config and generate MD + PDF."""
+    prompt = _resolve_active_prompt(db, "resume")
+    client, model = get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+    generate_md(job_key, "resume", prompt["content"], client, model, db)
+    template_path = _resolve_latex_template(db, prompt.get("template_name", ""))
+    generate_pdf(job_key, "resume", template_path, db)
+
+
+def generate_cover(job_key: str, db: Session) -> None:
+    """Resolve active cover prompt config and generate MD + PDF."""
+    prompt = _resolve_active_prompt(db, "cover")
+    client, model = get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+    generate_md(job_key, "cover", prompt["content"], client, model, db)
+    template_path = _resolve_latex_template(db, prompt.get("template_name", ""))
+    generate_pdf(job_key, "cover", template_path, db)
+
+
+def generate_job(job_key: str, db: Optional[Session] = None) -> None:
+    """Generate resume and cover letter for a job. Swallows exceptions to stderr."""
     own_db = db is None
     if own_db:
         db = SessionLocal()
-
     try:
-        if client is None or model is None:
-            client, model = get_openai_client(db)
-
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        if job is None:
-            return
-
-        row = db.query(UserProfileModel).first()
-        if not row:
-            raise RuntimeError("No user profile found in DB.")
-        data = json.loads(row.data)
-        data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
-        data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
-        data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
-        profile = UserProfile(**data)
-
-        resume_tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
-        if not resume_tpl:
-            raise RuntimeError("Prompt templates not seeded in config table.")
-
-        def _cfg(key: str) -> str:
-            r = db.query(Config).filter_by(key=key).first()
-            return r.value if r else ""
-
-        frontmatter = _build_frontmatter(
-            profile,
-            github=_cfg("resume_github"),
-            linkedin=_cfg("resume_linkedin"),
-            website=_cfg("resume_website"),
-        )
-
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        resume_md_path = _OUTPUTS_DIR / f"{job_key}_resume.md"
-        resume_md = strip_header_block(
-            call_claude(build_resume_prompt(job, profile, resume_tpl.value), client, model)
-        )
-        resume_md_path.write_text(frontmatter + resume_md, encoding="utf-8")
-
+        generate_resume(job_key, db)
+        generate_cover(job_key, db)
     except Exception as e:
         print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
     finally:
         if own_db:
             db.close()
-
-
-def generate_resume_pdf(
-    job_key: str,
-    db: Optional[Session] = None,
-) -> None:
-    """Render resume PDF from existing markdown for a job and set state to GENERATED."""
-    own_db = db is None
-    if own_db:
-        db = SessionLocal()
-
-    job = None
-    try:
-        resume_md_path = _OUTPUTS_DIR / f"{job_key}_resume.md"
-        if not resume_md_path.exists():
-            raise FileNotFoundError(f"Resume markdown not found: {resume_md_path}")
-
-        def _cfg(key: str) -> str:
-            r = db.query(Config).filter_by(key=key).first()
-            return r.value if r else ""
-
-        resume_tpl_path = Path(_cfg("resume_template_path")) if _cfg("resume_template_path") else None
-
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        resume_pdf_path = _OUTPUTS_DIR / f"{job_key}_resume.pdf"
-        render_resume_pdf(resume_md_path, resume_pdf_path, job_key, resume_tpl_path)
-
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        if job:
-            job.resume_path = str(resume_pdf_path)
-            db.commit()
-
-    except Exception as e:
-        print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
-    finally:
-        if own_db:
-            db.close()
-
-
-def generate_resume(
-    job_key: str,
-    db: Optional[Session] = None,
-    client: Optional[Any] = None,
-    model: Optional[str] = None,
-) -> None:
-    """Generate resume markdown and PDF for a job."""
-    generate_resume_md(job_key, db=db, client=client, model=model)
-    generate_resume_pdf(job_key, db=db)
-
-
-def generate_cover_md(
-    job_key: str,
-    db: Optional[Session] = None,
-    client: Optional[Any] = None,
-    model: Optional[str] = None,
-) -> None:
-    """Generate cover letter markdown for a job."""
-    own_db = db is None
-    if own_db:
-        db = SessionLocal()
-
-    try:
-        if client is None or model is None:
-            client, model = get_openai_client(db)
-
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        if job is None:
-            return
-
-        row = db.query(UserProfileModel).first()
-        if not row:
-            raise RuntimeError("No user profile found in DB.")
-        data = json.loads(row.data)
-        data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
-        data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
-        data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
-        profile = UserProfile(**data)
-
-        cover_tpl = db.query(Config).filter_by(key="cover_prompt_template").first()
-        if not cover_tpl:
-            raise RuntimeError("Prompt templates not seeded in config table.")
-
-        def _cfg(key: str) -> str:
-            r = db.query(Config).filter_by(key=key).first()
-            return r.value if r else ""
-
-        frontmatter = _build_frontmatter(
-            profile,
-            github=_cfg("resume_github"),
-            linkedin=_cfg("resume_linkedin"),
-            website=_cfg("resume_website"),
-        )
-
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        cover_md_path = _OUTPUTS_DIR / f"{job_key}_cover.md"
-        cover_md = call_claude(build_cover_prompt(job, profile, cover_tpl.value), client, model)
-        cover_md_path.write_text(frontmatter + cover_md, encoding="utf-8")
-
-    except Exception as e:
-        print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
-    finally:
-        if own_db:
-            db.close()
-
-
-def generate_cover_pdf(
-    job_key: str,
-    db: Optional[Session] = None,
-) -> None:
-    """Render cover letter PDF from existing markdown for a job."""
-    own_db = db is None
-    if own_db:
-        db = SessionLocal()
-
-    try:
-        cover_md_path = _OUTPUTS_DIR / f"{job_key}_cover.md"
-        if not cover_md_path.exists():
-            raise FileNotFoundError(f"Cover markdown not found: {cover_md_path}")
-
-        def _cfg(key: str) -> str:
-            r = db.query(Config).filter_by(key=key).first()
-            return r.value if r else ""
-
-        cover_tpl_path = Path(_cfg("cover_template_path")) if _cfg("cover_template_path") else _DEFAULT_COVER_TEMPLATE
-
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        cover_pdf_path = _OUTPUTS_DIR / f"{job_key}_cover.pdf"
-        render_pdf(cover_md_path, cover_pdf_path, cover_tpl_path)
-
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        if job:
-            job.cover_path = str(cover_pdf_path)
-            db.commit()
-
-    except Exception as e:
-        print(f"[generator] ERROR for {job_key}: {e}", file=sys.stderr)
-    finally:
-        if own_db:
-            db.close()
-
-
-def generate_cover(
-    job_key: str,
-    db: Optional[Session] = None,
-    client: Optional[Any] = None,
-    model: Optional[str] = None,
-) -> None:
-    """Generate cover letter markdown and PDF for a job."""
-    generate_cover_md(job_key, db=db, client=client, model=model)
-    generate_cover_pdf(job_key, db=db)
-
-
-def generate_job(
-    job_key: str,
-    db: Optional[Session] = None,
-    client: Optional[Any] = None,
-    model: Optional[str] = None,
-) -> None:
-    """Generate resume and cover letter for an approved job."""
-    generate_resume(job_key, db=db, client=client, model=model)
-    generate_cover(job_key, db=db, client=client, model=model)
