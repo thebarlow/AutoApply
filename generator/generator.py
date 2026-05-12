@@ -173,10 +173,12 @@ def generate_md(
     if not row:
         raise RuntimeError("No user profile found in DB.")
     data = json.loads(row.data)
+    import dataclasses as _dc
     data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
     data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
     data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
-    profile = UserProfile(**data)
+    _profile_fields = {f.name for f in _dc.fields(UserProfile)}
+    profile = UserProfile(**{k: v for k, v in data.items() if k in _profile_fields})
 
     frontmatter = _build_frontmatter(
         profile,
