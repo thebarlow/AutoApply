@@ -49,11 +49,13 @@ def load_user_profile(db: Session) -> UserProfile:
             print("No user profile found. Add one via /config.", file=sys.stderr)
         sys.exit(1)
 
+    import dataclasses as _dc
     data = json.loads(row.data)
     data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
     data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
     data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
-    return UserProfile(**data)
+    _profile_fields = {f.name for f in _dc.fields(UserProfile)}
+    return UserProfile(**{k: v for k, v in data.items() if k in _profile_fields})
 
 
 def load_config(db: Session) -> dict[str, float]:
