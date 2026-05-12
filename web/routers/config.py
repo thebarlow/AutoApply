@@ -353,12 +353,6 @@ class ProviderIn(BaseModel):
     api_key: str = ""
 
 
-class ProviderUpdateIn(BaseModel):
-    name: str
-    provider_type: str
-    api_key: str = ""
-
-
 def _get_providers(db: Session) -> list[dict]:
     return json.loads(_get(db, "named_providers", "[]"))
 
@@ -411,7 +405,7 @@ def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str
 
 
 @router.put("/api/config/providers/{provider_id}")
-def update_provider(provider_id: str, body: ProviderUpdateIn, db: Session = Depends(get_db)) -> dict[str, Any]:
+def update_provider(provider_id: str, body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
     if body.provider_type not in _VALID_PROVIDER_TYPES:
         raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
     providers = _get_providers(db)
@@ -421,10 +415,12 @@ def update_provider(provider_id: str, body: ProviderUpdateIn, db: Session = Depe
     match["name"] = body.name
     match["provider_type"] = body.provider_type
     _set_providers(db, providers)
+    env = _read_env()
     if body.api_key:
-        env = _read_env()
         env[_env_key_name(provider_id)] = body.api_key
-        _write_env(env)
+    else:
+        env.pop(_env_key_name(provider_id), None)
+    _write_env(env)
     return {"id": provider_id, "name": body.name, "provider_type": body.provider_type}
 
 

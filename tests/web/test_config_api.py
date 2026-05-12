@@ -195,7 +195,10 @@ def test_get_providers_empty(client):
     assert resp.json() == {"providers": []}
 
 
-def test_create_and_list_provider(client):
+def test_create_and_list_provider(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
     resp = client.post("/api/config/providers", json={
         "name": "My OpenRouter", "provider_type": "openrouter", "api_key": "sk-test-123"
     })
@@ -213,7 +216,10 @@ def test_create_and_list_provider(client):
     assert "masked_key" in providers[0]
 
 
-def test_update_provider(client):
+def test_update_provider(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
     pid = client.post("/api/config/providers", json={
         "name": "Old Name", "provider_type": "anthropic", "api_key": "sk-ant-abc"
     }).json()["id"]
@@ -228,7 +234,10 @@ def test_update_provider(client):
     assert resp2.json()["providers"][0]["name"] == "New Name"
 
 
-def test_delete_provider(client):
+def test_delete_provider(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
     pid = client.post("/api/config/providers", json={
         "name": "ToDelete", "provider_type": "openai", "api_key": "sk-xyz"
     }).json()["id"]
