@@ -71,7 +71,7 @@ def _apply_template(template: str, subs: dict[str, str]) -> str:
     return re.sub(r'\{(\w+)\}', _replace, template)
 
 
-def build_resume_prompt(job: Job, profile: UserProfile, template: str) -> str:
+def build_prompt(job: Job, profile: UserProfile, template: str) -> str:
     master = _load_master_resume(profile)
     return _apply_template(template, {
         "profile": master,
@@ -84,17 +84,9 @@ def build_resume_prompt(job: Job, profile: UserProfile, template: str) -> str:
     })
 
 
-def build_cover_prompt(job: Job, profile: UserProfile, template: str) -> str:
-    master = _load_master_resume(profile)
-    return _apply_template(template, {
-        "profile": master,
-        "master_resume": master,
-        "job": _render_job(job),
-        "title": job.title or "",
-        "company": job.company or "",
-        "location": job.location or "Not specified",
-        "description": job.description or "Not provided",
-    })
+# Keep old names as aliases — existing tests and imports continue to work
+build_resume_prompt = build_prompt
+build_cover_prompt = build_prompt
 
 
 def build_description_prompt(job: Job, template: str) -> str:
@@ -162,6 +154,75 @@ def _build_frontmatter(
         lines.append(f"website: {website}")
     lines.extend(["---", ""])
     return "\n".join(lines) + "\n"
+
+
+def generate_md(
+    job_key: str,
+    type_: str,
+    prompt_content: str,
+    client: Any,
+    model: str,
+    db: Session,
+) -> None:
+    """Generate resume or cover letter markdown for a job. Raises on failure."""
+    job = db.query(Job).filter_by(job_key=job_key).first()
+    if job is None:
+        raise RuntimeError(f"Job {job_key!r} not found")
+
+    row = db.query(UserProfileModel).first()
+    if not row:
+        raise RuntimeError("No user profile found in DB.")
+    data = json.loads(row.data)
+    data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
+    data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+    data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
+    profile = UserProfile(**data)
+
+    def _cfg(key: str) -> str:
+        r = db.query(Config).filter_by(key=key).first()
+        return r.value if r else ""
+
+    frontmatter = _build_frontmatter(
+        profile,
+        github=_cfg("resume_github"),
+        linkedin=_cfg("resume_linkedin"),
+        website=_cfg("resume_website"),
+    )
+
+    _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    md_path = _OUTPUTS_DIR / f"{job_key}_{type_}.md"
+    content = call_claude(build_prompt(job, profile, prompt_content), client, model)
+    if type_ == "resume":
+        content = strip_header_block(content)
+    md_path.write_text(frontmatter + content, encoding="utf-8")
+
+
+def generate_pdf(
+    job_key: str,
+    type_: str,
+    template_path: Path,
+    db: Session,
+) -> None:
+    """Render PDF from existing markdown for a job and update job DB record. Raises on failure."""
+    md_path = _OUTPUTS_DIR / f"{job_key}_{type_}.md"
+    if not md_path.exists():
+        raise FileNotFoundError(f"Markdown not found: {md_path}")
+
+    _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    pdf_path = _OUTPUTS_DIR / f"{job_key}_{type_}.pdf"
+
+    if type_ == "resume":
+        render_resume_pdf(md_path, pdf_path, job_key, template_path)
+    else:
+        render_pdf(md_path, pdf_path, template_path)
+
+    job = db.query(Job).filter_by(job_key=job_key).first()
+    if job:
+        if type_ == "resume":
+            job.resume_path = str(pdf_path)
+        else:
+            job.cover_path = str(pdf_path)
+        db.commit()
 
 
 def strip_header_block(md: str) -> str:

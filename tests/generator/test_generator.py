@@ -1,4 +1,5 @@
 import json
+import uuid as _uuid
 
 import pytest
 from sqlalchemy import create_engine
@@ -12,11 +13,14 @@ from generator.generator import (
     build_resume_prompt,
     build_cover_prompt,
     build_description_prompt,
+    build_prompt,
     strip_header_block,
     call_claude,
     generate_job,
     generate_resume,
     generate_cover,
+    generate_md,
+    generate_pdf,
 )
 
 
@@ -388,3 +392,121 @@ def test_extraction_json_to_markdown_all_sections():
     assert "## Key Responsibilities" in result
     assert "## Company Signals" in result
     assert "## Overview" in result
+
+
+def test_build_prompt_is_alias_for_build_resume_prompt():
+    job = _make_job_obj()
+    profile = _make_profile()
+    template = "{profile}\n{job}"
+    assert build_prompt(job, profile, template) == build_resume_prompt(job, profile, template)
+
+
+def _seed_db_new(db_session) -> None:
+    """Seed config in the new active-prompt format."""
+    prompt_id = _uuid.uuid4().hex
+    resume_prompts = [{"id": prompt_id, "name": "Test Resume", "content": "Resume: {profile}\n{job}",
+                       "provider_name": "TestProvider", "model_id": "test-model", "template_name": ""}]
+    cover_prompts = [{"id": prompt_id, "name": "Test Cover", "content": "Cover: {profile}\n{job}",
+                      "provider_name": "TestProvider", "model_id": "test-model", "template_name": ""}]
+    db_session.add(Config(key="resume_prompts", value=json.dumps(resume_prompts)))
+    db_session.add(Config(key="active_resume_prompt_id", value=prompt_id))
+    db_session.add(Config(key="cover_prompts", value=json.dumps(cover_prompts)))
+    db_session.add(Config(key="active_cover_prompt_id", value=prompt_id))
+    db_session.add(Config(key="resume_github", value=""))
+    db_session.add(Config(key="resume_linkedin", value=""))
+    db_session.add(Config(key="resume_website", value=""))
+    profile_data = {
+        "name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100",
+        "location": "Remote", "skills": ["Python"], "work_history": [], "education": [],
+        "projects": [], "hero": "",
+        "target_salary_min": 100000, "target_salary_max": 150000,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
+    }
+    db_session.add(UserProfileModel(data=json.dumps(profile_data)))
+    db_session.add(Job(
+        job_key="test_job", source="indeed", url="https://example.com/job/1",
+        state=JobState.DRAFT.value, title="SWE", company="Acme", description="Python required.",
+    ))
+    db_session.commit()
+
+
+def test_generate_md_writes_resume_file(db_session, monkeypatch, tmp_path):
+    _seed_db_new(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    mock_client = MagicMock()
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "## Skills\nPython")
+
+    generate_md("test_job", "resume", "Resume: {profile}\n{job}", mock_client, "test-model", db_session)
+
+    out = tmp_path / "test_job_resume.md"
+    assert out.exists()
+    assert "## Skills" in out.read_text()
+
+
+def test_generate_md_writes_cover_file(db_session, monkeypatch, tmp_path):
+    _seed_db_new(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    mock_client = MagicMock()
+    monkeypatch.setattr("generator.generator.call_claude", lambda prompt, client, model: "Dear Hiring Manager")
+
+    generate_md("test_job", "cover", "Cover: {profile}\n{job}", mock_client, "test-model", db_session)
+
+    out = tmp_path / "test_job_cover.md"
+    assert out.exists()
+    assert "Dear Hiring Manager" in out.read_text()
+
+
+def test_generate_md_raises_when_job_not_found(db_session, tmp_path):
+    db_session.add(UserProfileModel(data=json.dumps({
+        "name": "X", "email": "", "phone": "", "location": "", "skills": [],
+        "work_history": [], "education": [], "projects": [], "hero": "",
+        "target_salary_min": None, "target_salary_max": None,
+        "target_roles": [], "resume_path": "", "md_path": "",
+    })))
+    db_session.commit()
+    mock_client = MagicMock()
+    with pytest.raises(RuntimeError, match="not found"):
+        generate_md("missing_job", "resume", "{job}", mock_client, "model", db_session)
+
+
+def test_generate_pdf_resume_updates_job_resume_path(db_session, monkeypatch, tmp_path):
+    _seed_db_new(db_session)
+    md_file = tmp_path / "test_job_resume.md"
+    md_file.write_text("## Skills\nPython")
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.render_resume_pdf", lambda *a, **kw: None)
+
+    template = tmp_path / "resume.tex"
+    template.write_text("\\documentclass{article}")
+    generate_pdf("test_job", "resume", template, db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.resume_path is not None
+    assert "test_job_resume.pdf" in job.resume_path
+
+
+def test_generate_pdf_cover_updates_job_cover_path(db_session, monkeypatch, tmp_path):
+    _seed_db_new(db_session)
+    md_file = tmp_path / "test_job_cover.md"
+    md_file.write_text("Dear Hiring Manager")
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("generator.generator.render_pdf", lambda *a, **kw: None)
+
+    template = tmp_path / "cover.tex"
+    template.write_text("\\documentclass{article}")
+    generate_pdf("test_job", "cover", template, db_session)
+
+    db_session.expire_all()
+    job = db_session.query(Job).filter_by(job_key="test_job").first()
+    assert job.cover_path is not None
+    assert "test_job_cover.pdf" in job.cover_path
+
+
+def test_generate_pdf_raises_when_md_missing(db_session, monkeypatch, tmp_path):
+    _seed_db_new(db_session)
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+    template = tmp_path / "resume.tex"
+    template.write_text("\\documentclass{article}")
+    with pytest.raises(FileNotFoundError):
+        generate_pdf("test_job", "resume", template, db_session)
