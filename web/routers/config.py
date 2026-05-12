@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -434,6 +434,75 @@ def delete_provider(provider_id: str, db: Session = Depends(get_db)) -> None:
     env = _read_env()
     env.pop(_env_key_name(provider_id), None)
     _write_env(env)
+
+
+# ---- LaTeX Templates ----
+
+_TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
+
+
+class LatexTemplateNameBody(BaseModel):
+    name: str
+
+
+def _get_latex_templates(db: Session) -> list[dict]:
+    return json.loads(_get(db, "latex_templates", "[]"))
+
+
+def _set_latex_templates(db: Session, templates: list[dict]) -> None:
+    _set(db, "latex_templates", json.dumps(templates))
+
+
+@router.get("/api/config/latex-templates")
+def get_latex_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
+    return {"templates": _get_latex_templates(db)}
+
+
+@router.post("/api/config/latex-templates")
+def create_latex_template(
+    name: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    contents = file.file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 2 MB)")
+    _TEMPLATES_DIR.mkdir(exist_ok=True)
+    new_id = uuid.uuid4().hex
+    dest = _TEMPLATES_DIR / f"{new_id}.tex"
+    dest.write_bytes(contents)
+    templates = _get_latex_templates(db)
+    templates.append({"id": new_id, "name": name, "path": str(dest.resolve())})
+    _set_latex_templates(db, templates)
+    return {"id": new_id, "name": name, "path": str(dest.resolve())}
+
+
+@router.put("/api/config/latex-templates/{template_id}")
+def update_latex_template(
+    template_id: str,
+    body: LatexTemplateNameBody,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    templates = _get_latex_templates(db)
+    match = next((t for t in templates if t["id"] == template_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Template not found")
+    match["name"] = body.name
+    _set_latex_templates(db, templates)
+    return match
+
+
+@router.delete("/api/config/latex-templates/{template_id}", status_code=204)
+def delete_latex_template(template_id: str, db: Session = Depends(get_db)) -> None:
+    templates = _get_latex_templates(db)
+    match = next((t for t in templates if t["id"] == template_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Template not found")
+    remaining = [t for t in templates if t["id"] != template_id]
+    _set_latex_templates(db, remaining)
+    path = Path(match.get("path", ""))
+    if path.exists():
+        path.unlink(missing_ok=True)
 
 
 # ---- User Profiles ----

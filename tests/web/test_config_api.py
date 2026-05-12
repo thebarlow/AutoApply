@@ -249,6 +249,70 @@ def test_delete_provider(client, tmp_path, monkeypatch):
     assert resp2.json()["providers"] == []
 
 
+# ---- LaTeX Templates ----
+
+def test_get_latex_templates_empty(client):
+    resp = client.get("/api/config/latex-templates")
+    assert resp.status_code == 200
+    assert resp.json() == {"templates": []}
+
+
+def test_create_latex_template(client, tmp_path, monkeypatch):
+    import web.routers.config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "_TEMPLATES_DIR", tmp_path)
+
+    tex_bytes = b"\\documentclass{article}\\begin{document}Hello\\end{document}"
+    resp = client.post(
+        "/api/config/latex-templates",
+        data={"name": "resume.tex"},
+        files={"file": ("resume_template.tex", tex_bytes, "text/plain")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "resume.tex"
+    assert "id" in data
+    assert "path" in data
+
+    resp2 = client.get("/api/config/latex-templates")
+    templates = resp2.json()["templates"]
+    assert len(templates) == 1
+    assert templates[0]["name"] == "resume.tex"
+
+
+def test_update_latex_template_name(client, tmp_path, monkeypatch):
+    import web.routers.config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "_TEMPLATES_DIR", tmp_path)
+
+    tex_bytes = b"\\documentclass{article}"
+    tid = client.post(
+        "/api/config/latex-templates",
+        data={"name": "old.tex"},
+        files={"file": ("old.tex", tex_bytes, "text/plain")},
+    ).json()["id"]
+
+    resp = client.put(f"/api/config/latex-templates/{tid}", json={"name": "new.tex"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "new.tex"
+
+
+def test_delete_latex_template(client, tmp_path, monkeypatch):
+    import web.routers.config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "_TEMPLATES_DIR", tmp_path)
+
+    tex_bytes = b"\\documentclass{article}"
+    tid = client.post(
+        "/api/config/latex-templates",
+        data={"name": "to_delete.tex"},
+        files={"file": ("to_delete.tex", tex_bytes, "text/plain")},
+    ).json()["id"]
+
+    resp = client.delete(f"/api/config/latex-templates/{tid}")
+    assert resp.status_code == 204
+
+    resp2 = client.get("/api/config/latex-templates")
+    assert resp2.json()["templates"] == []
+
+
 def test_delete_provider_not_found(client):
     resp = client.delete("/api/config/providers/nonexistent-id")
     assert resp.status_code == 404
