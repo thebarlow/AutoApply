@@ -27,9 +27,22 @@
 
   <div class="config-content">
 
-    <!-- Pane: User Profile (populated in Task 6) -->
+    <!-- Pane: User Profile -->
     <div class="config-pane active" id="pane-profile">
       <div class="config-pane-title">User Profiles</div>
+      <table class="config-data-table" id="profile-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Resume</th>
+            <th>Cover Letter</th>
+            <th>Contact</th>
+          </tr>
+        </thead>
+        <tbody id="profile-tbody"></tbody>
+      </table>
+      <button class="config-btn-add" id="btn-add-profile">+ Add Profile</button>
+      <span class="save-status" id="status-profile" style="margin-left:12px;font-size:12px"></span>
     </div>
 
     <!-- Pane: Scaffolding (populated in Task 7–8) -->
@@ -69,6 +82,83 @@
     </div>
 
   </div><!-- /config-content -->
+
+<!-- Profile Modal -->
+<div class="config-modal-backdrop" id="profile-modal-backdrop">
+  <div class="config-modal config-modal--wide">
+    <div class="config-modal-header">
+      <h2 id="profile-modal-title">Profile</h2>
+      <button class="config-modal-close" id="profile-modal-close">✕</button>
+    </div>
+    <div class="config-modal-tabs">
+      <button class="config-modal-tab active" data-modal="profile" data-tab="files">Files</button>
+      <button class="config-modal-tab" data-modal="profile" data-tab="preview">Preview</button>
+      <button class="config-modal-tab" data-modal="profile" data-tab="details">Details</button>
+    </div>
+    <div class="config-modal-body">
+
+      <!-- Files tab -->
+      <div class="config-modal-tab-panel active" id="profile-tab-files">
+        <div class="config-form-group">
+          <label class="config-form-label">Resume (PDF or Markdown)</label>
+          <div class="config-drop-zone" id="profile-resume-drop">Drop .pdf or .md, or click to browse</div>
+          <input type="file" id="profile-resume-file" accept=".pdf,.md" style="display:none">
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Cover Letter (PDF)</label>
+          <div class="config-drop-zone" id="profile-cover-drop">Drop .pdf, or click to browse</div>
+          <input type="file" id="profile-cover-file" accept=".pdf" style="display:none">
+        </div>
+        <span class="save-status" id="status-profile-files" style="font-size:12px"></span>
+      </div>
+
+      <!-- Preview tab -->
+      <div class="config-modal-tab-panel" id="profile-tab-preview">
+        <iframe id="profile-preview-frame" src="about:blank" style="width:100%;height:480px;border:1px solid #e2e8f0;border-radius:6px;"></iframe>
+        <textarea id="profile-preview-md" style="display:none;width:100%;height:480px;font-family:monospace;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;padding:10px;" readonly></textarea>
+      </div>
+
+      <!-- Details tab -->
+      <div class="config-modal-tab-panel" id="profile-tab-details">
+        <div class="config-form-group">
+          <label class="config-form-label">Profile Name</label>
+          <input class="config-form-input" type="text" id="profile-modal-name">
+        </div>
+        <div class="config-modal-subsection-title">Contact</div>
+        <div class="config-form-row">
+          <div class="config-form-group">
+            <label class="config-form-label">Email</label>
+            <input class="config-form-input" type="text" id="profile-email">
+          </div>
+          <div class="config-form-group">
+            <label class="config-form-label">Phone</label>
+            <input class="config-form-input" type="text" id="profile-phone">
+          </div>
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Location</label>
+          <input class="config-form-input" type="text" id="profile-location">
+        </div>
+        <div class="config-modal-subsection-title">Skills</div>
+        <div class="config-chip-field" id="profile-skills-chips"></div>
+        <div class="config-chips-hint">Press Enter or comma to add · × to remove</div>
+        <div class="config-modal-subsection-title">Work History</div>
+        <div id="profile-work-list"></div>
+        <button class="config-btn-add" id="btn-add-work" style="margin-top:8px">+ Add Position</button>
+        <div class="config-modal-subsection-title">Education</div>
+        <div id="profile-edu-list"></div>
+        <button class="config-btn-add" id="btn-add-edu" style="margin-top:8px">+ Add Education</button>
+      </div>
+
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-profile-modal">Save</button>
+      <span class="save-status" id="status-profile-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-profile-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /config-shell -->
 
 <script>
@@ -139,8 +229,369 @@
     } catch { showStatus('status-api', 'Error saving', true); }
   });
 
+  // ---- Profile Tab ----
+
+  let _profileModalId = null;
+  let _profileModalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
+
+  function buildProfileRow(profile) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = profile.id;
+    const hasContact = !!(profile.data && profile.data.email);
+    tr.innerHTML = `
+      <td class="config-row-name"></td>
+      <td class="${profile.has_resume ? 'config-check' : 'config-cross'}">${profile.has_resume ? '✓' : '✗'}</td>
+      <td class="${profile.has_cover ? 'config-check' : 'config-cross'}">${profile.has_cover ? '✓' : '✗'}</td>
+      <td class="${hasContact ? 'config-check' : 'config-cross'}">${hasContact ? '✓' : '✗'}</td>
+    `;
+    tr.querySelector('.config-row-name').textContent = profile.name || 'Unnamed';
+    tr.addEventListener('click', function () { openProfileModal(profile.id); });
+    return tr;
+  }
+
+  async function loadProfiles() {
+    const resp = await fetch('/api/config/profiles');
+    if (!resp.ok) return;
+    const meta = await resp.json();
+    const tbody = document.getElementById('profile-tbody');
+    tbody.innerHTML = '';
+    for (const p of meta.profiles) {
+      const detail = await fetch('/api/config/profiles/' + p.id).then(r => r.json());
+      tbody.appendChild(buildProfileRow({ ...p, data: detail.data }));
+    }
+  }
+
+  async function openProfileModal(id) {
+    _profileModalId = id;
+    _profileModalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
+    document.getElementById('profile-modal-backdrop').classList.add('is-open');
+
+    // Reset tabs
+    switchConfigModalTab('profile', 'files');
+
+    if (!id) {
+      document.getElementById('profile-modal-title').textContent = 'New Profile';
+      document.getElementById('profile-modal-name').value = '';
+      document.getElementById('profile-email').value = '';
+      document.getElementById('profile-phone').value = '';
+      document.getElementById('profile-location').value = '';
+      resetChips('profile-skills-chips');
+      document.getElementById('profile-work-list').innerHTML = '';
+      document.getElementById('profile-edu-list').innerHTML = '';
+      document.getElementById('profile-resume-drop').textContent = 'Drop .pdf or .md, or click to browse';
+      document.getElementById('profile-resume-drop').classList.remove('has-file');
+      document.getElementById('profile-cover-drop').textContent = 'Drop .pdf, or click to browse';
+      document.getElementById('profile-cover-drop').classList.remove('has-file');
+      return;
+    }
+
+    const resp = await fetch('/api/config/profiles/' + id);
+    if (!resp.ok) return;
+    const profile = await resp.json();
+    const data = profile.data || {};
+
+    document.getElementById('profile-modal-title').textContent = profile.name || 'Profile';
+    document.getElementById('profile-modal-name').value = profile.name || '';
+    document.getElementById('profile-email').value = data.email || '';
+    document.getElementById('profile-phone').value = data.phone || '';
+    document.getElementById('profile-location').value = data.location || '';
+    setChips('profile-skills-chips', data.skills || []);
+
+    _profileModalFilePaths.resume_path = data.resume_path || '';
+    _profileModalFilePaths.md_path = data.md_path || '';
+    _profileModalFilePaths.cover_letter_path = data.cover_letter_path || '';
+
+    const resumeLabel = data.resume_filename || (data.resume_path ? data.resume_path.split(/[\\/]/).pop() : '');
+    const coverLabel = data.cover_filename || (data.cover_letter_path ? data.cover_letter_path.split(/[\\/]/).pop() : '');
+    setDropZoneLabel('profile-resume-drop', resumeLabel);
+    setDropZoneLabel('profile-cover-drop', coverLabel);
+
+    // Work history
+    const wl = document.getElementById('profile-work-list');
+    wl.innerHTML = '';
+    (data.work_history || []).forEach(e => wl.appendChild(buildWorkRow(e)));
+
+    // Education
+    const el = document.getElementById('profile-edu-list');
+    el.innerHTML = '';
+    (data.education || []).forEach(e => el.appendChild(buildEduRow(e)));
+  }
+
+  function closeProfileModal() {
+    _profileModalId = null;
+    document.getElementById('profile-modal-backdrop').classList.remove('is-open');
+  }
+
+  document.getElementById('profile-modal-close').addEventListener('click', closeProfileModal);
+  document.getElementById('profile-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closeProfileModal();
+  });
+
+  document.getElementById('save-profile-modal').addEventListener('click', async function () {
+    if (_profileModalId === null) return;
+    const name = document.getElementById('profile-modal-name').value.trim() || 'New Profile';
+    const body = {
+      name,
+      data: {
+        email: document.getElementById('profile-email').value,
+        phone: document.getElementById('profile-phone').value,
+        location: document.getElementById('profile-location').value,
+        skills: getChips('profile-skills-chips'),
+        work_history: collectWorkRows(),
+        education: collectEduRows(),
+        resume_path: _profileModalFilePaths.resume_path,
+        md_path: _profileModalFilePaths.md_path,
+        cover_letter_path: _profileModalFilePaths.cover_letter_path,
+        target_salary_min: null,
+        target_salary_max: null,
+        target_roles: [],
+      },
+    };
+    try {
+      const resp = await fetch('/api/config/profiles/' + _profileModalId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        showStatus('status-profile-modal', 'Saved ✓', false);
+        document.getElementById('profile-modal-title').textContent = name;
+        await loadProfiles();
+      } else {
+        showStatus('status-profile-modal', 'Error saving', true);
+      }
+    } catch { showStatus('status-profile-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-profile-btn').addEventListener('click', async function () {
+    if (_profileModalId === null) return;
+    if (!confirm('Delete this profile?')) return;
+    const resp = await fetch('/api/config/profiles/' + _profileModalId, { method: 'DELETE' });
+    if (resp.ok) { closeProfileModal(); await loadProfiles(); }
+    else showStatus('status-profile', 'Delete failed', true);
+  });
+
+  document.getElementById('btn-add-profile').addEventListener('click', async function () {
+    const resp = await fetch('/api/config/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'New Profile' }),
+    });
+    if (!resp.ok) return;
+    const profile = await resp.json();
+    await loadProfiles();
+    openProfileModal(profile.id);
+  });
+
+  // File drop zones
+  function setDropZoneLabel(id, filename) {
+    const zone = document.getElementById(id);
+    if (filename) {
+      zone.textContent = filename + ' ✓ — click to replace';
+      zone.classList.add('has-file');
+    } else {
+      zone.textContent = id === 'profile-resume-drop'
+        ? 'Drop .pdf or .md, or click to browse'
+        : 'Drop .pdf, or click to browse';
+      zone.classList.remove('has-file');
+    }
+  }
+
+  document.getElementById('profile-resume-drop').addEventListener('click', function () {
+    document.getElementById('profile-resume-file').click();
+  });
+  document.getElementById('profile-cover-drop').addEventListener('click', function () {
+    document.getElementById('profile-cover-file').click();
+  });
+
+  async function uploadProfileFile(file, type) {
+    const form = new FormData();
+    form.append('file', file);
+    const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
+    if (!resp.ok) return null;
+    return await resp.json();
+  }
+
+  document.getElementById('profile-resume-file').addEventListener('change', async function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const result = await uploadProfileFile(file, 'resume');
+    if (!result) { showStatus('status-profile-files', 'Upload failed', true); return; }
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      _profileModalFilePaths.resume_path = result.path;
+      _profileModalFilePaths.md_path = '';
+    } else {
+      _profileModalFilePaths.md_path = result.path;
+      _profileModalFilePaths.resume_path = '';
+    }
+    setDropZoneLabel('profile-resume-drop', file.name);
+    showStatus('status-profile-files', 'Uploaded ✓', false);
+  });
+
+  document.getElementById('profile-cover-file').addEventListener('change', async function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const result = await uploadProfileFile(file, 'cover');
+    if (!result) { showStatus('status-profile-files', 'Upload failed', true); return; }
+    _profileModalFilePaths.cover_letter_path = result.path;
+    setDropZoneLabel('profile-cover-drop', file.name);
+    showStatus('status-profile-files', 'Uploaded ✓', false);
+  });
+
+  // Preview tab — load PDF/MD on tab switch
+  document.querySelectorAll('[data-modal="profile"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.dataset.tab === 'preview' && _profileModalId) {
+        const hasPdf = !!_profileModalFilePaths.resume_path;
+        const hasMd = !!_profileModalFilePaths.md_path;
+        const frame = document.getElementById('profile-preview-frame');
+        const mdViewer = document.getElementById('profile-preview-md');
+        if (hasPdf) {
+          frame.style.display = '';
+          mdViewer.style.display = 'none';
+          frame.src = '/api/config/profiles/' + _profileModalId + '/file?type=pdf';
+        } else if (hasMd) {
+          frame.style.display = 'none';
+          mdViewer.style.display = '';
+          fetch('/api/config/profiles/' + _profileModalId + '/file?type=md')
+            .then(r => r.text())
+            .then(text => { mdViewer.value = text; });
+        }
+      }
+    });
+  });
+
+  // ---- Chip helpers ----
+
+  function resetChips(containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    const input = document.createElement('input');
+    input.className = 'config-chip-input';
+    input.placeholder = 'Add skill…';
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const val = input.value.replace(',', '').trim();
+        if (val) addChip(container, val);
+        input.value = '';
+      }
+    });
+    container.appendChild(input);
+    container.addEventListener('click', function () { input.focus(); });
+  }
+
+  function addChip(container, text) {
+    const input = container.querySelector('.config-chip-input');
+    const chip = document.createElement('span');
+    chip.className = 'config-chip';
+    chip.innerHTML = `${text} <button class="config-chip-remove" type="button">×</button>`;
+    chip.querySelector('.config-chip-remove').addEventListener('click', function () { chip.remove(); });
+    container.insertBefore(chip, input);
+  }
+
+  function setChips(containerId, skills) {
+    resetChips(containerId);
+    const container = document.getElementById(containerId);
+    skills.forEach(s => { if (s) addChip(container, s); });
+  }
+
+  function getChips(containerId) {
+    return Array.from(document.querySelectorAll('#' + containerId + ' .config-chip'))
+      .map(c => c.childNodes[0].textContent.trim())
+      .filter(Boolean);
+  }
+
+  // ---- Work history / education rows ----
+
+  function buildWorkRow(entry) {
+    entry = entry || {};
+    const row = document.createElement('div');
+    row.className = 'profile-subrow';
+    row.innerHTML = `
+      <input type="text" class="config-input ph-title" placeholder="Title">
+      <input type="text" class="config-input ph-company" placeholder="Company">
+      <input type="text" class="config-input ph-start" placeholder="Start (2022-01)">
+      <input type="text" class="config-input ph-end" placeholder="End (2024-03)">
+      <input type="text" class="config-input ph-summary" placeholder="Summary">
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    row.querySelector('.ph-title').value = entry.title || '';
+    row.querySelector('.ph-company').value = entry.company || '';
+    row.querySelector('.ph-start').value = entry.start || '';
+    row.querySelector('.ph-end').value = entry.end || '';
+    row.querySelector('.ph-summary').value = entry.summary || '';
+    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function buildEduRow(entry) {
+    entry = entry || {};
+    const row = document.createElement('div');
+    row.className = 'profile-subrow';
+    row.innerHTML = `
+      <input type="text" class="config-input ph-institution" placeholder="Institution">
+      <input type="text" class="config-input ph-degree" placeholder="Degree">
+      <input type="text" class="config-input ph-field" placeholder="Field">
+      <input type="text" class="config-input ph-graduated" placeholder="Graduated (2018)">
+      <input type="text" class="config-input ph-gpa" placeholder="GPA">
+      <button class="btn-remove-llm" type="button">✕</button>
+    `;
+    row.querySelector('.ph-institution').value = entry.institution || '';
+    row.querySelector('.ph-degree').value = entry.degree || '';
+    row.querySelector('.ph-field').value = entry.field || '';
+    row.querySelector('.ph-graduated').value = entry.graduated || '';
+    row.querySelector('.ph-gpa').value = entry.gpa || '';
+    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function collectWorkRows() {
+    return Array.from(document.querySelectorAll('#profile-work-list .profile-subrow')).map(r => ({
+      title: r.querySelector('.ph-title').value,
+      company: r.querySelector('.ph-company').value,
+      start: r.querySelector('.ph-start').value,
+      end: r.querySelector('.ph-end').value,
+      summary: r.querySelector('.ph-summary').value,
+    }));
+  }
+
+  function collectEduRows() {
+    return Array.from(document.querySelectorAll('#profile-edu-list .profile-subrow')).map(r => ({
+      institution: r.querySelector('.ph-institution').value,
+      degree: r.querySelector('.ph-degree').value,
+      field: r.querySelector('.ph-field').value,
+      graduated: r.querySelector('.ph-graduated').value,
+      gpa: parseFloat(r.querySelector('.ph-gpa').value) || 0,
+    }));
+  }
+
+  document.getElementById('btn-add-work').addEventListener('click', function () {
+    document.getElementById('profile-work-list').appendChild(buildWorkRow());
+  });
+  document.getElementById('btn-add-edu').addEventListener('click', function () {
+    document.getElementById('profile-edu-list').appendChild(buildEduRow());
+  });
+
+  // ---- Modal tab switching (shared) ----
+
+  function switchConfigModalTab(modalPrefix, tabName) {
+    document.querySelectorAll('[data-modal="' + modalPrefix + '"]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    document.querySelectorAll('#' + modalPrefix + '-modal-backdrop .config-modal-tab-panel').forEach(function (panel) {
+      panel.classList.toggle('active', panel.id === modalPrefix + '-tab-' + tabName);
+    });
+  }
+
+  document.querySelectorAll('.config-modal-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      switchConfigModalTab(btn.dataset.modal, btn.dataset.tab);
+    });
+  });
+
   // ---- Init ----
-  loadApiConfig().catch(console.error);
+  Promise.all([loadApiConfig(), loadProfiles()]).catch(console.error);
 
 })();
 </script>
