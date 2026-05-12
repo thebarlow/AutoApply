@@ -30,10 +30,11 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_profile_name()
     # Seed field help descriptions for any existing DB (no-op if already present)
-    from db.seed import seed_field_help  # local import avoids circular at module level
+    from db.seed import seed_field_help, seed_user_profile_field_help  # local import avoids circular at module level
     db = SessionLocal()
     try:
         seed_field_help(db)
+        seed_user_profile_field_help(db)
     finally:
         db.close()
 

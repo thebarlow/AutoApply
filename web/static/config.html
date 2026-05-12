@@ -263,8 +263,10 @@
           <textarea id="prompt-modal-content" class="prompt-textarea"></textarea>
         </div>
         <div class="field-chips-sidebar" id="field-chips-sidebar">
-          <div class="field-chips-sidebar-label">Available Fields</div>
+          <div class="field-chips-sidebar-label">Job Fields</div>
           <div id="field-chips-container"><span class="field-chips-unavailable">Loading…</span></div>
+          <div class="field-chips-sidebar-label" id="field-chips-user-label" style="margin-top:0.75rem;display:none">User Fields</div>
+          <div id="field-chips-user-container"></div>
         </div>
       </div>
     </div>
@@ -418,19 +420,28 @@
   // ---- Prompt Templates ----
 
   let _fieldChipsCache = null;
+  let _userFieldChipsCache = null;
 
   async function loadFieldChips() {
     const container = document.getElementById('field-chips-container');
-    if (_fieldChipsCache) {
-      renderFieldChips(_fieldChipsCache);
+    if (_fieldChipsCache && _userFieldChipsCache) {
+      renderChipsIntoContainer(container, _fieldChipsCache);
+      renderChipsIntoContainer(document.getElementById('field-chips-user-container'), _userFieldChipsCache);
       return;
     }
     try {
-      const resp = await fetch('/api/job-fields');
-      if (!resp.ok) throw new Error('fetch failed');
-      const data = await resp.json();
-      _fieldChipsCache = data.fields;
-      renderFieldChips(_fieldChipsCache);
+      const [jobResp, userResp] = await Promise.all([
+        fetch('/api/job-fields'),
+        fetch('/api/user-profile-fields'),
+      ]);
+      if (!jobResp.ok) throw new Error('fetch failed');
+      _fieldChipsCache = (await jobResp.json()).fields;
+      _userFieldChipsCache = userResp.ok ? (await userResp.json()).fields : [];
+      renderChipsIntoContainer(container, _fieldChipsCache);
+      if (_userFieldChipsCache.length) {
+        document.getElementById('field-chips-user-label').style.display = '';
+        renderChipsIntoContainer(document.getElementById('field-chips-user-container'), _userFieldChipsCache);
+      }
       renderBackdrop();
     } catch {
       container.innerHTML = '<span class="field-chips-unavailable">unavailable</span>';
@@ -439,8 +450,7 @@
     }
   }
 
-  function renderFieldChips(fields) {
-    const container = document.getElementById('field-chips-container');
+  function renderChipsIntoContainer(container, fields) {
     container.innerHTML = '';
     for (const field of fields) {
       const name = field.name ?? field;
@@ -486,7 +496,8 @@
     const backdrop = document.getElementById('prompt-backdrop');
     if (!backdrop) return;
     const text = _promptTextarea.value;
-    const validNames = _fieldChipsCache ? new Set(_fieldChipsCache.map(f => f.name ?? f)) : null;
+    const allFields = [...(_fieldChipsCache || []), ...(_userFieldChipsCache || [])];
+    const validNames = allFields.length ? new Set(allFields.map(f => f.name ?? f)) : null;
     const escaped = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

@@ -110,12 +110,36 @@ JOB_FIELD_DESCRIPTIONS: dict[str, str] = {
 }
 
 
+USER_PROFILE_FIELD_DESCRIPTIONS: dict[str, str] = {
+    "name": "Your full name as it appears on your resume.",
+    "email": "Your contact email address.",
+    "phone": "Your phone number.",
+    "location": "Your city or region (e.g. 'New York, NY' or 'Remote').",
+    "skills": "Flat list of your technical and professional skills.",
+    "work_history": "List of past roles with company, title, dates, and a summary of responsibilities.",
+    "education": "Degrees earned: institution, degree type, field of study, graduation year, and GPA.",
+    "projects": "Personal, academic, or side projects with name, description, URL, and technologies used.",
+    "target_salary_min": "Minimum acceptable annual salary (integer, USD).",
+    "target_salary_max": "Maximum target annual salary (integer, USD).",
+    "target_roles": "Job titles or role types you are actively targeting.",
+}
+
+
 def seed_field_help(db: Session) -> None:
     """Insert default field descriptions for the jobs table if not already present."""
     for column_name, description in JOB_FIELD_DESCRIPTIONS.items():
         existing = db.query(FieldHelp).filter_by(table_name="jobs", column_name=column_name).first()
         if not existing:
             db.add(FieldHelp(table_name="jobs", column_name=column_name, description=description))
+    db.commit()
+
+
+def seed_user_profile_field_help(db: Session) -> None:
+    """Insert default field descriptions for user_profile fields if not already present."""
+    for column_name, description in USER_PROFILE_FIELD_DESCRIPTIONS.items():
+        existing = db.query(FieldHelp).filter_by(table_name="user_profile", column_name=column_name).first()
+        if not existing:
+            db.add(FieldHelp(table_name="user_profile", column_name=column_name, description=description))
     db.commit()
 
 

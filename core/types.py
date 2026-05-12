@@ -13,6 +13,14 @@ class JobState(str, Enum):
 
 
 @dataclass
+class ProjectEntry:
+    name: str
+    description: str
+    url: str = ""
+    technologies: list[str] = field(default_factory=list)
+
+
+@dataclass
 class WorkHistoryEntry:
     company: str
     title: str
@@ -50,6 +58,7 @@ class UserProfile:
     skills: list[str] = field(default_factory=list)
     work_history: list[WorkHistoryEntry] = field(default_factory=list)
     education: list[EducationEntry] = field(default_factory=list)
+    projects: list[ProjectEntry] = field(default_factory=list)
     target_salary_min: Optional[int] = None
     target_salary_max: Optional[int] = None
     target_roles: list[str] = field(default_factory=list)

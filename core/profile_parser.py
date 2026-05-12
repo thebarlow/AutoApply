@@ -24,6 +24,9 @@ Use this exact schema:
   ],
   "education": [
     {"institution": "string", "degree": "string", "field": "string", "graduated": "string", "gpa": number}
+  ],
+  "projects": [
+    {"name": "string", "description": "string", "url": "string", "technologies": ["string"]}
   ]
 }
 
@@ -33,10 +36,12 @@ Rules:
 - Use [] for missing list fields.
 - For start/end dates use the format found in the resume (e.g. "2022-01" or "Jan 2022").
 - "end" should be "Present" if the role is current.
+- For projects, extract any personal, academic, or side projects listed. Use "" for missing url.
 """
 
 # resume_path and md_path are set by the caller after file upload, not by the LLM
 _DEFAULTS: dict[str, object] = {
+    "projects": [],
     "target_salary_min": None,
     "target_salary_max": None,
     "target_roles": [],
@@ -79,7 +84,7 @@ are always present but empty — the caller fills them after file placement.
         raise ValueError("LLM returned unexpected JSON shape")
 
     # Coerce list fields defensively — LLMs occasionally return wrong types on poor input
-    for key in ("skills", "work_history", "education", "target_roles"):
+    for key in ("skills", "work_history", "education", "projects", "target_roles"):
         if not isinstance(parsed.get(key), list):
             parsed[key] = []
 

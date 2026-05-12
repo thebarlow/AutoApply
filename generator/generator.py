@@ -11,7 +11,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from core.llm import get_openai_client
-from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
+from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry, ProjectEntry
 from db.database import SessionLocal
 from db.models import Config, Job, UserProfileModel
 
@@ -30,6 +30,12 @@ def _render_profile(profile: UserProfile) -> str:
         f"- {e.degree} in {e.field} from {e.institution} ({e.graduated}), GPA {e.gpa}"
         for e in profile.education
     )
+    projects = "\n".join(
+        f"- {e.name}: {e.description}"
+        + (f" ({e.url})" if e.url else "")
+        + (f" — {', '.join(e.technologies)}" if e.technologies else "")
+        for e in profile.projects
+    )
     return (
         f"Name: {profile.name}\n"
         f"Target roles: {', '.join(profile.target_roles)}\n"
@@ -37,6 +43,7 @@ def _render_profile(profile: UserProfile) -> str:
         f"Skills: {', '.join(profile.skills)}\n\n"
         f"Work History:\n{work}\n\n"
         f"Education:\n{education}"
+        + (f"\n\nProjects:\n{projects}" if projects else "")
     )
 
 
@@ -274,6 +281,7 @@ def generate_resume_md(
         data = json.loads(row.data)
         data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
         data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+        data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
         profile = UserProfile(**data)
 
         resume_tpl = db.query(Config).filter_by(key="resume_prompt_template").first()
@@ -378,6 +386,7 @@ def generate_cover_md(
         data = json.loads(row.data)
         data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
         data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+        data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
         profile = UserProfile(**data)
 
         cover_tpl = db.query(Config).filter_by(key="cover_prompt_template").first()

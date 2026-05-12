@@ -10,7 +10,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from core.llm import get_openai_client
-from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry
+from core.types import JobState, UserProfile, WorkHistoryEntry, EducationEntry, ProjectEntry
 from db.database import SessionLocal
 from db.models import Config, Job, UserProfileModel
 
@@ -52,6 +52,7 @@ def load_user_profile(db: Session) -> UserProfile:
     data = json.loads(row.data)
     data["work_history"] = [WorkHistoryEntry(**e) for e in data.get("work_history", [])]
     data["education"] = [EducationEntry(**e) for e in data.get("education", [])]
+    data["projects"] = [ProjectEntry(**e) for e in data.get("projects", [])]
     return UserProfile(**data)
 
 

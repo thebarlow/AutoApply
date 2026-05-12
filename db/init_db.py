@@ -4,7 +4,7 @@ import sys
 from sqlalchemy.exc import OperationalError
 
 from db.database import init_db, SessionLocal
-from db.seed import seed_default_config, seed_field_help
+from db.seed import seed_default_config, seed_field_help, seed_user_profile_field_help
 
 if __name__ == "__main__":
     try:
@@ -20,6 +20,7 @@ if __name__ == "__main__":
     try:
         seed_default_config(db)
         seed_field_help(db)
+        seed_user_profile_field_help(db)
         print("Database initialised and default config seeded.")
     except OperationalError as e:
         print(f"[init_db] Failed to seed config: {e}", file=sys.stderr)

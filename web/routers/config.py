@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 import core.profile_parser as _parser
 from db.models import Config, UserProfileModel, Job, FieldHelp
+from core.types import UserProfile
 
 router = APIRouter()
 
@@ -582,5 +583,18 @@ def get_job_fields(db: Session = Depends(get_db)) -> dict:
     fields = [
         {"name": col.name, "description": descriptions.get(col.name, "")}
         for col in Job.__table__.columns
+    ]
+    return {"fields": fields}
+
+
+@router.get("/api/user-profile-fields")
+def get_user_profile_fields(db: Session = Depends(get_db)) -> dict:
+    help_rows = db.query(FieldHelp).filter_by(table_name="user_profile").all()
+    descriptions = {row.column_name: row.description for row in help_rows}
+    import dataclasses
+    fields = [
+        {"name": f.name, "description": descriptions.get(f.name, "")}
+        for f in dataclasses.fields(UserProfile)
+        if f.name not in ("resume_path", "md_path")
     ]
     return {"fields": fields}
