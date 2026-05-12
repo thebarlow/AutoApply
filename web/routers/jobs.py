@@ -76,6 +76,7 @@ def _serialize(job: Job) -> dict[str, Any]:
         "resume_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_resume.md").exists(),
         "cover_md_exists": (_GENERATOR_OUTPUTS / f"{job.job_key}_cover.md").exists(),
         "extraction_json_exists": bool(job.extraction_json),
+        "scraped_at": job.scraped_at or "",
     }
 
 

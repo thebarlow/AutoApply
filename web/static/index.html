@@ -37,6 +37,9 @@
         <th class="sortable" @click="setSort('state')">
           Status <span x-show="sortField === 'state'" x-text="sortDir === 'desc' ? '▼' : '▲'"></span>
         </th>
+        <th class="sortable" @click="setSort('scraped_at')">
+          Date <span x-show="sortField === 'scraped_at'" x-text="sortDir === 'desc' ? '▼' : '▲'"></span>
+        </th>
       </tr>
     </thead>
     <tbody>
@@ -48,6 +51,7 @@
           <td x-text="job.location || ''"></td>
           <td x-text="job.salary || ''"></td>
           <td><span :class="'status-badge ' + statusClass(job.state)" x-text="statusLabel(job.state)"></span></td>
+          <td x-text="timeAgo(job.scraped_at)" style="white-space:nowrap;color:#6b7280;font-size:0.85em"></td>
         </tr>
       </template>
     </tbody>
@@ -287,7 +291,7 @@ function dashboard() {
   return {
     jobs: [],
     selectedJob: null,
-    sortField: 'final_score',
+    sortField: 'scraped_at',
     sortDir: 'desc',
     deleteConfirm: false,
     loadError: null,
@@ -434,6 +438,18 @@ function dashboard() {
 
     pct(v) {
       return v != null ? Math.round(v * 100) + '%' : '—';
+    },
+
+    timeAgo(iso) {
+      if (!iso) return '—';
+      const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+      if (secs < 60) return 'a few seconds ago';
+      const mins = Math.floor(secs / 60);
+      if (mins < 60) return mins + ' min ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + ' hr ago';
+      const d = new Date(iso);
+      return String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
     },
 
     formatDesc(desc) {
