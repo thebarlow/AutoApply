@@ -467,13 +467,21 @@ def create_latex_template(
     contents = file.file.read()
     if len(contents) > 2 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 2 MB)")
+    filename = file.filename or ""
+    suffix = Path(filename).suffix.lower()
+    if suffix != ".tex":
+        raise HTTPException(status_code=400, detail="Only .tex files are accepted")
     _TEMPLATES_DIR.mkdir(exist_ok=True)
     new_id = uuid.uuid4().hex
     dest = _TEMPLATES_DIR / f"{new_id}.tex"
     dest.write_bytes(contents)
-    templates = _get_latex_templates(db)
-    templates.append({"id": new_id, "name": name, "path": str(dest.resolve())})
-    _set_latex_templates(db, templates)
+    try:
+        templates = _get_latex_templates(db)
+        templates.append({"id": new_id, "name": name, "path": str(dest.resolve())})
+        _set_latex_templates(db, templates)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
     return {"id": new_id, "name": name, "path": str(dest.resolve())}
 
 
