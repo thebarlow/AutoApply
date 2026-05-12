@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -143,6 +143,9 @@ def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict:
 class PromptBody(BaseModel):
     name: str
     content: str
+    provider_name: str = ""
+    model_id: str = ""
+    template_name: str = ""
 
 
 class ActivePromptBody(BaseModel):
@@ -164,6 +167,22 @@ def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[d
     _set(db, legacy_key, match["content"] if match else "")
 
 
+@router.get("/api/config/prompts")
+def get_all_prompts(db: Session = Depends(get_db)) -> dict[str, Any]:
+    all_prompts = []
+    for type_ in ("resume", "cover", "description"):
+        for p in _get_prompts(db, type_):
+            all_prompts.append({
+                "id": p["id"],
+                "name": p["name"],
+                "type": type_,
+                "provider_name": p.get("provider_name", ""),
+                "model_id": p.get("model_id", ""),
+                "template_name": p.get("template_name", ""),
+            })
+    return {"prompts": all_prompts}
+
+
 @router.get("/api/config/prompts/{type_}")
 def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
@@ -179,7 +198,14 @@ def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     new_id = uuid.uuid4().hex
-    prompts.append({"id": new_id, "name": body.name, "content": body.content})
+    prompts.append({
+        "id": new_id,
+        "name": body.name,
+        "content": body.content,
+        "provider_name": body.provider_name,
+        "model_id": body.model_id,
+        "template_name": body.template_name,
+    })
     _set_prompts(db, type_, prompts)
     return {"id": new_id, "name": body.name}
 
@@ -219,6 +245,9 @@ def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = De
         raise HTTPException(status_code=404, detail="Prompt not found")
     match["name"] = body.name
     match["content"] = body.content
+    match["provider_name"] = body.provider_name
+    match["model_id"] = body.model_id
+    match["template_name"] = body.template_name
     _set_prompts(db, type_, prompts)
     active_id = _get(db, f"active_{type_}_prompt_id")
     if active_id == prompt_id:
@@ -341,6 +370,177 @@ def put_llm(body: LLMBody, db: Session = Depends(get_db)) -> dict[str, Any]:
     _set(db, "llm_providers", json.dumps(to_store))
     _set(db, "llm_active_provider", body.active)
     return get_llm(db)
+
+
+# ---- Named Providers ----
+
+_VALID_PROVIDER_TYPES = {"openrouter", "anthropic", "openai", "gemini"}
+
+
+class ProviderIn(BaseModel):
+    name: str
+    provider_type: str
+    api_key: str = ""
+
+
+def _get_providers(db: Session) -> list[dict]:
+    return json.loads(_get(db, "named_providers", "[]"))
+
+
+def _set_providers(db: Session, providers: list[dict]) -> None:
+    _set(db, "named_providers", json.dumps(providers))
+
+
+def _env_key_name(provider_id: str) -> str:
+    return f"LLM_KEY_{provider_id.upper().replace('-', '_')}"
+
+
+def _mask_key(key: str) -> str:
+    if not key:
+        return ""
+    visible = min(8, len(key))
+    return key[:visible] + "•" * max(0, len(key) - visible)
+
+
+@router.get("/api/config/providers")
+def get_providers(db: Session = Depends(get_db)) -> dict[str, Any]:
+    providers = _get_providers(db)
+    env = _read_env()
+    result = []
+    for p in providers:
+        raw_key = env.get(_env_key_name(p["id"]), "")
+        result.append({
+            "id": p["id"],
+            "name": p["name"],
+            "provider_type": p["provider_type"],
+            "has_key": bool(raw_key),
+            "masked_key": _mask_key(raw_key),
+        })
+    return {"providers": result}
+
+
+@router.post("/api/config/providers")
+def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if body.provider_type not in _VALID_PROVIDER_TYPES:
+        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
+    providers = _get_providers(db)
+    new_id = uuid.uuid4().hex
+    providers.append({"id": new_id, "name": body.name, "provider_type": body.provider_type})
+    _set_providers(db, providers)
+    if body.api_key:
+        env = _read_env()
+        env[_env_key_name(new_id)] = body.api_key
+        _write_env(env)
+    return {"id": new_id, "name": body.name, "provider_type": body.provider_type}
+
+
+@router.put("/api/config/providers/{provider_id}")
+def update_provider(provider_id: str, body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if body.provider_type not in _VALID_PROVIDER_TYPES:
+        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
+    providers = _get_providers(db)
+    match = next((p for p in providers if p["id"] == provider_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    match["name"] = body.name
+    match["provider_type"] = body.provider_type
+    _set_providers(db, providers)
+    env = _read_env()
+    if body.api_key:
+        env[_env_key_name(provider_id)] = body.api_key
+    else:
+        env.pop(_env_key_name(provider_id), None)
+    _write_env(env)
+    return {"id": provider_id, "name": body.name, "provider_type": body.provider_type}
+
+
+@router.delete("/api/config/providers/{provider_id}", status_code=204)
+def delete_provider(provider_id: str, db: Session = Depends(get_db)) -> None:
+    providers = _get_providers(db)
+    remaining = [p for p in providers if p["id"] != provider_id]
+    if len(remaining) == len(providers):
+        raise HTTPException(status_code=404, detail="Provider not found")
+    _set_providers(db, remaining)
+    env = _read_env()
+    env.pop(_env_key_name(provider_id), None)
+    _write_env(env)
+
+
+# ---- LaTeX Templates ----
+
+_TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
+
+
+class LatexTemplateNameBody(BaseModel):
+    name: str
+
+
+def _get_latex_templates(db: Session) -> list[dict]:
+    return json.loads(_get(db, "latex_templates", "[]"))
+
+
+def _set_latex_templates(db: Session, templates: list[dict]) -> None:
+    _set(db, "latex_templates", json.dumps(templates))
+
+
+@router.get("/api/config/latex-templates")
+def get_latex_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
+    return {"templates": _get_latex_templates(db)}
+
+
+@router.post("/api/config/latex-templates")
+def create_latex_template(
+    name: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    contents = file.file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 2 MB)")
+    filename = file.filename or ""
+    suffix = Path(filename).suffix.lower()
+    if suffix != ".tex":
+        raise HTTPException(status_code=400, detail="Only .tex files are accepted")
+    _TEMPLATES_DIR.mkdir(exist_ok=True)
+    new_id = uuid.uuid4().hex
+    dest = _TEMPLATES_DIR / f"{new_id}.tex"
+    dest.write_bytes(contents)
+    try:
+        templates = _get_latex_templates(db)
+        templates.append({"id": new_id, "name": name, "path": str(dest.resolve())})
+        _set_latex_templates(db, templates)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return {"id": new_id, "name": name, "path": str(dest.resolve())}
+
+
+@router.put("/api/config/latex-templates/{template_id}")
+def update_latex_template(
+    template_id: str,
+    body: LatexTemplateNameBody,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    templates = _get_latex_templates(db)
+    match = next((t for t in templates if t["id"] == template_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Template not found")
+    match["name"] = body.name
+    _set_latex_templates(db, templates)
+    return match
+
+
+@router.delete("/api/config/latex-templates/{template_id}", status_code=204)
+def delete_latex_template(template_id: str, db: Session = Depends(get_db)) -> None:
+    templates = _get_latex_templates(db)
+    match = next((t for t in templates if t["id"] == template_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Template not found")
+    remaining = [t for t in templates if t["id"] != template_id]
+    _set_latex_templates(db, remaining)
+    path = Path(match.get("path", ""))
+    if path.exists():
+        path.unlink(missing_ok=True)
 
 
 # ---- User Profiles ----

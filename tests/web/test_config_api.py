@@ -187,6 +187,192 @@ def test_put_llm_unknown_provider_returns_422(client, tmp_path, monkeypatch):
     assert resp.status_code == 422
 
 
+# ---- Named Providers ----
+
+def test_get_providers_empty(client):
+    resp = client.get("/api/config/providers")
+    assert resp.status_code == 200
+    assert resp.json() == {"providers": []}
+
+
+def test_create_and_list_provider(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
+    resp = client.post("/api/config/providers", json={
+        "name": "My OpenRouter", "provider_type": "openrouter", "api_key": "sk-test-123"
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "My OpenRouter"
+    assert data["provider_type"] == "openrouter"
+    assert "id" in data
+
+    resp2 = client.get("/api/config/providers")
+    providers = resp2.json()["providers"]
+    assert len(providers) == 1
+    assert providers[0]["name"] == "My OpenRouter"
+    assert providers[0]["has_key"] is True
+    assert "masked_key" in providers[0]
+
+
+def test_update_provider(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
+    pid = client.post("/api/config/providers", json={
+        "name": "Old Name", "provider_type": "anthropic", "api_key": "sk-ant-abc"
+    }).json()["id"]
+
+    resp = client.put(f"/api/config/providers/{pid}", json={
+        "name": "New Name", "provider_type": "anthropic", "api_key": ""
+    })
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "New Name"
+
+    resp2 = client.get("/api/config/providers")
+    assert resp2.json()["providers"][0]["name"] == "New Name"
+
+
+def test_delete_provider(client, tmp_path, monkeypatch):
+    import web.routers.config as config_mod
+    monkeypatch.setattr(config_mod, "_ENV_PATH", tmp_path / ".env")
+
+    pid = client.post("/api/config/providers", json={
+        "name": "ToDelete", "provider_type": "openai", "api_key": "sk-xyz"
+    }).json()["id"]
+
+    resp = client.delete(f"/api/config/providers/{pid}")
+    assert resp.status_code == 204
+
+    resp2 = client.get("/api/config/providers")
+    assert resp2.json()["providers"] == []
+
+
+# ---- LaTeX Templates ----
+
+def test_get_latex_templates_empty(client):
+    resp = client.get("/api/config/latex-templates")
+    assert resp.status_code == 200
+    assert resp.json() == {"templates": []}
+
+
+def test_create_latex_template(client, tmp_path, monkeypatch):
+    import web.routers.config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "_TEMPLATES_DIR", tmp_path)
+
+    tex_bytes = b"\\documentclass{article}\\begin{document}Hello\\end{document}"
+    resp = client.post(
+        "/api/config/latex-templates",
+        data={"name": "resume.tex"},
+        files={"file": ("resume_template.tex", tex_bytes, "text/plain")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "resume.tex"
+    assert "id" in data
+    assert "path" in data
+
+    resp2 = client.get("/api/config/latex-templates")
+    templates = resp2.json()["templates"]
+    assert len(templates) == 1
+    assert templates[0]["name"] == "resume.tex"
+
+
+def test_update_latex_template_name(client, tmp_path, monkeypatch):
+    import web.routers.config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "_TEMPLATES_DIR", tmp_path)
+
+    tex_bytes = b"\\documentclass{article}"
+    tid = client.post(
+        "/api/config/latex-templates",
+        data={"name": "old.tex"},
+        files={"file": ("old.tex", tex_bytes, "text/plain")},
+    ).json()["id"]
+
+    resp = client.put(f"/api/config/latex-templates/{tid}", json={"name": "new.tex"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "new.tex"
+
+
+def test_delete_latex_template(client, tmp_path, monkeypatch):
+    import web.routers.config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "_TEMPLATES_DIR", tmp_path)
+
+    tex_bytes = b"\\documentclass{article}"
+    tid = client.post(
+        "/api/config/latex-templates",
+        data={"name": "to_delete.tex"},
+        files={"file": ("to_delete.tex", tex_bytes, "text/plain")},
+    ).json()["id"]
+
+    resp = client.delete(f"/api/config/latex-templates/{tid}")
+    assert resp.status_code == 204
+
+    resp2 = client.get("/api/config/latex-templates")
+    assert resp2.json()["templates"] == []
+
+
+def test_delete_provider_not_found(client):
+    resp = client.delete("/api/config/providers/nonexistent-id")
+    assert resp.status_code == 404
+
+
+# ---- Unified Prompt List ----
+
+def test_unified_prompt_list_empty(client):
+    resp = client.get("/api/config/prompts")
+    assert resp.status_code == 200
+    assert resp.json() == {"prompts": []}
+
+
+def test_unified_prompt_list_includes_all_types(client):
+    client.post("/api/config/prompts/resume", json={"name": "R1", "content": "resume content"})
+    client.post("/api/config/prompts/cover", json={"name": "C1", "content": "cover content"})
+    client.post("/api/config/prompts/description", json={"name": "D1", "content": "desc content"})
+
+    resp = client.get("/api/config/prompts")
+    prompts = resp.json()["prompts"]
+    assert len(prompts) == 3
+    types = {p["type"] for p in prompts}
+    assert types == {"resume", "cover", "description"}
+
+
+# ---- Extended Prompt Fields ----
+
+def test_create_prompt_with_extended_fields(client):
+    resp = client.post("/api/config/prompts/resume", json={
+        "name": "Resume v1",
+        "content": "write a resume",
+        "provider_name": "My OpenRouter",
+        "model_id": "anthropic/claude-sonnet-4-6",
+        "template_name": "resume.tex",
+    })
+    assert resp.status_code == 200
+    pid = resp.json()["id"]
+
+    detail = client.get(f"/api/config/prompts/resume/{pid}").json()
+    assert detail["provider_name"] == "My OpenRouter"
+    assert detail["model_id"] == "anthropic/claude-sonnet-4-6"
+    assert detail["template_name"] == "resume.tex"
+
+
+def test_update_prompt_extended_fields(client):
+    pid = client.post("/api/config/prompts/cover", json={
+        "name": "C1", "content": "cover", "provider_name": "", "model_id": "", "template_name": "",
+    }).json()["id"]
+
+    client.put(f"/api/config/prompts/cover/{pid}", json={
+        "name": "C1", "content": "cover updated",
+        "provider_name": "Anthropic Direct",
+        "model_id": "claude-opus-4-7",
+        "template_name": "cover.tex",
+    })
+    detail = client.get(f"/api/config/prompts/cover/{pid}").json()
+    assert detail["provider_name"] == "Anthropic Direct"
+    assert detail["model_id"] == "claude-opus-4-7"
+
+
 def test_get_job_fields(client):
     resp = client.get("/api/job-fields")
     assert resp.status_code == 200

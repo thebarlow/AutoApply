@@ -1218,16 +1218,13 @@ details.config-section[open] > summary::before {
   background: #0f172a;
   display: flex;
   flex-direction: column;
+  border-right: 2px solid #334155;
+  padding-top: 14px;
+  align-self: stretch;
+  min-height: 100%;
 }
 
-.config-sidebar-label {
-  padding: 18px 16px 10px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: #475569;
-}
+.config-sidebar-label { display: none; }
 
 .config-tab-btn {
   display: block;
@@ -1247,9 +1244,10 @@ details.config-section[open] > summary::before {
 .config-tab-btn:hover { background: #1e293b; color: #e2e8f0; }
 
 .config-tab-btn.active {
-  background: #1e293b;
+  background: linear-gradient(90deg, #1e293b 0%, #162032 100%);
   color: #e0e7ff;
-  border-left-color: #818cf8;
+  border-left: 3px solid #818cf8;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.2);
   font-weight: 600;
 }
 

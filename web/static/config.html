@@ -16,264 +16,252 @@
   <a href="/help" class="nav-right">Help</a>
 </nav>
 
-<main>
-  <h1>Config</h1>
+<div class="config-shell">
 
-  <!-- Section 1: User Profile -->
-  <details class="config-section">
-    <summary>User Profile</summary>
-    <div class="config-body">
+  <nav class="config-sidebar">
+    <div class="config-sidebar-label">Config</div>
+    <button class="config-tab-btn active" data-tab="profile">User Profile</button>
+    <button class="config-tab-btn" data-tab="scaffolding">Scaffolding</button>
+    <button class="config-tab-btn" data-tab="api">API</button>
+  </nav>
 
-      <h2>Profiles</h2>
-      <div id="profile-list"></div>
-      <button class="btn btn-secondary" id="btn-add-profile" type="button">+ Add User</button>
+  <div class="config-content">
 
-      <div class="config-actions">
-        <button class="btn btn-save" id="save-profile">Save</button>
-        <span class="save-status" id="status-profile"></span>
+    <!-- Pane: User Profile -->
+    <div class="config-pane active" id="pane-profile">
+      <div class="config-pane-title">User Profiles</div>
+      <table class="config-data-table" id="profile-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Resume</th>
+            <th>Cover Letter</th>
+            <th>Contact</th>
+          </tr>
+        </thead>
+        <tbody id="profile-tbody"></tbody>
+      </table>
+      <button class="config-btn-add" id="btn-add-profile">+ Add Profile</button>
+      <span class="save-status" id="status-profile" style="margin-left:12px;font-size:12px"></span>
+    </div>
+
+    <!-- Pane: Scaffolding -->
+    <div class="config-pane" id="pane-scaffolding">
+      <div class="config-pane-title">Scaffolding</div>
+
+      <!-- Prompts -->
+      <div class="config-subsection">
+        <div class="config-subsection-title">Prompts</div>
+        <table class="config-data-table" id="prompts-table">
+          <thead>
+            <tr><th>Name</th><th>Type</th><th>Model</th><th>Template</th></tr>
+          </thead>
+          <tbody id="prompts-tbody"></tbody>
+        </table>
+        <button class="config-btn-add" id="btn-add-prompt">+ Add Prompt</button>
+      </div>
+
+      <!-- LaTeX Templates (populated in Task 8) -->
+      <div class="config-subsection" id="subsection-latex">
+        <div class="config-subsection-title">LaTeX Templates</div>
+        <table class="config-data-table" id="latex-table">
+          <thead><tr><th>Name</th><th>File</th></tr></thead>
+          <tbody id="latex-tbody"></tbody>
+        </table>
+        <button class="config-btn-add" id="btn-add-latex">+ Upload Template</button>
+      </div>
+
+      <!-- Providers (populated in Task 8) -->
+      <div class="config-subsection" id="subsection-providers">
+        <div class="config-subsection-title">Providers</div>
+        <table class="config-data-table" id="providers-table">
+          <thead><tr><th>Name</th><th>Provider</th><th>API Key</th></tr></thead>
+          <tbody id="providers-tbody"></tbody>
+        </table>
+        <button class="config-btn-add" id="btn-add-provider">+ Add Provider</button>
       </div>
 
     </div>
-  </details>
 
-  <!-- Section 2: Templates -->
-  <details class="config-section">
-    <summary>Templates</summary>
-    <div class="config-body">
-      <h2>LaTeX Templates</h2>
-      <label class="config-label">Resume template</label>
-      <div class="file-drop-zone" id="drop-resume">
-        <input type="file" accept=".tex" id="tpl-resume-file" style="display:none">
-        <span class="drop-label" id="tpl-resume-label">Drop .tex file or click to browse</span>
-      </div>
-      <label class="config-label">Cover letter template</label>
-      <div class="file-drop-zone" id="drop-cover">
-        <input type="file" accept=".tex" id="tpl-cover-file" style="display:none">
-        <span class="drop-label" id="tpl-cover-label">Drop .tex file or click to browse</span>
+    <!-- Pane: API -->
+    <div class="config-pane" id="pane-api">
+      <div class="config-pane-title">API Config</div>
+
+      <div class="config-subsection">
+        <div class="config-subsection-title">Sources</div>
+        <div class="config-api-checkbox-group">
+          <label><input type="checkbox" id="src-remotive"> Remotive</label>
+          <label><input type="checkbox" id="src-remoteok"> RemoteOK</label>
+        </div>
       </div>
 
-      <h2>Prompt Templates</h2>
-      <label class="config-label">Resume Prompts</label>
-      <div id="resume-prompt-list"></div>
-      <button class="btn btn-secondary" id="btn-add-resume-prompt" type="button">+ Add Resume Prompt</button>
-
-      <label class="config-label" style="margin-top:1rem">Cover Letter Prompts</label>
-      <div id="cover-prompt-list"></div>
-      <button class="btn btn-secondary" id="btn-add-cover-prompt" type="button">+ Add Cover Letter Prompt</button>
-
-      <label class="config-label" style="margin-top:1rem">Description Extraction Prompts</label>
-      <div id="description-prompt-list"></div>
-      <button class="btn btn-secondary" id="btn-add-description-prompt" type="button">+ Add Description Extraction Prompt</button>
-
-      <h2>Social Links</h2>
-      <label class="config-label">GitHub</label>
-      <input class="config-input" type="text" id="tpl-github" placeholder="github.com/username">
-      <label class="config-label">LinkedIn</label>
-      <input class="config-input" type="text" id="tpl-linkedin" placeholder="linkedin.com/in/username">
-      <label class="config-label">Website</label>
-      <input class="config-input" type="text" id="tpl-website" placeholder="yoursite.com">
-
-      <div class="config-actions">
-        <button class="btn btn-save" id="save-templates">Save</button>
-        <span class="save-status" id="status-templates"></span>
+      <div class="config-subsection">
+        <div class="config-subsection-title">Search</div>
+        <div class="config-form-group">
+          <label class="config-form-label">Keywords whitelist (comma-separated)</label>
+          <input class="config-form-input" type="text" id="search-whitelist" placeholder="Python, FastAPI, Data Engineer">
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Keywords blacklist (comma-separated)</label>
+          <input class="config-form-input" type="text" id="search-blacklist" placeholder="Senior, Lead, Manager">
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Max jobs per source</label>
+          <input class="config-form-input" type="number" id="search-max-jobs" min="1" max="500" value="50" style="width:120px">
+        </div>
+        <button class="config-btn-save" id="save-api">Save</button>
+        <span class="save-status" id="status-api" style="margin-left:12px;font-size:12px"></span>
       </div>
     </div>
-  </details>
 
-  <!-- Section 3: LLM Providers -->
-  <details class="config-section">
-    <summary>LLM Providers</summary>
-    <div class="config-body">
-      <div id="llm-provider-list"></div>
-      <button class="btn btn-secondary" id="btn-add-provider" type="button">+ Add LLM Provider</button>
-
-      <div class="config-actions">
-        <button class="btn btn-save" id="save-llm">Save</button>
-        <span class="save-status" id="status-llm"></span>
-      </div>
-    </div>
-  </details>
-
-  <!-- Section 4: API Config (disabled) -->
-  <details class="config-section" style="opacity:0.4;pointer-events:none">
-    <summary>API Config</summary>
-    <div class="config-body">
-      <h2>Sources</h2>
-      <div class="config-row">
-        <label><input type="checkbox" id="src-remotive"> Remotive</label>
-        <label><input type="checkbox" id="src-remoteok"> RemoteOK</label>
-      </div>
-
-      <h2>Search</h2>
-      <label class="config-label">Keywords whitelist (comma-separated)</label>
-      <input class="config-input" type="text" id="search-whitelist" placeholder="Python, FastAPI, Data Engineer">
-      <label class="config-label">Keywords blacklist (comma-separated)</label>
-      <input class="config-input" type="text" id="search-blacklist" placeholder="Senior, Lead, Manager">
-      <label class="config-label">Max jobs per source</label>
-      <input class="config-input" type="number" id="search-max-jobs" min="1" max="500" value="50">
-
-      <div class="config-actions">
-        <button class="btn btn-save" id="save-api">Save</button>
-        <span class="save-status" id="status-api"></span>
-      </div>
-    </div>
-  </details>
-
-  <!-- Section 5: Scoring (disabled) -->
-  <details class="config-section" style="opacity:0.4;pointer-events:none">
-    <summary>Scoring</summary>
-    <div class="config-body">
-      <h2>Score Weights</h2>
-      <div class="weight-widget">
-        <span class="weight-label">Desirability</span>
-        <input type="number" class="weight-input" id="w1" min="0" max="1" step="0.01" value="0.50">
-        <input type="range" id="w-slider" min="0" max="1" step="0.01" value="0.50">
-        <input type="number" class="weight-input" id="w2" min="0" max="1" step="0.01" value="0.50">
-        <span class="weight-label">Fitness</span>
-      </div>
-
-      <h2>Auto-routing Thresholds</h2>
-      <label class="config-label">Auto-reject below</label>
-      <input class="config-input" type="number" id="reject-threshold" min="0" max="1" step="0.01">
-      <label class="config-label">Auto-approve at or above</label>
-      <input class="config-input" type="number" id="approve-threshold" min="0" max="1" step="0.01">
-
-      <div class="config-actions">
-        <button class="btn btn-save" id="save-scoring">Save</button>
-        <span class="save-status" id="status-scoring"></span>
-      </div>
-    </div>
-  </details>
-
-</main>
+  </div><!-- /config-content -->
 
 <!-- Profile Modal -->
-<div class="profile-modal-backdrop" id="profile-modal-backdrop">
-  <div class="profile-modal-panel" id="profile-modal-panel">
-    <div class="profile-modal-header">
+<div class="config-modal-backdrop" id="profile-modal-backdrop">
+  <div class="config-modal config-modal--wide">
+    <div class="config-modal-header">
       <h2 id="profile-modal-title">Profile</h2>
-      <button class="btn-remove-llm" id="profile-modal-close" type="button" style="font-size:1.2rem">✕</button>
+      <button class="config-modal-close" id="profile-modal-close">✕</button>
     </div>
-
-    <div class="profile-tab-bar" id="profile-tab-bar">
-      <button class="profile-tab-btn active" id="tab-btn-upload" data-tab="upload">Upload</button>
-      <button class="profile-tab-btn" id="tab-btn-pdf" data-tab="pdf">Resume PDF</button>
-      <button class="profile-tab-btn" id="tab-btn-md" data-tab="md">Markdown</button>
-      <button class="profile-tab-btn" id="tab-btn-cover" data-tab="cover">Cover Letter</button>
-      <button class="profile-tab-btn" id="tab-btn-edit" data-tab="edit">Edit</button>
+    <div class="config-modal-tabs">
+      <button class="config-modal-tab active" data-modal="profile" data-tab="files">Files</button>
+      <button class="config-modal-tab" data-modal="profile" data-tab="preview">Preview</button>
+      <button class="config-modal-tab" data-modal="profile" data-tab="details">Details</button>
     </div>
+    <div class="config-modal-body">
 
-    <!-- Upload tab -->
-    <div class="profile-tab-panel active" id="tab-panel-upload">
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Upload Resume</h2>
-      <div class="config-row">
-        <input type="file" id="profile-file" accept=".pdf,.md">
-        <button class="btn btn-secondary" id="btn-parse-profile" type="button" disabled style="margin-top:0">Parse</button>
+      <!-- Files tab -->
+      <div class="config-modal-tab-panel active" id="profile-tab-files">
+        <div class="config-form-group">
+          <label class="config-form-label">Resume (PDF or Markdown)</label>
+          <div class="config-drop-zone" id="profile-resume-drop">Drop .pdf or .md, or click to browse</div>
+          <input type="file" id="profile-resume-file" accept=".pdf,.md" style="display:none">
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Cover Letter (PDF)</label>
+          <div class="config-drop-zone" id="profile-cover-drop">Drop .pdf, or click to browse</div>
+          <input type="file" id="profile-cover-file" accept=".pdf" style="display:none">
+        </div>
+        <span class="save-status" id="status-profile-files" style="font-size:12px"></span>
       </div>
-      <span class="save-status" id="status-parse"></span>
 
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1rem 0 0.5rem">Upload Cover Letter</h2>
-      <div class="config-row">
-        <input type="file" id="profile-cover-file" accept=".pdf">
+      <!-- Preview tab -->
+      <div class="config-modal-tab-panel" id="profile-tab-preview">
+        <iframe id="profile-preview-frame" src="about:blank" style="width:100%;height:480px;border:1px solid #e2e8f0;border-radius:6px;"></iframe>
+        <textarea id="profile-preview-md" style="display:none;width:100%;height:480px;font-family:monospace;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;padding:10px;" readonly></textarea>
       </div>
-      <span class="save-status" id="status-cover-upload"></span>
-    </div>
 
-    <!-- Resume PDF tab -->
-    <div class="profile-tab-panel" id="tab-panel-pdf">
-      <iframe class="profile-pdf-frame" id="profile-pdf-frame" src="about:blank"></iframe>
-    </div>
-
-    <!-- Markdown tab -->
-    <div class="profile-tab-panel" id="tab-panel-md">
-      <textarea class="profile-md-viewer" id="profile-md-viewer" readonly></textarea>
-    </div>
-
-    <!-- Cover Letter tab -->
-    <div class="profile-tab-panel" id="tab-panel-cover">
-      <p id="cover-pending-msg" style="font-size:13px;color:#888;margin-bottom:0.75rem;display:none">Cover letter uploaded — save profile to enable preview.</p>
-      <iframe class="profile-pdf-frame" id="profile-cover-frame" src="about:blank"></iframe>
-    </div>
-
-    <!-- Edit tab -->
-    <div class="profile-tab-panel" id="tab-panel-edit">
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Profile</h2>
-      <label class="config-label">Profile Name</label>
-      <input class="config-input" type="text" id="profile-modal-name">
-
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Details</h2>
-      <label class="config-label">Full Name</label>
-      <input class="config-input" type="text" id="profile-name">
-      <label class="config-label">Email</label>
-      <input class="config-input" type="text" id="profile-email">
-      <label class="config-label">Phone</label>
-      <input class="config-input" type="text" id="profile-phone">
-      <label class="config-label">Location</label>
-      <input class="config-input" type="text" id="profile-location">
-      <label class="config-label">Skills (comma-separated)</label>
-      <input class="config-input" type="text" id="profile-skills">
-
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Work History</h2>
-      <div id="work-history-list"></div>
-      <button class="btn btn-secondary" id="btn-add-work" type="button">+ Add Work History</button>
-
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:1.25rem 0 0.5rem">Education</h2>
-      <div id="education-list"></div>
-      <button class="btn btn-secondary" id="btn-add-education" type="button">+ Add Education</button>
-
-      <div class="config-actions" style="margin-top:1rem">
-        <button class="btn btn-save" id="save-profile-modal">Save</button>
-        <span class="save-status" id="status-profile-modal"></span>
+      <!-- Details tab -->
+      <div class="config-modal-tab-panel" id="profile-tab-details">
+        <div class="config-form-group">
+          <label class="config-form-label">Profile Name</label>
+          <input class="config-form-input" type="text" id="profile-modal-name">
+        </div>
+        <div class="config-modal-subsection-title">Contact</div>
+        <div class="config-form-row">
+          <div class="config-form-group">
+            <label class="config-form-label">Email</label>
+            <input class="config-form-input" type="text" id="profile-email">
+          </div>
+          <div class="config-form-group">
+            <label class="config-form-label">Phone</label>
+            <input class="config-form-input" type="text" id="profile-phone">
+          </div>
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">Location</label>
+          <input class="config-form-input" type="text" id="profile-location">
+        </div>
+        <div class="config-modal-subsection-title">Skills</div>
+        <div class="config-chip-field" id="profile-skills-chips"></div>
+        <div class="config-chips-hint">Press Enter or comma to add · × to remove</div>
+        <div class="config-modal-subsection-title">Work History</div>
+        <div id="profile-work-list"></div>
+        <button class="config-btn-add" id="btn-add-work" style="margin-top:8px">+ Add Position</button>
+        <div class="config-modal-subsection-title">Education</div>
+        <div id="profile-edu-list"></div>
+        <button class="config-btn-add" id="btn-add-edu" style="margin-top:8px">+ Add Education</button>
       </div>
-    </div>
 
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-profile-modal">Save</button>
+      <span class="save-status" id="status-profile-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-profile-btn">Delete</button>
+    </div>
   </div>
 </div>
 
 <!-- Prompt Modal -->
-<div class="profile-modal-backdrop" id="prompt-modal-backdrop">
-  <div class="profile-modal-panel" id="prompt-modal-panel">
-    <div class="profile-modal-header">
+<div class="config-modal-backdrop" id="prompt-modal-backdrop">
+  <div class="config-modal config-modal--wide">
+    <div class="config-modal-header">
       <h2 id="prompt-modal-title">Prompt</h2>
-      <button class="btn-remove-llm" id="prompt-modal-close" type="button" style="font-size:1.2rem">✕</button>
+      <button class="config-modal-close" id="prompt-modal-close">✕</button>
     </div>
-
-    <div class="profile-tab-bar" id="prompt-tab-bar">
-      <button class="profile-tab-btn active" id="ptab-btn-upload" data-tab="upload">Upload</button>
-      <button class="profile-tab-btn" id="ptab-btn-edit" data-tab="edit">Edit</button>
+    <div class="config-modal-tabs">
+      <button class="config-modal-tab active" data-modal="prompt" data-tab="config">Config</button>
+      <button class="config-modal-tab" data-modal="prompt" data-tab="content">Content</button>
     </div>
+    <div class="config-modal-body">
 
-    <!-- Upload tab -->
-    <div class="profile-tab-panel active" id="ptab-panel-upload">
-      <h2 style="font-size:0.8rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">Upload Prompt File</h2>
-      <div class="config-row">
-        <input type="file" id="prompt-file" accept=".md,.txt">
-      </div>
-      <span class="save-status" id="status-prompt-upload"></span>
-    </div>
-
-    <!-- Edit tab -->
-    <div class="profile-tab-panel" id="ptab-panel-edit">
-      <label class="config-label">Prompt Name</label>
-      <input class="config-input" type="text" id="prompt-modal-name" placeholder="e.g. Software Engineer v1">
-      <label class="config-label" style="margin-top:0.75rem">Content</label>
-      <div class="prompt-edit-layout">
-        <div class="prompt-editor-wrap">
-          <div class="prompt-backdrop" id="prompt-backdrop"></div>
-          <textarea id="prompt-modal-content" class="prompt-textarea"></textarea>
+      <!-- Config tab -->
+      <div class="config-modal-tab-panel active" id="prompt-tab-config">
+        <div class="config-form-group">
+          <label class="config-form-label">Prompt Name</label>
+          <input class="config-form-input" type="text" id="prompt-modal-name">
         </div>
-        <div class="field-chips-sidebar" id="field-chips-sidebar">
-          <div class="field-chips-sidebar-label">Job Fields</div>
-          <div id="field-chips-container"><span class="field-chips-unavailable">Loading…</span></div>
-          <div class="field-chips-sidebar-label" id="field-chips-user-label" style="margin-top:0.75rem;display:none">User Fields</div>
-          <div id="field-chips-user-container"></div>
+        <div class="config-form-group">
+          <label class="config-form-label">Type</label>
+          <select class="config-form-input" id="prompt-modal-type">
+            <option value="resume">Resume</option>
+            <option value="cover">Cover Letter</option>
+            <option value="description">Description Extraction</option>
+          </select>
+        </div>
+        <div class="config-modal-subsection-title">Model</div>
+        <div class="config-form-row">
+          <div class="config-form-group">
+            <label class="config-form-label">Provider</label>
+            <select class="config-form-input" id="prompt-modal-provider"></select>
+          </div>
+          <div class="config-form-group">
+            <label class="config-form-label">Model ID</label>
+            <input class="config-form-input" type="text" id="prompt-modal-model" placeholder="e.g. anthropic/claude-sonnet-4-6">
+          </div>
+        </div>
+        <div class="config-form-group">
+          <label class="config-form-label">LaTeX Template (optional)</label>
+          <select class="config-form-input" id="prompt-modal-template">
+            <option value="">— None —</option>
+          </select>
         </div>
       </div>
-    </div>
 
-    <div class="config-actions" style="margin-top:1rem">
-      <button class="btn btn-save" id="save-prompt-modal">Save</button>
-      <span class="save-status" id="status-prompt-modal"></span>
+      <!-- Content tab -->
+      <div class="config-modal-tab-panel" id="prompt-tab-content">
+        <div class="config-prompt-split">
+          <div class="config-prompt-split-editor">
+            <div class="config-prompt-split-backdrop" id="prompt-backdrop"></div>
+            <textarea class="config-prompt-split-textarea" id="prompt-content-textarea"></textarea>
+          </div>
+          <div class="config-prompt-split-sidebar" id="prompt-chips-sidebar">
+            <div class="field-chips-sidebar-label">Job Fields</div>
+            <div id="prompt-job-chips"><span class="field-chips-unavailable">Loading…</span></div>
+            <div class="field-chips-sidebar-label" id="prompt-user-chips-label" style="margin-top:8px;display:none">User Fields</div>
+            <div id="prompt-user-chips"></div>
+          </div>
+        </div>
+        <div class="config-prompt-hint">
+          Drag fields into the prompt. <span style="color:#16a34a">Green</span> = valid · <span style="color:#ca8a04">Yellow</span> = unrecognized.
+        </div>
+      </div>
+
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-prompt-modal">Save</button>
+      <span class="save-status" id="status-prompt-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-prompt-btn">Delete</button>
     </div>
   </div>
 </div>
@@ -283,13 +271,79 @@
   <div id="field-help-popover-desc"></div>
 </div>
 
+<!-- LaTeX Template Modal -->
+<div class="config-modal-backdrop" id="latex-modal-backdrop">
+  <div class="config-modal config-modal--narrow">
+    <div class="config-modal-header">
+      <h2 id="latex-modal-title">LaTeX Template</h2>
+      <button class="config-modal-close" id="latex-modal-close">✕</button>
+    </div>
+    <div class="config-modal-body">
+      <div class="config-form-group">
+        <label class="config-form-label">Name</label>
+        <input class="config-form-input" type="text" id="latex-modal-name">
+      </div>
+      <div class="config-form-group">
+        <label class="config-form-label">File</label>
+        <div class="config-drop-zone" id="latex-drop-zone">Drop .tex file or click to browse</div>
+        <input type="file" id="latex-file-input" accept=".tex" style="display:none">
+      </div>
+      <span class="save-status" id="status-latex-upload" style="font-size:12px"></span>
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-latex-modal">Save</button>
+      <span class="save-status" id="status-latex-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-latex-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Provider Modal -->
+<div class="config-modal-backdrop" id="provider-modal-backdrop">
+  <div class="config-modal config-modal--narrow">
+    <div class="config-modal-header">
+      <h2 id="provider-modal-title">Provider</h2>
+      <button class="config-modal-close" id="provider-modal-close">✕</button>
+    </div>
+    <div class="config-modal-body">
+      <div class="config-form-group">
+        <label class="config-form-label">Name</label>
+        <input class="config-form-input" type="text" id="provider-modal-name" placeholder="e.g. My OpenRouter">
+      </div>
+      <div class="config-form-group">
+        <label class="config-form-label">Provider</label>
+        <select class="config-form-input" id="provider-modal-type">
+          <option value="openrouter">OpenRouter</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </div>
+      <div class="config-form-group">
+        <label class="config-form-label">API Key</label>
+        <input class="config-form-input" type="password" id="provider-modal-key" placeholder="sk-…">
+      </div>
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-provider-modal">Save</button>
+      <span class="save-status" id="status-provider-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-provider-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /config-shell -->
+
 <script>
 (function () {
 
+  // ---- Utility ----
+
   function showStatus(id, text, isError) {
     const el = document.getElementById(id);
+    if (!el) return;
     el.textContent = text;
-    el.style.color = isError ? '#e74c3c' : '#27ae60';
+    el.style.color = isError ? '#dc2626' : '#16a34a';
     setTimeout(() => { el.textContent = ''; }, 3000);
   }
 
@@ -297,7 +351,18 @@
     return val.split(',').map(s => s.trim()).filter(Boolean);
   }
 
-  // ---- Section 1: API Config ----
+  // ---- Tab switching ----
+
+  document.querySelectorAll('.config-tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.config-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.config-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('pane-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---- API tab ----
 
   async function loadApiConfig() {
     const [src, search] = await Promise.all([
@@ -311,7 +376,7 @@
     document.getElementById('search-max-jobs').value = search.max_jobs_per_source;
   }
 
-  document.getElementById('save-api').addEventListener('click', async () => {
+  document.getElementById('save-api').addEventListener('click', async function () {
     try {
       const [r1, r2] = await Promise.all([
         fetch('/api/config/sources', {
@@ -334,412 +399,283 @@
       ]);
       if (r1.ok && r2.ok) showStatus('status-api', 'Saved ✓', false);
       else showStatus('status-api', 'Error saving', true);
-    } catch {
-      showStatus('status-api', 'Error saving', true);
-    }
+    } catch { showStatus('status-api', 'Error saving', true); }
   });
 
-  // ---- Drop zone helper ----
+  // ---- Profile Tab ----
 
-  const _dropValues = { resume: '', cover: '' };
+  let _profileModalId = null;
+  let _profileModalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
 
-  function initDropZone(zoneId, fileInputId, labelId, key, initialValue) {
-    const zone = document.getElementById(zoneId);
-    const input = document.getElementById(fileInputId);
-    const label = document.getElementById(labelId);
-
-    function setDisplay(name) {
-      label.textContent = name || 'Drop .tex file or click to browse';
-      label.classList.toggle('has-file', !!name);
-    }
-
-    function readFile(file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        _dropValues[key] = e.target.result;
-        setDisplay(file.name);
-      };
-      reader.readAsText(file);
-    }
-
-    _dropValues[key] = initialValue || '';
-    setDisplay(initialValue ? initialValue.split(/[\\/]/).pop() : '');
-
-    zone.addEventListener('click', () => input.click());
-
-    input.addEventListener('change', () => {
-      if (input.files.length) readFile(input.files[0]);
-    });
-
-    zone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      zone.classList.add('drag-over');
-    });
-
-    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-
-    zone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      zone.classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file) readFile(file);
-    });
-  }
-
-  // ---- Section 2: Templates ----
-
-  async function loadTemplates() {
-    const data = await fetch('/api/config/templates').then(r => r.json());
-    initDropZone('drop-resume', 'tpl-resume-file', 'tpl-resume-label', 'resume', data.resume_template_path);
-    initDropZone('drop-cover', 'tpl-cover-file', 'tpl-cover-label', 'cover', data.cover_template_path);
-    document.getElementById('tpl-github').value = data.github;
-    document.getElementById('tpl-linkedin').value = data.linkedin;
-    document.getElementById('tpl-website').value = data.website;
-  }
-
-  document.getElementById('save-templates').addEventListener('click', async () => {
-    try {
-      const resp = await fetch('/api/config/templates', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resume_template_path: _dropValues.resume,
-          cover_template_path: _dropValues.cover,
-          github: document.getElementById('tpl-github').value,
-          linkedin: document.getElementById('tpl-linkedin').value,
-          website: document.getElementById('tpl-website').value,
-        }),
-      });
-      if (resp.ok) showStatus('status-templates', 'Saved ✓', false);
-      else showStatus('status-templates', 'Error saving', true);
-    } catch {
-      showStatus('status-templates', 'Error saving', true);
-    }
-  });
-
-  // ---- Prompt Templates ----
-
-  let _fieldChipsCache = null;
-  let _userFieldChipsCache = null;
-
-  async function loadFieldChips() {
-    const container = document.getElementById('field-chips-container');
-    if (_fieldChipsCache && _userFieldChipsCache) {
-      renderChipsIntoContainer(container, _fieldChipsCache);
-      renderChipsIntoContainer(document.getElementById('field-chips-user-container'), _userFieldChipsCache);
-      return;
-    }
-    try {
-      const [jobResp, userResp] = await Promise.all([
-        fetch('/api/job-fields'),
-        fetch('/api/user-profile-fields'),
-      ]);
-      if (!jobResp.ok) throw new Error('fetch failed');
-      _fieldChipsCache = (await jobResp.json()).fields;
-      _userFieldChipsCache = userResp.ok ? (await userResp.json()).fields : [];
-      renderChipsIntoContainer(container, _fieldChipsCache);
-      if (_userFieldChipsCache.length) {
-        document.getElementById('field-chips-user-label').style.display = '';
-        renderChipsIntoContainer(document.getElementById('field-chips-user-container'), _userFieldChipsCache);
-      }
-      renderBackdrop();
-    } catch {
-      container.innerHTML = '<span class="field-chips-unavailable">unavailable</span>';
-      document.getElementById('field-chips-sidebar').style.display = 'none';
-      document.getElementById('prompt-modal-content').style.width = '100%';
-    }
-  }
-
-  function renderChipsIntoContainer(container, fields) {
-    container.innerHTML = '';
-    for (const field of fields) {
-      const name = field.name ?? field;
-      const desc = field.description ?? '';
-      const chip = document.createElement('div');
-      chip.className = 'field-chip';
-      chip.draggable = true;
-      chip.innerHTML = `<span class="field-chip-label">${name}</span><button class="field-chip-help" type="button" title="Field info">?</button>`;
-      chip.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', '{' + name + '}');
-        e.dataTransfer.effectAllowed = 'copy';
-      });
-      chip.querySelector('.field-chip-help').addEventListener('click', (e) => {
-        e.stopPropagation();
-        showFieldHelpPopover(e.currentTarget, name, desc);
-      });
-      container.appendChild(chip);
-    }
-  }
-
-  const _helpPopover = document.getElementById('field-help-popover');
-  function showFieldHelpPopover(btn, name, desc) {
-    const rect = btn.getBoundingClientRect();
-    document.getElementById('field-help-popover-name').textContent = '{' + name + '}';
-    document.getElementById('field-help-popover-desc').textContent = desc || 'No description available.';
-    // Position to the left of the sidebar chip
-    const popW = 220;
-    let left = rect.left - popW - 8;
-    if (left < 8) left = rect.right + 8;
-    let top = rect.top;
-    const popH = _helpPopover.offsetHeight || 80;
-    if (top + popH > window.innerHeight - 8) top = window.innerHeight - popH - 8;
-    _helpPopover.style.left = left + 'px';
-    _helpPopover.style.top = top + 'px';
-    _helpPopover.classList.add('is-open');
-  }
-
-  document.addEventListener('click', (e) => {
-    if (!_helpPopover.contains(e.target)) _helpPopover.classList.remove('is-open');
-  });
-
-  function renderBackdrop() {
-    const backdrop = document.getElementById('prompt-backdrop');
-    if (!backdrop) return;
-    const text = _promptTextarea.value;
-    const allFields = [...(_fieldChipsCache || []), ...(_userFieldChipsCache || [])];
-    const validNames = allFields.length ? new Set(allFields.map(f => f.name ?? f)) : null;
-    const escaped = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\{(\w+)\}/g, (match, name) => {
-        if (!validNames) return match;
-        const cls = validNames.has(name) ? 'fv-good' : 'fv-bad';
-        return `<mark class="${cls}">${match}</mark>`;
-      });
-    // trailing space prevents browser collapsing final newline
-    backdrop.innerHTML = escaped + ' ';
-    backdrop.scrollTop = _promptTextarea.scrollTop;
-  }
-
-  let _promptModalType = null;   // 'resume' or 'cover'
-  let _promptModalId = null;     // null = new
-  let _promptModalContent = '';
-
-  function buildPromptRow(prompt, type_, isActive) {
-    const row = document.createElement('div');
-    row.className = 'llm-row';
-    row.dataset.id = prompt.id;
-    row.innerHTML = `
-      <input type="radio" name="${type_}-prompt-active" value="${prompt.id}"${isActive ? ' checked' : ''}>
-      <span class="profile-name-label"></span>
-      <button class="btn-edit-profile btn btn-secondary" type="button">Edit</button>
-      <button class="btn-remove-llm" type="button">✕</button>
+  function buildProfileRow(profile) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = profile.id;
+    const hasContact = !!(profile.data && profile.data.email);
+    tr.innerHTML = `
+      <td class="config-row-name"></td>
+      <td class="${profile.has_resume ? 'config-check' : 'config-cross'}">${profile.has_resume ? '✓' : '✗'}</td>
+      <td class="${profile.has_cover ? 'config-check' : 'config-cross'}">${profile.has_cover ? '✓' : '✗'}</td>
+      <td class="${hasContact ? 'config-check' : 'config-cross'}">${hasContact ? '✓' : '✗'}</td>
     `;
-    row.querySelector('.profile-name-label').textContent = prompt.name || 'Unnamed';
-
-    row.querySelector('input[type=radio]').addEventListener('change', async function() {
-      await fetch('/api/config/prompts/' + type_ + '/active', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active_id: prompt.id }),
-      });
-    });
-
-    row.querySelector('.btn-edit-profile').addEventListener('click', function() {
-      row.querySelector('input[type=radio]').checked = true;
-      openPromptModal(type_, prompt.id);
-    });
-
-    row.querySelector('.btn-remove-llm').addEventListener('click', async function() {
-      const resp = await fetch('/api/config/prompts/' + type_ + '/' + prompt.id, { method: 'DELETE' });
-      if (!resp.ok) return;
-      row.remove();
-    });
-
-    return row;
+    tr.querySelector('.config-row-name').textContent = profile.name || 'Unnamed';
+    tr.addEventListener('click', function () { openProfileModal(profile.id); });
+    return tr;
   }
 
-  async function loadPrompts(type_) {
-    const resp = await fetch('/api/config/prompts/' + type_);
+  async function loadProfiles() {
+    const resp = await fetch('/api/config/profiles');
     if (!resp.ok) return;
-    const data = await resp.json();
-    const list = document.getElementById(type_ + '-prompt-list');
-    list.innerHTML = '';
-    data.prompts.forEach(function(p) {
-      list.appendChild(buildPromptRow(p, type_, p.id === data.active_id));
-    });
+    const meta = await resp.json();
+    const tbody = document.getElementById('profile-tbody');
+    tbody.innerHTML = '';
+    for (const p of meta.profiles) {
+      const detail = await fetch('/api/config/profiles/' + p.id).then(r => r.json());
+      tbody.appendChild(buildProfileRow({ ...p, data: detail.data }));
+    }
   }
 
-  document.getElementById('btn-add-resume-prompt').addEventListener('click', function() {
-    openPromptModal('resume', null);
-  });
-
-  document.getElementById('btn-add-cover-prompt').addEventListener('click', function() {
-    openPromptModal('cover', null);
-  });
-
-  document.getElementById('btn-add-description-prompt').addEventListener('click', function() {
-    openPromptModal('description', null);
-  });
-
-  function openPromptModal(type_, id) {
-    _promptModalType = type_;
-    _promptModalId = id;
-    _promptModalContent = '';
-    const titleMap = { resume: 'Resume', cover: 'Cover Letter', description: 'Description Extraction' };
-    const title = (titleMap[type_] || type_) + ' Prompt';
-    document.getElementById('prompt-modal-title').textContent = id ? 'Edit ' + title : 'New ' + title;
+  async function openProfileModal(id) {
+    _profileModalId = id;
+    _profileModalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
+    document.getElementById('profile-modal-backdrop').classList.add('is-open');
 
     // Reset tabs
-    document.querySelectorAll('#prompt-tab-bar .profile-tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('#prompt-modal-panel .profile-tab-panel').forEach(p => p.classList.remove('active'));
+    switchConfigModalTab('profile', 'files');
 
-    document.getElementById('prompt-modal-content').value = '';
-    document.getElementById('prompt-modal-name').value = '';
-    document.getElementById('prompt-file').value = '';
-    document.getElementById('status-prompt-upload').textContent = '';
-    document.getElementById('status-prompt-modal').textContent = '';
-
-    if (id) {
-      // Load existing and open Edit tab
-      fetch('/api/config/prompts/' + type_ + '/' + id)
-        .then(r => r.json())
-        .then(function(p) {
-          document.getElementById('prompt-modal-name').value = p.name || '';
-          document.getElementById('prompt-modal-content').value = p.content || '';
-          _promptModalContent = p.content || '';
-          renderBackdrop();
-        });
-      document.getElementById('ptab-btn-edit').classList.add('active');
-      document.getElementById('ptab-panel-edit').classList.add('active');
-    } else {
-      document.getElementById('ptab-btn-upload').classList.add('active');
-      document.getElementById('ptab-panel-upload').classList.add('active');
+    if (!id) {
+      document.getElementById('profile-modal-title').textContent = 'New Profile';
+      document.getElementById('profile-modal-name').value = '';
+      document.getElementById('profile-email').value = '';
+      document.getElementById('profile-phone').value = '';
+      document.getElementById('profile-location').value = '';
+      resetChips('profile-skills-chips');
+      document.getElementById('profile-work-list').innerHTML = '';
+      document.getElementById('profile-edu-list').innerHTML = '';
+      document.getElementById('profile-resume-drop').textContent = 'Drop .pdf or .md, or click to browse';
+      document.getElementById('profile-resume-drop').classList.remove('has-file');
+      document.getElementById('profile-cover-drop').textContent = 'Drop .pdf, or click to browse';
+      document.getElementById('profile-cover-drop').classList.remove('has-file');
+      return;
     }
 
-    loadFieldChips();
-    document.getElementById('prompt-modal-backdrop').classList.add('is-open');
+    const resp = await fetch('/api/config/profiles/' + id);
+    if (!resp.ok) return;
+    const profile = await resp.json();
+    const data = profile.data || {};
+
+    document.getElementById('profile-modal-title').textContent = profile.name || 'Profile';
+    document.getElementById('profile-modal-name').value = profile.name || '';
+    document.getElementById('profile-email').value = data.email || '';
+    document.getElementById('profile-phone').value = data.phone || '';
+    document.getElementById('profile-location').value = data.location || '';
+    setChips('profile-skills-chips', data.skills || []);
+
+    _profileModalFilePaths.resume_path = data.resume_path || '';
+    _profileModalFilePaths.md_path = data.md_path || '';
+    _profileModalFilePaths.cover_letter_path = data.cover_letter_path || '';
+
+    const resumeLabel = data.resume_filename || (data.resume_path ? data.resume_path.split(/[\\/]/).pop() : '');
+    const coverLabel = data.cover_filename || (data.cover_letter_path ? data.cover_letter_path.split(/[\\/]/).pop() : '');
+    setDropZoneLabel('profile-resume-drop', resumeLabel);
+    setDropZoneLabel('profile-cover-drop', coverLabel);
+
+    // Work history
+    const wl = document.getElementById('profile-work-list');
+    wl.innerHTML = '';
+    (data.work_history || []).forEach(e => wl.appendChild(buildWorkRow(e)));
+
+    // Education
+    const el = document.getElementById('profile-edu-list');
+    el.innerHTML = '';
+    (data.education || []).forEach(e => el.appendChild(buildEduRow(e)));
   }
 
-  function closePromptModal() {
-    _promptModalType = null;
-    _promptModalId = null;
-    _promptModalContent = '';
-    document.getElementById('field-chips-sidebar').style.display = '';
-    document.getElementById('prompt-modal-content').style.width = '';
-    document.getElementById('prompt-backdrop').innerHTML = '';
-    _helpPopover.classList.remove('is-open');
-    document.getElementById('prompt-modal-backdrop').classList.remove('is-open');
+  function closeProfileModal() {
+    _profileModalId = null;
+    document.getElementById('profile-modal-backdrop').classList.remove('is-open');
   }
 
-  const _promptTextarea = document.getElementById('prompt-modal-content');
-
-  _promptTextarea.addEventListener('input', () => {
-    _promptModalContent = _promptTextarea.value;
-    renderBackdrop();
+  document.getElementById('profile-modal-close').addEventListener('click', closeProfileModal);
+  document.getElementById('profile-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closeProfileModal();
   });
 
-  _promptTextarea.addEventListener('scroll', () => {
-    const backdrop = document.getElementById('prompt-backdrop');
-    if (backdrop) backdrop.scrollTop = _promptTextarea.scrollTop;
-  });
-
-  _promptTextarea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  });
-
-  _promptTextarea.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const text = e.dataTransfer.getData('text/plain');
-    if (!text) return;
-    const idx = _promptTextarea.selectionStart ?? _promptTextarea.value.length;
-    const val = _promptTextarea.value;
-    _promptTextarea.value = val.slice(0, idx) + text + val.slice(idx);
-    _promptTextarea.setSelectionRange(idx + text.length, idx + text.length);
-    _promptTextarea.focus();
-    _promptModalContent = _promptTextarea.value;
-    renderBackdrop();
-  });
-
-  document.getElementById('prompt-modal-close').addEventListener('click', closePromptModal);
-
-  document.getElementById('prompt-modal-backdrop').addEventListener('click', function(e) {
-    if (e.target === this) closePromptModal();
-  });
-
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('prompt-modal-backdrop').classList.contains('is-open')) {
-      closePromptModal();
-    }
-  });
-
-  // Tab switching for prompt modal
-  document.querySelectorAll('#prompt-tab-bar .profile-tab-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      // Snapshot textarea only while Edit panel is visible (hidden elements are unreliable in some browsers)
-      if (document.getElementById('ptab-panel-edit').classList.contains('active')) {
-        _promptModalContent = document.getElementById('prompt-modal-content').value;
+  document.getElementById('save-profile-modal').addEventListener('click', async function () {
+    if (_profileModalId === null) return;
+    const name = document.getElementById('profile-modal-name').value.trim() || 'New Profile';
+    const body = {
+      name,
+      data: {
+        email: document.getElementById('profile-email').value,
+        phone: document.getElementById('profile-phone').value,
+        location: document.getElementById('profile-location').value,
+        skills: getChips('profile-skills-chips'),
+        work_history: collectWorkRows(),
+        education: collectEduRows(),
+        resume_path: _profileModalFilePaths.resume_path,
+        md_path: _profileModalFilePaths.md_path,
+        cover_letter_path: _profileModalFilePaths.cover_letter_path,
+        target_salary_min: null,
+        target_salary_max: null,
+        target_roles: [],
+      },
+    };
+    try {
+      const resp = await fetch('/api/config/profiles/' + _profileModalId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        showStatus('status-profile-modal', 'Saved ✓', false);
+        document.getElementById('profile-modal-title').textContent = name;
+        await loadProfiles();
+      } else {
+        showStatus('status-profile-modal', 'Error saving', true);
       }
-      document.querySelectorAll('#prompt-tab-bar .profile-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('#prompt-modal-panel .profile-tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('ptab-panel-' + btn.dataset.tab).classList.add('active');
-      if (btn.dataset.tab === 'edit') {
-        document.getElementById('prompt-modal-content').value = _promptModalContent;
-        renderBackdrop();
+    } catch { showStatus('status-profile-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-profile-btn').addEventListener('click', async function () {
+    if (_profileModalId === null) return;
+    if (!confirm('Delete this profile?')) return;
+    const resp = await fetch('/api/config/profiles/' + _profileModalId, { method: 'DELETE' });
+    if (resp.ok) { closeProfileModal(); await loadProfiles(); }
+    else showStatus('status-profile', 'Delete failed', true);
+  });
+
+  document.getElementById('btn-add-profile').addEventListener('click', async function () {
+    const resp = await fetch('/api/config/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'New Profile' }),
+    });
+    if (!resp.ok) return;
+    const profile = await resp.json();
+    await loadProfiles();
+    openProfileModal(profile.id);
+  });
+
+  // File drop zones
+  function setDropZoneLabel(id, filename) {
+    const zone = document.getElementById(id);
+    if (filename) {
+      zone.textContent = filename + ' ✓ — click to replace';
+      zone.classList.add('has-file');
+    } else {
+      zone.textContent = id === 'profile-resume-drop'
+        ? 'Drop .pdf or .md, or click to browse'
+        : 'Drop .pdf, or click to browse';
+      zone.classList.remove('has-file');
+    }
+  }
+
+  document.getElementById('profile-resume-drop').addEventListener('click', function () {
+    document.getElementById('profile-resume-file').click();
+  });
+  document.getElementById('profile-cover-drop').addEventListener('click', function () {
+    document.getElementById('profile-cover-file').click();
+  });
+
+  async function uploadProfileFile(file, type) {
+    const form = new FormData();
+    form.append('file', file);
+    const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
+    if (!resp.ok) return null;
+    return await resp.json();
+  }
+
+  document.getElementById('profile-resume-file').addEventListener('change', async function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const result = await uploadProfileFile(file, 'resume');
+    if (!result) { showStatus('status-profile-files', 'Upload failed', true); return; }
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      _profileModalFilePaths.resume_path = result.path;
+      _profileModalFilePaths.md_path = '';
+    } else {
+      _profileModalFilePaths.md_path = result.path;
+      _profileModalFilePaths.resume_path = '';
+    }
+    setDropZoneLabel('profile-resume-drop', file.name);
+    showStatus('status-profile-files', 'Uploaded ✓', false);
+  });
+
+  document.getElementById('profile-cover-file').addEventListener('change', async function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const result = await uploadProfileFile(file, 'cover');
+    if (!result) { showStatus('status-profile-files', 'Upload failed', true); return; }
+    _profileModalFilePaths.cover_letter_path = result.path;
+    setDropZoneLabel('profile-cover-drop', file.name);
+    showStatus('status-profile-files', 'Uploaded ✓', false);
+  });
+
+  // Preview tab — load PDF/MD on tab switch
+  document.querySelectorAll('[data-modal="profile"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.dataset.tab === 'preview' && _profileModalId) {
+        const hasPdf = !!_profileModalFilePaths.resume_path;
+        const hasMd = !!_profileModalFilePaths.md_path;
+        const frame = document.getElementById('profile-preview-frame');
+        const mdViewer = document.getElementById('profile-preview-md');
+        if (hasPdf) {
+          frame.style.display = '';
+          mdViewer.style.display = 'none';
+          frame.src = '/api/config/profiles/' + _profileModalId + '/file?type=pdf';
+        } else if (hasMd) {
+          frame.style.display = 'none';
+          mdViewer.style.display = '';
+          fetch('/api/config/profiles/' + _profileModalId + '/file?type=md')
+            .then(r => r.text())
+            .then(text => { mdViewer.value = text; });
+        }
       }
     });
   });
 
-  document.getElementById('prompt-file').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      _promptModalContent = ev.target.result;
-      document.getElementById('prompt-modal-content').value = _promptModalContent;
-      if (!document.getElementById('prompt-modal-name').value) {
-        document.getElementById('prompt-modal-name').value = file.name.replace(/\.[^.]+$/, '');
+  // ---- Chip helpers ----
+
+  function resetChips(containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    const input = document.createElement('input');
+    input.className = 'config-chip-input';
+    input.placeholder = 'Add skill…';
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const val = input.value.replace(',', '').trim();
+        if (val) addChip(container, val);
+        input.value = '';
       }
-      // Switch to Edit tab
-      document.querySelectorAll('#prompt-tab-bar .profile-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('#prompt-modal-panel .profile-tab-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById('ptab-btn-edit').classList.add('active');
-      document.getElementById('ptab-panel-edit').classList.add('active');
-      showStatus('status-prompt-upload', 'Loaded ✓', false);
-    };
-    reader.readAsText(file);
-  });
+    });
+    container.appendChild(input);
+    container.addEventListener('click', function () { input.focus(); });
+  }
 
-  document.getElementById('save-prompt-modal').addEventListener('click', async function() {
-    if (!_promptModalType) return;
-    const name = document.getElementById('prompt-modal-name').value.trim() || 'Unnamed';
-    const content = document.getElementById('prompt-modal-content').value;
-    try {
-      let resp, result;
-      if (_promptModalId) {
-        resp = await fetch('/api/config/prompts/' + _promptModalType + '/' + _promptModalId, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, content }),
-        });
-        if (!resp.ok) { showStatus('status-prompt-modal', 'Error saving', true); return; }
-        result = await resp.json();
-        const row = document.querySelector('#' + _promptModalType + '-prompt-list .llm-row[data-id="' + _promptModalId + '"]');
-        if (row) row.querySelector('.profile-name-label').textContent = name;
-      } else {
-        resp = await fetch('/api/config/prompts/' + _promptModalType, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, content }),
-        });
-        if (!resp.ok) { showStatus('status-prompt-modal', 'Error saving', true); return; }
-        result = await resp.json();
-        const list = document.getElementById(_promptModalType + '-prompt-list');
-        list.appendChild(buildPromptRow({ id: result.id, name: result.name }, _promptModalType, false));
-        _promptModalId = result.id;
-      }
-      showStatus('status-prompt-modal', 'Saved ✓', false);
-    } catch (e) {
-      showStatus('status-prompt-modal', 'Error saving', true);
-    }
-  });
+  function addChip(container, text) {
+    const input = container.querySelector('.config-chip-input');
+    const chip = document.createElement('span');
+    chip.className = 'config-chip';
+    chip.innerHTML = `${text} <button class="config-chip-remove" type="button">×</button>`;
+    chip.querySelector('.config-chip-remove').addEventListener('click', function () { chip.remove(); });
+    container.insertBefore(chip, input);
+  }
 
-  // ---- Section 3: User Profile ----
+  function setChips(containerId, skills) {
+    resetChips(containerId);
+    const container = document.getElementById(containerId);
+    skills.forEach(s => { if (s) addChip(container, s); });
+  }
 
-  let _selectedProfileId = null;
+  function getChips(containerId) {
+    return Array.from(document.querySelectorAll('#' + containerId + ' .config-chip'))
+      .map(c => c.childNodes[0].textContent.trim())
+      .filter(Boolean);
+  }
+
+  // ---- Work history / education rows ----
 
   function buildWorkRow(entry) {
     entry = entry || {};
@@ -762,7 +698,7 @@
     return row;
   }
 
-  function buildEducationRow(entry) {
+  function buildEduRow(entry) {
     entry = entry || {};
     const row = document.createElement('div');
     row.className = 'profile-subrow';
@@ -783,521 +719,587 @@
     return row;
   }
 
-  function populateEditForm(data) {
-    document.getElementById('profile-name').value = data.name || '';
-    document.getElementById('profile-email').value = data.email || '';
-    document.getElementById('profile-phone').value = data.phone || '';
-    document.getElementById('profile-location').value = data.location || '';
-    document.getElementById('profile-skills').value = (data.skills || []).join(', ');
-
-    const wl = document.getElementById('work-history-list');
-    wl.innerHTML = '';
-    (data.work_history || []).forEach(function(e) { wl.appendChild(buildWorkRow(e)); });
-
-    const el = document.getElementById('education-list');
-    el.innerHTML = '';
-    (data.education || []).forEach(function(e) { el.appendChild(buildEducationRow(e)); });
-  }
-
-  function collectEditForm(profileLabel) {
-    return {
-      name: profileLabel,
-      data: {
-        name: document.getElementById('profile-name').value,
-        email: document.getElementById('profile-email').value,
-        phone: document.getElementById('profile-phone').value,
-        location: document.getElementById('profile-location').value,
-        skills: document.getElementById('profile-skills').value
-          .split(',').map(function(s) { return s.trim(); }).filter(Boolean),
-        work_history: Array.from(document.querySelectorAll('#work-history-list .profile-subrow')).map(function(r) {
-          return {
-            title: r.querySelector('.ph-title').value,
-            company: r.querySelector('.ph-company').value,
-            start: r.querySelector('.ph-start').value,
-            end: r.querySelector('.ph-end').value,
-            summary: r.querySelector('.ph-summary').value,
-          };
-        }),
-        education: Array.from(document.querySelectorAll('#education-list .profile-subrow')).map(function(r) {
-          return {
-            institution: r.querySelector('.ph-institution').value,
-            degree: r.querySelector('.ph-degree').value,
-            field: r.querySelector('.ph-field').value,
-            graduated: r.querySelector('.ph-graduated').value,
-            gpa: parseFloat(r.querySelector('.ph-gpa').value) || 0,
-          };
-        }),
-        target_salary_min: null,
-        target_salary_max: null,
-        target_roles: [],
-        resume_path: '',
-      },
-    };
-  }
-
-  function buildProfileRow(profile, isActive) {
-    const row = document.createElement('div');
-    row.className = 'llm-row';
-    row.dataset.id = profile.id;
-
-    row.innerHTML = `
-      <input type="radio" name="profile-active" value="${profile.id}"${isActive ? ' checked' : ''}>
-      <span class="profile-name-label"></span>
-      <button class="btn-edit-profile btn btn-secondary" type="button" title="Edit profile">Edit</button>
-      <button class="btn-remove-llm" type="button" title="Delete profile">✕</button>
-    `;
-    row.querySelector('.profile-name-label').textContent = profile.name || 'New Profile';
-
-    row.querySelector('input[type=radio]').addEventListener('change', function () {
-      _selectedProfileId = profile.id;
-    });
-
-    row.querySelector('.btn-edit-profile').addEventListener('click', function () {
-      _selectedProfileId = profile.id;
-      row.querySelector('input[type=radio]').checked = true;
-      openProfileModal(profile.id, false);
-    });
-
-    row.querySelector('.btn-remove-llm').addEventListener('click', async function () {
-      const resp = await fetch('/api/config/profiles/' + profile.id, { method: 'DELETE' });
-      if (!resp.ok) { showStatus('status-profile', 'Delete failed', true); return; }
-      row.remove();
-      if (_selectedProfileId === profile.id) _selectedProfileId = null;
-    });
-
-    return row;
-  }
-
-  async function loadProfiles() {
-    const resp = await fetch('/api/config/profiles');
-    if (!resp.ok) { showStatus('status-profile', 'Failed to load profiles', true); return; }
-    const meta = await resp.json();
-    const list = document.getElementById('profile-list');
-    list.innerHTML = '';
-    meta.profiles.forEach(function(p) {
-      const row = buildProfileRow(
-        { id: p.id, name: p.name },
-        p.id === meta.active_id
-      );
-      list.appendChild(row);
-    });
-    if (meta.active_id) {
-      _selectedProfileId = meta.active_id;
-    }
-  }
-
-  document.getElementById('btn-add-profile').addEventListener('click', async function() {
-    try {
-      const resp = await fetch('/api/config/profiles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Profile' }),
-      });
-      if (!resp.ok) { showStatus('status-profile', 'Failed to create profile', true); return; }
-      const profile = await resp.json();
-      if (!profile.id) { showStatus('status-profile', 'Invalid response from server', true); return; }
-      const row = buildProfileRow({ id: profile.id, name: profile.name }, false);
-      document.getElementById('profile-list').appendChild(row);
-      _selectedProfileId = profile.id;
-      openProfileModal(profile.id, true);
-    } catch (e) {
-      showStatus('status-profile', 'Error creating profile', true);
-    }
-  });
-
-  document.getElementById('save-profile').addEventListener('click', async function() {
-    const activeRadio = document.querySelector('input[name="profile-active"]:checked');
-    if (!activeRadio) { showStatus('status-profile', 'Select a profile first', true); return; }
-    const activeId = parseInt(activeRadio.value);
-    try {
-      const resp = await fetch('/api/config/profiles/active', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active_id: activeId }),
-      });
-      if (resp.ok) {
-        _selectedProfileId = activeId;
-        showStatus('status-profile', 'Active profile set ✓', false);
-      } else {
-        showStatus('status-profile', 'Error setting active profile', true);
-      }
-    } catch (e) {
-      showStatus('status-profile', 'Error setting active profile', true);
-    }
-  });
-
-  // ---- Profile Modal ----
-
-  let _modalProfileId = null;
-  let _modalIsNew = false;
-  let _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
-
-  function openProfileModal(id, isNew) {
-    _modalProfileId = id;
-    _modalIsNew = isNew;
-    _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
-    document.getElementById('profile-modal-backdrop').classList.add('is-open');
-    loadModalContent(id, isNew);
-  }
-
-  async function closeProfileModal() {
-    if (_modalIsNew) {
-      await fetch('/api/config/profiles/' + _modalProfileId, { method: 'DELETE' });
-      const row = document.querySelector('#profile-list .llm-row[data-id="' + _modalProfileId + '"]');
-      if (row) row.remove();
-      if (_selectedProfileId === _modalProfileId) _selectedProfileId = null;
-    }
-    _modalProfileId = null;
-    _modalIsNew = false;
-    _modalFilePaths = { resume_path: '', md_path: '', cover_letter_path: '' };
-    document.getElementById('profile-modal-backdrop').classList.remove('is-open');
-    document.getElementById('profile-pdf-frame').src = 'about:blank';
-    document.getElementById('profile-cover-frame').src = 'about:blank';
-    document.getElementById('profile-md-viewer').value = '';
-  }
-
-  async function loadModalContent(id, isNew) {
-    // Reset all tabs
-    document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
-
-    // Reset file inputs and parse button
-    const fileInput = document.getElementById('profile-file');
-    fileInput.value = '';
-    document.getElementById('btn-parse-profile').disabled = true;
-    document.getElementById('profile-cover-file').value = '';
-
-    if (isNew) {
-      document.getElementById('tab-btn-upload').classList.add('active');
-      document.getElementById('tab-panel-upload').classList.add('active');
-      document.getElementById('profile-modal-title').textContent = 'New Profile';
-      document.getElementById('profile-modal-name').value = '';
-      document.getElementById('tab-btn-pdf').style.display = 'none';
-      document.getElementById('tab-btn-md').style.display = 'none';
-      document.getElementById('tab-btn-cover').style.display = 'none';
-      populateEditForm({});
-      return;
-    }
-
-    // Editing existing — land on Edit tab
-    document.getElementById('tab-btn-edit').classList.add('active');
-    document.getElementById('tab-panel-edit').classList.add('active');
-
-    try {
-      const resp = await fetch('/api/config/profiles/' + id);
-      if (!resp.ok) { showStatus('status-profile-modal', 'Failed to load profile', true); return; }
-      const profile = await resp.json();
-
-      document.getElementById('profile-modal-title').textContent = profile.name || 'Profile';
-      document.getElementById('profile-modal-name').value = profile.name || '';
-      const data = profile.data || {};
-      populateEditForm(Object.assign({ name: profile.name }, data));
-
-      _modalFilePaths.resume_path = data.resume_path || '';
-      _modalFilePaths.md_path = data.md_path || '';
-      _modalFilePaths.cover_letter_path = data.cover_letter_path || '';
-
-      const resumePath = _modalFilePaths.resume_path;
-      const hasPdf = resumePath.toLowerCase().endsWith('.pdf');
-      document.getElementById('tab-btn-pdf').style.display = hasPdf ? '' : 'none';
-      if (hasPdf) {
-        document.getElementById('profile-pdf-frame').src = '/api/config/profiles/' + id + '/file?type=pdf';
-      }
-
-      const mdPath = _modalFilePaths.md_path;
-      const hasMd = !!mdPath;
-      document.getElementById('tab-btn-md').style.display = hasMd ? '' : 'none';
-      if (hasMd) {
-        fetch('/api/config/profiles/' + id + '/file?type=md')
-          .then(r => r.text())
-          .then(text => { document.getElementById('profile-md-viewer').value = text; })
-          .catch(() => { document.getElementById('profile-md-viewer').value = '(Failed to load)'; });
-      }
-
-      const hasCover = !!_modalFilePaths.cover_letter_path;
-      document.getElementById('tab-btn-cover').style.display = hasCover ? '' : 'none';
-      document.getElementById('cover-pending-msg').style.display = 'none';
-      if (hasCover) {
-        document.getElementById('profile-cover-frame').src = '/api/config/profiles/' + id + '/file?type=cover';
-      }
-    } catch (e) {
-      showStatus('status-profile-modal', 'Failed to load profile', true);
-    }
-  }
-
-  document.getElementById('save-profile-modal').addEventListener('click', async function() {
-    if (!_modalProfileId) return;
-    const profileName = document.getElementById('profile-modal-name').value.trim() || 'New Profile';
-    const body = collectEditForm(profileName);
-    body.data.resume_path = _modalFilePaths.resume_path;
-    body.data.md_path = _modalFilePaths.md_path;
-    body.data.cover_letter_path = _modalFilePaths.cover_letter_path;
-    try {
-      const resp = await fetch('/api/config/profiles/' + _modalProfileId, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (resp.ok) {
-        _modalIsNew = false;
-        document.getElementById('profile-modal-title').textContent = profileName;
-        const row = document.querySelector('#profile-list .llm-row[data-id="' + _modalProfileId + '"]');
-        if (row) row.querySelector('.profile-name-label').textContent = profileName;
-        showStatus('status-profile-modal', 'Saved ✓', false);
-      } else {
-        showStatus('status-profile-modal', 'Error saving', true);
-      }
-    } catch (e) {
-      showStatus('status-profile-modal', 'Error saving', true);
-    }
-  });
-
-  document.getElementById('profile-modal-close').addEventListener('click', closeProfileModal);
-
-  document.getElementById('profile-modal-backdrop').addEventListener('click', function(e) {
-    if (e.target === this) closeProfileModal();
-  });
-
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('profile-modal-backdrop').classList.contains('is-open')) {
-      closeProfileModal();
-    }
-  });
-
-  // Tab switching
-  document.querySelectorAll('.profile-tab-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      const tab = btn.dataset.tab;
-      document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('tab-panel-' + tab).classList.add('active');
-    });
-  });
-
-  document.getElementById('profile-file').addEventListener('change', async function(e) {
-    const file = e.target.files[0];
-    if (!file) {
-      document.getElementById('btn-parse-profile').disabled = true;
-      return;
-    }
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
-      if (!resp.ok) { showStatus('status-profile-modal', 'Upload failed: ' + await resp.text(), true); return; }
-      const result = await resp.json();
-      if (!result.path) {
-        showStatus('status-profile-modal', 'Upload error: server returned no path', true);
-        return;
-      }
-      if (file.name.toLowerCase().endsWith('.pdf')) {
-        _modalFilePaths.resume_path = result.path;
-        _modalFilePaths.md_path = '';
-      } else {
-        _modalFilePaths.md_path = result.path;
-        _modalFilePaths.resume_path = '';
-      }
-      document.getElementById('btn-parse-profile').disabled = false;
-    } catch (err) {
-      showStatus('status-profile-modal', 'Upload error: ' + err.message, true);
-    }
-  });
-
-  document.getElementById('profile-cover-file').addEventListener('change', async function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const resp = await fetch('/api/config/profile/upload', { method: 'POST', body: form });
-      if (!resp.ok) { showStatus('status-cover-upload', 'Upload failed', true); return; }
-      const result = await resp.json();
-      if (!result.path) { showStatus('status-cover-upload', 'Upload error: no path returned', true); return; }
-      _modalFilePaths.cover_letter_path = result.path;
-      showStatus('status-cover-upload', 'Uploaded ✓', false);
-      document.getElementById('tab-btn-cover').style.display = '';
-      document.getElementById('cover-pending-msg').style.display = '';
-      document.getElementById('profile-cover-frame').src = 'about:blank';
-    } catch (err) {
-      showStatus('status-cover-upload', 'Upload error: ' + err.message, true);
-    }
-  });
-
-  document.getElementById('btn-parse-profile').addEventListener('click', async function() {
-    const file = document.getElementById('profile-file').files[0];
-    if (!file) return;
-    const btn = document.getElementById('btn-parse-profile');
-    btn.disabled = true;
-    btn.textContent = 'Parsing…';
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const resp = await fetch('/api/config/profile/parse', { method: 'POST', body: form });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => null);
-        showStatus('status-parse', 'Parse failed: ' + (err && err.detail ? err.detail : resp.statusText), true);
-        return;
-      }
-      const data = await resp.json();
-      document.getElementById('profile-modal-name').value = data.name || '';
-      populateEditForm(Object.assign({ name: data.name }, data));
-      // Switch to Edit tab
-      document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.profile-tab-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById('tab-btn-edit').classList.add('active');
-      document.getElementById('tab-panel-edit').classList.add('active');
-    } catch (e) {
-      showStatus('status-parse', 'Parse error: ' + e.message, true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Parse';
-    }
-  });
-
-  document.getElementById('btn-add-work').addEventListener('click', function() {
-    document.getElementById('work-history-list').appendChild(buildWorkRow());
-  });
-
-  document.getElementById('btn-add-education').addEventListener('click', function() {
-    document.getElementById('education-list').appendChild(buildEducationRow());
-  });
-
-  // ---- Section 4: Scoring ----
-
-  async function loadScoring() {
-    const data = await fetch('/api/config/scoring').then(r => r.json());
-    document.getElementById('w1').value = data.w1.toFixed(2);
-    document.getElementById('w2').value = data.w2.toFixed(2);
-    document.getElementById('w-slider').value = data.w2.toFixed(2);
-    document.getElementById('reject-threshold').value = data.auto_reject_threshold.toFixed(2);
-    document.getElementById('approve-threshold').value = data.auto_approve_threshold.toFixed(2);
-  }
-
-  const w1El = document.getElementById('w1');
-  const w2El = document.getElementById('w2');
-  const sliderEl = document.getElementById('w-slider');
-
-  // Slider represents w2 (fitness); moving right increases fitness weight
-  sliderEl.addEventListener('input', () => {
-    const w2 = parseFloat(sliderEl.value);
-    w2El.value = w2.toFixed(2);
-    w1El.value = (1 - w2).toFixed(2);
-  });
-
-  w2El.addEventListener('input', () => {
-    const w2 = Math.min(1, Math.max(0, parseFloat(w2El.value) || 0));
-    w1El.value = (1 - w2).toFixed(2);
-    sliderEl.value = w2.toFixed(2);
-  });
-
-  w1El.addEventListener('input', () => {
-    const w1 = Math.min(1, Math.max(0, parseFloat(w1El.value) || 0));
-    const w2 = 1 - w1;
-    w2El.value = w2.toFixed(2);
-    sliderEl.value = w2.toFixed(2);
-  });
-
-  document.getElementById('save-scoring').addEventListener('click', async () => {
-    const w1 = parseFloat(w1El.value);
-    const w2 = parseFloat(w2El.value);
-    const reject = parseFloat(document.getElementById('reject-threshold').value);
-    const approve = parseFloat(document.getElementById('approve-threshold').value);
-
-    if (Math.abs(w1 + w2 - 1.0) > 0.001) {
-      showStatus('status-scoring', 'Desirability + Fitness must equal 1.0', true);
-      return;
-    }
-    if (reject >= approve) {
-      showStatus('status-scoring', 'Reject threshold must be less than approve threshold', true);
-      return;
-    }
-
-    try {
-      const resp = await fetch('/api/config/scoring', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ w1, w2, auto_reject_threshold: reject, auto_approve_threshold: approve }),
-      });
-      if (resp.ok) showStatus('status-scoring', 'Saved ✓', false);
-      else {
-        const err = await resp.json().catch(() => ({}));
-        showStatus('status-scoring', err.detail || 'Error saving', true);
-      }
-    } catch {
-      showStatus('status-scoring', 'Error saving', true);
-    }
-  });
-
-  // ---- Section 5: LLM Providers ----
-
-  const LLM_PROVIDERS = {
-    openrouter: 'OpenRouter',
-    anthropic: 'Anthropic',
-    openai: 'OpenAI',
-    gemini: 'Gemini',
-  };
-
-  function buildProviderRow(provider, isActive) {
-    const name = provider ? provider.name : Object.keys(LLM_PROVIDERS)[0];
-    const row = document.createElement('div');
-    row.className = 'llm-row';
-    const opts = Object.entries(LLM_PROVIDERS)
-      .map(([k, v]) => `<option value="${k}"${name === k ? ' selected' : ''}>${v}</option>`)
-      .join('');
-    row.innerHTML = `
-      <input type="radio" name="llm-active" class="llm-radio" value="${name}"${isActive ? ' checked' : ''}>
-      <select class="llm-provider-select">${opts}</select>
-      <input type="text" class="llm-model" placeholder="Model (e.g. anthropic/claude-sonnet-4-6)" value="${provider ? provider.model : ''}">
-      <input type="password" class="llm-key" placeholder="${provider && provider.has_key ? '***' : 'API Key'}">
-      <button class="btn-remove-llm" type="button">✕</button>
-    `;
-    const select = row.querySelector('.llm-provider-select');
-    const radio = row.querySelector('.llm-radio');
-    select.addEventListener('change', () => { radio.value = select.value; });
-    row.querySelector('.btn-remove-llm').addEventListener('click', () => row.remove());
-    return row;
-  }
-
-  async function loadLLM() {
-    const data = await fetch('/api/config/llm').then(r => r.json());
-    const list = document.getElementById('llm-provider-list');
-    list.innerHTML = '';
-    data.providers.forEach(p => {
-      list.appendChild(buildProviderRow(p, p.name === data.active));
-    });
-  }
-
-  document.getElementById('btn-add-provider').addEventListener('click', () => {
-    document.getElementById('llm-provider-list').appendChild(buildProviderRow(null, false));
-  });
-
-  document.getElementById('save-llm').addEventListener('click', async () => {
-    const rows = document.querySelectorAll('#llm-provider-list .llm-row');
-    const activeRadio = document.querySelector('input[name="llm-active"]:checked');
-    const providers = Array.from(rows).map(row => ({
-      name: row.querySelector('.llm-provider-select').value,
-      model: row.querySelector('.llm-model').value,
-      api_key: row.querySelector('.llm-key').value,
+  function collectWorkRows() {
+    return Array.from(document.querySelectorAll('#profile-work-list .profile-subrow')).map(r => ({
+      title: r.querySelector('.ph-title').value,
+      company: r.querySelector('.ph-company').value,
+      start: r.querySelector('.ph-start').value,
+      end: r.querySelector('.ph-end').value,
+      summary: r.querySelector('.ph-summary').value,
     }));
-    try {
-      const resp = await fetch('/api/config/llm', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers, active: activeRadio ? activeRadio.value : '' }),
-      });
-      if (resp.ok) showStatus('status-llm', 'Saved ✓', false);
-      else {
-        const err = await resp.json().catch(() => ({}));
-        showStatus('status-llm', err.detail || 'Error saving', true);
-      }
-    } catch {
-      showStatus('status-llm', 'Error saving', true);
+  }
+
+  function collectEduRows() {
+    return Array.from(document.querySelectorAll('#profile-edu-list .profile-subrow')).map(r => ({
+      institution: r.querySelector('.ph-institution').value,
+      degree: r.querySelector('.ph-degree').value,
+      field: r.querySelector('.ph-field').value,
+      graduated: r.querySelector('.ph-graduated').value,
+      gpa: parseFloat(r.querySelector('.ph-gpa').value) || 0,
+    }));
+  }
+
+  document.getElementById('btn-add-work').addEventListener('click', function () {
+    document.getElementById('profile-work-list').appendChild(buildWorkRow());
+  });
+  document.getElementById('btn-add-edu').addEventListener('click', function () {
+    document.getElementById('profile-edu-list').appendChild(buildEduRow());
+  });
+
+  // ---- Modal tab switching (shared) ----
+
+  function switchConfigModalTab(modalPrefix, tabName) {
+    document.querySelectorAll('[data-modal="' + modalPrefix + '"]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    document.querySelectorAll('#' + modalPrefix + '-modal-backdrop .config-modal-tab-panel').forEach(function (panel) {
+      panel.classList.toggle('active', panel.id === modalPrefix + '-tab-' + tabName);
+    });
+  }
+
+  document.querySelectorAll('.config-modal-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      switchConfigModalTab(btn.dataset.modal, btn.dataset.tab);
+    });
+  });
+
+  // ---- Prompt Tab ----
+
+  let _promptModalId = null;
+  let _promptModalType = null;
+  let _fieldChipsCache = null;
+  let _userFieldChipsCache = null;
+
+  function buildPromptRow(prompt) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = prompt.id;
+    tr.dataset.type = prompt.type;
+    const modelDisplay = prompt.provider_name && prompt.model_id
+      ? prompt.provider_name + ' — ' + prompt.model_id
+      : prompt.model_id || '';
+    const typeLabel = { resume: 'Resume', cover: 'Cover Letter', description: 'Description' }[prompt.type] || prompt.type;
+    tr.innerHTML = `
+      <td class="config-row-name"></td>
+      <td class="config-meta"></td>
+      <td class="config-meta"></td>
+      <td class="config-meta"></td>
+    `;
+    tr.querySelectorAll('td')[0].textContent = prompt.name || 'Unnamed';
+    tr.querySelectorAll('td')[1].textContent = typeLabel;
+    tr.querySelectorAll('td')[2].textContent = modelDisplay;
+    tr.querySelectorAll('td')[3].textContent = prompt.template_name || '—';
+    if (!prompt.template_name) tr.querySelectorAll('td')[3].className = 'config-muted';
+    tr.addEventListener('click', function () { openPromptModal(prompt.type, prompt.id); });
+    return tr;
+  }
+
+  async function loadPrompts() {
+    const resp = await fetch('/api/config/prompts');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tbody = document.getElementById('prompts-tbody');
+    tbody.innerHTML = '';
+    data.prompts.forEach(p => tbody.appendChild(buildPromptRow(p)));
+  }
+
+  async function populatePromptDropdowns() {
+    const [provResp, tplResp] = await Promise.all([
+      fetch('/api/config/providers'),
+      fetch('/api/config/latex-templates'),
+    ]);
+    const providers = provResp.ok ? (await provResp.json()).providers : [];
+    const templates = tplResp.ok ? (await tplResp.json()).templates : [];
+
+    const provSelect = document.getElementById('prompt-modal-provider');
+    provSelect.innerHTML = '<option value="">— None —</option>';
+    providers.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      provSelect.appendChild(opt);
+    });
+
+    const tplSelect = document.getElementById('prompt-modal-template');
+    tplSelect.innerHTML = '<option value="">— None —</option>';
+    templates.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.name;
+      opt.textContent = t.name;
+      tplSelect.appendChild(opt);
+    });
+  }
+
+  async function openPromptModal(type_, id) {
+    _promptModalType = type_ || 'resume';
+    _promptModalId = id || null;
+    await populatePromptDropdowns();
+    switchConfigModalTab('prompt', 'config');
+    document.getElementById('prompt-modal-backdrop').classList.add('is-open');
+
+    if (!id) {
+      document.getElementById('prompt-modal-title').textContent = 'New Prompt';
+      document.getElementById('prompt-modal-name').value = '';
+      document.getElementById('prompt-modal-type').value = _promptModalType;
+      document.getElementById('prompt-modal-provider').value = '';
+      document.getElementById('prompt-modal-model').value = '';
+      document.getElementById('prompt-modal-template').value = '';
+      document.getElementById('prompt-content-textarea').value = '';
+      renderPromptBackdrop();
+      return;
     }
+
+    const resp = await fetch('/api/config/prompts/' + type_ + '/' + id);
+    if (!resp.ok) return;
+    const prompt = await resp.json();
+
+    document.getElementById('prompt-modal-title').textContent = prompt.name || 'Prompt';
+    document.getElementById('prompt-modal-name').value = prompt.name || '';
+    document.getElementById('prompt-modal-type').value = type_;
+    document.getElementById('prompt-modal-provider').value = prompt.provider_name || '';
+    document.getElementById('prompt-modal-model').value = prompt.model_id || '';
+    document.getElementById('prompt-modal-template').value = prompt.template_name || '';
+    document.getElementById('prompt-content-textarea').value = prompt.content || '';
+    renderPromptBackdrop();
+  }
+
+  function closePromptModal() {
+    _promptModalId = null;
+    _promptModalType = null;
+    document.getElementById('prompt-modal-backdrop').classList.remove('is-open');
+    document.getElementById('field-help-popover').classList.remove('is-open');
+  }
+
+  document.getElementById('prompt-modal-close').addEventListener('click', closePromptModal);
+  document.getElementById('prompt-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closePromptModal();
+  });
+
+  document.getElementById('btn-add-prompt').addEventListener('click', function () {
+    openPromptModal('resume', null);
+  });
+
+  document.getElementById('save-prompt-modal').addEventListener('click', async function () {
+    const type_ = document.getElementById('prompt-modal-type').value;
+    const body = {
+      name: document.getElementById('prompt-modal-name').value.trim() || 'Unnamed',
+      content: document.getElementById('prompt-content-textarea').value,
+      provider_name: document.getElementById('prompt-modal-provider').value,
+      model_id: document.getElementById('prompt-modal-model').value,
+      template_name: document.getElementById('prompt-modal-template').value,
+    };
+    try {
+      let resp;
+      if (_promptModalId) {
+        resp = await fetch('/api/config/prompts/' + type_ + '/' + _promptModalId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } else {
+        resp = await fetch('/api/config/prompts/' + type_, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) _promptModalId = (await resp.json()).id;
+      }
+      if (resp && resp.ok) {
+        showStatus('status-prompt-modal', 'Saved ✓', false);
+        document.getElementById('prompt-modal-title').textContent = body.name;
+        await loadPrompts();
+      } else {
+        showStatus('status-prompt-modal', 'Error saving', true);
+      }
+    } catch { showStatus('status-prompt-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-prompt-btn').addEventListener('click', async function () {
+    if (!_promptModalId || !_promptModalType) return;
+    if (!confirm('Delete this prompt?')) return;
+    const resp = await fetch('/api/config/prompts/' + _promptModalType + '/' + _promptModalId, { method: 'DELETE' });
+    if (resp.ok) { closePromptModal(); await loadPrompts(); }
+  });
+
+  // ---- Prompt field chips / backdrop ----
+
+  const _promptTextarea = document.getElementById('prompt-content-textarea');
+
+  async function loadFieldChips() {
+    if (_fieldChipsCache && _userFieldChipsCache !== null) {
+      renderPromptChips();
+      return;
+    }
+    try {
+      const [jobResp, userResp] = await Promise.all([
+        fetch('/api/job-fields'),
+        fetch('/api/user-profile-fields'),
+      ]);
+      _fieldChipsCache = jobResp.ok ? (await jobResp.json()).fields : [];
+      _userFieldChipsCache = userResp.ok ? (await userResp.json()).fields : [];
+      renderPromptChips();
+    } catch {
+      document.getElementById('prompt-job-chips').innerHTML = '<span class="field-chips-unavailable">unavailable</span>';
+    }
+  }
+
+  function renderPromptChips() {
+    renderChipsIntoContainer(document.getElementById('prompt-job-chips'), _fieldChipsCache || []);
+    const userContainer = document.getElementById('prompt-user-chips');
+    const userLabel = document.getElementById('prompt-user-chips-label');
+    if (_userFieldChipsCache && _userFieldChipsCache.length) {
+      userLabel.style.display = '';
+      renderChipsIntoContainer(userContainer, _userFieldChipsCache);
+    }
+    renderPromptBackdrop();
+  }
+
+  function renderChipsIntoContainer(container, fields) {
+    container.innerHTML = '';
+    for (const field of fields) {
+      const name = field.name ?? field;
+      const desc = field.description ?? '';
+      const chip = document.createElement('div');
+      chip.className = 'field-chip';
+      chip.draggable = true;
+      chip.innerHTML = `<span class="field-chip-label">{${name}}</span><button class="field-chip-help" type="button">?</button>`;
+      chip.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', '{' + name + '}');
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      chip.querySelector('.field-chip-help').addEventListener('click', function (e) {
+        e.stopPropagation();
+        showFieldHelpPopover(e.currentTarget, name, desc);
+      });
+      container.appendChild(chip);
+    }
+  }
+
+  function showFieldHelpPopover(btn, name, desc) {
+    const popover = document.getElementById('field-help-popover');
+    const rect = btn.getBoundingClientRect();
+    document.getElementById('field-help-popover-name').textContent = '{' + name + '}';
+    document.getElementById('field-help-popover-desc').textContent = desc || 'No description.';
+    const popW = 220;
+    let left = rect.left - popW - 8;
+    if (left < 8) left = rect.right + 8;
+    let top = rect.top;
+    const popH = popover.offsetHeight || 80;
+    if (top + popH > window.innerHeight - 8) top = window.innerHeight - popH - 8;
+    popover.style.left = left + 'px';
+    popover.style.top = top + 'px';
+    popover.classList.add('is-open');
+  }
+
+  document.addEventListener('click', function (e) {
+    const popover = document.getElementById('field-help-popover');
+    if (!popover.contains(e.target)) popover.classList.remove('is-open');
+  });
+
+  function renderPromptBackdrop() {
+    const backdrop = document.getElementById('prompt-backdrop');
+    const text = _promptTextarea.value;
+    const allFields = [...(_fieldChipsCache || []), ...(_userFieldChipsCache || [])];
+    const validNames = allFields.length ? new Set(allFields.map(f => f.name ?? f)) : null;
+    const escaped = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\{(\w+)\}/g, function (match, name) {
+        if (!validNames) return match;
+        return `<mark class="${validNames.has(name) ? 'fv-good' : 'fv-bad'}">${match}</mark>`;
+      });
+    backdrop.innerHTML = escaped + ' ';
+    backdrop.scrollTop = _promptTextarea.scrollTop;
+  }
+
+  _promptTextarea.addEventListener('input', renderPromptBackdrop);
+  _promptTextarea.addEventListener('scroll', function () {
+    document.getElementById('prompt-backdrop').scrollTop = _promptTextarea.scrollTop;
+  });
+  _promptTextarea.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  _promptTextarea.addEventListener('drop', function (e) {
+    e.preventDefault();
+    const text = e.dataTransfer.getData('text/plain');
+    if (!text) return;
+    const idx = _promptTextarea.selectionStart ?? _promptTextarea.value.length;
+    const val = _promptTextarea.value;
+    _promptTextarea.value = val.slice(0, idx) + text + val.slice(idx);
+    _promptTextarea.setSelectionRange(idx + text.length, idx + text.length);
+    _promptTextarea.focus();
+    renderPromptBackdrop();
+  });
+
+  // Load field chips when Content tab is opened
+  document.querySelectorAll('[data-modal="prompt"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.dataset.tab === 'content') loadFieldChips();
+    });
+  });
+
+  // ---- LaTeX Templates ----
+
+  let _latexModalId = null;
+  let _latexPendingFile = null;
+
+  function buildLatexRow(tpl) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = tpl.id;
+    tr.innerHTML = `<td class="config-row-name"></td><td class="config-meta"></td>`;
+    tr.querySelectorAll('td')[0].textContent = tpl.name || 'Unnamed';
+    tr.querySelectorAll('td')[1].textContent = tpl.path ? tpl.path.split(/[\\/]/).pop() : '';
+    tr.addEventListener('click', function () { openLatexModal(tpl.id); });
+    return tr;
+  }
+
+  async function loadLatexTemplates() {
+    const resp = await fetch('/api/config/latex-templates');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tbody = document.getElementById('latex-tbody');
+    tbody.innerHTML = '';
+    data.templates.forEach(t => tbody.appendChild(buildLatexRow(t)));
+    return data.templates;
+  }
+
+  async function openLatexModal(id) {
+    _latexModalId = id || null;
+    _latexPendingFile = null;
+    document.getElementById('latex-modal-backdrop').classList.add('is-open');
+    document.getElementById('status-latex-upload').textContent = '';
+    document.getElementById('status-latex-modal').textContent = '';
+
+    if (!id) {
+      document.getElementById('latex-modal-title').textContent = 'Upload Template';
+      document.getElementById('latex-modal-name').value = '';
+      document.getElementById('latex-drop-zone').textContent = 'Drop .tex file or click to browse';
+      document.getElementById('latex-drop-zone').classList.remove('has-file');
+      document.getElementById('delete-latex-btn').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('delete-latex-btn').style.display = '';
+    const resp = await fetch('/api/config/latex-templates');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tpl = data.templates.find(t => t.id === id);
+    if (!tpl) return;
+
+    document.getElementById('latex-modal-title').textContent = 'Edit Template';
+    document.getElementById('latex-modal-name').value = tpl.name || '';
+    const filename = tpl.path ? tpl.path.split(/[\\/]/).pop() : '';
+    const zone = document.getElementById('latex-drop-zone');
+    if (filename) {
+      zone.textContent = filename + ' ✓ — click to replace';
+      zone.classList.add('has-file');
+    } else {
+      zone.textContent = 'Drop .tex file or click to browse';
+      zone.classList.remove('has-file');
+    }
+  }
+
+  function closeLatexModal() {
+    _latexModalId = null;
+    _latexPendingFile = null;
+    document.getElementById('latex-modal-backdrop').classList.remove('is-open');
+  }
+
+  document.getElementById('latex-modal-close').addEventListener('click', closeLatexModal);
+  document.getElementById('latex-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closeLatexModal();
+  });
+
+  document.getElementById('latex-drop-zone').addEventListener('click', function () {
+    document.getElementById('latex-file-input').click();
+  });
+
+  document.getElementById('latex-file-input').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    _latexPendingFile = file;
+    const zone = document.getElementById('latex-drop-zone');
+    zone.textContent = file.name + ' (pending save)';
+    zone.classList.add('has-file');
+    if (!document.getElementById('latex-modal-name').value) {
+      document.getElementById('latex-modal-name').value = file.name;
+    }
+  });
+
+  document.getElementById('save-latex-modal').addEventListener('click', async function () {
+    const name = document.getElementById('latex-modal-name').value.trim();
+    if (!name) { showStatus('status-latex-modal', 'Name required', true); return; }
+
+    try {
+      let resp;
+      if (_latexModalId) {
+        resp = await fetch('/api/config/latex-templates/' + _latexModalId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        if (_latexPendingFile) {
+          const form = new FormData();
+          form.append('name', name);
+          form.append('file', _latexPendingFile);
+          const newResp = await fetch('/api/config/latex-templates', { method: 'POST', body: form });
+          if (newResp.ok) {
+            await fetch('/api/config/latex-templates/' + _latexModalId, { method: 'DELETE' });
+            _latexModalId = (await newResp.json()).id;
+          }
+        }
+      } else {
+        if (!_latexPendingFile) { showStatus('status-latex-modal', 'File required', true); return; }
+        const form = new FormData();
+        form.append('name', name);
+        form.append('file', _latexPendingFile);
+        resp = await fetch('/api/config/latex-templates', { method: 'POST', body: form });
+        if (resp.ok) _latexModalId = (await resp.json()).id;
+      }
+      showStatus('status-latex-modal', 'Saved ✓', false);
+      await loadLatexTemplates();
+    } catch { showStatus('status-latex-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-latex-btn').addEventListener('click', async function () {
+    if (!_latexModalId) return;
+    if (!confirm('Delete this template?')) return;
+    const resp = await fetch('/api/config/latex-templates/' + _latexModalId, { method: 'DELETE' });
+    if (resp.ok) { closeLatexModal(); await loadLatexTemplates(); }
+  });
+
+  document.getElementById('btn-add-latex').addEventListener('click', function () {
+    openLatexModal(null);
+  });
+
+  // ---- Providers ----
+
+  let _providerModalId = null;
+
+  function buildProviderRow(provider) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = provider.id;
+    tr.innerHTML = `
+      <td class="config-row-name"></td>
+      <td class="config-meta"></td>
+      <td><span class="config-key-field"></span></td>
+    `;
+    tr.querySelectorAll('td')[0].textContent = provider.name || 'Unnamed';
+    tr.querySelectorAll('td')[1].textContent = provider.provider_type || '';
+    tr.querySelector('.config-key-field').textContent = provider.has_key ? provider.masked_key : '—';
+    tr.addEventListener('click', function () { openProviderModal(provider.id); });
+    return tr;
+  }
+
+  async function loadProviders() {
+    const resp = await fetch('/api/config/providers');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tbody = document.getElementById('providers-tbody');
+    tbody.innerHTML = '';
+    data.providers.forEach(p => tbody.appendChild(buildProviderRow(p)));
+  }
+
+  async function openProviderModal(id) {
+    _providerModalId = id || null;
+    document.getElementById('provider-modal-backdrop').classList.add('is-open');
+    document.getElementById('status-provider-modal').textContent = '';
+    document.getElementById('provider-modal-key').value = '';
+
+    if (!id) {
+      document.getElementById('provider-modal-title').textContent = 'Add Provider';
+      document.getElementById('provider-modal-name').value = '';
+      document.getElementById('provider-modal-type').value = 'openrouter';
+      document.getElementById('provider-modal-key').placeholder = 'sk-…';
+      document.getElementById('delete-provider-btn').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('delete-provider-btn').style.display = '';
+    document.getElementById('provider-modal-title').textContent = 'Edit Provider';
+    document.getElementById('provider-modal-key').placeholder = 'Enter new key to replace existing';
+
+    const resp = await fetch('/api/config/providers');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const provider = data.providers.find(p => p.id === id);
+    if (!provider) return;
+
+    document.getElementById('provider-modal-name').value = provider.name || '';
+    document.getElementById('provider-modal-type').value = provider.provider_type || 'openrouter';
+  }
+
+  function closeProviderModal() {
+    _providerModalId = null;
+    document.getElementById('provider-modal-backdrop').classList.remove('is-open');
+  }
+
+  document.getElementById('provider-modal-close').addEventListener('click', closeProviderModal);
+  document.getElementById('provider-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closeProviderModal();
+  });
+
+  document.getElementById('save-provider-modal').addEventListener('click', async function () {
+    const body = {
+      name: document.getElementById('provider-modal-name').value.trim(),
+      provider_type: document.getElementById('provider-modal-type').value,
+      api_key: document.getElementById('provider-modal-key').value,
+    };
+    if (!body.name) { showStatus('status-provider-modal', 'Name required', true); return; }
+    try {
+      let resp;
+      if (_providerModalId) {
+        resp = await fetch('/api/config/providers/' + _providerModalId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } else {
+        resp = await fetch('/api/config/providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) _providerModalId = (await resp.json()).id;
+      }
+      if (resp && resp.ok) {
+        showStatus('status-provider-modal', 'Saved ✓', false);
+        document.getElementById('provider-modal-title').textContent = body.name;
+        await loadProviders();
+      } else {
+        showStatus('status-provider-modal', 'Error saving', true);
+      }
+    } catch { showStatus('status-provider-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-provider-btn').addEventListener('click', async function () {
+    if (!_providerModalId) return;
+    if (!confirm('Delete this provider?')) return;
+    const resp = await fetch('/api/config/providers/' + _providerModalId, { method: 'DELETE' });
+    if (resp.ok) { closeProviderModal(); await loadProviders(); }
+  });
+
+  document.getElementById('btn-add-provider').addEventListener('click', function () {
+    openProviderModal(null);
+  });
+
+  // ---- Escape key handler ----
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('profile-modal-backdrop').classList.contains('is-open')) closeProfileModal();
+    if (document.getElementById('prompt-modal-backdrop').classList.contains('is-open')) closePromptModal();
+    if (document.getElementById('latex-modal-backdrop').classList.contains('is-open')) closeLatexModal();
+    if (document.getElementById('provider-modal-backdrop').classList.contains('is-open')) closeProviderModal();
   });
 
   // ---- Init ----
-  Promise.all([loadTemplates(), loadProfiles(), loadLLM(), loadPrompts('resume'), loadPrompts('cover'), loadPrompts('description')]).catch(console.error);
+  Promise.all([
+    loadApiConfig(),
+    loadProfiles(),
+    loadPrompts(),
+    loadLatexTemplates(),
+    loadProviders(),
+  ]).catch(console.error);
 
 })();
 </script>
