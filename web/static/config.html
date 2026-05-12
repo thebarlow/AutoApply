@@ -916,6 +916,12 @@
         if (resp.ok) _promptModalId = (await resp.json()).id;
       }
       if (resp && resp.ok) {
+        // Auto-activate: last saved prompt becomes active for its type
+        await fetch('/api/config/prompts/' + type_ + '/active', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active_id: _promptModalId }),
+        });
         showStatus('status-prompt-modal', 'Saved ✓', false);
         document.getElementById('prompt-modal-title').textContent = body.name;
         await loadPrompts();
