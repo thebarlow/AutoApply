@@ -271,6 +271,67 @@
   <div id="field-help-popover-desc"></div>
 </div>
 
+<!-- LaTeX Template Modal -->
+<div class="config-modal-backdrop" id="latex-modal-backdrop">
+  <div class="config-modal config-modal--narrow">
+    <div class="config-modal-header">
+      <h2 id="latex-modal-title">LaTeX Template</h2>
+      <button class="config-modal-close" id="latex-modal-close">✕</button>
+    </div>
+    <div class="config-modal-body">
+      <div class="config-form-group">
+        <label class="config-form-label">Name</label>
+        <input class="config-form-input" type="text" id="latex-modal-name">
+      </div>
+      <div class="config-form-group">
+        <label class="config-form-label">File</label>
+        <div class="config-drop-zone" id="latex-drop-zone">Drop .tex file or click to browse</div>
+        <input type="file" id="latex-file-input" accept=".tex" style="display:none">
+      </div>
+      <span class="save-status" id="status-latex-upload" style="font-size:12px"></span>
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-latex-modal">Save</button>
+      <span class="save-status" id="status-latex-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-latex-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Provider Modal -->
+<div class="config-modal-backdrop" id="provider-modal-backdrop">
+  <div class="config-modal config-modal--narrow">
+    <div class="config-modal-header">
+      <h2 id="provider-modal-title">Provider</h2>
+      <button class="config-modal-close" id="provider-modal-close">✕</button>
+    </div>
+    <div class="config-modal-body">
+      <div class="config-form-group">
+        <label class="config-form-label">Name</label>
+        <input class="config-form-input" type="text" id="provider-modal-name" placeholder="e.g. My OpenRouter">
+      </div>
+      <div class="config-form-group">
+        <label class="config-form-label">Provider</label>
+        <select class="config-form-input" id="provider-modal-type">
+          <option value="openrouter">OpenRouter</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </div>
+      <div class="config-form-group">
+        <label class="config-form-label">API Key</label>
+        <input class="config-form-input" type="password" id="provider-modal-key" placeholder="sk-…">
+      </div>
+    </div>
+    <div class="config-modal-footer">
+      <button class="config-btn-save" id="save-provider-modal">Save</button>
+      <span class="save-status" id="status-provider-modal" style="font-size:12px"></span>
+      <button class="config-btn-delete" id="delete-provider-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /config-shell -->
 
 <script>
@@ -976,8 +1037,269 @@
     });
   });
 
+  // ---- LaTeX Templates ----
+
+  let _latexModalId = null;
+  let _latexPendingFile = null;
+
+  function buildLatexRow(tpl) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = tpl.id;
+    tr.innerHTML = `<td class="config-row-name"></td><td class="config-meta"></td>`;
+    tr.querySelectorAll('td')[0].textContent = tpl.name || 'Unnamed';
+    tr.querySelectorAll('td')[1].textContent = tpl.path ? tpl.path.split(/[\\/]/).pop() : '';
+    tr.addEventListener('click', function () { openLatexModal(tpl.id); });
+    return tr;
+  }
+
+  async function loadLatexTemplates() {
+    const resp = await fetch('/api/config/latex-templates');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tbody = document.getElementById('latex-tbody');
+    tbody.innerHTML = '';
+    data.templates.forEach(t => tbody.appendChild(buildLatexRow(t)));
+    return data.templates;
+  }
+
+  async function openLatexModal(id) {
+    _latexModalId = id || null;
+    _latexPendingFile = null;
+    document.getElementById('latex-modal-backdrop').classList.add('is-open');
+    document.getElementById('status-latex-upload').textContent = '';
+    document.getElementById('status-latex-modal').textContent = '';
+
+    if (!id) {
+      document.getElementById('latex-modal-title').textContent = 'Upload Template';
+      document.getElementById('latex-modal-name').value = '';
+      document.getElementById('latex-drop-zone').textContent = 'Drop .tex file or click to browse';
+      document.getElementById('latex-drop-zone').classList.remove('has-file');
+      document.getElementById('delete-latex-btn').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('delete-latex-btn').style.display = '';
+    const resp = await fetch('/api/config/latex-templates');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tpl = data.templates.find(t => t.id === id);
+    if (!tpl) return;
+
+    document.getElementById('latex-modal-title').textContent = 'Edit Template';
+    document.getElementById('latex-modal-name').value = tpl.name || '';
+    const filename = tpl.path ? tpl.path.split(/[\\/]/).pop() : '';
+    const zone = document.getElementById('latex-drop-zone');
+    if (filename) {
+      zone.textContent = filename + ' ✓ — click to replace';
+      zone.classList.add('has-file');
+    } else {
+      zone.textContent = 'Drop .tex file or click to browse';
+      zone.classList.remove('has-file');
+    }
+  }
+
+  function closeLatexModal() {
+    _latexModalId = null;
+    _latexPendingFile = null;
+    document.getElementById('latex-modal-backdrop').classList.remove('is-open');
+  }
+
+  document.getElementById('latex-modal-close').addEventListener('click', closeLatexModal);
+  document.getElementById('latex-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closeLatexModal();
+  });
+
+  document.getElementById('latex-drop-zone').addEventListener('click', function () {
+    document.getElementById('latex-file-input').click();
+  });
+
+  document.getElementById('latex-file-input').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    _latexPendingFile = file;
+    const zone = document.getElementById('latex-drop-zone');
+    zone.textContent = file.name + ' (pending save)';
+    zone.classList.add('has-file');
+    if (!document.getElementById('latex-modal-name').value) {
+      document.getElementById('latex-modal-name').value = file.name;
+    }
+  });
+
+  document.getElementById('save-latex-modal').addEventListener('click', async function () {
+    const name = document.getElementById('latex-modal-name').value.trim();
+    if (!name) { showStatus('status-latex-modal', 'Name required', true); return; }
+
+    try {
+      let resp;
+      if (_latexModalId) {
+        resp = await fetch('/api/config/latex-templates/' + _latexModalId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        if (_latexPendingFile) {
+          const form = new FormData();
+          form.append('name', name);
+          form.append('file', _latexPendingFile);
+          const newResp = await fetch('/api/config/latex-templates', { method: 'POST', body: form });
+          if (newResp.ok) {
+            await fetch('/api/config/latex-templates/' + _latexModalId, { method: 'DELETE' });
+            _latexModalId = (await newResp.json()).id;
+          }
+        }
+      } else {
+        if (!_latexPendingFile) { showStatus('status-latex-modal', 'File required', true); return; }
+        const form = new FormData();
+        form.append('name', name);
+        form.append('file', _latexPendingFile);
+        resp = await fetch('/api/config/latex-templates', { method: 'POST', body: form });
+        if (resp.ok) _latexModalId = (await resp.json()).id;
+      }
+      showStatus('status-latex-modal', 'Saved ✓', false);
+      await loadLatexTemplates();
+    } catch { showStatus('status-latex-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-latex-btn').addEventListener('click', async function () {
+    if (!_latexModalId) return;
+    if (!confirm('Delete this template?')) return;
+    const resp = await fetch('/api/config/latex-templates/' + _latexModalId, { method: 'DELETE' });
+    if (resp.ok) { closeLatexModal(); await loadLatexTemplates(); }
+  });
+
+  document.getElementById('btn-add-latex').addEventListener('click', function () {
+    openLatexModal(null);
+  });
+
+  // ---- Providers ----
+
+  let _providerModalId = null;
+
+  function buildProviderRow(provider) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = provider.id;
+    tr.innerHTML = `
+      <td class="config-row-name"></td>
+      <td class="config-meta"></td>
+      <td><span class="config-key-field"></span></td>
+    `;
+    tr.querySelectorAll('td')[0].textContent = provider.name || 'Unnamed';
+    tr.querySelectorAll('td')[1].textContent = provider.provider_type || '';
+    tr.querySelector('.config-key-field').textContent = provider.has_key ? provider.masked_key : '—';
+    tr.addEventListener('click', function () { openProviderModal(provider.id); });
+    return tr;
+  }
+
+  async function loadProviders() {
+    const resp = await fetch('/api/config/providers');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const tbody = document.getElementById('providers-tbody');
+    tbody.innerHTML = '';
+    data.providers.forEach(p => tbody.appendChild(buildProviderRow(p)));
+  }
+
+  async function openProviderModal(id) {
+    _providerModalId = id || null;
+    document.getElementById('provider-modal-backdrop').classList.add('is-open');
+    document.getElementById('status-provider-modal').textContent = '';
+    document.getElementById('provider-modal-key').value = '';
+
+    if (!id) {
+      document.getElementById('provider-modal-title').textContent = 'Add Provider';
+      document.getElementById('provider-modal-name').value = '';
+      document.getElementById('provider-modal-type').value = 'openrouter';
+      document.getElementById('provider-modal-key').placeholder = 'sk-…';
+      document.getElementById('delete-provider-btn').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('delete-provider-btn').style.display = '';
+    document.getElementById('provider-modal-title').textContent = 'Edit Provider';
+    document.getElementById('provider-modal-key').placeholder = 'Enter new key to replace existing';
+
+    const resp = await fetch('/api/config/providers');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const provider = data.providers.find(p => p.id === id);
+    if (!provider) return;
+
+    document.getElementById('provider-modal-name').value = provider.name || '';
+    document.getElementById('provider-modal-type').value = provider.provider_type || 'openrouter';
+  }
+
+  function closeProviderModal() {
+    _providerModalId = null;
+    document.getElementById('provider-modal-backdrop').classList.remove('is-open');
+  }
+
+  document.getElementById('provider-modal-close').addEventListener('click', closeProviderModal);
+  document.getElementById('provider-modal-backdrop').addEventListener('click', function (e) {
+    if (e.target === this) closeProviderModal();
+  });
+
+  document.getElementById('save-provider-modal').addEventListener('click', async function () {
+    const body = {
+      name: document.getElementById('provider-modal-name').value.trim(),
+      provider_type: document.getElementById('provider-modal-type').value,
+      api_key: document.getElementById('provider-modal-key').value,
+    };
+    if (!body.name) { showStatus('status-provider-modal', 'Name required', true); return; }
+    try {
+      let resp;
+      if (_providerModalId) {
+        resp = await fetch('/api/config/providers/' + _providerModalId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } else {
+        resp = await fetch('/api/config/providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) _providerModalId = (await resp.json()).id;
+      }
+      if (resp && resp.ok) {
+        showStatus('status-provider-modal', 'Saved ✓', false);
+        document.getElementById('provider-modal-title').textContent = body.name;
+        await loadProviders();
+      } else {
+        showStatus('status-provider-modal', 'Error saving', true);
+      }
+    } catch { showStatus('status-provider-modal', 'Error saving', true); }
+  });
+
+  document.getElementById('delete-provider-btn').addEventListener('click', async function () {
+    if (!_providerModalId) return;
+    if (!confirm('Delete this provider?')) return;
+    const resp = await fetch('/api/config/providers/' + _providerModalId, { method: 'DELETE' });
+    if (resp.ok) { closeProviderModal(); await loadProviders(); }
+  });
+
+  document.getElementById('btn-add-provider').addEventListener('click', function () {
+    openProviderModal(null);
+  });
+
+  // ---- Escape key handler ----
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('profile-modal-backdrop').classList.contains('is-open')) closeProfileModal();
+    if (document.getElementById('prompt-modal-backdrop').classList.contains('is-open')) closePromptModal();
+    if (document.getElementById('latex-modal-backdrop').classList.contains('is-open')) closeLatexModal();
+    if (document.getElementById('provider-modal-backdrop').classList.contains('is-open')) closeProviderModal();
+  });
+
   // ---- Init ----
-  Promise.all([loadApiConfig(), loadProfiles(), loadPrompts()]).catch(console.error);
+  Promise.all([
+    loadApiConfig(),
+    loadProfiles(),
+    loadPrompts(),
+    loadLatexTemplates(),
+    loadProviders(),
+  ]).catch(console.error);
 
 })();
 </script>
