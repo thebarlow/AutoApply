@@ -56,7 +56,20 @@ def _resolve_prompt(db: Session, type_: str) -> dict:
             status_code=400,
             detail=f"No active {type_} prompt configured. Set one under Config → Scaffolding.",
         )
+    for required_key in ("content", "provider_name", "model_id"):
+        if required_key not in prompt:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Active {type_} prompt is missing required field '{required_key}'. Re-save it in Config → Scaffolding.",
+            )
     return prompt
+
+
+def _get_job_or_404(db: Session, job_key: str) -> Job:
+    job = db.query(Job).filter(Job.job_key == job_key).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 def _resolve_template(db: Session, template_name: str) -> Path:
@@ -128,9 +141,7 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     if body.state not in _VALID_STATES:
         raise HTTPException(status_code=400, detail=f"Invalid state: {body.state!r}")
 
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
 
     job.state = body.state
     db.commit()
@@ -140,9 +151,7 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
 
 @router.post("/{job_key}/score")
 def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
 
     profile = _load_user_profile(db)
     config = _load_config(db)
@@ -154,9 +163,7 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_key}/generate")
 def generate_job_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     _generate_job(job_key, db=db)
     db.refresh(job)
     return _serialize(job)
@@ -164,9 +171,7 @@ def generate_job_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_key}/generate/resume")
 def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     try:
         _generate_resume(job_key, db=db)
     except Exception as exc:
@@ -177,9 +182,7 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_key}/generate/resume/md")
 def generate_resume_md_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     prompt = _resolve_prompt(db, "resume")
     try:
         client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
@@ -195,9 +198,7 @@ def generate_resume_md_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_key}/generate/resume/pdf")
 def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
     if not md_path.exists():
         raise HTTPException(status_code=400, detail="Resume markdown must be generated first")
@@ -215,9 +216,7 @@ def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_key}/generate/cover")
 def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     try:
         _generate_cover(job_key, db=db)
     except Exception as exc:
@@ -228,9 +227,7 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_key}/generate/cover/md")
 def generate_cover_md_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     prompt = _resolve_prompt(db, "cover")
     try:
         client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
@@ -246,9 +243,7 @@ def generate_cover_md_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_key}/generate/cover/pdf")
 def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     if not job.resume_path:
         raise HTTPException(status_code=400, detail="Resume PDF must be generated before cover letter PDF")
     md_path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
@@ -268,9 +263,7 @@ def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/resume")
 def serve_resume(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     if not job.resume_path:
         raise HTTPException(status_code=404, detail="Resume not found")
     path = Path(job.resume_path)
@@ -281,9 +274,7 @@ def serve_resume(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/cover")
 def serve_cover(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     if not job.cover_path:
         raise HTTPException(status_code=404, detail="Cover letter not found")
     path = Path(job.cover_path)
@@ -294,9 +285,7 @@ def serve_cover(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/resume/markdown", response_class=PlainTextResponse)
 def serve_resume_markdown(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Resume markdown not found")
@@ -305,9 +294,7 @@ def serve_resume_markdown(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/cover/markdown", response_class=PlainTextResponse)
 def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Cover letter markdown not found")
@@ -316,9 +303,7 @@ def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/resume/prompt", response_class=PlainTextResponse)
 def get_resume_prompt(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     profile = _load_user_profile(db)
     prompt = _resolve_prompt(db, "resume")
     return build_resume_prompt(job, profile, prompt["content"])
@@ -326,9 +311,7 @@ def get_resume_prompt(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/cover/prompt", response_class=PlainTextResponse)
 def get_cover_prompt(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     profile = _load_user_profile(db)
     prompt = _resolve_prompt(db, "cover")
     return build_cover_prompt(job, profile, prompt["content"])
@@ -336,18 +319,14 @@ def get_cover_prompt(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/description/prompt", response_class=PlainTextResponse)
 def get_description_prompt(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     prompt = _resolve_prompt(db, "description")
     return build_description_prompt(job, prompt["content"])
 
 
 @router.post("/{job_key}/description/extract")
 def extract_description(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     prompt = _resolve_prompt(db, "description")
     actual_prompt = build_description_prompt(job, prompt["content"])
     try:
@@ -356,8 +335,8 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc))
     try:
         job.extraction_json = _call_llm_for_extraction(client, model, actual_prompt)
-    except Exception:
-        raise HTTPException(status_code=500, detail="Description extraction failed")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Description extraction failed: {exc}")
     db.commit()
     db.refresh(job)
     return _serialize(job)
@@ -365,9 +344,7 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_key}/description", response_class=HTMLResponse)
 def serve_description_html(job_key: str, view: str = Query("rendered", pattern="^(rendered|json)$"), db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     if not job.extraction_json:
         raise HTTPException(status_code=404, detail="No extraction available")
 
@@ -398,9 +375,7 @@ def serve_description_html(job_key: str, view: str = Query("rendered", pattern="
 
 @router.delete("/{job_key}")
 def delete_job(job_key: str, db: Session = Depends(get_db)):
-    job = db.query(Job).filter(Job.job_key == job_key).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+    job = _get_job_or_404(db, job_key)
     db.delete(job)
     db.commit()
     return {"deleted": job_key}
