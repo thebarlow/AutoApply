@@ -365,7 +365,7 @@ function dashboard() {
       }
     },
 
-    selectJob(job) {
+    async selectJob(job) {
       this.selectedJob = { ...job };
       this.deleteConfirm = false;
       this.activeTab = 'overview';
@@ -374,8 +374,16 @@ function dashboard() {
       this.resumeMarkdown = null;
       this.coverMarkdown = null;
       this.promptOverlay = null;
-      this.extractionHasPrompt = false;
       this.extractionView = 'rendered';
+      try {
+        const r = await fetch('/api/config/prompts/active-status');
+        if (r.ok) {
+          const s = await r.json();
+          this.resumeHasTemplate = s.resume_has_template;
+          this.coverHasTemplate = s.cover_has_template;
+          this.extractionHasPrompt = s.description_has_prompt;
+        }
+      } catch { /* leave existing values */ }
     },
 
     closeOverlay() {
@@ -387,7 +395,6 @@ function dashboard() {
       this.resumeMarkdown = null;
       this.coverMarkdown = null;
       this.promptOverlay = null;
-      this.extractionHasPrompt = false;
       this.extractionView = 'rendered';
       this.generating = null;
     },
