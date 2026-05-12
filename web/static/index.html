@@ -112,7 +112,8 @@
                   x-text="selectedJob.resume_md_exists ? 'Regenerate MD' : 'Generate MD'">
                 </button>
                 <button class="btn" @click="generateResumePdf()"
-                  :disabled="!!generating || !selectedJob.resume_md_exists"
+                  :disabled="!!generating || !selectedJob.resume_md_exists || !resumeHasTemplate"
+                  :title="!resumeHasTemplate ? 'Assign a LaTeX template to the active Resume prompt in Config first' : ''"
                   x-text="selectedJob.resume_path ? 'Regenerate PDF' : 'Generate PDF'">
                 </button>
                 <button class="btn" x-show="selectedJob.resume_md_exists"
@@ -129,8 +130,8 @@
                   x-text="selectedJob.cover_md_exists ? 'Regenerate MD' : 'Generate MD'">
                 </button>
                 <button class="btn" @click="generateCoverPdf()"
-                  :disabled="!!generating || !selectedJob.cover_md_exists || !selectedJob.resume_path"
-                  :title="!selectedJob.cover_md_exists ? 'Generate cover MD first' : !selectedJob.resume_path ? 'Generate resume PDF first' : ''"
+                  :disabled="!!generating || !selectedJob.cover_md_exists || !selectedJob.resume_path || !coverHasTemplate"
+                  :title="!coverHasTemplate ? 'Assign a LaTeX template to the active Cover prompt in Config first' : !selectedJob.cover_md_exists ? 'Generate cover MD first' : !selectedJob.resume_path ? 'Generate resume PDF first' : ''"
                   x-text="selectedJob.cover_path ? 'Regenerate PDF' : 'Generate PDF'">
                 </button>
                 <button class="btn" x-show="selectedJob.cover_md_exists"
@@ -303,10 +304,21 @@ function dashboard() {
     coverMarkdown: null,
     promptOverlay: null,
     extractionHasPrompt: false,
+    resumeHasTemplate: false,
+    coverHasTemplate: false,
     extractionView: 'rendered',
 
     async init() {
       await this.loadJobs();
+      try {
+        const r = await fetch('/api/config/prompts/active-status');
+        if (r.ok) {
+          const s = await r.json();
+          this.resumeHasTemplate = s.resume_has_template;
+          this.coverHasTemplate = s.cover_has_template;
+          this.extractionHasPrompt = s.description_has_prompt;
+        }
+      } catch { /* leave as false */ }
       document.addEventListener('click', (e) => {
         if (this.deleteConfirm && !e.target.closest('.action-bar')) {
           this.deleteConfirm = false;
@@ -393,14 +405,6 @@ function dashboard() {
         if (this.selectedJob.cover_md_exists && this.coverMarkdown === null) {
           this.fetchCoverMarkdown();
         }
-      } else if (tab === 'details') {
-        try {
-          const r = await fetch('/api/config/prompts/description');
-          if (r.ok) {
-            const data = await r.json();
-            this.extractionHasPrompt = data.prompts.length > 0;
-          }
-        } catch { /* leave extractionHasPrompt false */ }
       }
     },
 
