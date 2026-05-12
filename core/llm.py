@@ -3,11 +3,27 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import openai
 from sqlalchemy.orm import Session
 
 from db.models import Config
+
+_ENV_PATH = Path(__file__).parent.parent / ".env"
+
+
+def _read_env_file() -> dict[str, str]:
+    """Read .env file directly — needed for keys saved at runtime after startup."""
+    if not _ENV_PATH.exists():
+        return {}
+    result: dict[str, str] = {}
+    for line in _ENV_PATH.read_text().splitlines():
+        line = line.strip()
+        if "=" in line and not line.startswith("#"):
+            k, _, v = line.partition("=")
+            result[k.strip()] = v.strip()
+    return result
 
 
 @dataclass
@@ -62,7 +78,7 @@ def get_client_for_named_provider(db: Session, provider_name: str, model_id: str
         raise RuntimeError(f"Unknown provider_type '{provider['provider_type']}'.")
 
     env_key = f"LLM_KEY_{provider['id'].upper().replace('-', '_')}"
-    api_key = os.getenv(env_key)
+    api_key = os.getenv(env_key) or _read_env_file().get(env_key, "")
     if not api_key:
         raise RuntimeError(
             f"No API key for provider '{provider_name}'. Set {env_key} in .env."
