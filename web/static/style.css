@@ -1218,8 +1218,10 @@ details.config-section[open] > summary::before {
   background: #0f172a;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(255,255,255,0.07);
+  border-right: 2px solid #334155;
   padding-top: 14px;
+  align-self: stretch;
+  min-height: 100%;
 }
 
 .config-sidebar-label { display: none; }
