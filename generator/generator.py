@@ -166,12 +166,12 @@ def _build_frontmatter(
     linkedin: str = "",
     website: str = "",
 ) -> str:
-    parts = profile.name.split(" ", 1)
-    firstname = parts[0]
-    lastname = parts[1] if len(parts) > 1 else ""
+    full_name = profile.name or f"{profile.first_name} {profile.last_name}".strip()
+    firstname = profile.first_name or full_name.split(" ", 1)[0]
+    lastname = profile.last_name or (full_name.split(" ", 1)[1] if " " in full_name else "")
     lines = [
         "---",
-        f"name: {profile.name}",
+        f"name: {full_name}",
         f"firstname: {firstname}",
         f"lastname: {lastname}",
         f"email: {profile.email}",

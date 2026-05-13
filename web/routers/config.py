@@ -658,10 +658,15 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
     row = db.query(UserProfileModel).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
+    data = body.data
+    if not data.get("name"):
+        first = data.get("first_name", "")
+        last = data.get("last_name", "")
+        data["name"] = f"{first} {last}".strip()
     row.name = body.name
-    row.data = json.dumps(body.data)
+    row.data = json.dumps(data)
     db.commit()
-    return {"id": row.id, "name": row.name, "data": body.data}
+    return {"id": row.id, "name": row.name, "data": data}
 
 
 @router.delete("/api/config/profiles/{profile_id}", status_code=204)
