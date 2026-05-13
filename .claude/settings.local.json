@@ -37,7 +37,8 @@
       "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest --tb=short -q 2>&1 | Select-Object -Last 20)",
       "Bash(gh pr *)",
       "Bash(Get-Content C:\\\\Users\\\\barlo\\\\Projects\\\\auto_apply\\\\.gitignore)",
-      "Bash(Select-String -Pattern \"doc\")"
+      "Bash(Select-String -Pattern \"doc\")",
+      "Bash(.venv\\\\Scripts\\\\python.exe *)"
     ]
   },
   "enabledPlugins": {

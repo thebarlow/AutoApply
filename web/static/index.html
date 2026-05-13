@@ -170,7 +170,7 @@
             </select>
 
             <template x-if="!deleteConfirm">
-              <button class="btn btn-danger" @click="deleteConfirm = true">Delete</button>
+              <button class="btn btn-danger" @click.stop="deleteConfirm = true">Delete</button>
             </template>
             <template x-if="deleteConfirm">
               <button class="btn btn-danger-confirm" @click.stop="deleteJob()">Confirm Delete</button>
