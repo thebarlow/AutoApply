@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from core.job import Job, Job as JobClass, JobState
+from core.job import Job, JobState
 from scraper.base import SearchConfig, JobSource, ScrapedJob
 from db.database import Base, Config
 from scraper.runner import (
@@ -14,11 +14,6 @@ from scraper.runner import (
     load_search_config,
     run_scraper,
 )
-
-
-def save_jobs(db, jobs):
-    """Thin wrapper so existing tests keep working after save_jobs was removed from runner."""
-    return JobClass.save_batch(jobs, db)
 
 
 @pytest.fixture
@@ -73,20 +68,20 @@ class _FailingSource(JobSource):
 # --- save_jobs ---
 
 def test_save_jobs_inserts_new_jobs(db_session):
-    count = save_jobs(db_session, [_scraped(1), _scraped(2)])
+    count = Job.save_batch([_scraped(1), _scraped(2)], db_session)
     assert count == 2
     assert db_session.query(Job).count() == 2
 
 
 def test_save_jobs_deduplicates_by_url(db_session):
-    save_jobs(db_session, [_scraped(1)])
-    count = save_jobs(db_session, [_scraped(1), _scraped(2)])
+    Job.save_batch([_scraped(1)], db_session)
+    count = Job.save_batch([_scraped(1), _scraped(2)], db_session)
     assert count == 1
     assert db_session.query(Job).count() == 2
 
 
 def test_save_jobs_sets_scraped_state(db_session):
-    save_jobs(db_session, [_scraped(1)])
+    Job.save_batch([_scraped(1)], db_session)
     job = db_session.query(Job).first()
     assert job.state == JobState.DRAFT.value
 
@@ -98,7 +93,7 @@ def test_save_jobs_maps_all_fields(db_session):
         description="Python expert", location="Remote",
         salary="$120k", remote=True, posted_at="2026-01-01",
     )
-    save_jobs(db_session, [scraped])
+    Job.save_batch([scraped], db_session)
     job = db_session.query(Job).first()
     assert job.job_key == "remotive_42"
     assert job.source == "remotive"
