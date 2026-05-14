@@ -670,3 +670,50 @@ def test_build_prompt_without_extracted_description_ignores_db():
     result = build_prompt(job, profile, template, db=None)
     assert "Senior Software Engineer" in result
     assert "Jane Doe" in result
+
+
+def test_generate_md_auto_extracts_when_placeholder_used(db_session, monkeypatch, tmp_path):
+    """generate_md triggers extraction when template uses {job.extracted_description}."""
+    pid = _uuid.uuid4().hex
+    npid = _uuid.uuid4().hex
+
+    named_providers = [{"id": npid, "name": "GenProv", "provider_type": "openai", "default_model": "gpt-md"}]
+    desc_prompts = [{"id": pid, "name": "D", "content": "Extract: {description}",
+                     "provider_name": "GenProv", "model_id": "gpt-md"}]
+    db_session.add(Config(key="named_providers", value=json.dumps(named_providers)))
+    db_session.add(Config(key="description_prompts", value=json.dumps(desc_prompts)))
+    db_session.add(Config(key="active_description_prompt_id", value=pid))
+    db_session.add(Config(key="resume_github", value=""))
+    db_session.add(Config(key="resume_linkedin", value=""))
+    db_session.add(Config(key="resume_website", value=""))
+
+    profile_data = {
+        "name": "Jane Doe", "email": "jane@example.com", "phone": "555-0100",
+        "location": "Remote", "skills": ["Python"], "work_history": [], "education": [],
+        "projects": [], "hero": "",
+        "target_salary_min": 100000, "target_salary_max": 150000,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
+    }
+    db_session.add(UserProfileModel(data=json.dumps(profile_data)))
+    db_session.add(Job(
+        job_key="md_extract_test", source="test", url="https://example.com/x",
+        state=JobState.DRAFT.value, title="SWE", company="Acme", description="Python required.",
+    ))
+    db_session.commit()
+
+    monkeypatch.setattr("generator.generator._OUTPUTS_DIR", tmp_path)
+
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider",
+                        lambda db, name, model: (MagicMock(), "gpt-md"))
+    monkeypatch.setattr("generator.generator._run_extraction",
+                        lambda job, db: '{"required_skills":["Python"]}')
+    monkeypatch.setattr("generator.generator.call_claude",
+                        lambda prompt, client, model: "## Skills\nPython")
+
+    template = "Job:\n{job.extracted_description}\nProfile: {user_profile.name}"
+    generate_md("md_extract_test", "resume", template, MagicMock(), "gpt-md", db_session)
+
+    out = tmp_path / "md_extract_test_resume.md"
+    assert out.exists()
+    content = out.read_text()
+    assert "## Skills" in content  # from call_claude mock

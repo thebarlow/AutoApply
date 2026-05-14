@@ -277,7 +277,7 @@ def generate_md(
 
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     md_path = _OUTPUTS_DIR / f"{job_key}_{type_}.md"
-    content = call_claude(build_prompt(job, profile, prompt_content), client, model)
+    content = call_claude(build_prompt(job, profile, prompt_content, db=db), client, model)
     if type_ == "resume":
         content = strip_header_block(content)
     md_path.write_text(frontmatter + content, encoding="utf-8")
