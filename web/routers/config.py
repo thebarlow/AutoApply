@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from pathlib import Path
@@ -12,8 +13,9 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 import core.profile_parser as _parser
-from db.models import Config, UserProfileModel, Job, FieldHelp
-from core.types import UserProfile
+from db.models import Config, FieldHelp
+from core.user import User
+from core.job import Job
 
 router = APIRouter()
 
@@ -604,7 +606,7 @@ class ActiveProfileBody(BaseModel):
 
 @router.get("/api/config/profiles")
 def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
-    rows = db.query(UserProfileModel).all()
+    rows = db.query(User).all()
     active_raw = _get(db, "active_profile_id")
     active_id = int(active_raw) if active_raw else None
     profiles = []
@@ -627,7 +629,7 @@ def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
 
 @router.post("/api/config/profiles")
 def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    row = UserProfileModel(name=body.name, data=json.dumps(_EMPTY_PROFILE_DATA))
+    row = User(name=body.name, data=json.dumps(_EMPTY_PROFILE_DATA))
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -638,7 +640,7 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
 # attempt to coerce the literal string "active" to an integer profile_id.
 @router.put("/api/config/profiles/active")
 def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    row = db.query(UserProfileModel).filter_by(id=body.active_id).first()
+    row = db.query(User).filter_by(id=body.active_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     _set(db, "active_profile_id", str(body.active_id))
@@ -647,7 +649,7 @@ def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -
 
 @router.get("/api/config/profiles/{profile_id}")
 def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
-    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"id": row.id, "name": row.name, "data": json.loads(row.data)}
@@ -655,7 +657,7 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
 
 @router.put("/api/config/profiles/{profile_id}")
 def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     data = body.data
@@ -672,7 +674,7 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
 @router.delete("/api/config/profiles/{profile_id}", status_code=204)
 def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
     """Delete a profile and clear active_profile_id if it pointed to this profile."""
-    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     db.delete(row)
@@ -692,7 +694,7 @@ def serve_profile_file(
     type: str = "pdf",
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     data = json.loads(row.data)
@@ -718,7 +720,7 @@ def serve_profile_file(
 @router.post("/api/config/profiles/{profile_id}/parse")
 def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     """Parse the already-uploaded resume for a profile and merge extracted data back into it."""
-    row = db.query(UserProfileModel).filter_by(id=profile_id).first()
+    row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     data = json.loads(row.data) if row.data else {}
@@ -831,9 +833,10 @@ def get_user_profile_fields(db: Session = Depends(get_db)) -> dict:
     help_rows = db.query(FieldHelp).filter_by(table_name="user_profile").all()
     descriptions = {row.column_name: row.description for row in help_rows}
     import dataclasses
+    from core.types import UserProfile as _UserProfile
     fields = [
         {"name": f"user_profile.{f.name}", "description": descriptions.get(f.name, "")}
-        for f in dataclasses.fields(UserProfile)
+        for f in dataclasses.fields(_UserProfile)
         if f.name not in ("resume_path", "md_path")
     ]
     fields.insert(0, {
