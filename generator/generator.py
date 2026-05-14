@@ -108,11 +108,25 @@ def _apply_template(template: str, sources: dict[str, Any]) -> str:
     return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
 
 
-def build_prompt(job: Job, profile: UserProfile, template: str) -> str:
+def build_prompt(job: Job, profile: UserProfile, template: str, db: Optional[Session] = None) -> str:
     # Pre-substitute the virtual {user_profile.master_resume} placeholder, which reads
     # from md_path if present rather than reconstructing from structured fields.
     master = _load_master_resume(profile)
     template = template.replace("{user_profile.master_resume}", master)
+
+    # Pre-substitute {job.extracted_description} virtual placeholder
+    if "{job.extracted_description}" in template:
+        if job.extraction_json is not None:
+            extracted_md = extraction_json_to_markdown(json.loads(job.extraction_json))
+        elif db is not None:
+            raw_json = _run_extraction(job, db)
+            extracted_md = extraction_json_to_markdown(json.loads(raw_json))
+        else:
+            raise RuntimeError(
+                "db required to auto-run extraction for {job.extracted_description}"
+            )
+        template = template.replace("{job.extracted_description}", extracted_md)
+
     return _apply_template(template, {"job": job, "user_profile": profile})
 
 

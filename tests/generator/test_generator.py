@@ -600,3 +600,73 @@ def test_run_extraction_raises_on_empty_llm_response(db_session, monkeypatch):
 
     with pytest.raises(RuntimeError, match="LLM returned empty extraction response"):
         _run_extraction(job, db_session)
+
+
+def test_build_prompt_extracted_description_uses_cached_json(db_session):
+    """{job.extracted_description} injects markdown from existing extraction_json."""
+    extraction_data = {"required_skills": ["Python", "FastAPI"]}
+    job = Job(
+        job_key="bp_test1", source="test", url="https://example.com",
+        state=JobState.DRAFT.value, title="SWE", company="Acme",
+        description="Python required.",
+        extraction_json=json.dumps(extraction_data),
+    )
+    db_session.add(job)
+    db_session.commit()
+    profile = _make_profile()
+
+    result = build_prompt(job, profile, "Job desc:\n{job.extracted_description}", db=db_session)
+    assert "## Required Skills" in result
+    assert "- Python" in result
+    assert "- FastAPI" in result
+    assert "{job.extracted_description}" not in result
+
+
+def test_build_prompt_extracted_description_auto_runs_extraction(db_session, monkeypatch):
+    """{job.extracted_description} triggers _run_extraction when extraction_json is absent."""
+    prompt_id = "pid_bp"
+    desc_prompts = [{"id": prompt_id, "name": "D", "content": "Extract: {description}",
+                     "provider_name": "TestProv", "model_id": "gpt-test"}]
+    named_providers = [{"id": "npid_bp", "name": "TestProv", "provider_type": "openai", "default_model": "gpt-test"}]
+    db_session.add(Config(key="description_prompts", value=json.dumps(desc_prompts)))
+    db_session.add(Config(key="active_description_prompt_id", value=prompt_id))
+    db_session.add(Config(key="named_providers", value=json.dumps(named_providers)))
+    job = Job(
+        job_key="bp_test2", source="test", url="https://example.com/2",
+        state=JobState.DRAFT.value, title="SWE", company="Acme",
+        description="Python required.",
+    )
+    db_session.add(job)
+    db_session.commit()
+    profile = _make_profile()
+
+    mock_client = MagicMock()
+    choice = MagicMock()
+    choice.message.content = '{"required_skills":["Python"]}'
+    mock_client.chat.completions.create.return_value = MagicMock(choices=[choice])
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider",
+                        lambda db, name, model: (mock_client, "gpt-test"))
+
+    result = build_prompt(job, profile, "Desc:\n{job.extracted_description}", db=db_session)
+    assert "## Required Skills" in result
+    assert "- Python" in result
+
+
+def test_build_prompt_extracted_description_raises_without_db():
+    """{job.extracted_description} with no db and no cached extraction raises RuntimeError."""
+    job = _make_job_obj()  # no extraction_json
+    profile = _make_profile()
+
+    with pytest.raises(RuntimeError, match="db required"):
+        build_prompt(job, profile, "Desc:\n{job.extracted_description}", db=None)
+
+
+def test_build_prompt_without_extracted_description_ignores_db():
+    """Templates without {job.extracted_description} work fine with db=None (no regression)."""
+    job = _make_job_obj()
+    profile = _make_profile()
+    template = "Title: {job.title}\nName: {user_profile.name}"
+
+    result = build_prompt(job, profile, template, db=None)
+    assert "Senior Software Engineer" in result
+    assert "Jane Doe" in result
