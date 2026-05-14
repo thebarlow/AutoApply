@@ -163,7 +163,7 @@
             <div class="action-bar-spacer"></div>
 
             <!-- Persistent actions (right) -->
-            <a class="btn" :href="selectedJob.url" target="_blank" rel="noopener noreferrer">View Posting</a>
+            <a class="btn" :href="selectedJob.url + '#aajob=' + selectedJob.job_key" target="_blank" rel="noopener noreferrer">View Posting</a>
 
             <select class="status-select" @change="setStatus($event.target.value)">
               <option value="draft" :selected="selectedJob.state === 'draft'">Draft</option>
