@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 
 from db.database import SessionLocal, get_db
 from db.models import Config
-from scraper.base import ScrapedJob
 from scraper.remotive import RemotiveSource
 from scraper.remoteok import RemoteOKSource
-from scraper.runner import run_scraper, save_jobs
+from core.job import Job
+from scraper.runner import run_scraper
 
 router = APIRouter(prefix="/api/scraper")
 
@@ -69,8 +69,19 @@ class StageJobRequest(BaseModel):
 
 @router.post("/stage-job")
 def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str, str]:
-    # scraped_at is accepted for client compatibility but not stored; ScrapedJob has no such field.
-    job = ScrapedJob(
+    """Stage a single job submitted by the browser extension.
+
+    Accepts a job payload and persists it if not already present (deduped by URL).
+
+    Args:
+        body: Job data from the browser extension.
+        db: SQLAlchemy session.
+
+    Returns:
+        Dict with 'status' ('staged' or 'duplicate') and 'job_key'.
+    """
+    from scraper.base import ScrapedJob
+    scraped = ScrapedJob(
         source=body.source,
         job_key=body.job_key,
         title=body.title,
@@ -82,6 +93,6 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
         remote=body.remote,
         posted_at=body.posted_at,
     )
-    inserted = save_jobs(db, [job])
+    inserted = Job.save_batch([scraped], db)
     status = "staged" if inserted > 0 else "duplicate"
     return {"status": status, "job_key": body.job_key}

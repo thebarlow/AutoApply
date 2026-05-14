@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from core.types import SearchConfig
+from scraper.base import SearchConfig
 from scraper.base import JobSource, ScrapedJob
 
 _BASE_URL = "https://remotive.com/api/remote-jobs"

@@ -5,12 +5,20 @@ import warnings
 
 from sqlalchemy.orm import Session
 
-from core.types import JobState, SearchConfig
-from db.models import Config, Job
-from scraper.base import JobSource, ScrapedJob
+from core.job import Job
+from scraper.base import JobSource, SearchConfig
+from db.models import Config
 
 
 def load_search_config(db: Session) -> SearchConfig:
+    """Load scraper search parameters from the Config table.
+
+    Args:
+        db: SQLAlchemy session.
+
+    Returns:
+        SearchConfig instance populated from stored config values.
+    """
     def _get(key: str, default: str = "") -> str:
         row = db.query(Config).filter_by(key=key).first()
         return row.value if row else default
@@ -33,6 +41,14 @@ def load_search_config(db: Session) -> SearchConfig:
 
 
 def load_max_jobs(db: Session) -> int:
+    """Load the max_jobs_per_source config value.
+
+    Args:
+        db: SQLAlchemy session.
+
+    Returns:
+        Integer limit, defaulting to 50.
+    """
     row = db.query(Config).filter_by(key="max_jobs_per_source").first()
     if row:
         try:
@@ -42,42 +58,28 @@ def load_max_jobs(db: Session) -> int:
     return 50
 
 
-def save_jobs(db: Session, jobs: list[ScrapedJob]) -> int:
-    count = 0
-    for scraped in jobs:
-        if db.query(Job).filter_by(url=scraped.url).first():
-            continue
-        db.add(Job(
-            job_key=scraped.job_key,
-            source=scraped.source,
-            title=scraped.title,
-            company=scraped.company,
-            url=scraped.url,
-            description=scraped.description,
-            location=scraped.location,
-            salary=scraped.salary,
-            remote=scraped.remote,
-            posted_at=scraped.posted_at,
-            state=JobState.DRAFT.value,
-        ))
-        count += 1
-    db.commit()
-    return count
-
-
 def run_scraper(db: Session, sources: list[JobSource]) -> int:
+    """Fetch jobs from all sources and persist new ones.
+
+    Args:
+        db: SQLAlchemy session.
+        sources: List of JobSource instances to fetch from.
+
+    Returns:
+        Total count of newly inserted jobs.
+    """
     config = load_search_config(db)
     max_jobs = load_max_jobs(db)
 
-    all_jobs: list[ScrapedJob] = []
+    all_scraped = []
     for source in sources:
         try:
             jobs = source.fetch(config, max_jobs)
             print(f"[scraper] {source.source_id}: fetched {len(jobs)} jobs")
-            all_jobs.extend(jobs)
+            all_scraped.extend(jobs)
         except Exception as e:
             warnings.warn(f"[scraper] {source.source_id} failed: {e}")
 
-    new_count = save_jobs(db, all_jobs)
-    print(f"[scraper] saved {new_count} new jobs (skipped {len(all_jobs) - new_count} duplicates)")
+    new_count = Job.save_batch(all_scraped, db)
+    print(f"[scraper] saved {new_count} new jobs (skipped {len(all_scraped) - new_count} duplicates)")
     return new_count
