@@ -89,14 +89,27 @@ async function triggerUpload(job_key, file_type, fastapiUrl) {
 // Injected into page on Firefox — clicks the file input to open OS dialog
 function clickFileInput(file_type) {
   const keyword = file_type === "resume" ? "resume" : "cover";
-  const inputs = [...document.querySelectorAll('input[type="file"]')];
-  const input = inputs.find(el => {
-    const label =
-      el.closest("label")?.textContent ||
-      document.querySelector(`label[for="${el.id}"]`)?.textContent ||
-      el.getAttribute("aria-label") || "";
-    return label.toLowerCase().includes(keyword);
-  }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
+
+  function findInput() {
+    const docs = [document];
+    for (const iframe of document.querySelectorAll("iframe")) {
+      try { if (iframe.contentDocument) docs.push(iframe.contentDocument); } catch (_) {}
+    }
+    for (const doc of docs) {
+      const inputs = [...doc.querySelectorAll('input[type="file"]')];
+      const found = inputs.find(el => {
+        const label =
+          el.closest("label")?.textContent ||
+          doc.querySelector(`label[for="${el.id}"]`)?.textContent ||
+          el.getAttribute("aria-label") || "";
+        return label.toLowerCase().includes(keyword);
+      }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const input = findInput();
   if (!input) {
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#e53935;color:#fff;padding:10px;font-size:14px;z-index:99999;text-align:center;";
@@ -111,15 +124,27 @@ function clickFileInput(file_type) {
 // Injected into page on Chrome — uses DataTransfer to set file directly
 async function injectFileChrome({ job_key, file_type, fastapiUrl }) {
   const keyword = file_type === "resume" ? "resume" : "cover";
-  const inputs = [...document.querySelectorAll('input[type="file"]')];
-  const input = inputs.find(el => {
-    const label =
-      el.closest("label")?.textContent ||
-      document.querySelector(`label[for="${el.id}"]`)?.textContent ||
-      el.getAttribute("aria-label") || "";
-    return label.toLowerCase().includes(keyword);
-  }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
 
+  function findInput() {
+    const docs = [document];
+    for (const iframe of document.querySelectorAll("iframe")) {
+      try { if (iframe.contentDocument) docs.push(iframe.contentDocument); } catch (_) {}
+    }
+    for (const doc of docs) {
+      const inputs = [...doc.querySelectorAll('input[type="file"]')];
+      const found = inputs.find(el => {
+        const label =
+          el.closest("label")?.textContent ||
+          doc.querySelector(`label[for="${el.id}"]`)?.textContent ||
+          el.getAttribute("aria-label") || "";
+        return label.toLowerCase().includes(keyword);
+      }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const input = findInput();
   if (!input) {
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#e53935;color:#fff;padding:10px;font-size:14px;z-index:99999;text-align:center;";
