@@ -3,7 +3,7 @@
   "name": "Job Scraper",
   "version": "1.0.0",
   "description": "Scrapes job listings from LinkedIn and Indeed.",
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage", "tabs", "activeTab", "scripting", "webNavigation"],
   "host_permissions": [
     "https://*.linkedin.com/*",
     "https://*.indeed.com/*",
