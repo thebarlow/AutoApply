@@ -453,3 +453,86 @@ def test_generate_pdf_raises_when_md_missing(db_session, monkeypatch, tmp_path):
     template.write_text("\\documentclass{article}")
     with pytest.raises(FileNotFoundError):
         generate_pdf("test_job", "resume", template, db_session)
+
+
+def test_run_extraction_uses_cached_json(db_session):
+    """If extraction_json already populated, _run_extraction returns it without calling LLM."""
+    from generator.generator import _run_extraction
+    job = Job(
+        job_key="ex_test", source="test", url="https://example.com",
+        state=JobState.DRAFT.value, title="SWE", company="Acme",
+        description="Python required.", extraction_json='{"required_skills":["Python"]}',
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    result = _run_extraction(job, db_session)
+    assert result == '{"required_skills":["Python"]}'
+
+
+def test_run_extraction_calls_llm_when_missing(db_session, monkeypatch):
+    """If extraction_json is absent, _run_extraction calls LLM and stores result."""
+    from generator.generator import _run_extraction
+
+    prompt_id = "pid1"
+    desc_prompts = [{"id": prompt_id, "name": "D", "content": "Extract: {description}",
+                     "provider_name": "TestProv", "model_id": "gpt-test"}]
+    named_providers = [{"id": "npid", "name": "TestProv", "provider_type": "openai", "default_model": "gpt-test"}]
+    db_session.add(Config(key="description_prompts", value=json.dumps(desc_prompts)))
+    db_session.add(Config(key="active_description_prompt_id", value=prompt_id))
+    db_session.add(Config(key="named_providers", value=json.dumps(named_providers)))
+    job = Job(
+        job_key="ex_test2", source="test", url="https://example.com/2",
+        state=JobState.DRAFT.value, title="SWE", company="Acme",
+        description="Python required.",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    mock_client = MagicMock()
+    choice = MagicMock()
+    choice.message.content = '{"required_skills":["Python"]}'
+    mock_client.chat.completions.create.return_value = MagicMock(choices=[choice])
+
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider",
+                        lambda db, name, model: (mock_client, "gpt-test"))
+
+    result = _run_extraction(job, db_session)
+    assert result == '{"required_skills":["Python"]}'
+
+    db_session.expire_all()
+    refreshed = db_session.query(Job).filter_by(job_key="ex_test2").first()
+    assert refreshed.extraction_json == '{"required_skills":["Python"]}'
+
+
+def test_run_extraction_strips_markdown_code_fences(db_session, monkeypatch):
+    """LLM responses wrapped in ```json ... ``` are stripped before storing."""
+    from generator.generator import _run_extraction
+
+    prompt_id = "pid2"
+    desc_prompts = [{"id": prompt_id, "name": "D", "content": "Extract: {description}",
+                     "provider_name": "TestProv", "model_id": "gpt-test"}]
+    named_providers = [{"id": "npid2", "name": "TestProv", "provider_type": "openai", "default_model": "gpt-test"}]
+    db_session.add(Config(key="description_prompts", value=json.dumps(desc_prompts)))
+    db_session.add(Config(key="active_description_prompt_id", value=prompt_id))
+    db_session.add(Config(key="named_providers", value=json.dumps(named_providers)))
+    job = Job(
+        job_key="ex_test3", source="test", url="https://example.com/3",
+        state=JobState.DRAFT.value, title="SWE", company="Acme",
+        description="Python required.",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    raw_response = "```json\n{\"required_skills\":[\"Python\"]}\n```"
+    mock_client = MagicMock()
+    choice = MagicMock()
+    choice.message.content = raw_response
+    mock_client.chat.completions.create.return_value = MagicMock(choices=[choice])
+
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider",
+                        lambda db, name, model: (mock_client, "gpt-test"))
+
+    result = _run_extraction(job, db_session)
+    assert result == '{"required_skills":["Python"]}'
+    assert "```" not in result

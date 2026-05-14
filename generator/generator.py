@@ -130,6 +130,35 @@ def build_description_prompt(job: Job, template: str) -> str:
     return re.sub(r'\{(\w+)\}', _bare_replace, result)
 
 
+def _run_extraction(job: Job, db: Session) -> str:
+    """Return extraction JSON for job, running LLM if not already cached.
+
+    If job.extraction_json is already populated, returns it immediately.
+    Otherwise: resolves active description prompt, calls LLM, strips markdown
+    code fences from the response, stores result in job.extraction_json, commits,
+    and returns the JSON string.
+    """
+    if job.extraction_json:
+        return job.extraction_json
+
+    prompt_cfg = _resolve_active_prompt(db, "description")
+    actual_prompt = build_description_prompt(job, prompt_cfg["content"])
+    client, model = get_client_for_named_provider(db, prompt_cfg["provider_name"], prompt_cfg["model_id"])
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": actual_prompt}],
+    )
+    raw = response.choices[0].message.content or ""
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
+    raw = re.sub(r"\s*```$", "", raw.strip())
+    result = raw.strip()
+
+    job.extraction_json = result
+    db.commit()
+    return result
+
+
 def extraction_json_to_markdown(data: dict) -> str:
     """Converts structured extraction JSON to human-readable markdown."""
     sections = []
