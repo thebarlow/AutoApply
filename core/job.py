@@ -71,7 +71,6 @@ class Job(Base):
 
     __tablename__ = "jobs"
     __allow_unmapped__ = True
-    __table_args__ = {"extend_existing": True}
 
     # ── Scrape data ────────────────────────────────────────────────────────────
     id = Column(Integer, primary_key=True)

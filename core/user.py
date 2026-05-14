@@ -56,7 +56,6 @@ class User(Base):
     # Profile fields live in the JSON `data` column and are set by _hydrate(),
     # not declared as Mapped[] — suppress SQLAlchemy 2.x unmapped attr errors.
     __allow_unmapped__ = True
-    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, default="Default")
