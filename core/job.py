@@ -14,6 +14,45 @@ from db.database import Base
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
 
+def _field_to_str(value: Any) -> str:
+    """Render a job or user field value to a string for template substitution."""
+    from core.user import WorkHistoryEntry, EducationEntry, ProjectEntry
+    if isinstance(value, list):
+        if not value:
+            return ""
+        first = value[0]
+        if isinstance(first, WorkHistoryEntry):
+            return "\n".join(f"- {e.title} at {e.company} ({e.start}–{e.end}): {e.summary}" for e in value)
+        if isinstance(first, EducationEntry):
+            return "\n".join(f"- {e.degree} in {e.field} from {e.institution} ({e.graduated}), GPA {e.gpa}" for e in value)
+        if isinstance(first, ProjectEntry):
+            return "\n".join(
+                f"- {e.name}: {e.description}"
+                + (f" ({e.url})" if e.url else "")
+                + (f" — {', '.join(e.technologies)}" if e.technologies else "")
+                for e in value
+            )
+        return ", ".join(str(v) for v in value)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _apply_template(template: str, sources: dict[str, Any]) -> str:
+    """Replace {table.field} placeholders using attribute values from sources dict."""
+    import re
+    def _replace(m: "re.Match[str]") -> str:
+        table, field = m.group(1), m.group(2)
+        obj = sources.get(table)
+        if obj is None:
+            return m.group(0)
+        value = getattr(obj, field, None)
+        if value is None:
+            return m.group(0)
+        return _field_to_str(value)
+    return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
+
+
 class JobState(str, Enum):
     """Valid states for a job in the pipeline."""
 
@@ -300,6 +339,108 @@ Return only the JSON object, no other text.
             "fit": parsed["fit_justification"],
         })
         db.commit()
+
+    # ── Description extraction ─────────────────────────────────────────────────
+
+    def build_description_prompt(self, template: str) -> str:
+        """Render the description extraction prompt template against this job's fields.
+
+        Supports {job.field} placeholders. Also supports bare {field} placeholders
+        (e.g., {description}, {title}) for backwards compatibility with existing prompts.
+
+        Args:
+            template: Prompt template string with placeholders.
+
+        Returns:
+            Rendered prompt string.
+        """
+        import re
+        result = _apply_template(template, {"job": self})
+        def _bare_replace(m: "re.Match[str]") -> str:
+            value = getattr(self, m.group(1), None)
+            return _field_to_str(value) if value is not None else m.group(0)
+        return re.sub(r'\{(\w+)\}', _bare_replace, result)
+
+    def extract_description(self, db: Session) -> None:
+        """Extract structured fields from job.description using the LLM.
+
+        Populates all ext_* columns. Skips silently if ext_seniority is already set.
+        Resolves the active description prompt from the Config table.
+
+        Args:
+            db: SQLAlchemy session.
+
+        Raises:
+            RuntimeError: If no active description prompt is configured or the LLM fails.
+        """
+        if self.ext_seniority is not None:
+            return
+
+        from core.llm import get_client_for_named_provider
+        import re
+
+        prompt_cfg = self._resolve_active_prompt(db, "description")
+        actual_prompt = self.build_description_prompt(prompt_cfg["content"])
+        client, model = get_client_for_named_provider(
+            db, prompt_cfg["provider_name"], prompt_cfg["model_id"]
+        )
+
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=2048,
+            messages=[{"role": "user", "content": actual_prompt}],
+        )
+        choice = response.choices[0]
+        raw = choice.message.content
+        if not raw:
+            raise RuntimeError(f"LLM returned empty extraction response (finish_reason={choice.finish_reason!r})")
+        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
+        raw = re.sub(r"\s*```$", "", raw.strip())
+        result = raw.strip()
+        if not result:
+            raise RuntimeError("LLM extraction returned empty content after fence stripping")
+        try:
+            data = json.loads(result)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(f"LLM extraction is not valid JSON: {exc}") from exc
+
+        self.ext_seniority = data.get("seniority", "")
+        self.ext_role_type = data.get("role_type", "")
+        self.ext_domain = data.get("domain", "")
+        self.ext_work_arrangement = data.get("work_arrangement", "")
+        self.ext_employment_type = data.get("employment_type", "")
+        self.ext_required_skills = ", ".join(data.get("required_skills") or [])
+        self.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
+        self.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
+        self.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
+        self.ext_company_signals = ", ".join(data.get("company_signals") or [])
+        db.flush()
+        db.commit()
+
+    @staticmethod
+    def _resolve_active_prompt(db: Session, type_: str) -> dict:
+        """Return the active prompt config dict for a given type.
+
+        Args:
+            db: SQLAlchemy session.
+            type_: Prompt type key (e.g., 'description', 'resume', 'cover').
+
+        Returns:
+            Prompt config dict with keys: id, content, provider_name, model_id.
+
+        Raises:
+            RuntimeError: If no active prompt is configured for the given type.
+        """
+        from db.models import Config
+        def _get(key: str) -> str:
+            row = db.query(Config).filter_by(key=key).first()
+            return row.value if row else ""
+        active_id = _get(f"active_{type_}_prompt_id")
+        prompts = json.loads(_get(f"{type_}_prompts") or "[]")
+        prompt = next((p for p in prompts if p["id"] == active_id), None)
+        if not prompt:
+            raise RuntimeError(f"No active {type_} prompt configured. Set one under Config → Scaffolding.")
+        return prompt
 
     def serialize(self) -> dict:
         """Return a JSON-serializable dict of all job fields for the API.

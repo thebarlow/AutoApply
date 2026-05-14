@@ -179,3 +179,72 @@ def test_score_populates_scores(db_session):
     assert fetched.fit_score == 0.7
     assert fetched.final_score == pytest.approx(0.75)
     assert fetched.score_justification is not None
+
+
+def test_build_description_prompt_substitutes_fields(db_session):
+    from core.job import Job
+    job = Job.from_scraped(_make_scraped(title="Python Dev", description="Needs Python."))
+    db_session.add(job)
+    db_session.commit()
+    prompt = job.build_description_prompt("Title: {job.title}\nDesc: {job.description}")
+    assert "Python Dev" in prompt
+    assert "Needs Python." in prompt
+
+
+def test_extract_description_populates_ext_columns(db_session):
+    from core.job import Job
+    from unittest.mock import MagicMock, patch
+    import json as _json
+
+    job = Job.from_scraped(_make_scraped(description="Needs Python and FastAPI."))
+    db_session.add(job)
+    db_session.commit()
+
+    extraction_result = _json.dumps({
+        "seniority": "Mid",
+        "role_type": "Backend",
+        "domain": "Web",
+        "work_arrangement": "Remote",
+        "employment_type": "Full-time",
+        "required_skills": ["Python", "FastAPI"],
+        "preferred_skills": ["Docker"],
+        "tech_stack": ["Python", "PostgreSQL"],
+        "key_responsibilities": ["Build APIs"],
+        "company_signals": ["Startup"],
+    })
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = extraction_result
+    mock_client.chat.completions.create.return_value.choices[0].finish_reason = "stop"
+
+    from db.models import Config
+    db_session.add(Config(key="active_description_prompt_id", value="p1"))
+    db_session.add(Config(key="description_prompts", value=_json.dumps([{
+        "id": "p1", "content": "Extract: {job.description}",
+        "provider_name": "test", "model_id": "m",
+    }])))
+    db_session.commit()
+
+    with patch("core.llm.get_client_for_named_provider", return_value=(mock_client, "m")):
+        job.extract_description(db_session)
+
+    fetched = db_session.query(Job).first()
+    assert fetched.ext_seniority == "Mid"
+    assert "Python" in fetched.ext_required_skills
+    assert fetched.ext_work_arrangement == "Remote"
+
+
+def test_extract_description_skips_if_already_populated(db_session):
+    from core.job import Job
+    from unittest.mock import MagicMock
+
+    job = Job.from_scraped(_make_scraped())
+    job.ext_seniority = "Senior"
+    db_session.add(job)
+    db_session.commit()
+
+    mock_client = MagicMock()
+    # extract_description should not call the LLM at all
+    job.extract_description(db_session)
+    mock_client.chat.completions.create.assert_not_called()
+    assert db_session.query(Job).first().ext_seniority == "Senior"
