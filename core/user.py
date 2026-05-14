@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import sys
 from pathlib import Path
 from typing import ClassVar, List, Optional
 
@@ -54,6 +53,8 @@ class User(Base):
     """
 
     __tablename__ = "user_profile"
+    # Profile fields live in the JSON `data` column and are set by _hydrate(),
+    # not declared as Mapped[] — suppress SQLAlchemy 2.x unmapped attr errors.
     __allow_unmapped__ = True
     __table_args__ = {"extend_existing": True}
 
@@ -333,10 +334,14 @@ Rules:
             + (f" — {', '.join(e.technologies)}" if e.technologies else "")
             for e in self.projects
         )
+        salary_str = (
+            f"${self.target_salary_min}–${self.target_salary_max}"
+            if self.target_salary_min is not None else "Not specified"
+        )
         result = (
             f"Name: {self.full_name()}\n"
             f"Target roles: {', '.join(self.target_roles)}\n"
-            f"Target salary: ${self.target_salary_min}–${self.target_salary_max}\n"
+            f"Target salary: {salary_str}\n"
             f"Skills: {', '.join(self.skills)}\n\n"
             f"Work History:\n{work}\n\n"
             f"Education:\n{education}"
