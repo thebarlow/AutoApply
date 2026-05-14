@@ -217,7 +217,7 @@ def test_extract_description_populates_ext_columns(db_session):
     mock_client.chat.completions.create.return_value.choices[0].message.content = extraction_result
     mock_client.chat.completions.create.return_value.choices[0].finish_reason = "stop"
 
-    from db.models import Config
+    from db.database import Config
     db_session.add(Config(key="active_description_prompt_id", value="p1"))
     db_session.add(Config(key="description_prompts", value=_json.dumps([{
         "id": "p1", "content": "Extract: {job.description}",
@@ -290,9 +290,10 @@ def test_generate_resume_md_writes_file(db_session, tmp_path):
         "target_roles": ["SWE"], "resume_path": "", "md_path": "",
     }
     db_session.add(User(name="Matt", data=_json.dumps(data)))
-    db_session.add(__import__("db.models", fromlist=["Config"]).Config(key="resume_github", value=""))
-    db_session.add(__import__("db.models", fromlist=["Config"]).Config(key="resume_linkedin", value=""))
-    db_session.add(__import__("db.models", fromlist=["Config"]).Config(key="resume_website", value=""))
+    from db.database import Config as _Config
+    db_session.add(_Config(key="resume_github", value=""))
+    db_session.add(_Config(key="resume_linkedin", value=""))
+    db_session.add(_Config(key="resume_website", value=""))
     db_session.commit()
     user = User.load(db_session)
 

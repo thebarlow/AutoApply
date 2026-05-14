@@ -1,6 +1,6 @@
 import pytest
 
-from core.types import SearchConfig
+from scraper.base import SearchConfig
 from scraper.base import JobSource, ScrapedJob
 
 

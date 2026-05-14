@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from db.models import Config, FieldHelp
+from db.database import Config, FieldHelp
 
 _GENERATOR_DIR = Path(__file__).parent.parent / "generator"
 

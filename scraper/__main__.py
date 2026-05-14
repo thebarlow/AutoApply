@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from db.database import SessionLocal
-from db.models import Config
+from db.database import Config
 from scraper.remotive import RemotiveSource
 from scraper.remoteok import RemoteOKSource
 from scraper.runner import run_scraper

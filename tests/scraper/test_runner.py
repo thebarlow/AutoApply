@@ -6,10 +6,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from core.job import Job as JobClass
-from core.types import JobState, SearchConfig
-from db.models import Base, Config, Job
-from scraper.base import JobSource, ScrapedJob
+from core.job import Job, Job as JobClass, JobState
+from scraper.base import SearchConfig, JobSource, ScrapedJob
+from db.database import Base, Config
 from scraper.runner import (
     load_max_jobs,
     load_search_config,

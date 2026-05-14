@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from db.database import SessionLocal
-from db.models import Job
+from core.job import Job
 
 LEGACY_STATES = {"pending", "generated", "scraped", "approved", "pending_review", "failed"}
 

@@ -3,13 +3,30 @@ from __future__ import annotations
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
+from sqlalchemy import Column, String, Text, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
 class Base(DeclarativeBase):
     """SQLAlchemy declarative base — registry for all ORM models."""
     pass
+
+
+class Config(Base):
+    """Key-value application configuration store."""
+
+    __tablename__ = "config"
+    key = Column(String, primary_key=True)
+    value = Column(Text)
+
+
+class FieldHelp(Base):
+    """Human-readable descriptions for database columns, used by the UI."""
+
+    __tablename__ = "field_help"
+    table_name = Column(String, primary_key=True)
+    column_name = Column(String, primary_key=True)
+    description = Column(Text, nullable=False, default="")
 
 load_dotenv()
 
@@ -40,8 +57,6 @@ def _migrate_legacy_config() -> None:
         "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
     }
     _BASE_URL_TO_TYPE = {v: k for k, v in _LLM_BASE_URLS.items()}
-
-    from db.models import Config
 
     db = SessionLocal()
     try:

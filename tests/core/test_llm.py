@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from unittest.mock import patch, MagicMock
 
-from db.models import Base, Config
+from db.database import Base, Config
 from core.llm import LLMProvider, get_active_provider, get_client_for_named_provider, call_llm
 
 

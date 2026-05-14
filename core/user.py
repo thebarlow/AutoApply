@@ -9,7 +9,7 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.orm import Session
 
 from db.database import Base
-import db.models as _db_models  # noqa: F401 — ensures Config/UserProfileModel registered with Base.metadata
+import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp registered with Base.metadata
 
 
 @dataclasses.dataclass
@@ -123,7 +123,7 @@ class User(Base):
         Raises:
             RuntimeError: If no profile exists in the database.
         """
-        from db.models import Config  # local import — Config moves to db.database in Task 13
+        from db.database import Config
 
         row: Optional[User] = None
 

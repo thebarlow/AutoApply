@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from core.job import Job
 from scraper.base import JobSource, SearchConfig
-from db.models import Config
+from db.database import Config
 
 
 def load_search_config(db: Session) -> SearchConfig:

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from core.types import SearchConfig
+from scraper.base import SearchConfig
 from scraper.remoteok import RemoteOKSource
 
 

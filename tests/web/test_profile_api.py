@@ -7,7 +7,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.database import get_db
-from db.models import Base, Config, UserProfileModel
+from db.database import Base, Config
+from core.user import User as UserProfileModel
 from web.main import app
 
 
@@ -167,7 +168,7 @@ def test_parse_endpoint_pdf_calls_pdf_to_markdown(client, monkeypatch):
 
 
 def test_serve_profile_file_pdf_not_set(client, db_session):
-    from db.models import UserProfileModel
+    from core.user import User as UserProfileModel
     data = {"resume_path": "", "md_path": ""}
     row = UserProfileModel(name="Test", data=json.dumps(data))
     db_session.add(row)
@@ -178,7 +179,7 @@ def test_serve_profile_file_pdf_not_set(client, db_session):
 
 
 def test_serve_profile_file_md_not_set(client, db_session):
-    from db.models import UserProfileModel
+    from core.user import User as UserProfileModel
     data = {"resume_path": "", "md_path": ""}
     row = UserProfileModel(name="Test", data=json.dumps(data))
     db_session.add(row)
@@ -189,7 +190,7 @@ def test_serve_profile_file_md_not_set(client, db_session):
 
 
 def test_serve_profile_file_pdf_missing_on_disk(client, db_session):
-    from db.models import UserProfileModel
+    from core.user import User as UserProfileModel
     data = {"resume_path": "/nonexistent/resume.pdf", "md_path": ""}
     row = UserProfileModel(name="Test", data=json.dumps(data))
     db_session.add(row)
@@ -200,7 +201,7 @@ def test_serve_profile_file_pdf_missing_on_disk(client, db_session):
 
 
 def test_serve_profile_file_md_missing_on_disk(client, db_session):
-    from db.models import UserProfileModel
+    from core.user import User as UserProfileModel
     data = {"resume_path": "", "md_path": "/nonexistent/resume.md"}
     row = UserProfileModel(name="Test", data=json.dumps(data))
     db_session.add(row)
@@ -216,7 +217,7 @@ def test_serve_profile_file_profile_not_found(client, db_session):
 
 
 def test_serve_profile_file_pdf_ok(client, db_session, tmp_path):
-    from db.models import UserProfileModel
+    from core.user import User as UserProfileModel
     pdf_file = tmp_path / "resume.pdf"
     pdf_file.write_bytes(b"%PDF-1.4 fake")
     data = {"resume_path": str(pdf_file), "md_path": ""}
@@ -230,7 +231,7 @@ def test_serve_profile_file_pdf_ok(client, db_session, tmp_path):
 
 
 def test_serve_profile_file_md_ok(client, db_session, tmp_path):
-    from db.models import UserProfileModel
+    from core.user import User as UserProfileModel
     md_file = tmp_path / "resume.md"
     md_file.write_text("# Resume\nHello", encoding="utf-8")
     data = {"resume_path": "", "md_path": str(md_file)}
@@ -244,7 +245,7 @@ def test_serve_profile_file_md_ok(client, db_session, tmp_path):
 
 
 def test_serve_profile_file_invalid_type(client, db_session):
-    from db.models import UserProfileModel
+    from core.user import User as UserProfileModel
     data = {"resume_path": "", "md_path": ""}
     row = UserProfileModel(name="Test", data=json.dumps(data))
     db_session.add(row)

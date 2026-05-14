@@ -431,7 +431,7 @@ Return only the JSON object, no other text.
         Raises:
             RuntimeError: If no active prompt is configured for the given type.
         """
-        from db.models import Config
+        from db.database import Config
         def _get(key: str) -> str:
             row = db.query(Config).filter_by(key=key).first()
             return row.value if row else ""
@@ -630,7 +630,7 @@ Return only the JSON object, no other text.
         Returns:
             YAML front matter string ending with a blank line.
         """
-        from db.models import Config
+        from db.database import Config
 
         def _cfg(key: str) -> str:
             row = db.query(Config).filter_by(key=key).first()

@@ -9,7 +9,7 @@ from typing import Any
 import openai
 from sqlalchemy.orm import Session
 
-from db.models import Config
+from db.database import Config
 
 _ENV_PATH = Path(__file__).parent.parent / ".env"
 

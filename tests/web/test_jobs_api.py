@@ -225,20 +225,21 @@ def test_delete_job_not_found(client):
 # --- POST /api/jobs/{job_key}/score ---
 
 def test_score_job_endpoint(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
+    from core.job import Job
+    from core.user import User
 
     _make_job(db_session, "job_score")
 
-    def mock_score_job(job, profile, config, llm_client, model, db):
-        job.desirability_score = 0.9
-        job.fit_score = 0.8
-        job.final_score = 0.85
-        job.score_justification = json.dumps({"desirability": "Great.", "fit": "Perfect."})
+    def mock_score(self, user, config, llm_client, model, db):
+        self.desirability_score = 0.9
+        self.fit_score = 0.8
+        self.final_score = 0.85
+        self.score_justification = json.dumps({"desirability": "Great.", "fit": "Perfect."})
         db.commit()
 
-    monkeypatch.setattr(jobs_router, "_score_job", mock_score_job)
-    monkeypatch.setattr(jobs_router, "_load_user_profile", lambda db: None)
-    monkeypatch.setattr(jobs_router, "_load_config", lambda db: {})
+    monkeypatch.setattr(Job, "score", mock_score)
+    monkeypatch.setattr(User, "load", classmethod(lambda cls, db, profile_id=None: None))
+    import web.routers.jobs as jobs_router
     monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
 
     resp = client.post("/api/jobs/job_score/score")
@@ -292,13 +293,12 @@ def test_generate_resume_endpoint(client, db_session, monkeypatch):
 
     _make_job(db_session, "job_resume")
 
-    def mock_generate_resume(job_key, db):
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        job.resume_path = f"/outputs/{job_key}_resume.pdf"
+    def mock_do_generate_resume(job, db):
+        job.resume_path = f"/outputs/{job.job_key}_resume.pdf"
         job.state = "generated"
         db.commit()
 
-    monkeypatch.setattr(jobs_router, "_generate_resume", mock_generate_resume)
+    monkeypatch.setattr(jobs_router, "_do_generate_resume", mock_do_generate_resume)
 
     resp = client.post("/api/jobs/job_resume/generate/resume")
     assert resp.status_code == 200
@@ -317,12 +317,11 @@ def test_generate_cover_endpoint(client, db_session, monkeypatch):
 
     _make_job(db_session, "job_cover", resume_path="/outputs/job_cover_resume.pdf")
 
-    def mock_generate_cover(job_key, db):
-        job = db.query(Job).filter_by(job_key=job_key).first()
-        job.cover_path = f"/outputs/{job_key}_cover.pdf"
+    def mock_do_generate_cover(job, db):
+        job.cover_path = f"/outputs/{job.job_key}_cover.pdf"
         db.commit()
 
-    monkeypatch.setattr(jobs_router, "_generate_cover", mock_generate_cover)
+    monkeypatch.setattr(jobs_router, "_do_generate_cover", mock_do_generate_cover)
 
     resp = client.post("/api/jobs/job_cover/generate/cover")
     assert resp.status_code == 200
@@ -420,7 +419,7 @@ def test_get_description_invalid_view_param(client, db_session):
 # --- GET /api/jobs/{job_key}/description/prompt ---
 
 def test_get_description_prompt_returns_text(client, db_session):
-    from db.models import Config
+    from db.database import Config
     import json as _json
     job = _make_job(db_session, "job_dprompt", description="We need Python skills.")
     db_session.add(Config(key="active_description_prompt_id", value="p1"))
@@ -447,7 +446,7 @@ def test_get_description_prompt_not_found(client):
 # --- POST /api/jobs/{job_key}/description/extract ---
 
 def _seed_description_prompt(db_session, content: str = "Extract: {description}") -> None:
-    from db.models import Config
+    from db.database import Config
     import json as _json
     db_session.add(Config(key="active_description_prompt_id", value="p1"))
     db_session.add(Config(key="description_prompts", value=_json.dumps([

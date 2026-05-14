@@ -16,16 +16,7 @@ from core.job import Job, JobState
 from core.user import User
 from core.llm import get_openai_client
 from core.llm import get_client_for_named_provider as _get_client_for_named_provider
-from core.scorer import load_config as _load_config
-from core.scorer import load_user_profile as _load_user_profile
-from core.scorer import score_job as _score_job
-from db.database import get_db
-from db.models import Config
-from generator.generator import generate_job as _generate_job
-from generator.generator import generate_resume as _generate_resume
-from generator.generator import generate_cover as _generate_cover
-from generator.generator import generate_md as _generate_md
-from generator.generator import generate_pdf as _generate_pdf
+from db.database import get_db, Config
 
 _GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
 
@@ -113,18 +104,47 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     return job.serialize()
 
 
+def _load_score_config(db: Session) -> dict:
+    """Load scoring weights from the config table."""
+    result = {}
+    for key in ("w1", "w2", "auto_reject_threshold", "auto_approve_threshold"):
+        row = db.query(Config).filter_by(key=key).first()
+        result[key] = float(row.value) if row else 0.5
+    return result
+
+
 @router.post("/{job_key}/score")
 def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    profile = _load_user_profile(db)
-    config = _load_config(db)
+    user = User.load(db)
+    config = _load_score_config(db)
     client, model = get_openai_client(db)
-    _score_job(job, profile, config, client, model, db)
+    job.score(user, config, client, model, db)
     db.refresh(job)
     return job.serialize()
+
+
+def _do_generate_resume(job: Job, db: Session) -> None:
+    """Resolve active resume prompt and generate MD + PDF for job."""
+    prompt = _resolve_prompt(db, "resume")
+    client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+    user = User.load(db)
+    job.generate_resume_md(user, prompt["content"], client, model, db)
+    template_path = _resolve_template(db, prompt.get("template_name", ""))
+    job.generate_resume_pdf(template_path, db)
+
+
+def _do_generate_cover(job: Job, db: Session) -> None:
+    """Resolve active cover prompt and generate MD + PDF for job."""
+    prompt = _resolve_prompt(db, "cover")
+    client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+    user = User.load(db)
+    job.generate_cover_md(user, prompt["content"], client, model, db)
+    template_path = _resolve_template(db, prompt.get("template_name", ""))
+    job.generate_cover_pdf(template_path, db)
 
 
 @router.post("/{job_key}/generate")
@@ -132,7 +152,11 @@ def generate_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    _generate_job(job_key, db=db)
+    try:
+        _do_generate_resume(job, db)
+        _do_generate_cover(job, db)
+    except Exception as e:
+        print(f"[generator] ERROR for {job_key}: {e}", file=__import__('sys').stderr)
     db.refresh(job)
     return job.serialize()
 
@@ -143,7 +167,7 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     try:
-        _generate_resume(job_key, db=db)
+        _do_generate_resume(job, db)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     db.refresh(job)
@@ -160,8 +184,9 @@ def generate_resume_md_endpoint(job_key: str, db: Session = Depends(get_db)):
         client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    user = User.load(db)
     try:
-        _generate_md(job_key, "resume", prompt["content"], client, model, db)
+        job.generate_resume_md(user, prompt["content"], client, model, db)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Resume markdown generation failed: {exc}")
     db.refresh(job)
@@ -179,7 +204,7 @@ def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     prompt = _resolve_prompt(db, "resume")
     template_path = _resolve_template(db, prompt.get("template_name", ""))
     try:
-        _generate_pdf(job_key, "resume", template_path, db)
+        job.generate_resume_pdf(template_path, db)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Resume PDF rendering failed: {exc}")
     db.refresh(job)
@@ -194,7 +219,7 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     try:
-        _generate_cover(job_key, db=db)
+        _do_generate_cover(job, db)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     db.refresh(job)
@@ -211,8 +236,9 @@ def generate_cover_md_endpoint(job_key: str, db: Session = Depends(get_db)):
         client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    user = User.load(db)
     try:
-        _generate_md(job_key, "cover", prompt["content"], client, model, db)
+        job.generate_cover_md(user, prompt["content"], client, model, db)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Cover letter markdown generation failed: {exc}")
     db.refresh(job)
@@ -232,7 +258,7 @@ def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     prompt = _resolve_prompt(db, "cover")
     template_path = _resolve_template(db, prompt.get("template_name", ""))
     try:
-        _generate_pdf(job_key, "cover", template_path, db)
+        job.generate_cover_pdf(template_path, db)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Cover letter PDF rendering failed: {exc}")
     db.refresh(job)

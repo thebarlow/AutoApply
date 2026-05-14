@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import SessionLocal, get_db
-from db.models import Config
+from db.database import Config
 from scraper.remotive import RemotiveSource
 from scraper.remoteok import RemoteOKSource
 from core.job import Job

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.models import Config, FieldHelp
+from db.database import Config, FieldHelp
 from core.user import User
 from core.job import Job
 
@@ -825,16 +825,20 @@ def get_job_fields(db: Session = Depends(get_db)) -> dict:
     return {"fields": fields}
 
 
+_USER_PROFILE_FIELDS = [
+    "name", "first_name", "last_name", "hero", "email", "phone", "linkedin",
+    "github", "location", "skills", "work_history", "education", "projects",
+    "target_salary_min", "target_salary_max", "target_roles",
+]
+
+
 @router.get("/api/user-profile-fields")
 def get_user_profile_fields(db: Session = Depends(get_db)) -> dict:
     help_rows = db.query(FieldHelp).filter_by(table_name="user_profile").all()
     descriptions = {row.column_name: row.description for row in help_rows}
-    import dataclasses
-    from core.types import UserProfile as _UserProfile
     fields = [
-        {"name": f"user_profile.{f.name}", "description": descriptions.get(f.name, "")}
-        for f in dataclasses.fields(_UserProfile)
-        if f.name not in ("resume_path", "md_path")
+        {"name": f"user_profile.{name}", "description": descriptions.get(name, "")}
+        for name in _USER_PROFILE_FIELDS
     ]
     fields.insert(0, {
         "name": "user_profile.master_resume",

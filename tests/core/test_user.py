@@ -78,7 +78,7 @@ def test_user_load_uses_active_profile_id(db_session):
     db_session.add(User(name="Second", data=json.dumps({**SAMPLE_DATA, "email": "second@x.com"})))
     db_session.commit()
 
-    from db.models import Config  # will exist until Task 13
+    from db.database import Config
     db_session.add(Config(key="active_profile_id", value="2"))
     db_session.commit()
 
@@ -118,7 +118,7 @@ def test_user_full_name_falls_back_to_first_last(db_session):
 
 def test_user_from_markdown_returns_profile_dict(db_session):
     from core.user import User
-    from db.models import Config
+    from db.database import Config
     db_session.add(Config(key="llm_active_provider", value="test"))
     db_session.add(Config(key="llm_providers", value='[{"name":"test","base_url":"http://x","model":"m"}]'))
     db_session.commit()
