@@ -1,33 +1,41 @@
 const DEDUP_KEY = "stagedJobKeys";
-const jobTabs = {};
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  handleMessage(message, sender, sendResponse);
+  return true;
+});
+
+async function handleMessage(message, sender, sendResponse) {
   if (message.type === "CHECK_DEDUP") {
-    chrome.storage.local.get(DEDUP_KEY).then(({ [DEDUP_KEY]: keys = [] }) => {
-      sendResponse({ isDuplicate: keys.includes(message.job_key) });
-    });
-    return true;
+    const { [DEDUP_KEY]: keys = [] } = await chrome.storage.local.get(DEDUP_KEY);
+    sendResponse({ isDuplicate: keys.includes(message.job_key) });
+    return;
   }
 
   if (message.type === "SCRAPE_JOB") {
-    handleScrape(message.payload)
-      .then(sendResponse)
-      .catch((err) => sendResponse({ ok: false, error: err.message }));
-    return true;
+    try {
+      const result = await handleScrape(message.payload);
+      sendResponse(result);
+    } catch (err) {
+      sendResponse({ ok: false, error: err.message });
+    }
+    return;
   }
 
   if (message.type === "REGISTER_JOB_TAB") {
+    const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
     jobTabs[sender.tab.id] = message.job_key;
+    await chrome.storage.session.set({ jobTabs });
     sendResponse({ ok: true });
-    return true;
+    return;
   }
 
   if (message.type === "GET_JOB_KEY") {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tabId = tabs[0]?.id;
-      sendResponse({ job_key: jobTabs[tabId] ?? null });
-    });
-    return true;
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id;
+    const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
+    sendResponse({ job_key: jobTabs[tabId] ?? null });
+    return;
   }
 
   if (message.type === "NATIVE_UPLOAD") {
@@ -40,9 +48,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: false, error: "native_host_disconnected" });
     });
     port.postMessage({ job_key: message.job_key, file_type: message.file_type });
-    return true;
+    return;
   }
-});
+}
 
 async function handleScrape(payload) {
   const { [DEDUP_KEY]: keys = [] } = await chrome.storage.local.get(DEDUP_KEY);
@@ -70,12 +78,16 @@ async function handleScrape(payload) {
   return { ok: true, status: data.status };
 }
 
-chrome.webNavigation.onCreatedNavigationTarget.addListener(({ sourceTabId, tabId }) => {
+chrome.webNavigation.onCreatedNavigationTarget.addListener(async ({ sourceTabId, tabId }) => {
+  const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
   if (jobTabs[sourceTabId]) {
     jobTabs[tabId] = jobTabs[sourceTabId];
+    await chrome.storage.session.set({ jobTabs });
   }
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => {
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
   delete jobTabs[tabId];
+  await chrome.storage.session.set({ jobTabs });
 });
