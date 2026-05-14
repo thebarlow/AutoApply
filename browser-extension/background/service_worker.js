@@ -1,6 +1,7 @@
 const DEDUP_KEY = "stagedJobKeys";
+const jobTabs = {};
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "CHECK_DEDUP") {
     chrome.storage.local.get(DEDUP_KEY).then(({ [DEDUP_KEY]: keys = [] }) => {
       sendResponse({ isDuplicate: keys.includes(message.job_key) });
@@ -12,6 +13,33 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     handleScrape(message.payload)
       .then(sendResponse)
       .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
+  if (message.type === "REGISTER_JOB_TAB") {
+    jobTabs[sender.tab.id] = message.job_key;
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type === "GET_JOB_KEY") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tabId = tabs[0]?.id;
+      sendResponse({ job_key: jobTabs[tabId] ?? null });
+    });
+    return true;
+  }
+
+  if (message.type === "NATIVE_UPLOAD") {
+    const port = chrome.runtime.connectNative("com.auto_apply.host");
+    port.onMessage.addListener((response) => {
+      sendResponse(response);
+      port.disconnect();
+    });
+    port.onDisconnect.addListener(() => {
+      sendResponse({ ok: false, error: "native_host_disconnected" });
+    });
+    port.postMessage({ job_key: message.job_key, file_type: message.file_type });
     return true;
   }
 });
@@ -41,3 +69,13 @@ async function handleScrape(payload) {
   await chrome.storage.local.set({ [DEDUP_KEY]: [...keySet] });
   return { ok: true, status: data.status };
 }
+
+chrome.webNavigation.onCreatedNavigationTarget.addListener(({ sourceTabId, tabId }) => {
+  if (jobTabs[sourceTabId]) {
+    jobTabs[tabId] = jobTabs[sourceTabId];
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  delete jobTabs[tabId];
+});
