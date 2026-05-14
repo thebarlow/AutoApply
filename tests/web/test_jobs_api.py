@@ -7,13 +7,16 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.database import get_db
-from db.models import Base, Job
-from core.types import JobState
+from db.database import Base
+from core.job import Job, JobState
+import core.user  # noqa: F401 — register User with Base.metadata
 from web.main import app
 
 
 @pytest.fixture
 def db_session():
+    import core.job  # noqa: F401 — ensure Job registered with Base.metadata
+    import core.user  # noqa: F401 — ensure User registered with Base.metadata
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -341,7 +344,7 @@ def test_generate_cover_endpoint_not_found(client):
     assert resp.status_code == 404
 
 
-# --- extraction_json_exists in _serialize ---
+# --- extraction_json_exists in serialize ---
 
 def test_get_jobs_includes_extraction_json_exists_false(client, db_session):
     _make_job(db_session, "job_noextract")
@@ -354,7 +357,7 @@ def test_get_jobs_includes_extraction_json_exists_false(client, db_session):
 
 def test_get_jobs_includes_extraction_json_exists_true(client, db_session):
     job = _make_job(db_session, "job_hasextract")
-    job.extraction_json = '{"required_skills": ["Python"]}'
+    job.ext_required_skills = "Python"
     db_session.commit()
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -366,7 +369,7 @@ def test_get_jobs_includes_extraction_json_exists_true(client, db_session):
 
 def test_get_description_html_returns_html(client, db_session):
     job = _make_job(db_session, "job_html")
-    job.extraction_json = '{"required_skills": ["Python", "FastAPI"]}'
+    job.ext_required_skills = "Python, FastAPI"
     db_session.commit()
     resp = client.get("/api/jobs/job_html/description")
     assert resp.status_code == 200
@@ -387,7 +390,7 @@ def test_get_description_html_no_extraction(client, db_session):
 
 def test_get_description_rendered_view_converts_json(client, db_session):
     job = _make_job(db_session, "job_rendered")
-    job.extraction_json = '{"required_skills": ["Python", "FastAPI"]}'
+    job.ext_required_skills = "Python, FastAPI"
     db_session.commit()
     resp = client.get("/api/jobs/job_rendered/description")
     assert resp.status_code == 200
@@ -396,20 +399,19 @@ def test_get_description_rendered_view_converts_json(client, db_session):
     assert "Python" in resp.text
 
 
-def test_get_description_json_view_returns_raw(client, db_session):
+def test_get_description_json_view_returns_html(client, db_session):
     job = _make_job(db_session, "job_jsonview")
-    job.extraction_json = '{"required_skills": ["Python"]}'
+    job.ext_required_skills = "Python"
     db_session.commit()
     resp = client.get("/api/jobs/job_jsonview/description?view=json")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
-    assert "required_skills" in resp.text
-    assert "<pre" in resp.text
+    assert "Python" in resp.text
 
 
 def test_get_description_invalid_view_param(client, db_session):
     job = _make_job(db_session, "job_badview")
-    job.extraction_json = '{"required_skills": []}'
+    job.ext_required_skills = "Python"
     db_session.commit()
     resp = client.get("/api/jobs/job_badview/description?view=invalid")
     assert resp.status_code == 422
@@ -499,4 +501,3 @@ def test_extract_description_llm_failure_returns_500(client, db_session, monkeyp
     resp = client.post("/api/jobs/job_extract_fail/description/extract")
     assert resp.status_code == 500
     assert "extraction failed" in resp.json()["detail"].lower()
-
