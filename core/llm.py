@@ -4,6 +4,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import openai
 from sqlalchemy.orm import Session
@@ -103,3 +104,32 @@ def get_openai_client(db: Session) -> tuple:
         )
     client = openai.OpenAI(api_key=api_key, base_url=provider.base_url)
     return client, provider.model
+
+
+def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> str:
+    """Send a single-turn prompt to the LLM and return the response text.
+
+    Args:
+        prompt: The user message to send.
+        client: An OpenAI-compatible client instance.
+        model: Model identifier string.
+        max_tokens: Maximum tokens in the response.
+
+    Returns:
+        Stripped response content string.
+
+    Raises:
+        RuntimeError: If the LLM returns an empty response.
+    """
+    response = client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    choice = response.choices[0]
+    content = choice.message.content
+    if not content:
+        raise RuntimeError(
+            f"LLM returned empty response (finish_reason={choice.finish_reason!r})"
+        )
+    return content.strip()

@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from unittest.mock import patch, MagicMock
 
 from db.models import Base, Config
-from core.llm import LLMProvider, get_active_provider, get_client_for_named_provider
+from core.llm import LLMProvider, get_active_provider, get_client_for_named_provider, call_llm
 
 
 @pytest.fixture
@@ -99,3 +99,29 @@ def test_get_client_for_named_provider_raises_when_no_api_key(db_session):
     with patch.dict(os.environ, env_without_key, clear=True):
         with pytest.raises(RuntimeError, match="No API key"):
             get_client_for_named_provider(db_session, "MyOR", "model")
+
+
+# --- call_llm tests ---
+
+def _mock_client(content: str):
+    client = MagicMock()
+    client.chat.completions.create.return_value.choices[0].message.content = content
+    client.chat.completions.create.return_value.choices[0].finish_reason = "stop"
+    return client
+
+
+def test_call_llm_returns_stripped_content():
+    result = call_llm("hello", _mock_client("  world  "), "gpt-4")
+    assert result == "world"
+
+
+def test_call_llm_raises_on_empty_response():
+    with pytest.raises(RuntimeError, match="empty response"):
+        call_llm("hello", _mock_client(""), "gpt-4")
+
+
+def test_call_llm_passes_max_tokens():
+    client = _mock_client("ok")
+    call_llm("prompt", client, "gpt-4", max_tokens=256)
+    call_args = client.chat.completions.create.call_args
+    assert call_args.kwargs["max_tokens"] == 256
