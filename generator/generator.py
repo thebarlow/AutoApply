@@ -138,7 +138,7 @@ def _run_extraction(job: Job, db: Session) -> str:
     code fences from the response, stores result in job.extraction_json, commits,
     and returns the JSON string.
     """
-    if job.extraction_json:
+    if job.extraction_json is not None:
         return job.extraction_json
 
     prompt_cfg = _resolve_active_prompt(db, "description")
@@ -147,9 +147,15 @@ def _run_extraction(job: Job, db: Session) -> str:
 
     response = client.chat.completions.create(
         model=model,
+        max_tokens=2048,
         messages=[{"role": "user", "content": actual_prompt}],
     )
-    raw = response.choices[0].message.content or ""
+    choice = response.choices[0]
+    raw = choice.message.content
+    if not raw:
+        raise RuntimeError(
+            f"LLM returned empty extraction response (finish_reason={choice.finish_reason!r})"
+        )
     raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
     raw = re.sub(r"\s*```$", "", raw.strip())
     result = raw.strip()

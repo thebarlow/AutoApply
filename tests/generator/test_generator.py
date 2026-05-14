@@ -536,3 +536,50 @@ def test_run_extraction_strips_markdown_code_fences(db_session, monkeypatch):
     result = _run_extraction(job, db_session)
     assert result == '{"required_skills":["Python"]}'
     assert "```" not in result
+
+
+def test_run_extraction_returns_empty_string_if_cached_as_empty(db_session):
+    """If extraction_json is empty string (cached, not None), _run_extraction returns it without calling LLM."""
+    from generator.generator import _run_extraction
+    job = Job(
+        job_key="ex_test_empty", source="test", url="https://example.com",
+        state=JobState.DRAFT.value, title="SWE", company="Acme",
+        description="Python required.", extraction_json='',
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    result = _run_extraction(job, db_session)
+    assert result == ''
+
+
+def test_run_extraction_raises_on_empty_llm_response(db_session, monkeypatch):
+    """If LLM returns empty content, _run_extraction raises RuntimeError."""
+    from generator.generator import _run_extraction
+
+    prompt_id = "pid3"
+    desc_prompts = [{"id": prompt_id, "name": "D", "content": "Extract: {description}",
+                     "provider_name": "TestProv", "model_id": "gpt-test"}]
+    named_providers = [{"id": "npid3", "name": "TestProv", "provider_type": "openai", "default_model": "gpt-test"}]
+    db_session.add(Config(key="description_prompts", value=json.dumps(desc_prompts)))
+    db_session.add(Config(key="active_description_prompt_id", value=prompt_id))
+    db_session.add(Config(key="named_providers", value=json.dumps(named_providers)))
+    job = Job(
+        job_key="ex_test_empty_llm", source="test", url="https://example.com/empty",
+        state=JobState.DRAFT.value, title="SWE", company="Acme",
+        description="Python required.",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    mock_client = MagicMock()
+    choice = MagicMock()
+    choice.message.content = None
+    choice.finish_reason = "max_tokens"
+    mock_client.chat.completions.create.return_value = MagicMock(choices=[choice])
+
+    monkeypatch.setattr("generator.generator.get_client_for_named_provider",
+                        lambda db, name, model: (mock_client, "gpt-test"))
+
+    with pytest.raises(RuntimeError, match="LLM returned empty extraction response"):
+        _run_extraction(job, db_session)
