@@ -9,6 +9,7 @@ from db.database import Base
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     job_key = Column(String, unique=True, nullable=False)
