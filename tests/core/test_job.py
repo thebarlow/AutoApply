@@ -115,3 +115,67 @@ def test_job_serialize_returns_dict(db_session):
     assert result["final_score"] == 0.75
     assert isinstance(result["score_justification"], dict)
     assert "extraction_json_exists" in result
+
+
+def test_build_score_prompt_contains_job_and_user(db_session):
+    from core.job import Job
+    from core.user import User
+    job = Job.from_scraped(_make_scraped(title="Python Dev", company="Acme"))
+    db_session.add(job)
+    db_session.commit()
+
+    data = {
+        "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
+        "email": "m@x.com", "phone": "", "location": "Remote", "hero": "",
+        "linkedin": "", "github": "",
+        "skills": ["Python", "SQL"], "work_history": [], "education": [],
+        "projects": [], "target_salary_min": 120000, "target_salary_max": 160000,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
+    }
+    import json as _json
+    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+
+    prompt = job.build_score_prompt(user)
+    assert "Python Dev" in prompt
+    assert "Acme" in prompt
+    assert "Matt Barlow" in prompt
+    assert "desirability_score" in prompt
+
+
+def test_score_populates_scores(db_session):
+    from core.job import Job
+    from core.user import User
+    from unittest.mock import MagicMock
+    import json as _json
+
+    job = Job.from_scraped(_make_scraped())
+    db_session.add(job)
+    data = {
+        "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
+        "email": "", "phone": "", "location": "", "hero": "", "linkedin": "", "github": "",
+        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
+        "target_salary_min": 100000, "target_salary_max": 150000,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
+    }
+    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = _json.dumps({
+        "desirability_score": 0.8,
+        "fit_score": 0.7,
+        "desirability_justification": "Good salary.",
+        "fit_justification": "Python match.",
+    })
+
+    config = {"w1": 0.5, "w2": 0.5}
+    job.score(user, config, mock_client, "gpt-4", db_session)
+
+    fetched = db_session.query(Job).first()
+    assert fetched.desirability_score == 0.8
+    assert fetched.fit_score == 0.7
+    assert fetched.final_score == pytest.approx(0.75)
+    assert fetched.score_justification is not None

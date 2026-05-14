@@ -190,6 +190,117 @@ class Job(Base):
         self.applied_at = datetime.now(timezone.utc).isoformat()
         db.commit()
 
+    # ── Scoring ────────────────────────────────────────────────────────────────
+
+    def build_score_prompt(self, user: Any) -> str:
+        """Build the LLM scoring prompt for this job.
+
+        Args:
+            user: A User instance with profile data.
+
+        Returns:
+            Prompt string ready to send to the LLM.
+        """
+        work_history_text = "\n".join(
+            f"- {e.title} at {e.company} ({e.start}–{e.end}): {e.summary}"
+            for e in user.work_history
+        )
+        education_text = "\n".join(
+            f"- {e.degree} in {e.field} from {e.institution} ({e.graduated}), GPA {e.gpa}"
+            for e in user.education
+        )
+        return f"""You are evaluating a job posting for a candidate. Score the job on two dimensions.
+
+## Candidate Profile
+Name: {f"{user.first_name} {user.last_name}".strip() or user.full_name()}
+Skills: {", ".join(user.skills)}
+Target roles: {", ".join(user.target_roles)}
+Target salary: ${user.target_salary_min}–${user.target_salary_max}
+
+Work History:
+{work_history_text}
+
+Education:
+{education_text}
+
+## Job Posting
+Title: {self.title}
+Company: {self.company}
+Location: {self.location}
+Salary: {self.salary or "Not specified"}
+Description:
+{self.description or "Not provided"}
+
+## Instructions
+Return ONLY a JSON object with exactly these four keys:
+- desirability_score: float 0.0–1.0 (how much the candidate would want this job)
+- fit_score: float 0.0–1.0 (how well the candidate matches the job requirements)
+- desirability_justification: string (1–2 sentences explaining desirability score)
+- fit_justification: string (1–2 sentences explaining fit score)
+
+Consider for desirability: salary vs target, remote/location fit, role alignment, company quality.
+Consider for fit: required skills vs candidate skills, experience level, education requirements.
+
+Return only the JSON object, no other text.
+"""
+
+    def score(
+        self,
+        user: Any,
+        config: dict,
+        client: Any,
+        model: str,
+        db: Session,
+    ) -> None:
+        """Score this job using the LLM. Populates score fields and commits.
+
+        Clamps scores to [0.0, 1.0]. Warns and returns early on LLM error or
+        unparseable response without raising.
+
+        Args:
+            user: A User instance with profile data.
+            config: Dict with keys w1, w2 (scoring weights).
+            client: An OpenAI-compatible client instance.
+            model: Model identifier string.
+            db: SQLAlchemy session.
+        """
+        import warnings
+
+        prompt = self.build_score_prompt(user)
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = response.choices[0].message.content
+        except Exception as e:
+            warnings.warn(f"LLM API error for {self.job_key}: {e}")
+            return
+
+        required = {"desirability_score", "fit_score", "desirability_justification", "fit_justification"}
+        try:
+            parsed = json.loads(raw.strip())
+            if not required.issubset(parsed.keys()):
+                raise ValueError("Missing required keys")
+        except (json.JSONDecodeError, ValueError, AttributeError):
+            warnings.warn(f"Unparseable LLM response for {self.job_key}: {raw!r}")
+            return
+
+        desirability = max(0.0, min(1.0, float(parsed["desirability_score"])))
+        fit = max(0.0, min(1.0, float(parsed["fit_score"])))
+        w1, w2 = config.get("w1", 0.5), config.get("w2", 0.5)
+        final = max(0.0, min(1.0, w1 * desirability + w2 * fit))
+
+        self.desirability_score = desirability
+        self.fit_score = fit
+        self.final_score = final
+        self.score_justification = json.dumps({
+            "desirability": parsed["desirability_justification"],
+            "fit": parsed["fit_justification"],
+        })
+        db.commit()
+
     def serialize(self) -> dict:
         """Return a JSON-serializable dict of all job fields for the API.
 
