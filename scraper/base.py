@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Optional
 
-from core.types import SearchConfig
+
+@dataclasses.dataclass
+class SearchConfig:
+    """Search parameters passed to every scraper source when fetching jobs."""
+
+    keywords_whitelist: list[str] = dataclasses.field(default_factory=list)
+    keywords_blacklist: list[str] = dataclasses.field(default_factory=list)
+    location: str = ""
+    remote_only: bool = True
+    full_time_only: bool = True
+    target_salary_min: Optional[int] = None
+    benefits_priorities: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclass

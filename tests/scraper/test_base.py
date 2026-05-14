@@ -47,3 +47,18 @@ def test_scraped_job_optional_fields():
 def test_job_source_cannot_be_instantiated_directly():
     with pytest.raises(TypeError):
         JobSource()
+
+
+def test_search_config_importable_from_scraper_base():
+    from scraper.base import SearchConfig
+    config = SearchConfig()
+    assert config.keywords_whitelist == []
+    assert config.remote_only is True
+    assert config.full_time_only is True
+
+
+def test_search_config_custom_values():
+    from scraper.base import SearchConfig
+    config = SearchConfig(keywords_whitelist=["python"], remote_only=False)
+    assert config.keywords_whitelist == ["python"]
+    assert config.remote_only is False

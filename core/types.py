@@ -38,15 +38,6 @@ class EducationEntry:
     gpa: float
 
 
-@dataclass
-class SearchConfig:
-    keywords_whitelist: list[str] = field(default_factory=list)
-    keywords_blacklist: list[str] = field(default_factory=list)
-    location: str = ""
-    remote_only: bool = True
-    full_time_only: bool = True
-    target_salary_min: Optional[int] = None
-    benefits_priorities: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -69,3 +60,7 @@ class UserProfile:
     target_roles: list[str] = field(default_factory=list)
     resume_path: str = ""
     md_path: str = ""
+
+
+# Backward-compat re-export — remove after all callers updated
+from scraper.base import SearchConfig as SearchConfig  # noqa: F401
