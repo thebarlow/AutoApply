@@ -89,13 +89,14 @@ async function triggerUpload(job_key, file_type, fastapiUrl) {
 // Injected into page on Firefox — clicks the file input to open OS dialog
 function clickFileInput(file_type) {
   const keyword = file_type === "resume" ? "resume" : "cover";
-  const input = [...document.querySelectorAll('input[type="file"]')].find(el => {
+  const inputs = [...document.querySelectorAll('input[type="file"]')];
+  const input = inputs.find(el => {
     const label =
       el.closest("label")?.textContent ||
       document.querySelector(`label[for="${el.id}"]`)?.textContent ||
       el.getAttribute("aria-label") || "";
     return label.toLowerCase().includes(keyword);
-  });
+  }) || (inputs.length === 1 ? inputs[0] : null);
   if (!input) {
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#e53935;color:#fff;padding:10px;font-size:14px;z-index:99999;text-align:center;";
@@ -110,13 +111,14 @@ function clickFileInput(file_type) {
 // Injected into page on Chrome — uses DataTransfer to set file directly
 async function injectFileChrome({ job_key, file_type, fastapiUrl }) {
   const keyword = file_type === "resume" ? "resume" : "cover";
-  const input = [...document.querySelectorAll('input[type="file"]')].find(el => {
+  const inputs = [...document.querySelectorAll('input[type="file"]')];
+  const input = inputs.find(el => {
     const label =
       el.closest("label")?.textContent ||
       document.querySelector(`label[for="${el.id}"]`)?.textContent ||
       el.getAttribute("aria-label") || "";
     return label.toLowerCase().includes(keyword);
-  });
+  }) || (inputs.length === 1 ? inputs[0] : null);
 
   if (!input) {
     const banner = document.createElement("div");
