@@ -195,3 +195,9 @@ function _msg(message) {
     });
   });
 }
+
+(function _registerJobTab() {
+  const match = location.hash.match(/#aajob=([^&]+)/);
+  if (!match) return;
+  chrome.runtime.sendMessage({ type: 'REGISTER_JOB_TAB', job_key: match[1] });
+})();
