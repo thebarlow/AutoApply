@@ -173,6 +173,11 @@ def _run_extraction(job: Job, db: Session) -> str:
     raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
     raw = re.sub(r"\s*```$", "", raw.strip())
     result = raw.strip()
+    if not result:
+        raise RuntimeError(
+            f"LLM extraction returned empty content after fence stripping "
+            f"(finish_reason={choice.finish_reason!r})"
+        )
     try:
         json.loads(result)
     except (json.JSONDecodeError, ValueError) as exc:
@@ -182,7 +187,7 @@ def _run_extraction(job: Job, db: Session) -> str:
         ) from exc
 
     job.extraction_json = result
-    db.commit()
+    db.flush()
     return result
 
 

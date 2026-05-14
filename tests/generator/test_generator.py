@@ -566,7 +566,7 @@ def test_run_extraction_raises_on_fences_only_response(db_session, monkeypatch):
     monkeypatch.setattr("generator.generator.get_client_for_named_provider",
                         lambda db, name, model: (mock_client, "gpt-test"))
 
-    with pytest.raises(RuntimeError, match="not valid JSON after fence stripping"):
+    with pytest.raises(RuntimeError, match="empty content after fence stripping"):
         _run_extraction(job, db_session)
 
 
