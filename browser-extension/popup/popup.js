@@ -96,7 +96,7 @@ function clickFileInput(file_type) {
       document.querySelector(`label[for="${el.id}"]`)?.textContent ||
       el.getAttribute("aria-label") || "";
     return label.toLowerCase().includes(keyword);
-  }) || (inputs.length === 1 ? inputs[0] : null);
+  }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
   if (!input) {
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#e53935;color:#fff;padding:10px;font-size:14px;z-index:99999;text-align:center;";
@@ -118,7 +118,7 @@ async function injectFileChrome({ job_key, file_type, fastapiUrl }) {
       document.querySelector(`label[for="${el.id}"]`)?.textContent ||
       el.getAttribute("aria-label") || "";
     return label.toLowerCase().includes(keyword);
-  }) || (inputs.length === 1 ? inputs[0] : null);
+  }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
 
   if (!input) {
     const banner = document.createElement("div");
