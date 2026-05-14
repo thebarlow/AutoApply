@@ -61,9 +61,9 @@ async function triggerUpload(job_key, file_type, fastapiUrl) {
   const isFirefox = typeof browser !== "undefined";
 
   if (isFirefox) {
-    // Firefox: inject script that clicks input, then background relays to native host
+    // Firefox: inject into all frames, clicks input to open OS dialog, then native host fills it
     await (browser.scripting || chrome.scripting).executeScript({
-      target: { tabId: tab.id },
+      target: { tabId: tab.id, allFrames: true },
       func: clickFileInput,
       args: [file_type],
     });
@@ -77,9 +77,9 @@ async function triggerUpload(job_key, file_type, fastapiUrl) {
       showMsg(messages[result?.error] || "Upload failed.", "red");
     }
   } else {
-    // Chrome: inject DataTransfer approach directly
+    // Chrome: inject into all frames, DataTransfer sets file directly
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId: tab.id, allFrames: true },
       func: injectFileChrome,
       args: [{ job_key, file_type, fastapiUrl }],
     });
@@ -91,22 +91,14 @@ function clickFileInput(file_type) {
   const keyword = file_type === "resume" ? "resume" : "cover";
 
   function findInput() {
-    const docs = [document];
-    for (const iframe of document.querySelectorAll("iframe")) {
-      try { if (iframe.contentDocument) docs.push(iframe.contentDocument); } catch (_) {}
-    }
-    for (const doc of docs) {
-      const inputs = [...doc.querySelectorAll('input[type="file"]')];
-      const found = inputs.find(el => {
-        const label =
-          el.closest("label")?.textContent ||
-          doc.querySelector(`label[for="${el.id}"]`)?.textContent ||
-          el.getAttribute("aria-label") || "";
-        return label.toLowerCase().includes(keyword);
-      }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
-      if (found) return found;
-    }
-    return null;
+    const inputs = [...document.querySelectorAll('input[type="file"]')];
+    return inputs.find(el => {
+      const label =
+        el.closest("label")?.textContent ||
+        document.querySelector(`label[for="${el.id}"]`)?.textContent ||
+        el.getAttribute("aria-label") || "";
+      return label.toLowerCase().includes(keyword);
+    }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
   }
 
   const input = findInput();
@@ -126,22 +118,14 @@ async function injectFileChrome({ job_key, file_type, fastapiUrl }) {
   const keyword = file_type === "resume" ? "resume" : "cover";
 
   function findInput() {
-    const docs = [document];
-    for (const iframe of document.querySelectorAll("iframe")) {
-      try { if (iframe.contentDocument) docs.push(iframe.contentDocument); } catch (_) {}
-    }
-    for (const doc of docs) {
-      const inputs = [...doc.querySelectorAll('input[type="file"]')];
-      const found = inputs.find(el => {
-        const label =
-          el.closest("label")?.textContent ||
-          doc.querySelector(`label[for="${el.id}"]`)?.textContent ||
-          el.getAttribute("aria-label") || "";
-        return label.toLowerCase().includes(keyword);
-      }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
-      if (found) return found;
-    }
-    return null;
+    const inputs = [...document.querySelectorAll('input[type="file"]')];
+    return inputs.find(el => {
+      const label =
+        el.closest("label")?.textContent ||
+        document.querySelector(`label[for="${el.id}"]`)?.textContent ||
+        el.getAttribute("aria-label") || "";
+      return label.toLowerCase().includes(keyword);
+    }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
   }
 
   const input = findInput();
