@@ -82,7 +82,9 @@ def test_init_db_creates_tables(monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
 
     import db.database as db_module
+    import db.models as models_module
     importlib.reload(db_module)
+    importlib.reload(models_module)  # re-registers ORM models against the reloaded Base
 
     db_module.init_db()
 
@@ -92,7 +94,8 @@ def test_init_db_creates_tables(monkeypatch, tmp_path):
     assert "user_profile" in inspector.get_table_names()
 
     db_module.engine.dispose()
-    importlib.reload(db_module)  # restore module state for other tests
+    importlib.reload(db_module)   # restore module state for other tests
+    importlib.reload(models_module)
 
 
 def test_seed_default_config(db_session):

@@ -3,11 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, Float, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase
 
-
-class Base(DeclarativeBase):
-    pass
+from db.database import Base
 
 
 class Job(Base):

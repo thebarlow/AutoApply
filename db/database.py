@@ -4,9 +4,12 @@ import os
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from db.models import Base
+
+class Base(DeclarativeBase):
+    """SQLAlchemy declarative base — registry for all ORM models."""
+    pass
 
 load_dotenv()
 
