@@ -1,0 +1,158 @@
+from __future__ import annotations
+import json
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from unittest.mock import MagicMock
+
+
+@pytest.fixture
+def db_session():
+    from db.database import Base
+    import core.user  # noqa: F401
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
+    Base.metadata.drop_all(engine)
+
+
+SAMPLE_DATA = {
+    "first_name": "Matt",
+    "last_name": "Barlow",
+    "email": "matt@example.com",
+    "phone": "555-1234",
+    "location": "Remote",
+    "skills": ["Python", "SQL"],
+    "work_history": [
+        {"company": "Acme", "title": "SWE", "start": "2022-01", "end": "Present", "summary": "Built things."}
+    ],
+    "education": [
+        {"institution": "Columbia", "degree": "B.S.", "field": "EE", "graduated": "2018", "gpa": 3.5}
+    ],
+    "projects": [
+        {"name": "auto_apply", "description": "Job pipeline", "url": "https://github.com/x", "technologies": ["Python"]}
+    ],
+    "target_salary_min": 120000,
+    "target_salary_max": 160000,
+    "target_roles": ["Backend Engineer"],
+    "resume_path": "",
+    "md_path": "",
+    "hero": "",
+    "linkedin": "",
+    "github": "",
+}
+
+
+def test_user_load_hydrates_fields(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    user = User.load(db_session)
+    assert user.email == "matt@example.com"
+    assert user.skills == ["Python", "SQL"]
+    assert user.work_history[0].company == "Acme"
+    assert user.education[0].institution == "Columbia"
+    assert user.projects[0].name == "auto_apply"
+    assert user.target_salary_min == 120000
+
+
+def test_user_load_raises_when_no_profile(db_session):
+    from core.user import User
+    with pytest.raises(RuntimeError, match="No user profile found"):
+        User.load(db_session)
+
+
+def test_user_load_uses_active_profile_id(db_session):
+    from core.user import User
+    # Insert two profiles
+    db_session.add(User(name="First", data=json.dumps({**SAMPLE_DATA, "email": "first@x.com"})))
+    db_session.add(User(name="Second", data=json.dumps({**SAMPLE_DATA, "email": "second@x.com"})))
+    db_session.commit()
+
+    from db.models import Config  # will exist until Task 13
+    db_session.add(Config(key="active_profile_id", value="2"))
+    db_session.commit()
+
+    user = User.load(db_session)
+    assert user.email == "second@x.com"
+
+
+def test_user_save_persists_changes(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    user = User.load(db_session)
+    user.email = "updated@example.com"
+    user.save(db_session)
+
+    fresh = User.load(db_session)
+    assert fresh.email == "updated@example.com"
+
+
+def test_user_full_name_uses_name_column(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt Barlow", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+    user = User.load(db_session)
+    assert user.full_name() == "Matt Barlow"
+
+
+def test_user_full_name_falls_back_to_first_last(db_session):
+    from core.user import User
+    data = {**SAMPLE_DATA, "first_name": "Matt", "last_name": "Barlow"}
+    db_session.add(User(name="", data=json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+    assert user.full_name() == "Matt Barlow"
+
+
+def test_user_from_markdown_returns_profile_dict(db_session):
+    from core.user import User
+    from db.models import Config
+    db_session.add(Config(key="llm_active_provider", value="test"))
+    db_session.add(Config(key="llm_providers", value='[{"name":"test","base_url":"http://x","model":"m"}]'))
+    db_session.commit()
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = json.dumps({
+        "name": "Matt Barlow", "email": "matt@x.com", "phone": "", "location": "",
+        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
+        "target_roles": [],
+    })
+
+    import unittest.mock as mock
+    with mock.patch("core.llm.get_openai_client", return_value=(mock_client, "m")):
+        result = User.from_markdown("resume text here", db_session)
+
+    assert result["email"] == "matt@x.com"
+    assert result["skills"] == ["Python"]
+
+
+def test_user_render_for_prompt_contains_skills(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+    user = User.load(db_session)
+    prompt = user.render_for_prompt()
+    assert "Python" in prompt
+    assert "SQL" in prompt
+    assert "Work History" in prompt
+
+
+def test_user_master_resume_falls_back_to_render(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt", data=json.dumps({**SAMPLE_DATA, "md_path": ""})))
+    db_session.commit()
+    user = User.load(db_session)
+    result = user.master_resume()
+    assert "Python" in result
