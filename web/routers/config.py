@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-import core.profile_parser as _parser
 from db.models import Config, FieldHelp
 from core.user import User
 from core.job import Job
@@ -730,13 +729,12 @@ def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) ->
     path = Path(resume_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Resume file not found on disk")
-    if path.suffix.lower() == ".pdf":
-        md_text = _parser.pdf_to_markdown(path.read_bytes())
-    else:
-        md_text = path.read_text(errors="replace")
     try:
-        parsed = _parser.markdown_to_profile(md_text, db)
-    except Exception as exc:
+        if path.suffix.lower() == ".pdf":
+            parsed = User.from_pdf(path.read_bytes(), db)
+        else:
+            parsed = User.from_markdown(path.read_text(errors="replace"), db)
+    except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     merged = {**_EMPTY_PROFILE_DATA, **parsed}
     merged["resume_path"] = data.get("resume_path", "")
@@ -805,12 +803,11 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
     if len(contents) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
     filename = file.filename or ""
-    if filename.lower().endswith(".pdf"):
-        md_text = _parser.pdf_to_markdown(contents)
-    else:
-        md_text = contents.decode("utf-8", errors="replace")
     try:
-        return _parser.markdown_to_profile(md_text, db)
+        if filename.lower().endswith(".pdf"):
+            return User.from_pdf(contents, db)
+        else:
+            return User.from_markdown(contents.decode("utf-8", errors="replace"), db)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

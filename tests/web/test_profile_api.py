@@ -125,13 +125,13 @@ def test_put_active_profile_not_found(client):
 
 
 def test_parse_endpoint_md_returns_profile_dict(client, monkeypatch):
-    import core.profile_parser as pp
-    monkeypatch.setattr(pp, "markdown_to_profile", lambda text, db: {
+    from core.user import User
+    monkeypatch.setattr(User, "from_markdown", classmethod(lambda cls, text, db: {
         "name": "Test User", "email": "t@t.com", "phone": "", "location": "",
         "skills": ["Python"], "work_history": [], "education": [],
         "target_salary_min": None, "target_salary_max": None,
         "target_roles": [], "resume_path": "", "md_path": "",
-    })
+    }))
 
     resp = client.post(
         "/api/config/profile/parse",
@@ -144,20 +144,19 @@ def test_parse_endpoint_md_returns_profile_dict(client, monkeypatch):
 
 
 def test_parse_endpoint_pdf_calls_pdf_to_markdown(client, monkeypatch):
-    import core.profile_parser as pp
+    from core.user import User
     pdf_calls = []
 
-    def fake_pdf_to_md(b):
+    def fake_from_pdf(cls, b, db):
         pdf_calls.append(b)
-        return "# Resume"
+        return {
+            "name": "", "email": "", "phone": "", "location": "",
+            "skills": [], "work_history": [], "education": [],
+            "target_salary_min": None, "target_salary_max": None,
+            "target_roles": [], "resume_path": "", "md_path": "",
+        }
 
-    monkeypatch.setattr(pp, "pdf_to_markdown", fake_pdf_to_md)
-    monkeypatch.setattr(pp, "markdown_to_profile", lambda t, db: {
-        "name": "", "email": "", "phone": "", "location": "",
-        "skills": [], "work_history": [], "education": [],
-        "target_salary_min": None, "target_salary_max": None,
-        "target_roles": [], "resume_path": "", "md_path": "",
-    })
+    monkeypatch.setattr(User, "from_pdf", classmethod(fake_from_pdf))
 
     resp = client.post(
         "/api/config/profile/parse",
@@ -256,12 +255,12 @@ def test_serve_profile_file_invalid_type(client, db_session):
 
 
 def test_parse_endpoint_surfaces_no_provider_error(client, monkeypatch):
-    import core.profile_parser as pp
+    from core.user import User
 
-    def _raise(*_):
+    def _raise(cls, *_):
         raise RuntimeError("No active LLM provider configured")
 
-    monkeypatch.setattr(pp, "markdown_to_profile", _raise)
+    monkeypatch.setattr(User, "from_markdown", classmethod(_raise))
 
     resp = client.post(
         "/api/config/profile/parse",
@@ -272,12 +271,12 @@ def test_parse_endpoint_surfaces_no_provider_error(client, monkeypatch):
 
 
 def test_parse_endpoint_surfaces_bad_json_error(client, monkeypatch):
-    import core.profile_parser as pp
+    from core.user import User
 
-    def _raise(*_):
+    def _raise(cls, *_):
         raise ValueError("LLM returned invalid JSON: ...")
 
-    monkeypatch.setattr(pp, "markdown_to_profile", _raise)
+    monkeypatch.setattr(User, "from_markdown", classmethod(_raise))
 
     resp = client.post(
         "/api/config/profile/parse",
