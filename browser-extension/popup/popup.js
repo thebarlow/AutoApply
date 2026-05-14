@@ -41,14 +41,14 @@ async function loadApplySection(fastapiUrl) {
   applyJobLabel.textContent = `Apply — ${job.title} @ ${job.company}`;
   applyStatus.textContent = "";
 
-  if (job.resume_pdf_exists) {
+  if (job.resume_path) {
     btnResume.disabled = false;
     btnResume.addEventListener("click", () => triggerUpload(job_key, "resume", fastapiUrl));
   } else {
     btnResume.title = "Generate resume first";
   }
 
-  if (job.cover_pdf_exists) {
+  if (job.cover_path) {
     btnCover.disabled = false;
     btnCover.addEventListener("click", () => triggerUpload(job_key, "cover", fastapiUrl));
   } else {
