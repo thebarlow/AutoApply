@@ -89,6 +89,14 @@ def get_jobs(db: Session = Depends(get_db)):
     return [j.serialize() for j in jobs]
 
 
+@router.get("/{job_key}")
+def get_job(job_key: str, db: Session = Depends(get_db)):
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.serialize()
+
+
 @router.patch("/{job_key}/state")
 def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_db)):
     if body.state not in _VALID_STATES:
