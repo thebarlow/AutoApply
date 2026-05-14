@@ -248,3 +248,64 @@ def test_extract_description_skips_if_already_populated(db_session):
     job.extract_description(db_session)
     mock_client.chat.completions.create.assert_not_called()
     assert db_session.query(Job).first().ext_seniority == "Senior"
+
+
+def test_build_resume_prompt_substitutes_job_and_user(db_session):
+    from core.job import Job
+    from core.user import User
+    import json as _json
+
+    job = Job.from_scraped(_make_scraped(title="Python Dev"))
+    db_session.add(job)
+    data = {
+        "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
+        "email": "", "phone": "", "location": "", "hero": "", "linkedin": "", "github": "",
+        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
+        "target_salary_min": 100000, "target_salary_max": 150000,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
+    }
+    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+
+    prompt = job.build_resume_prompt(user, "Job: {job.title}\nProfile: {user_profile.skills}", db_session)
+    assert "Python Dev" in prompt
+    assert "Python" in prompt
+
+
+def test_generate_resume_md_writes_file(db_session, tmp_path):
+    from core.job import Job
+    from core.user import User
+    from unittest.mock import MagicMock, patch
+    import json as _json
+
+    job = Job.from_scraped(_make_scraped())
+    db_session.add(job)
+    data = {
+        "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
+        "email": "m@x.com", "phone": "555", "location": "Remote",
+        "hero": "", "linkedin": "li", "github": "gh",
+        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
+        "target_salary_min": 100000, "target_salary_max": 150000,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
+    }
+    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    db_session.add(__import__("db.models", fromlist=["Config"]).Config(key="resume_github", value=""))
+    db_session.add(__import__("db.models", fromlist=["Config"]).Config(key="resume_linkedin", value=""))
+    db_session.add(__import__("db.models", fromlist=["Config"]).Config(key="resume_website", value=""))
+    db_session.commit()
+    user = User.load(db_session)
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = "## Experience\n- Did things"
+    mock_client.chat.completions.create.return_value.choices[0].finish_reason = "stop"
+
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    with patch("core.job._OUTPUTS_DIR", outputs):
+        job.generate_resume_md(user, "Write resume for {job.title}", mock_client, "gpt-4", db_session)
+
+    md_file = outputs / "remotive_1_resume.md"
+    assert md_file.exists()
+    content = md_file.read_text()
+    assert "## Experience" in content

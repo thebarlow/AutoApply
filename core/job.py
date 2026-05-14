@@ -442,6 +442,221 @@ Return only the JSON object, no other text.
             raise RuntimeError(f"No active {type_} prompt configured. Set one under Config → Scaffolding.")
         return prompt
 
+    # ── Generation ─────────────────────────────────────────────────────────────
+
+    def build_resume_prompt(self, user: Any, template: str, db: Session) -> str:
+        """Render the resume generation prompt.
+
+        Handles the {user_profile.master_resume} virtual placeholder (reads from
+        user.master_resume()) and {job.extracted_description} (auto-runs extraction
+        if ext_* columns are empty).
+
+        Args:
+            user: A User instance with profile data.
+            template: Prompt template string with placeholders.
+            db: SQLAlchemy session (used for auto-extraction if needed).
+
+        Returns:
+            Rendered prompt string.
+        """
+        template = template.replace("{user_profile.master_resume}", user.master_resume())
+        if "{job.extracted_description}" in template:
+            if not self.ext_seniority:
+                self.extract_description(db)
+            extracted_md = self._ext_to_markdown()
+            template = template.replace("{job.extracted_description}", extracted_md)
+        return _apply_template(template, {"job": self, "user_profile": user})
+
+    def build_cover_prompt(self, user: Any, template: str, db: Session) -> str:
+        """Render the cover letter generation prompt.
+
+        Handles the same virtual placeholders as build_resume_prompt.
+
+        Args:
+            user: A User instance with profile data.
+            template: Prompt template string with placeholders.
+            db: SQLAlchemy session (used for auto-extraction if needed).
+
+        Returns:
+            Rendered prompt string.
+        """
+        return self.build_resume_prompt(user, template, db)
+
+    def generate_resume_md(
+        self,
+        user: Any,
+        prompt_content: str,
+        client: Any,
+        model: str,
+        db: Session,
+    ) -> None:
+        """Generate resume markdown via LLM and write to generator/outputs/.
+
+        Writes to generator/outputs/{job_key}_resume.md, prepending YAML front matter
+        with the user's contact info.
+
+        Args:
+            user: A User instance with profile data.
+            prompt_content: Prompt template string.
+            client: An OpenAI-compatible client instance.
+            model: Model identifier string.
+            db: SQLAlchemy session.
+        """
+        from core.llm import call_llm
+        from core.utils import strip_header_block
+
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        frontmatter = self._build_frontmatter(user, db)
+        prompt = self.build_resume_prompt(user, prompt_content, db)
+        content = call_llm(prompt, client, model)
+        content = strip_header_block(content)
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        md_path.write_text(frontmatter + content, encoding="utf-8")
+
+    def generate_cover_md(
+        self,
+        user: Any,
+        prompt_content: str,
+        client: Any,
+        model: str,
+        db: Session,
+    ) -> None:
+        """Generate cover letter markdown via LLM and write to generator/outputs/.
+
+        Writes to generator/outputs/{job_key}_cover.md, prepending YAML front matter.
+
+        Args:
+            user: A User instance with profile data.
+            prompt_content: Prompt template string.
+            client: An OpenAI-compatible client instance.
+            model: Model identifier string.
+            db: SQLAlchemy session.
+        """
+        from core.llm import call_llm
+
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        frontmatter = self._build_frontmatter(user, db)
+        prompt = self.build_cover_prompt(user, prompt_content, db)
+        content = call_llm(prompt, client, model)
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
+        md_path.write_text(frontmatter + content, encoding="utf-8")
+
+    def generate_resume_pdf(self, template_path: Path, db: Session) -> None:
+        """Render resume PDF from existing markdown and update resume_path.
+
+        Requires generator/outputs/{job_key}_resume.md to exist.
+
+        Args:
+            template_path: Path to the LaTeX template file.
+            db: SQLAlchemy session.
+
+        Raises:
+            FileNotFoundError: If the resume markdown file does not exist.
+        """
+        from core.utils import render_resume_pdf
+
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        if not md_path.exists():
+            raise FileNotFoundError(f"Resume markdown not found: {md_path}")
+        pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
+        render_resume_pdf(md_path, pdf_path, self.job_key, template_path)
+        self.resume_path = str(pdf_path)
+        db.commit()
+
+    def generate_cover_pdf(self, template_path: Path, db: Session) -> None:
+        """Render cover letter PDF from existing markdown and update cover_path.
+
+        Requires generator/outputs/{job_key}_cover.md to exist.
+
+        Args:
+            template_path: Path to the LaTeX template file.
+            db: SQLAlchemy session.
+
+        Raises:
+            FileNotFoundError: If the cover letter markdown file does not exist.
+        """
+        from core.utils import render_pdf
+
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
+        if not md_path.exists():
+            raise FileNotFoundError(f"Cover markdown not found: {md_path}")
+        pdf_path = _OUTPUTS_DIR / f"{self.job_key}_cover.pdf"
+        render_pdf(md_path, pdf_path, template_path)
+        self.cover_path = str(pdf_path)
+        db.commit()
+
+    # ── Private helpers ────────────────────────────────────────────────────────
+
+    def _ext_to_markdown(self) -> str:
+        """Format the extracted description fields as human-readable markdown.
+
+        Returns:
+            Markdown string with sections for overview metadata, skills, tech stack,
+            responsibilities, and company signals.
+        """
+        sections = []
+        meta = []
+        for attr, label in [
+            ("ext_seniority", "Seniority"), ("ext_role_type", "Role Type"),
+            ("ext_domain", "Domain"), ("ext_work_arrangement", "Work Arrangement"),
+            ("ext_employment_type", "Employment Type"),
+        ]:
+            if val := getattr(self, attr, ""):
+                meta.append(f"**{label}:** {val}")
+        if meta:
+            sections.append("## Overview\n\n" + "\n\n".join(meta))
+        for attr, heading in [
+            ("ext_required_skills", "Required Skills"),
+            ("ext_preferred_skills", "Preferred Skills"),
+            ("ext_tech_stack", "Tech Stack"),
+            ("ext_key_responsibilities", "Key Responsibilities"),
+            ("ext_company_signals", "Company Signals"),
+        ]:
+            raw = getattr(self, attr, "") or ""
+            items = [i.strip() for i in raw.split(",") if i.strip()]
+            if items:
+                sections.append(f"## {heading}\n" + "\n".join(f"- {item}" for item in items))
+        return "\n\n".join(sections)
+
+    def _build_frontmatter(self, user: Any, db: Session) -> str:
+        """Build YAML front matter for resume/cover letter markdown files.
+
+        Reads resume_github, resume_linkedin, resume_website from the Config table.
+
+        Args:
+            user: A User instance with contact info.
+            db: SQLAlchemy session.
+
+        Returns:
+            YAML front matter string ending with a blank line.
+        """
+        from db.models import Config
+
+        def _cfg(key: str) -> str:
+            row = db.query(Config).filter_by(key=key).first()
+            return row.value if row else ""
+
+        full_name = user.full_name()
+        first = user.first_name or full_name.split(" ", 1)[0]
+        last = user.last_name or (full_name.split(" ", 1)[1] if " " in full_name else "")
+        github = _cfg("resume_github")
+        linkedin = _cfg("resume_linkedin")
+        website = _cfg("resume_website")
+
+        lines = [
+            "---",
+            f"name: {full_name}", f"firstname: {first}", f"lastname: {last}",
+            f"email: {user.email}", f"phone: {user.phone}", f"location: {user.location}",
+        ]
+        if github:
+            lines.append(f"github: {github}")
+        if linkedin:
+            lines.append(f"linkedin: {linkedin}")
+        if website:
+            lines.append(f"website: {website}")
+        lines.extend(["---", ""])
+        return "\n".join(lines) + "\n"
+
     def serialize(self) -> dict:
         """Return a JSON-serializable dict of all job fields for the API.
 
