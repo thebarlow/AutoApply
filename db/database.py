@@ -91,13 +91,30 @@ def _migrate_legacy_config() -> None:
         db.close()
 
 
+def _migrate_ext_columns() -> None:
+    """Add ext_* extraction columns to the jobs table if they do not exist."""
+    ext_columns = [
+        "ext_seniority", "ext_role_type", "ext_domain", "ext_work_arrangement",
+        "ext_employment_type", "ext_required_skills", "ext_preferred_skills",
+        "ext_tech_stack", "ext_key_responsibilities", "ext_company_signals",
+    ]
+    with engine.connect() as conn:
+        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
+        for col in ext_columns:
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} TEXT"))
+        conn.commit()
+
+
 def init_db() -> None:
-    """Create all tables and run schema migrations."""
+    """Create all tables, run schema migrations, and seed default data."""
+    import core.job   # noqa: F401 — registers Job with Base.metadata
+    import core.user  # noqa: F401 — registers User with Base.metadata
     Base.metadata.create_all(bind=engine)
     _migrate_profile_name()
     _migrate_legacy_config()
-    # Seed field help descriptions for any existing DB (no-op if already present)
-    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates  # local import avoids circular at module level
+    _migrate_ext_columns()
+    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates
     db = SessionLocal()
     try:
         seed_field_help(db)
