@@ -9,6 +9,12 @@
     input { width: 100%; box-sizing: border-box; padding: 5px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 3px; }
     button { width: 100%; padding: 6px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; margin-bottom: 6px; background: #f5f5f5; }
     button#btn-save { background: #0a66c2; color: #fff; border-color: #0a66c2; }
+    button.apply-btn { background: #057642; color: #fff; border-color: #057642; }
+    button.apply-btn:disabled { background: #ccc; border-color: #ccc; cursor: not-allowed; }
+    hr { border: none; border-top: 1px solid #eee; margin: 10px 0; }
+    #apply-section { margin-top: 4px; }
+    #apply-job-label { font-size: 12px; font-weight: 600; margin-bottom: 8px; color: #333; }
+    #apply-status { font-size: 11px; color: #888; margin-bottom: 6px; }
     #msg { font-size: 11px; min-height: 14px; }
   </style>
 </head>
@@ -18,6 +24,13 @@
   <input id="fastapi-url" type="text" placeholder="http://localhost:8000">
   <button id="btn-save">Save</button>
   <button id="btn-clear">Clear history (<span id="count">0</span> jobs staged)</button>
+  <hr>
+  <div id="apply-section">
+    <div id="apply-job-label">Apply</div>
+    <div id="apply-status">Checking...</div>
+    <button class="apply-btn" id="btn-resume" disabled>Upload Resume</button>
+    <button class="apply-btn" id="btn-cover" disabled>Upload Cover Letter</button>
+  </div>
   <div id="msg"></div>
   <script src="popup.js"></script>
 </body>
