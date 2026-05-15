@@ -101,7 +101,15 @@ function clickFileInput(file_type) {
     }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
   }
 
-  const input = findInput();
+  const inputs = [...document.querySelectorAll('input[type="file"]')];
+  if (inputs.length === 0) return;
+  const input = inputs.find(el => {
+    const label =
+      el.closest("label")?.textContent ||
+      document.querySelector(`label[for="${el.id}"]`)?.textContent ||
+      el.getAttribute("aria-label") || "";
+    return label.toLowerCase().includes(keyword);
+  }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
   if (!input) {
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#e53935;color:#fff;padding:10px;font-size:14px;z-index:99999;text-align:center;";
@@ -117,18 +125,15 @@ function clickFileInput(file_type) {
 async function injectFileChrome({ job_key, file_type, fastapiUrl }) {
   const keyword = file_type === "resume" ? "resume" : "cover";
 
-  function findInput() {
-    const inputs = [...document.querySelectorAll('input[type="file"]')];
-    return inputs.find(el => {
-      const label =
-        el.closest("label")?.textContent ||
-        document.querySelector(`label[for="${el.id}"]`)?.textContent ||
-        el.getAttribute("aria-label") || "";
-      return label.toLowerCase().includes(keyword);
-    }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
-  }
-
-  const input = findInput();
+  const inputs = [...document.querySelectorAll('input[type="file"]')];
+  if (inputs.length === 0) return;
+  const input = inputs.find(el => {
+    const label =
+      el.closest("label")?.textContent ||
+      document.querySelector(`label[for="${el.id}"]`)?.textContent ||
+      el.getAttribute("aria-label") || "";
+    return label.toLowerCase().includes(keyword);
+  }) || inputs.find(el => /pdf|doc/i.test(el.accept || "")) || (inputs.length === 1 ? inputs[0] : null);
   if (!input) {
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#e53935;color:#fff;padding:10px;font-size:14px;z-index:99999;text-align:center;";
