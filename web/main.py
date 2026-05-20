@@ -5,7 +5,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -100,4 +100,4 @@ def spa_catchall(full_path: str):
     """Serve React SPA for any unmatched non-API route."""
     if (_DIST / "index.html").exists():
         return _spa_index()
-    return FileResponse(_STATIC / "index.html")
+    raise HTTPException(status_code=404)
