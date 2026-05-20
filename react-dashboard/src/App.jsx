@@ -1,21 +1,24 @@
 import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
+import Inbox from './components/widgets/Inbox'
+import Processing from './components/widgets/Processing'
+import Outbox from './components/widgets/Outbox'
+import Stats from './components/widgets/Stats'
+import Settings from './components/widgets/Settings'
 
 export default function App() {
   return (
     <div className="min-h-screen text-space-text">
       <Navbar />
       <Dashboard>
-        {/* Left column: 3/5 = 60% */}
-        <div className="col-span-3 flex flex-col gap-4">
-          <div className="bg-purple-900/20 rounded-xl flex-1 flex items-center justify-center text-space-dim">Inbox</div>
-          <div className="bg-purple-900/20 rounded-xl flex-1 flex items-center justify-center text-space-dim">Processing</div>
-          <div className="bg-purple-900/20 rounded-xl flex-1 flex items-center justify-center text-space-dim">Outbox</div>
+        <div className="col-span-3 flex flex-col gap-4 overflow-hidden">
+          <Inbox />
+          <Processing />
+          <Outbox />
         </div>
-        {/* Right column: 2/5 = 40% */}
-        <div className="col-span-2 flex flex-col gap-4">
-          <div className="bg-blue-900/20 rounded-xl flex-1 flex items-center justify-center text-space-dim">Stats</div>
-          <div className="bg-blue-900/20 rounded-xl flex-1 flex items-center justify-center text-space-dim">Settings</div>
+        <div className="col-span-2 flex flex-col gap-4 overflow-hidden">
+          <Stats />
+          <Settings />
         </div>
       </Dashboard>
     </div>
