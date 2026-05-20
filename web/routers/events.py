@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api")
 
 
 @router.get("/events")
-async def sse_events():
+async def sse_events() -> StreamingResponse:
     q = subscribe()
 
     async def generate():

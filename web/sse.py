@@ -7,31 +7,33 @@ queue synchronously — safe to call from FastAPI's threadpool workers.
 from __future__ import annotations
 
 import queue
-from typing import List
+import threading
 
 
-_clients: List[queue.SimpleQueue] = []
+_lock = threading.Lock()
+_clients: list[queue.SimpleQueue] = []
 
 
 def subscribe() -> queue.SimpleQueue:
     """Register a new SSE client and return its queue."""
     q: queue.SimpleQueue = queue.SimpleQueue()
-    _clients.append(q)
+    with _lock:
+        _clients.append(q)
     return q
 
 
 def unsubscribe(q: queue.SimpleQueue) -> None:
     """Remove a client queue when its connection closes."""
-    try:
-        _clients.remove(q)
-    except ValueError:
-        pass
+    with _lock:
+        try:
+            _clients.remove(q)
+        except ValueError:
+            pass
 
 
 def broadcast(payload: str) -> None:
     """Send a JSON string to every connected SSE client."""
-    for q in list(_clients):
-        try:
-            q.put_nowait(payload)
-        except Exception:
-            pass
+    with _lock:
+        clients = list(_clients)
+    for q in clients:
+        q.put_nowait(payload)
