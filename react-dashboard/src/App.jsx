@@ -1,9 +1,6 @@
 import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
-import Inbox from './components/widgets/Inbox'
-import Processing from './components/widgets/Processing'
-import Outbox from './components/widgets/Outbox'
-import Stats from './components/widgets/Stats'
+import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
 
 export default function App() {
@@ -11,13 +8,10 @@ export default function App() {
     <div className="min-h-screen text-space-text">
       <Navbar />
       <Dashboard>
-        <div className="col-span-3 flex flex-col gap-4 overflow-hidden">
-          <Inbox />
-          <Processing />
-          <Outbox />
+        <div className="col-span-3 overflow-hidden h-full">
+          <Pipeline />
         </div>
-        <div className="col-span-2 flex flex-col gap-4 overflow-hidden">
-          <Stats />
+        <div className="col-span-2 overflow-hidden h-full">
           <Settings />
         </div>
       </Dashboard>
