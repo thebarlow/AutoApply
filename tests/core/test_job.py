@@ -273,6 +273,53 @@ def test_build_resume_prompt_substitutes_job_and_user(db_session):
     assert "Python" in prompt
 
 
+def test_serialize_extraction_none_when_no_ext_fields(db_session):
+    from core.job import Job
+    job = Job.from_scraped(_make_scraped())
+    db_session.add(job)
+    db_session.commit()
+    result = job.serialize()
+    assert result["extraction_json_exists"] is False
+    assert result["extraction"] is None
+
+
+def test_serialize_extraction_populated_when_ext_fields_set(db_session):
+    from core.job import Job
+    job = Job.from_scraped(_make_scraped())
+    job.ext_seniority = "Mid"
+    job.ext_required_skills = "Python, FastAPI, Docker"
+    job.ext_tech_stack = "Python, PostgreSQL"
+    job.ext_preferred_skills = "  Kubernetes , Go "
+    db_session.add(job)
+    db_session.commit()
+    result = job.serialize()
+    assert result["extraction_json_exists"] is True
+    ext = result["extraction"]
+    assert ext is not None
+    assert ext["seniority"] == "Mid"
+    assert ext["required_skills"] == ["Python", "FastAPI", "Docker"]
+    assert ext["tech_stack"] == ["Python", "PostgreSQL"]
+    # verify strip logic removes surrounding whitespace
+    assert ext["preferred_skills"] == ["Kubernetes", "Go"]
+
+
+def test_all_inbox_returns_only_new_and_pending_review(db_session):
+    from core.job import Job, JobState
+    new_job = Job.from_scraped(_make_scraped(job_key="r_new", url="https://x.com/new"))
+    pending_job = Job.from_scraped(_make_scraped(job_key="r_pending", url="https://x.com/pending"))
+    pending_job.state = JobState.PENDING_REVIEW.value
+    ready_job = Job.from_scraped(_make_scraped(job_key="r_ready", url="https://x.com/ready"))
+    ready_job.state = JobState.READY.value
+    db_session.add_all([new_job, pending_job, ready_job])
+    db_session.commit()
+    results = Job.all_inbox(db_session)
+    keys = {j.job_key for j in results}
+    assert "r_new" in keys
+    assert "r_pending" in keys
+    assert "r_ready" not in keys
+    assert len(results) == 2
+
+
 def test_generate_resume_md_writes_file(db_session, tmp_path):
     from core.job import Job
     from core.user import User

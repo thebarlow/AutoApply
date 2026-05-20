@@ -193,7 +193,7 @@ class Job(Base):
 
     @classmethod
     def all_inbox(cls, db: Session) -> list["Job"]:
-        """Return all Inbox jobs (new or pending_review) ordered by final_score descending.
+        """Return all jobs awaiting review (new or pending_review) ordered by final_score descending.
 
         Args:
             db: SQLAlchemy session.
@@ -691,7 +691,7 @@ Return only the JSON object, no other text.
             "cover_path": self.cover_path,
             "resume_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_resume.md").exists(),
             "cover_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_cover.md").exists(),
-            "extraction_json_exists": bool(self.ext_required_skills or self.ext_seniority),
+            "extraction_json_exists": (has_extraction := bool(self.ext_required_skills or self.ext_seniority)),
             "extraction": {
                 "seniority": self.ext_seniority,
                 "role_type": self.ext_role_type,
@@ -703,6 +703,6 @@ Return only the JSON object, no other text.
                 "tech_stack": [s.strip() for s in (self.ext_tech_stack or "").split(",") if s.strip()],
                 "key_responsibilities": [s.strip() for s in (self.ext_key_responsibilities or "").split(",") if s.strip()],
                 "company_signals": [s.strip() for s in (self.ext_company_signals or "").split(",") if s.strip()],
-            } if bool(self.ext_required_skills or self.ext_seniority) else None,
+            } if has_extraction else None,
             "scraped_at": self.scraped_at or "",
         }
