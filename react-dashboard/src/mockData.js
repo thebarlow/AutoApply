@@ -13,9 +13,9 @@ export const inboxJobs = [
 ]
 
 export const processingJobs = [
-  { id: 6, title: 'Full Stack Developer', company: 'Retool', stage: 'Scoring', docs: { resume: true, coverLetter: false } },
-  { id: 7, title: 'TypeScript Engineer', company: 'Prisma', stage: 'Generating', docs: { resume: false, coverLetter: false } },
-  { id: 8, title: 'Staff Engineer', company: 'PlanetScale', stage: 'Scoring', docs: { resume: true, coverLetter: true } },
+  { id: 6, title: 'Full Stack Developer', company: 'Retool', docs: { resume: true, coverLetter: false } },
+  { id: 7, title: 'TypeScript Engineer', company: 'Prisma', docs: { resume: false, coverLetter: false } },
+  { id: 8, title: 'Staff Engineer', company: 'PlanetScale', docs: { resume: true, coverLetter: true } },
 ]
 
 export const outboxJobs = [
