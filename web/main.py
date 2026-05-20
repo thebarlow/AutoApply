@@ -13,6 +13,7 @@ from db.database import init_db
 from web.routers import jobs
 from web.routers import scraper
 from web.routers import config
+from web.routers import events
 
 
 def _timed(label: str, fn):
@@ -38,9 +39,9 @@ async def lifespan(app: FastAPI):
     t = threading.Thread(target=_warm_lazy_imports, daemon=True)
     t.start()
 
-    print("[startup] Open http://localhost:8080 in your browser  (0.0.0.0 in the line above is the bind address, not the URL)")
+    print("[startup] Open http://localhost:8080 in your browser")
 
-    yield  # server is live from here
+    yield
 
     print("[shutdown] Waiting for background thread...")
     t.join(timeout=5)
@@ -49,28 +50,54 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Auto Apply", lifespan=lifespan)
 
 _STATIC = Path(__file__).parent / "static"
+_DIST = Path(__file__).parent.parent / "react-dashboard" / "dist"
 
 app.include_router(jobs.router)
 app.include_router(scraper.router)
 app.include_router(config.router)
+app.include_router(events.router)
+
+# Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
+
+# Serve Vite-compiled JS/CSS bundles (only when built)
+if (_DIST / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=_DIST / "assets"), name="assets")
+
+
+def _spa_index() -> FileResponse:
+    return FileResponse(_DIST / "index.html")
 
 
 @app.get("/")
 def index():
+    if (_DIST / "index.html").exists():
+        return _spa_index()
     return FileResponse(_STATIC / "index.html")
 
 
 @app.get("/config")
 def config_page():
+    if (_DIST / "index.html").exists():
+        return _spa_index()
     return FileResponse(_STATIC / "config.html")
 
 
 @app.get("/setup")
 def setup_page():
+    if (_DIST / "index.html").exists():
+        return _spa_index()
     return FileResponse(_STATIC / "setup.html")
 
 
 @app.get("/help")
 def help_page():
     return FileResponse(Path(__file__).parent.parent / "docs" / "index.html")
+
+
+@app.get("/{full_path:path}")
+def spa_catchall(full_path: str):
+    """Serve React SPA for any unmatched non-API route."""
+    if (_DIST / "index.html").exists():
+        return _spa_index()
+    return FileResponse(_STATIC / "index.html")
