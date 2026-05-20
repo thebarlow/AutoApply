@@ -37,3 +37,6 @@ docs/superpowers/*
 .venv
 START_HERE.md
 profiles/
+
+# React build output
+react-dashboard/dist/
