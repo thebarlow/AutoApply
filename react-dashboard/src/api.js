@@ -3,7 +3,8 @@ const BASE = ''
 async function _fetch(url, options) {
   const res = await fetch(BASE + url, options)
   if (!res.ok) throw new Error(`${options?.method ?? 'GET'} ${url} → ${res.status}`)
-  return res.json()
+  const ct = res.headers.get('content-type')
+  return ct && ct.includes('application/json') ? res.json() : null
 }
 
 export const getJobs = () => _fetch('/api/jobs')
