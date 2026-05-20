@@ -296,7 +296,11 @@ function AdvancedTab() {
               onChange={(e) => setProviders((prev) =>
                 prev.map((p) => p.id === provider.id ? { ...p, default_model: e.target.value } : p)
               )}
-              onBlur={(e) => handleSave(provider, 'default_model', e.target.value)}
+              onBlur={(e) => {
+                if (e.target.value !== (provider.default_model || '')) {
+                  handleSave(provider, 'default_model', e.target.value)
+                }
+              }}
             />
           </div>
           <div className="flex flex-col gap-1">

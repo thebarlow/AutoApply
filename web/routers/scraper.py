@@ -99,4 +99,8 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
     )
     inserted = Job.save_batch([scraped], db)
     status = "staged" if inserted > 0 else "duplicate"
+    if inserted > 0:
+        job = db.query(Job).filter_by(job_key=body.job_key).first()
+        if job:
+            _broadcast(_json.dumps(job.serialize()))
     return {"status": status, "job_key": body.job_key}

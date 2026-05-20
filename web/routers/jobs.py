@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html as _html
-import json
 import json as _json
 import re
 from pathlib import Path
@@ -42,7 +41,7 @@ def _cfg_val(db: Session, key: str) -> str:
 def _resolve_prompt(db: Session, type_: str) -> dict:
     """Return the active prompt dict for a type; raises HTTP 400 if not configured."""
     active_id = _cfg_val(db, f"active_{type_}_prompt_id")
-    prompts = json.loads(_cfg_val(db, f"{type_}_prompts") or "[]")
+    prompts = _json.loads(_cfg_val(db, f"{type_}_prompts") or "[]")
     prompt = next((p for p in prompts if p["id"] == active_id), None)
     if not prompt:
         raise HTTPException(
@@ -65,7 +64,7 @@ def _resolve_template(db: Session, template_name: str) -> Path:
             status_code=400,
             detail="No LaTeX template assigned to this prompt. Set one under Config → Scaffolding.",
         )
-    templates = json.loads(_cfg_val(db, "latex_templates") or "[]")
+    templates = _json.loads(_cfg_val(db, "latex_templates") or "[]")
     match = next((t for t in templates if t["name"] == template_name), None)
     if not match:
         raise HTTPException(status_code=400, detail=f"LaTeX template '{template_name}' not found.")
@@ -385,8 +384,8 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Description extraction failed: {exc}")
     # Parse and store into ext_* columns via job method
     try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
+        data = _json.loads(raw)
+    except (_json.JSONDecodeError, TypeError):
         raise HTTPException(status_code=500, detail="Description extraction failed: LLM returned invalid JSON")
     job.ext_seniority = data.get("seniority", "")
     job.ext_role_type = data.get("role_type", "")
