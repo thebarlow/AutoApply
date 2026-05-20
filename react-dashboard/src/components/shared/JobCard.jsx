@@ -29,7 +29,7 @@ function ProcessingIcon() {
   )
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {} }) {
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
 
@@ -37,7 +37,11 @@ export default function JobCard({ title, company, statusIcon, docs = {} }) {
     <motion.div
       whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.06)' }}
       transition={{ duration: 0.15 }}
-      className="flex items-stretch justify-between rounded-lg px-3 py-2 bg-white/[0.03] border border-white/5 gap-3"
+      className={`flex items-stretch justify-between rounded-lg px-3 py-2 border gap-3 transition-colors
+        ${selected
+          ? 'bg-purple-900/30 border-purple-500/50'
+          : 'bg-white/[0.03] border-white/5'
+        }`}
     >
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-space-text truncate">{title}</p>
