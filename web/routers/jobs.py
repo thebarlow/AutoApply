@@ -17,6 +17,7 @@ from core.user import User
 from core.llm import get_openai_client
 from core.llm import get_client_for_named_provider as _get_client_for_named_provider
 from db.database import get_db, Config
+from web.sse import broadcast as _broadcast
 
 _GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
 
@@ -83,6 +84,12 @@ class StateUpdate(BaseModel):
 _VALID_STATES = {s.value for s in JobState}
 
 
+def _emit(job: Job) -> None:
+    """Serialize job and push to all SSE clients."""
+    import json as _json
+    _broadcast(_json.dumps(job.serialize()))
+
+
 @router.get("")
 def get_jobs(db: Session = Depends(get_db)):
     jobs = db.query(Job).order_by(Job.final_score.desc()).all()
@@ -109,6 +116,7 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     job.state = body.state
     db.commit()
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 
@@ -132,6 +140,7 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     client, model = get_openai_client(db)
     job.score(user, config, client, model, db)
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 
@@ -166,6 +175,7 @@ def generate_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"[generator] ERROR for {job_key}: {e}", file=__import__('sys').stderr)
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 
@@ -179,6 +189,7 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 
@@ -198,6 +209,7 @@ def generate_resume_md_endpoint(job_key: str, db: Session = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Resume markdown generation failed: {exc}")
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 
@@ -218,6 +230,7 @@ def generate_resume_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     db.refresh(job)
     if not job.resume_path:
         raise HTTPException(status_code=500, detail="Resume PDF rendering failed")
+    _emit(job)
     return job.serialize()
 
 
@@ -231,6 +244,7 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 
@@ -250,6 +264,7 @@ def generate_cover_md_endpoint(job_key: str, db: Session = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Cover letter markdown generation failed: {exc}")
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 
@@ -272,6 +287,7 @@ def generate_cover_pdf_endpoint(job_key: str, db: Session = Depends(get_db)):
     db.refresh(job)
     if job.cover_path is None:
         raise HTTPException(status_code=500, detail="Cover letter PDF rendering failed")
+    _emit(job)
     return job.serialize()
 
 
@@ -384,6 +400,7 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
     job.ext_company_signals = ", ".join(data.get("company_signals") or [])
     db.commit()
     db.refresh(job)
+    _emit(job)
     return job.serialize()
 
 

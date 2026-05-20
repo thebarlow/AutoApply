@@ -112,8 +112,8 @@ def test_run_scraper_aggregates_sources(db_session):
         _MockSource("remotive", [_scraped(1), _scraped(2)]),
         _MockSource("remoteok", [_scraped(3)]),
     ]
-    count = run_scraper(db_session, sources)
-    assert count == 3
+    new_jobs = run_scraper(db_session, sources)
+    assert len(new_jobs) == 3
     assert db_session.query(Job).count() == 3
 
 
@@ -121,8 +121,8 @@ def test_run_scraper_continues_on_source_error(db_session):
     sources = [_FailingSource(), _MockSource("remoteok", [_scraped(1)])]
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        count = run_scraper(db_session, sources)
-    assert count == 1
+        new_jobs = run_scraper(db_session, sources)
+    assert len(new_jobs) == 1
     assert any("failing" in str(w.message) for w in caught)
 
 

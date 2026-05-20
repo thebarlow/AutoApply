@@ -58,7 +58,7 @@ def load_max_jobs(db: Session) -> int:
     return 50
 
 
-def run_scraper(db: Session, sources: list[JobSource]) -> int:
+def run_scraper(db: Session, sources: list[JobSource]) -> list[Job]:
     """Fetch jobs from all sources and persist new ones.
 
     Args:
@@ -66,7 +66,7 @@ def run_scraper(db: Session, sources: list[JobSource]) -> int:
         sources: List of JobSource instances to fetch from.
 
     Returns:
-        Total count of newly inserted jobs.
+        List of newly inserted Job objects.
     """
     config = load_search_config(db)
     max_jobs = load_max_jobs(db)
@@ -80,6 +80,6 @@ def run_scraper(db: Session, sources: list[JobSource]) -> int:
         except Exception as e:
             warnings.warn(f"[scraper] {source.source_id} failed: {e}")
 
-    new_count = Job.save_batch(all_scraped, db)
-    print(f"[scraper] saved {new_count} new jobs (skipped {len(all_scraped) - new_count} duplicates)")
-    return new_count
+    new_jobs = Job.save_batch_returning(all_scraped, db)
+    print(f"[scraper] saved {len(new_jobs)} new jobs (skipped {len(all_scraped) - len(new_jobs)} duplicates)")
+    return new_jobs

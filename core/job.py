@@ -160,6 +160,29 @@ class Job(Base):
         return count
 
     @classmethod
+    def save_batch_returning(cls, scraped_jobs: list[Any], db: Session) -> list["Job"]:
+        """Persist new jobs and return the inserted Job objects.
+
+        Args:
+            scraped_jobs: List of ScrapedJob instances from a scraper source.
+            db: SQLAlchemy session.
+
+        Returns:
+            List of newly inserted Job instances.
+        """
+        new_jobs: list["Job"] = []
+        for scraped in scraped_jobs:
+            if db.query(cls).filter_by(url=scraped.url).first():
+                continue
+            job = cls.from_scraped(scraped)
+            db.add(job)
+            new_jobs.append(job)
+        db.commit()
+        for job in new_jobs:
+            db.refresh(job)
+        return new_jobs
+
+    @classmethod
     def get(cls, job_key: str, db: Session) -> Optional["Job"]:
         """Fetch a single job by job_key.
 

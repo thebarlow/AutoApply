@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json as _json
 import threading
 from typing import Any
 
@@ -13,6 +14,7 @@ from scraper.remotive import RemotiveSource
 from scraper.remoteok import RemoteOKSource
 from core.job import Job
 from scraper.runner import run_scraper
+from web.sse import broadcast as _broadcast
 
 router = APIRouter(prefix="/api/scraper")
 
@@ -33,7 +35,9 @@ def _run_in_background(source_ids: list[str]) -> None:
     db = SessionLocal()
     try:
         sources = [_SOURCES[sid]() for sid in source_ids]
-        run_scraper(db, sources)
+        new_jobs = run_scraper(db, sources)
+        for job in new_jobs:
+            _broadcast(_json.dumps(job.serialize()))
     finally:
         db.close()
 
