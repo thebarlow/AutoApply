@@ -34,8 +34,12 @@ export default function App() {
         upsertJob(JSON.parse(e.data))
       } catch { /* malformed event — ignore */ }
     }
+    let refetchScheduled = false
     es.onerror = () => {
-      getJobs().then(setJobs).catch(console.error)
+      if (!refetchScheduled) {
+        refetchScheduled = true
+        getJobs().then(setJobs).catch(console.error).finally(() => { refetchScheduled = false })
+      }
     }
     return () => es.close()
   }, [upsertJob])
@@ -43,19 +47,19 @@ export default function App() {
   // Escape key clears selection
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape' && selectedJob) {
+      if (e.key === 'Escape') {
         setSelectedJob(null)
         setSettingsTab('User')
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [selectedJob])
+  }, [])
 
-  const handleJobSelect = (job) => {
+  const handleJobSelect = useCallback((job) => {
     setSelectedJob(job)
     setSettingsTab('Preview')
-  }
+  }, [])
 
   return (
     <div className="min-h-screen text-space-text">
