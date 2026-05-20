@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getProfiles, createProfile, getProviders, saveProvider } from '../../api'
 
@@ -24,6 +24,8 @@ const slideVariants = {
 }
 
 // ─── Preview tab ──────────────────────────────────────────────────────────────
+
+const STATE_LABELS = { new: 'New', pending_review: 'Pending Review', ready: 'Ready', applied: 'Applied', contact: 'In Contact', rejected: 'Rejected' }
 
 function ExtractionView({ data }) {
   const fields = [
@@ -66,7 +68,7 @@ function PreviewTab({ job }) {
   if (!job) return null
 
   const score = job.final_score != null ? Math.round(job.final_score * 100) + '%' : '—'
-  const stateLabel = { new: 'New', pending_review: 'Pending Review', ready: 'Ready', applied: 'Applied', contact: 'In Contact', rejected: 'Rejected' }[job.state] ?? job.state
+  const stateLabel = STATE_LABELS[job.state] ?? job.state
 
   return (
     <div className="flex flex-col gap-4">
@@ -193,15 +195,17 @@ function CreateProfile({ onBack, onCreated }) {
 function ProfileList({ onCreateProfile }) {
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     getProfiles()
       .then((data) => setProfiles(data.profiles ?? []))
-      .catch(console.error)
+      .catch(() => setError('Failed to load profiles'))
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <p className="text-xs text-space-dim">Loading…</p>
+  if (error) return <p className="text-xs text-red-400">{error}</p>
 
   return (
     <div className="flex flex-col gap-4">
@@ -248,6 +252,7 @@ function AdvancedTab() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState(null)
+  const timerRef = useRef(null)
 
   useEffect(() => {
     getProviders()
@@ -256,16 +261,22 @@ function AdvancedTab() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => () => clearTimeout(timerRef.current), [])
+
   const handleSave = async (provider, field, value) => {
     setSaving(true)
     try {
       await saveProvider(provider.id, { ...provider, [field]: value })
+      setProviders((prev) =>
+        prev.map((p) => p.id === provider.id ? { ...p, [field]: value } : p)
+      )
       setStatus('Saved ✓')
     } catch {
       setStatus('Save failed')
     } finally {
       setSaving(false)
-      setTimeout(() => setStatus(null), 2500)
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => setStatus(null), 2500)
     }
   }
 
@@ -281,7 +292,10 @@ function AdvancedTab() {
             <label className="text-xs text-space-dim">Default Model</label>
             <input
               className={inputClass}
-              defaultValue={provider.default_model || ''}
+              value={provider.default_model || ''}
+              onChange={(e) => setProviders((prev) =>
+                prev.map((p) => p.id === provider.id ? { ...p, default_model: e.target.value } : p)
+              )}
               onBlur={(e) => handleSave(provider, 'default_model', e.target.value)}
             />
           </div>
