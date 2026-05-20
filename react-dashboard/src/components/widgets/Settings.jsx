@@ -12,15 +12,15 @@ function BackArrow() {
   )
 }
 
+const inputClass =
+  'w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors'
+
 // ─── Advanced tab ─────────────────────────────────────────────────────────────
 
 function AdvancedTab() {
   const [provider, setProvider] = useState(mockSettings.provider)
   const [model, setModel] = useState(mockSettings.model)
   const [apiKey, setApiKey] = useState(mockSettings.apiKey)
-
-  const inputClass =
-    'w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors'
 
   return (
     <div className="flex flex-col gap-4">
@@ -61,7 +61,7 @@ function AdvancedTab() {
 
 // ─── Create Profile ───────────────────────────────────────────────────────────
 
-function CreateProfile({ onBack }) {
+function CreateProfile() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [droppedFile, setDroppedFile] = useState(null)
@@ -74,9 +74,6 @@ function CreateProfile({ onBack }) {
     const file = e.dataTransfer.files[0]
     if (file) setDroppedFile(file)
   }
-
-  const inputClass =
-    'w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors'
 
   return (
     <div className="flex flex-col gap-4">
