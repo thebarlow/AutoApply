@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import JobCard, { NewIcon, ProcessingIcon } from '../shared/JobCard'
 
@@ -25,7 +25,7 @@ function archiveBadge(state) {
   )
 }
 
-function JobList({ jobs, processingKeys, selectedJob, onJobSelect, showArchiveBadge }) {
+function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, showArchiveBadge }) {
   if (jobs.length === 0) {
     return <p className="text-xs text-space-dim py-1">Empty</p>
   }
@@ -53,15 +53,15 @@ function JobList({ jobs, processingKeys, selectedJob, onJobSelect, showArchiveBa
   )
 }
 
-export default function Pipeline({ jobs, processingKeys, selectedJob, onJobSelect }) {
+export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect }) {
   const [activeTab, setActiveTab] = useState('Inbox')
 
-  const tabJobs = {
+  const tabJobs = useMemo(() => ({
     Inbox: jobs.filter((j) => INBOX_STATES.has(j.state) && !processingKeys.has(j.job_key)),
     Processing: jobs.filter((j) => processingKeys.has(j.job_key)),
     Outbound: jobs.filter((j) => OUTBOUND_STATES.has(j.state)),
     Archives: jobs.filter((j) => ARCHIVE_STATES.has(j.state)),
-  }
+  }), [jobs, processingKeys])
 
   return (
     <motion.div
