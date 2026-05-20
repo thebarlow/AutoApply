@@ -56,9 +56,11 @@ def _apply_template(template: str, sources: dict[str, Any]) -> str:
 class JobState(str, Enum):
     """Valid states for a job in the pipeline."""
 
-    DRAFT = "draft"
+    NEW = "new"
+    PENDING_REVIEW = "pending_review"
+    READY = "ready"
     APPLIED = "applied"
-    IN_CONTACT = "in_contact"
+    CONTACT = "contact"
     REJECTED = "rejected"
 
 
@@ -85,7 +87,7 @@ class Job(Base):
     url = Column(String, unique=True, nullable=False)
     posted_at = Column(String)
     scraped_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
-    state = Column(String, nullable=False, default="draft")
+    state = Column(String, nullable=False, default="new")
 
     # ── Scores ─────────────────────────────────────────────────────────────────
     desirability_score = Column(Float)
@@ -134,7 +136,7 @@ class Job(Base):
             salary=scraped.salary,
             remote=scraped.remote,
             posted_at=scraped.posted_at,
-            state=JobState.DRAFT.value,
+            state=JobState.NEW.value,
         )
 
     @classmethod
@@ -190,18 +192,18 @@ class Job(Base):
         return job
 
     @classmethod
-    def all_draft(cls, db: Session) -> list["Job"]:
-        """Return all DRAFT jobs ordered by final_score descending.
+    def all_inbox(cls, db: Session) -> list["Job"]:
+        """Return all Inbox jobs (new or pending_review) ordered by final_score descending.
 
         Args:
             db: SQLAlchemy session.
 
         Returns:
-            List of Job instances in DRAFT state.
+            List of Job instances in NEW or PENDING_REVIEW state.
         """
         return (
             db.query(cls)
-            .filter_by(state=JobState.DRAFT.value)
+            .filter(cls.state.in_([JobState.NEW.value, JobState.PENDING_REVIEW.value]))
             .order_by(cls.final_score.desc())
             .all()
         )
@@ -690,5 +692,17 @@ Return only the JSON object, no other text.
             "resume_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_resume.md").exists(),
             "cover_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_cover.md").exists(),
             "extraction_json_exists": bool(self.ext_required_skills or self.ext_seniority),
+            "extraction": {
+                "seniority": self.ext_seniority,
+                "role_type": self.ext_role_type,
+                "domain": self.ext_domain,
+                "work_arrangement": self.ext_work_arrangement,
+                "employment_type": self.ext_employment_type,
+                "required_skills": [s.strip() for s in (self.ext_required_skills or "").split(",") if s.strip()],
+                "preferred_skills": [s.strip() for s in (self.ext_preferred_skills or "").split(",") if s.strip()],
+                "tech_stack": [s.strip() for s in (self.ext_tech_stack or "").split(",") if s.strip()],
+                "key_responsibilities": [s.strip() for s in (self.ext_key_responsibilities or "").split(",") if s.strip()],
+                "company_signals": [s.strip() for s in (self.ext_company_signals or "").split(",") if s.strip()],
+            } if bool(self.ext_required_skills or self.ext_seniority) else None,
             "scraped_at": self.scraped_at or "",
         }

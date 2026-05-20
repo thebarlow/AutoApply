@@ -40,7 +40,7 @@ def client(db_session):
 def _make_job(
     db_session,
     job_key: str,
-    state: JobState = JobState.DRAFT,
+    state: JobState = JobState.NEW,
     final_score: float = 0.75,
     description: str | None = None,
     remote: bool | None = None,
@@ -76,7 +76,7 @@ def _make_job(
 # --- GET /api/jobs ---
 
 def test_get_jobs_returns_all_states(client, db_session):
-    _make_job(db_session, "job_a", JobState.DRAFT)
+    _make_job(db_session, "job_a", JobState.NEW)
     _make_job(db_session, "job_b", JobState.APPLIED)
     _make_job(db_session, "job_c", JobState.REJECTED)
 
@@ -99,9 +99,9 @@ def test_get_jobs_includes_artifact_paths(client, db_session):
 
 
 def test_get_jobs_sorted_by_score(client, db_session):
-    _make_job(db_session, "low", JobState.DRAFT, final_score=0.4)
-    _make_job(db_session, "high", JobState.DRAFT, final_score=0.9)
-    _make_job(db_session, "mid", JobState.DRAFT, final_score=0.65)
+    _make_job(db_session, "low", JobState.NEW, final_score=0.4)
+    _make_job(db_session, "high", JobState.NEW, final_score=0.9)
+    _make_job(db_session, "mid", JobState.NEW, final_score=0.65)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -116,7 +116,7 @@ def test_get_jobs_empty(client):
 
 
 def test_get_jobs_justification_parsed(client, db_session):
-    _make_job(db_session, "job_x", JobState.DRAFT)
+    _make_job(db_session, "job_x", JobState.NEW)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -142,18 +142,18 @@ def test_patch_state_to_rejected(client, db_session):
     assert resp.json()["state"] == "rejected"
 
 
-def test_patch_state_to_in_contact(client, db_session):
+def test_patch_state_to_contact(client, db_session):
     _make_job(db_session, "job_contact")
-    resp = client.patch("/api/jobs/job_contact/state", json={"state": "in_contact"})
+    resp = client.patch("/api/jobs/job_contact/state", json={"state": "contact"})
     assert resp.status_code == 200
-    assert resp.json()["state"] == "in_contact"
+    assert resp.json()["state"] == "contact"
 
 
-def test_patch_state_to_draft(client, db_session):
-    _make_job(db_session, "job_draft", state=JobState.APPLIED)
-    resp = client.patch("/api/jobs/job_draft/state", json={"state": "draft"})
+def test_patch_state_to_new(client, db_session):
+    _make_job(db_session, "job_new", state=JobState.APPLIED)
+    resp = client.patch("/api/jobs/job_new/state", json={"state": "new"})
     assert resp.status_code == 200
-    assert resp.json()["state"] == "draft"
+    assert resp.json()["state"] == "new"
 
 
 def test_patch_invalid_state_rejected_by_api(client, db_session):
@@ -168,7 +168,7 @@ def test_patch_state_not_found(client):
 
 
 def test_get_jobs_includes_url(client, db_session):
-    _make_job(db_session, "job_url", JobState.DRAFT)
+    _make_job(db_session, "job_url", JobState.NEW)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job = resp.json()[0]
@@ -177,7 +177,7 @@ def test_get_jobs_includes_url(client, db_session):
 
 
 def test_get_jobs_includes_description(client, db_session):
-    _make_job(db_session, "job_desc", JobState.DRAFT, description="We are looking for a software engineer.")
+    _make_job(db_session, "job_desc", JobState.NEW, description="We are looking for a software engineer.")
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -186,7 +186,7 @@ def test_get_jobs_includes_description(client, db_session):
 
 
 def test_get_jobs_remote_true_when_set(client, db_session):
-    _make_job(db_session, "job_remote", JobState.DRAFT, remote=True)
+    _make_job(db_session, "job_remote", JobState.NEW, remote=True)
 
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
@@ -195,7 +195,7 @@ def test_get_jobs_remote_true_when_set(client, db_session):
 
 
 def test_get_jobs_remote_none_when_not_set(client, db_session):
-    _make_job(db_session, "job_noremote", JobState.DRAFT)
+    _make_job(db_session, "job_noremote", JobState.NEW)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     job_data = resp.json()[0]
@@ -246,7 +246,7 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["final_score"] == pytest.approx(0.85)
-    assert data["state"] == "draft"
+    assert data["state"] == "new"
 
 
 def test_score_job_endpoint_not_found(client):

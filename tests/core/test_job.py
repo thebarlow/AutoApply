@@ -40,7 +40,7 @@ def test_job_from_scraped_sets_fields():
     job = Job.from_scraped(scraped)
     assert job.job_key == "remotive_1"
     assert job.company == "Acme"
-    assert job.state == "draft"
+    assert job.state == "new"
 
 
 def test_job_save_batch_inserts_new_jobs(db_session):

@@ -83,7 +83,7 @@ def test_save_jobs_deduplicates_by_url(db_session):
 def test_save_jobs_sets_scraped_state(db_session):
     Job.save_batch([_scraped(1)], db_session)
     job = db_session.query(Job).first()
-    assert job.state == JobState.DRAFT.value
+    assert job.state == JobState.NEW.value
 
 
 def test_save_jobs_maps_all_fields(db_session):
