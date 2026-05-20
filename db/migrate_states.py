@@ -13,6 +13,13 @@ from db.database import SessionLocal
 def migrate() -> None:
     db = SessionLocal()
     try:
+        legacy_count = db.execute(
+            text("SELECT COUNT(*) FROM jobs WHERE state IN ('draft', 'in_contact')")
+        ).scalar()
+        if legacy_count == 0:
+            print("No legacy states found — migration already complete or not needed.")
+            return
+
         updated = db.execute(
             text("UPDATE jobs SET state = 'new' WHERE state = 'draft'")
         ).rowcount
