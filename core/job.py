@@ -161,7 +161,7 @@ class Job(Base):
 
     @classmethod
     def save_batch_returning(cls, scraped_jobs: list[Any], db: Session) -> list["Job"]:
-        """Persist new jobs and return the inserted Job objects.
+        """Persist new (non-duplicate) jobs and return the inserted Job objects.
 
         Args:
             scraped_jobs: List of ScrapedJob instances from a scraper source.
@@ -170,9 +170,16 @@ class Job(Base):
         Returns:
             List of newly inserted Job instances.
         """
+        if not scraped_jobs:
+            return []
+        urls = {s.url for s in scraped_jobs}
+        existing_urls = {
+            row[0]
+            for row in db.query(cls.url).filter(cls.url.in_(urls)).all()
+        }
         new_jobs: list["Job"] = []
         for scraped in scraped_jobs:
-            if db.query(cls).filter_by(url=scraped.url).first():
+            if scraped.url in existing_urls:
                 continue
             job = cls.from_scraped(scraped)
             db.add(job)

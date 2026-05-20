@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html as _html
 import json
+import json as _json
 import re
 from pathlib import Path
 from typing import Any
@@ -86,7 +87,6 @@ _VALID_STATES = {s.value for s in JobState}
 
 def _emit(job: Job) -> None:
     """Serialize job and push to all SSE clients."""
-    import json as _json
     _broadcast(_json.dumps(job.serialize()))
 
 
