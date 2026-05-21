@@ -357,3 +357,26 @@ def test_generate_resume_md_writes_file(db_session, tmp_path):
     assert md_file.exists()
     content = md_file.read_text()
     assert "## Experience" in content
+
+
+def test_intake_spawns_background_thread_and_calls_extract(db_session):
+    from unittest.mock import patch, MagicMock
+    from core.job import Job
+
+    job = Job.from_scraped(_make_scraped(job_key="r_intake", url="https://x.com/intake"))
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+
+    called = []
+
+    def fake_extract(self, db):
+        called.append(self.job_key)
+
+    with patch.object(Job, "extract_description", fake_extract):
+        from db.database import SessionLocal
+        with patch("db.database.SessionLocal", return_value=db_session):
+            job.intake(db_session)
+            import time; time.sleep(0.2)  # let thread finish
+
+    assert called == ["r_intake"]

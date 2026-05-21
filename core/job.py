@@ -448,6 +448,39 @@ Return only the JSON object, no other text.
         db.flush()
         db.commit()
 
+    def intake(self, db: Session) -> None:
+        """Run post-intake processing (description extraction) in a background thread.
+
+        Opens a fresh DB session so the thread is session-safe. Logs start,
+        completion, and any failure to stdout.
+
+        Args:
+            db: Caller's session — used only to resolve SessionLocal factory;
+                not passed into the thread.
+        """
+        import threading
+        from db.database import SessionLocal
+
+        job_key = self.job_key
+
+        def _run() -> None:
+            thread_db = SessionLocal()
+            try:
+                print(f"[intake] {job_key}: extraction started", flush=True)
+                thread_job = thread_db.query(Job).filter_by(job_key=job_key).first()
+                if thread_job is None:
+                    print(f"[intake] {job_key}: job not found in thread session", flush=True)
+                    return
+                thread_job.extract_description(thread_db)
+                print(f"[intake] {job_key}: extraction complete", flush=True)
+            except Exception as exc:
+                print(f"[intake] {job_key}: extraction failed — {exc}", flush=True)
+            finally:
+                thread_db.close()
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+
     @staticmethod
     def _resolve_active_prompt(db: Session, type_: str) -> dict:
         """Return the active prompt config dict for a given type.
