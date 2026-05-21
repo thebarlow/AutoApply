@@ -82,3 +82,36 @@ def test_stage_job_returns_422_for_missing_url(client):
     payload = {k: v for k, v in _VALID.items() if k != "url"}
     response = client.post("/api/scraper/stage-job", json=payload)
     assert response.status_code == 422
+
+
+def test_stage_job_calls_intake_on_new_job(client, db_session):
+    from unittest.mock import patch
+
+    intake_called = []
+
+    def fake_intake(self):
+        intake_called.append(self.job_key)
+
+    with patch.object(Job, "intake", fake_intake):
+        response = client.post("/api/scraper/stage-job", json=_VALID)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "staged"
+    assert intake_called == ["linkedin_123"]
+
+
+def test_stage_job_does_not_call_intake_on_duplicate(client, db_session):
+    from unittest.mock import patch
+
+    client.post("/api/scraper/stage-job", json=_VALID)
+
+    intake_called = []
+
+    def fake_intake(self):
+        intake_called.append(self.job_key)
+
+    with patch.object(Job, "intake", fake_intake):
+        response = client.post("/api/scraper/stage-job", json=_VALID)
+
+    assert response.json()["status"] == "duplicate"
+    assert intake_called == []
