@@ -435,3 +435,24 @@ def test_put_profile_accepts_base64_padded_key(client, db_session, monkeypatch, 
     })
     assert resp.status_code == 200
     assert f"LLM_KEY_PROFILE_{row.id}=sk-validkey==" in env_file.read_text()
+
+
+def test_get_profiles_includes_first_last_name(client, db_session):
+    import json
+    from core.user import User as UserProfileModel
+    data = {
+        "email": "", "phone": "", "location": "", "skills": [],
+        "work_history": [], "education": [], "target_salary_min": None,
+        "target_salary_max": None, "target_roles": [], "resume_path": "",
+        "first_name": "Jane", "last_name": "Doe",
+    }
+    row = UserProfileModel(name="Software Engineer", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get("/api/config/profiles")
+    assert resp.status_code == 200
+    profiles = resp.json()["profiles"]
+    assert len(profiles) == 1
+    assert profiles[0]["first_name"] == "Jane"
+    assert profiles[0]["last_name"] == "Doe"
