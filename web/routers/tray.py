@@ -53,8 +53,6 @@ async def apply_job(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if not job.resume_path or not job.cover_path:
-        raise HTTPException(status_code=400, detail="resume_path and cover_path must both be set before applying")
 
     ws = _tray_ws
     if ws is None:
@@ -62,10 +60,10 @@ async def apply_job(job_key: str, db: Session = Depends(get_db)):
 
     payload = {
         "jobId": job_key,
-        "role": job.role or "",
+        "role": job.title or "",
         "company": job.company or "",
-        "resume_path": job.resume_path,
-        "cover_path": job.cover_path,
+        "resume_path": job.resume_path or "",
+        "cover_path": job.cover_path or "",
     }
     try:
         await ws.send_text(_json.dumps(payload))

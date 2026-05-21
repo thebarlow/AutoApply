@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtCore import QEvent, Qt, pyqtSlot
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from tray_app.job_card import JobCard
 
@@ -22,9 +22,31 @@ class TrayPanel(QWidget):
 
         self._drag_pos = None
         self._cards: dict[str, JobCard] = {}
+        self._saved_size = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(4, 4, 4, 4)
+        outer.setSpacing(4)
+
+        # Drag-to-move header with minimize button
+        header = QWidget()
+        header.setStyleSheet("background: #e9ecef; border-radius: 6px;")
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(8, 4, 4, 4)
+        title_label = QLabel("Auto Apply")
+        title_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #495057; background: transparent;")
+        header_row.addWidget(title_label)
+        header_row.addStretch()
+        minimize_btn = QPushButton("−")
+        minimize_btn.setFixedSize(22, 22)
+        minimize_btn.setStyleSheet(
+            "QPushButton { background: #adb5bd; color: white; border-radius: 11px; font-size: 14px; font-weight: bold; border: none; }"
+            "QPushButton:hover { background: #6c757d; }"
+        )
+        minimize_btn.clicked.connect(self.showMinimized)
+        header_row.addWidget(minimize_btn)
+        outer.addWidget(header)
+        self._header = header  # used for drag detection
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -38,6 +60,15 @@ class TrayPanel(QWidget):
         outer.addWidget(self._scroll)
 
         self.setStyleSheet("background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;")
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.WindowStateChange:
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                self._saved_size = self.size()
+            elif self._saved_size is not None:
+                self.resize(self._saved_size)
+                self._saved_size = None
+        super().changeEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

@@ -20,7 +20,8 @@ class DragHandle(QLabel):
 
         if self._exists:
             self.setToolTip(file_path)
-            self.setStyleSheet("color: #0d6efd; text-decoration: underline; cursor: grab;")
+            self.setStyleSheet("color: #0d6efd; text-decoration: underline;")
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.setEnabled(False)
             self.setStyleSheet("color: #aaa;")

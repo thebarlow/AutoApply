@@ -33,6 +33,7 @@ class JobCard(QFrame):
         layout.setSpacing(4)
 
         header = QLabel(f"<b>{role}</b><br><small>{company}</small>")
+        header.setStyleSheet("color: #212529; background: transparent;")
         layout.addWidget(header)
 
         handles_row = QHBoxLayout()

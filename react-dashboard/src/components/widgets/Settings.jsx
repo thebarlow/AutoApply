@@ -149,7 +149,7 @@ function PreviewTab({ job }) {
       <hr className="border-space-border" />
 
       {/* Content tab bar */}
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         {CONTENT_TABS.map((tab) => {
           const disabled = (tab === 'resume' && !hasResume) || (tab === 'cover' && !hasCover)
           return (
@@ -165,6 +165,17 @@ function PreviewTab({ job }) {
             </button>
           )
         })}
+        <button
+          onClick={() => {
+            if (job.url) window.open(job.url, '_blank')
+            fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
+              .then(res => { if (!res.ok) console.error(`Apply failed: ${res.status}`) })
+              .catch(err => console.error('Apply request failed:', err))
+          }}
+          className="ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#198754] text-white hover:opacity-90"
+        >
+          {hasResume ? 'Apply' : 'View Post'}
+        </button>
       </div>
 
       <hr className="border-space-border" />
