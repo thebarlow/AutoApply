@@ -55,7 +55,14 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
               disabled={!canApply}
               onClick={async (e) => {
                 e.stopPropagation()
-                await fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
+                try {
+                  const res = await fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
+                  if (!res.ok) {
+                    console.error(`Apply failed: ${res.status}`)
+                  }
+                } catch (err) {
+                  console.error('Apply request failed:', err)
+                }
               }}
               className={`self-end text-xs font-semibold px-3 py-1 rounded border-none transition-opacity
                 ${canApply
