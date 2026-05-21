@@ -109,20 +109,38 @@ function SubToggle({ options, value, onChange }) {
 
 function PreviewTab({ job }) {
   const [contentTab, setContentTab] = useState('description')
-  const [descView, setDescView] = useState('raw')
-  const [artifactView, setArtifactView] = useState('markdown')
+  const [descView, setDescView] = useState(() => job?.extraction_json_exists ? 'extracted' : 'raw')
+  const [artifactView, setArtifactView] = useState(() => job?.resume_path ? 'pdf' : 'markdown')
+  const [actionLoading, setActionLoading] = useState(false)
 
   // Reset all state when a different job is selected
   useEffect(() => {
     setContentTab('description')
-    setDescView('raw')
-    setArtifactView('markdown')
+    setDescView(job?.extraction_json_exists ? 'extracted' : 'raw')
+    setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
+    setActionLoading(false)
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
   const handleContentTab = (tab) => {
     setContentTab(tab)
-    setArtifactView('markdown')
+    if (tab === 'resume') setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
+    else if (tab === 'cover') setArtifactView(job?.cover_path ? 'pdf' : 'markdown')
+  }
+
+  const handleAction = async () => {
+    if (!job || actionLoading) return
+    const urlMap = {
+      description: `/api/jobs/${job.job_key}/description/extract`,
+      resume: `/api/jobs/${job.job_key}/generate/resume`,
+      cover: `/api/jobs/${job.job_key}/generate/cover`,
+    }
+    setActionLoading(true)
+    try {
+      await fetch(urlMap[contentTab], { method: 'POST' })
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   if (!job) return null
@@ -151,7 +169,7 @@ function PreviewTab({ job }) {
       {/* Content tab bar */}
       <div className="flex items-center gap-2">
         {CONTENT_TABS.map((tab) => {
-          const disabled = (tab === 'resume' && !hasResume) || (tab === 'cover' && !hasCover)
+          const disabled = false
           return (
             <button
               key={tab}
@@ -183,14 +201,23 @@ function PreviewTab({ job }) {
       {/* Content area */}
       {contentTab === 'description' && (
         <div className="flex flex-col gap-3">
-          <SubToggle
-            options={[
-              { key: 'raw', label: 'Raw' },
-              { key: 'extracted', label: 'Processed', disabled: !job.extraction_json_exists },
-            ]}
-            value={descView}
-            onChange={setDescView}
-          />
+          <div className="flex items-center justify-between">
+            <SubToggle
+              options={[
+                { key: 'raw', label: 'Raw' },
+                { key: 'extracted', label: 'Processed', disabled: !job.extraction_json_exists },
+              ]}
+              value={descView}
+              onChange={setDescView}
+            />
+            <button
+              onClick={handleAction}
+              disabled={actionLoading}
+              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+            >
+              {actionLoading ? '…' : job.extraction_json_exists ? 'Reprocess' : 'Process'}
+            </button>
+          </div>
           {descView === 'raw' && (
             <p className="text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
               {job.description || 'No description available.'}
@@ -206,14 +233,23 @@ function PreviewTab({ job }) {
 
       {(contentTab === 'resume' || contentTab === 'cover') && (
         <div className="flex flex-col gap-3">
-          <SubToggle
-            options={[
-              { key: 'markdown', label: 'Markdown' },
-              { key: 'pdf', label: 'PDF' },
-            ]}
-            value={artifactView}
-            onChange={setArtifactView}
-          />
+          <div className="flex items-center justify-between">
+            <SubToggle
+              options={[
+                { key: 'markdown', label: 'Markdown' },
+                { key: 'pdf', label: 'PDF' },
+              ]}
+              value={artifactView}
+              onChange={setArtifactView}
+            />
+            <button
+              onClick={handleAction}
+              disabled={actionLoading}
+              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+            >
+              {actionLoading ? '…' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
+            </button>
+          </div>
           {artifactView === 'markdown' && (
             <MarkdownView
               url={contentTab === 'resume'
