@@ -264,8 +264,8 @@ function ProfileCards({ onSelect, onCreateProfile }) {
             key={profile.id}
             onClick={() => onSelect(profile.id)}
             className={`flex flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors
-              bg-white/[0.03] border hover:border-purple-500/50
-              ${activeId === profile.id ? 'border-l-2 border-purple-500' : 'border-white/5'}`}
+              bg-white/[0.03] border border-white/5 border-l-4 hover:border-purple-500/50
+              ${activeId === profile.id ? 'border-l-purple-500' : 'border-l-transparent'}`}
           >
             <p className="text-sm font-medium text-space-text">{profile.name || 'Unnamed'}</p>
             {(profile.first_name || profile.last_name) && (
@@ -319,8 +319,9 @@ function ProfileDetailView({ profileId }) {
       })
       .catch(() => setStatus('Failed to load profile'))
       .finally(() => setLoading(false))
-    return () => clearTimeout(timerRef.current)
   }, [profileId])
+
+  useEffect(() => () => clearTimeout(timerRef.current), [])
 
   const handleSave = async () => {
     if (!form) return
