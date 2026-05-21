@@ -597,6 +597,7 @@ class ProfileNameBody(BaseModel):
 class ProfileBody(BaseModel):
     name: str
     data: dict
+    llm_api_key: str = ""
 
 
 class ActiveProfileBody(BaseModel):
@@ -677,6 +678,10 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
     row.name = body.name
     row.data = json.dumps(data)
     db.commit()
+    if body.llm_api_key:
+        env = _read_env()
+        env[f"LLM_KEY_PROFILE_{profile_id}"] = body.llm_api_key
+        _write_env(env)
     return {"id": row.id, "name": row.name, "data": data}
 
 
