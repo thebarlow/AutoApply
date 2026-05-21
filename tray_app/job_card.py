@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import httpx
+import os
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
@@ -8,7 +9,7 @@ from PyQt6.QtWidgets import (
 
 from tray_app.drag_handle import DragHandle
 
-_API_BASE = "http://localhost:8080"
+_API_BASE = os.getenv("AUTO_APPLY_API_BASE", "http://localhost:8080")
 
 
 class JobCard(QFrame):
@@ -84,7 +85,13 @@ class JobCard(QFrame):
                 self.confirmed.emit(self._job_id)
             else:
                 self._show_error(f"Server error {resp.status_code} — retry?")
-        except Exception:
+        except httpx.TimeoutException:
+            self._show_error("Request timed out — retry?")
+        except httpx.RequestError as exc:
+            print(f"[tray] Request failed: {exc}")
+            self._show_error("Failed to connect — retry?")
+        except Exception as exc:
+            print(f"[tray] Unexpected error: {exc}")
             self._show_error("Failed to archive — retry?")
 
     def _show_error(self, msg: str):
