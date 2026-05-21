@@ -65,16 +65,19 @@ function MarkdownView({ url }) {
   const [error, setError] = useState(false)
 
   useEffect(() => {
+    const controller = new AbortController()
     setText(null)
     setError(false)
-    fetch(url)
+    fetch(url, { signal: controller.signal })
       .then((r) => { if (!r.ok) throw new Error(); return r.text() })
       .then(setText)
-      .catch(() => setError(true))
+      .catch((e) => { if (e.name !== 'AbortError') setError(true) })
+    return () => controller.abort()
   }, [url])
 
   if (error) return <p className="text-xs text-space-dim">Not available.</p>
   if (text === null) return <p className="text-xs text-space-dim">Loading…</p>
+  if (text === '') return <p className="text-xs text-space-dim">Not available.</p>
   return (
     <div className="prose prose-invert prose-sm max-w-none text-space-text text-xs leading-relaxed">
       <ReactMarkdown>{text}</ReactMarkdown>
@@ -212,8 +215,7 @@ function PreviewTab({ job }) {
               src={contentTab === 'resume'
                 ? `/api/jobs/${job.job_key}/resume`
                 : `/api/jobs/${job.job_key}/cover`}
-              className="w-full rounded border border-space-border"
-              style={{ height: '600px' }}
+              className="w-full h-[600px] rounded border border-space-border"
               title={contentTab === 'resume' ? 'Resume PDF' : 'Cover Letter PDF'}
             />
           )}
