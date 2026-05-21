@@ -67,5 +67,8 @@ async def apply_job(job_key: str, db: Session = Depends(get_db)):
         "resume_path": job.resume_path,
         "cover_path": job.cover_path,
     }
-    await ws.send_text(_json.dumps(payload))
+    try:
+        await ws.send_text(_json.dumps(payload))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Tray app disconnected before payload could be sent")
     return {"status": "queued"}
