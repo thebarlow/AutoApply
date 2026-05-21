@@ -192,46 +192,6 @@ function CreateProfile({ onBack, onCreated }) {
   )
 }
 
-function ProfileList({ onCreateProfile }) {
-  const [profiles, setProfiles] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    getProfiles()
-      .then((data) => setProfiles(data.profiles ?? []))
-      .catch(() => setError('Failed to load profiles'))
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return <p className="text-xs text-space-dim">Loading…</p>
-  if (error) return <p className="text-xs text-red-400">{error}</p>
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        {profiles.length === 0 && (
-          <p className="text-xs text-space-dim">No profiles yet.</p>
-        )}
-        {profiles.map((profile) => (
-          <div
-            key={profile.id}
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5"
-          >
-            <p className="text-sm font-medium text-space-text">{profile.name || 'Unnamed'}</p>
-          </div>
-        ))}
-      </div>
-      <button
-        onClick={onCreateProfile}
-        className="w-full py-2 rounded-lg border border-space-border hover:border-purple-500/50 text-sm text-space-dim hover:text-space-text transition-colors"
-      >
-        + Create Profile
-      </button>
-    </div>
-  )
-}
-
 // ─── User tab — profile cards ─────────────────────────────────────────────────
 
 function ProfileCards({ onSelect, onCreateProfile }) {

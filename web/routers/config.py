@@ -687,12 +687,12 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
     row.data = json.dumps(data)
     db.commit()
     if body.llm_api_key:
+        _validate_api_key(body.llm_api_key)
         key_val = body.llm_api_key.strip()
-        if "\n" in key_val or "\r" in key_val:
-            raise HTTPException(status_code=422, detail="Invalid llm_api_key format")
-        env = _read_env()
-        env[f"LLM_KEY_PROFILE_{profile_id}"] = key_val
-        _write_env(env)
+        if key_val:
+            env = _read_env()
+            env[f"LLM_KEY_PROFILE_{profile_id}"] = key_val
+            _write_env(env)
     return {"id": row.id, "name": row.name, "data": data}
 
 
@@ -711,6 +711,9 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
         else:
             db.add(Config(key="active_profile_id", value=""))
     db.commit()
+    env = _read_env()
+    if env.pop(f"LLM_KEY_PROFILE_{profile_id}", None) is not None:
+        _write_env(env)
 
 
 @router.get("/api/config/profiles/{profile_id}/file")
