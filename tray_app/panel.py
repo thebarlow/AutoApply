@@ -55,7 +55,9 @@ class TrayPanel(QWidget):
 
     @pyqtSlot(dict)
     def add_job(self, payload: dict):
-        job_id = payload["jobId"]
+        job_id = payload.get("jobId")
+        if not job_id:
+            return
         if job_id in self._cards:
             return
         card = JobCard(
