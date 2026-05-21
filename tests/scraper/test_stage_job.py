@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from unittest.mock import patch
 
 from db.database import get_db
 from db.database import Base
@@ -85,8 +86,6 @@ def test_stage_job_returns_422_for_missing_url(client):
 
 
 def test_stage_job_calls_intake_on_new_job(client, db_session):
-    from unittest.mock import patch
-
     intake_called = []
 
     def fake_intake(self):
@@ -101,8 +100,6 @@ def test_stage_job_calls_intake_on_new_job(client, db_session):
 
 
 def test_stage_job_does_not_call_intake_on_duplicate(client, db_session):
-    from unittest.mock import patch
-
     client.post("/api/scraper/stage-job", json=_VALID)
 
     intake_called = []
@@ -113,5 +110,6 @@ def test_stage_job_does_not_call_intake_on_duplicate(client, db_session):
     with patch.object(Job, "intake", fake_intake):
         response = client.post("/api/scraper/stage-job", json=_VALID)
 
+    assert response.status_code == 200
     assert response.json()["status"] == "duplicate"
     assert intake_called == []

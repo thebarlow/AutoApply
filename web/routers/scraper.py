@@ -101,5 +101,8 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
     status = "staged" if inserted_jobs else "duplicate"
     for job in inserted_jobs:
         job.intake()
-        _broadcast(_json.dumps(job.serialize()))
+        try:
+            _broadcast(_json.dumps(job.serialize()))
+        except Exception:
+            pass
     return {"status": status, "job_key": body.job_key}
