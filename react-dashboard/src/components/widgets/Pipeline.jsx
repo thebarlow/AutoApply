@@ -25,7 +25,7 @@ function archiveBadge(state) {
   )
 }
 
-function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, showArchiveBadge }) {
+function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, showArchiveBadge, showApplyButton }) {
   if (jobs.length === 0) {
     return <p className="text-xs text-space-dim py-1">Empty</p>
   }
@@ -51,7 +51,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
                 selected={selectedJob?.job_key === job.job_key}
               />
             </div>
-            <button
+            {showApplyButton && <button
               disabled={!canApply}
               onClick={async (e) => {
                 e.stopPropagation()
@@ -71,7 +71,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
                 }`}
             >
               Apply
-            </button>
+            </button>}
           </div>
         )
       })}
@@ -125,6 +125,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
           selectedJob={selectedJob}
           onJobSelect={onJobSelect}
           showArchiveBadge={activeTab === 'Archives'}
+          showApplyButton={activeTab !== 'Archives'}
         />
       </div>
     </motion.div>
