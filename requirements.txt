@@ -12,3 +12,5 @@ pytest>=8.0
 pytest-asyncio>=0.24
 python-multipart>=0.0.27
 markdown>=3.6
+PyQt6>=6.0
+websockets>=13.0
