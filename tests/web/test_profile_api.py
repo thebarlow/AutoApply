@@ -285,3 +285,47 @@ def test_parse_endpoint_surfaces_bad_json_error(client, monkeypatch):
     )
     assert resp.status_code == 422
     assert "LLM returned invalid JSON" in resp.json()["detail"]
+
+
+def test_get_profile_includes_llm_fields(client, db_session):
+    from core.user import User as UserProfileModel
+    import json
+    data = {
+        "email": "", "phone": "", "location": "", "skills": [],
+        "work_history": [], "education": [], "target_salary_min": None,
+        "target_salary_max": None, "target_roles": [], "resume_path": "",
+        "llm_provider_type": "openrouter", "llm_model": "gpt-4o",
+    }
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.get(f"/api/config/profiles/{row.id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["llm_provider_type"] == "openrouter"
+    assert body["llm_model"] == "gpt-4o"
+    assert body["has_llm_key"] is False
+
+
+def test_get_profile_has_llm_key_true(client, db_session, monkeypatch, tmp_path):
+    import web.routers.config as config_mod
+    import json
+    from core.user import User as UserProfileModel
+
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(config_mod, "_ENV_PATH", env_file)
+
+    data = {"email": "", "phone": "", "location": "", "skills": [],
+            "work_history": [], "education": [], "target_salary_min": None,
+            "target_salary_max": None, "target_roles": [], "resume_path": "",
+            "llm_provider_type": "anthropic", "llm_model": "claude-3-5-sonnet"}
+    row = UserProfileModel(name="Test", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+
+    env_file.write_text(f"LLM_KEY_PROFILE_{row.id}=sk-test-key\n")
+
+    resp = client.get(f"/api/config/profiles/{row.id}")
+    assert resp.status_code == 200
+    assert resp.json()["has_llm_key"] is True

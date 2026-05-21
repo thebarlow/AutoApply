@@ -651,7 +651,17 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return {"id": row.id, "name": row.name, "data": json.loads(row.data)}
+    data = json.loads(row.data) if row.data else {}
+    env = _read_env()
+    has_llm_key = bool(env.get(f"LLM_KEY_PROFILE_{profile_id}"))
+    return {
+        "id": row.id,
+        "name": row.name,
+        "data": data,
+        "llm_provider_type": data.get("llm_provider_type", ""),
+        "llm_model": data.get("llm_model", ""),
+        "has_llm_key": has_llm_key,
+    }
 
 
 @router.put("/api/config/profiles/{profile_id}")
