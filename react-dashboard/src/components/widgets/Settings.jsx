@@ -79,7 +79,7 @@ function MarkdownView({ url }) {
   if (text === null) return <p className="text-xs text-space-dim">Loading…</p>
   if (text === '') return <p className="text-xs text-space-dim">Not available.</p>
   return (
-    <div className="prose prose-invert prose-sm max-w-none text-space-text text-xs leading-relaxed">
+    <div className="text-xs text-space-text leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mb-2 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mb-1.5 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:list-inside [&_ul]:mb-2 [&_li]:mb-0.5 [&_strong]:font-semibold [&_em]:italic [&_code]:bg-white/10 [&_code]:rounded [&_code]:px-1">
       <ReactMarkdown>{text}</ReactMarkdown>
     </div>
   )
