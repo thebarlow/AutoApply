@@ -31,24 +31,43 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
   }
   return (
     <div className="flex flex-col gap-2">
-      {jobs.map((job) => (
-        <div key={job.job_key} onClick={() => onJobSelect(job)} className="cursor-pointer">
-          <JobCard
-            title={job.title || '(no title)'}
-            company={job.company || ''}
-            docs={{
-              resume: !!(job.resume_path || job.resume_md_exists),
-              coverLetter: !!(job.cover_path || job.cover_md_exists),
-            }}
-            statusIcon={
-              showArchiveBadge
-                ? archiveBadge(job.state)
-                : statusIconFor(job, processingKeys)
-            }
-            selected={selectedJob?.job_key === job.job_key}
-          />
-        </div>
-      ))}
+      {jobs.map((job) => {
+        const canApply = !!(job.resume_path && job.cover_path)
+        return (
+          <div key={job.job_key} className="flex flex-col gap-1">
+            <div onClick={() => onJobSelect(job)} className="cursor-pointer">
+              <JobCard
+                title={job.title || '(no title)'}
+                company={job.company || ''}
+                docs={{
+                  resume: !!(job.resume_path || job.resume_md_exists),
+                  coverLetter: !!(job.cover_path || job.cover_md_exists),
+                }}
+                statusIcon={
+                  showArchiveBadge
+                    ? archiveBadge(job.state)
+                    : statusIconFor(job, processingKeys)
+                }
+                selected={selectedJob?.job_key === job.job_key}
+              />
+            </div>
+            <button
+              disabled={!canApply}
+              onClick={async (e) => {
+                e.stopPropagation()
+                await fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
+              }}
+              className={`self-end text-xs font-semibold px-3 py-1 rounded border-none transition-opacity
+                ${canApply
+                  ? 'bg-[#198754] text-white cursor-pointer hover:opacity-90'
+                  : 'bg-[#198754] text-white opacity-40 cursor-not-allowed'
+                }`}
+            >
+              Apply
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
