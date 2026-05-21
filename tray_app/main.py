@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import signal
 import sys
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -33,6 +35,12 @@ def main():
     tray.show()
 
     ws.connection_state_changed.connect(tray.setToolTip)
+
+    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    # Allow Python to process signals every 500ms while Qt event loop runs
+    timer = QTimer()
+    timer.start(500)
+    timer.timeout.connect(lambda: None)
 
     ws.start()
     sys.exit(app.exec())
