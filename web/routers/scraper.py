@@ -40,8 +40,8 @@ def _run_in_background(source_ids: list[str]) -> None:
             job.intake()
             try:
                 _broadcast(_json.dumps(job.serialize()))
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[scraper] broadcast failed for {job.job_key}: {exc}", flush=True)
     finally:
         db.close()
 
@@ -107,6 +107,6 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
         job.intake()
         try:
             _broadcast(_json.dumps(job.serialize()))
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[stage_job] broadcast failed for {job.job_key}: {exc}", flush=True)
     return {"status": status, "job_key": body.job_key}

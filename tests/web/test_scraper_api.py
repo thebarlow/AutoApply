@@ -1,4 +1,5 @@
 import types
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,9 +7,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from core.job import Job
 from db.database import get_db
 from db.database import Base, Config
+from scraper.base import ScrapedJob
 from web.main import app
+import web.routers.scraper as scraper_router
 
 
 @pytest.fixture
@@ -39,7 +43,6 @@ def _seed_sources(db_session, value: str = "remotive,remoteok") -> None:
 
 
 def test_trigger_scrape_returns_started(client, db_session, monkeypatch):
-    import web.routers.scraper as scraper_router
     _seed_sources(db_session)
 
     spawned = []
@@ -77,7 +80,6 @@ def test_trigger_scrape_returns_400_when_sources_empty(client, db_session):
 
 
 def test_trigger_scrape_ignores_unknown_source_ids(client, db_session, monkeypatch):
-    import web.routers.scraper as scraper_router
     _seed_sources(db_session, value="remotive,nonexistent")
 
     spawned = []
@@ -101,11 +103,6 @@ def test_trigger_scrape_ignores_unknown_source_ids(client, db_session, monkeypat
 
 
 def test_scraper_run_background_calls_intake_on_new_jobs(db_session, monkeypatch):
-    import web.routers.scraper as scraper_router
-    from unittest.mock import patch
-    from core.job import Job
-    from scraper.base import ScrapedJob
-
     fake_scraped = [ScrapedJob(
         source="remotive", job_key="r_bg_1", title="Dev", company="Co",
         url="https://remotive.com/bg1", description="Python dev role.",
