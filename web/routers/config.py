@@ -356,6 +356,12 @@ def _write_env(env: dict[str, str]) -> None:
     _ENV_PATH.write_text("\n".join(lines) + "\n")
 
 
+def _validate_api_key(key: str) -> str:
+    if "\n" in key or "\r" in key:
+        raise HTTPException(status_code=422, detail="Invalid api_key format")
+    return key
+
+
 # ---- LLM ----
 
 class LLMProviderIn(BaseModel):
@@ -396,7 +402,7 @@ def put_llm(body: LLMBody, db: Session = Depends(get_db)) -> dict[str, Any]:
         if not base_url:
             raise HTTPException(status_code=422, detail=f"Unknown provider: {p.name}")
         if p.api_key:
-            env[f"LLM_KEY_{name.upper()}"] = p.api_key
+            env[f"LLM_KEY_{name.upper()}"] = _validate_api_key(p.api_key)
         to_store.append({"name": name, "base_url": base_url, "model": p.model})
     _write_env(env)
     _set(db, "llm_providers", json.dumps(to_store))
@@ -463,7 +469,7 @@ def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str
     _set_providers(db, providers)
     if body.api_key:
         env = _read_env()
-        env[_env_key_name(new_id)] = body.api_key
+        env[_env_key_name(new_id)] = _validate_api_key(body.api_key)
         _write_env(env)
     return {"id": new_id, "name": body.name, "provider_type": body.provider_type}
 
@@ -482,7 +488,7 @@ def update_provider(provider_id: str, body: ProviderIn, db: Session = Depends(ge
     _set_providers(db, providers)
     env = _read_env()
     if body.api_key:
-        env[_env_key_name(provider_id)] = body.api_key
+        env[_env_key_name(provider_id)] = _validate_api_key(body.api_key)
     else:
         env.pop(_env_key_name(provider_id), None)
     _write_env(env)
