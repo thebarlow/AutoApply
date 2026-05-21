@@ -11,13 +11,16 @@ auto_apply/
 ├── db/                         # SQLAlchemy models, engine setup, config seeding, init/seed scripts
 ├── generator/                  # Resume/cover letter generation; LaTeX templates and output artifacts live here
 │   └── outputs/                # Generated resume/cover letter artifacts (gitignored)
-├── web/                        # FastAPI app + Alpine.js dashboard (landing page + API)
+├── react-dashboard/            # React frontend dashboard (Vite + React)
+│   └── src/
+├── web/                        # FastAPI app + REST API (no longer serves frontend UI)
 │   └── CONTEXT.md
 ├── 3_applicator/               # Stage 3: submit applications (TBD)
 │   └── CONTEXT.md
 ├── tray_app/                   # Stage 3: PyQt6 system tray app for drag-and-drop application submission
 ├── scripts/                    # One-time admin scripts (e.g. state migration)
 ├── tests/                      # pytest test suite
+├── start.bat                   # Launch script: starts uvicorn server + tray app together
 ├── CLAUDE.md                   # Project overview + routing rules
 └── ARCHITECTURE.md
 ```
@@ -77,6 +80,7 @@ browser-extension                  scraper/ (Remotive, RemoteOK)
 | `core/scorer.py` | Scores jobs via Claude; computes desirability/fit/final scores; does not change job state |
 | `db/` | SQLAlchemy ORM models (`Job`, `Config`, `UserProfileModel`), engine setup, default config seeding; `init_db.py` creates tables, `seed_profile.py` loads profile JSON |
 | `generator/generator.py` | Generates tailored resume and cover letter via Claude; renders PDF via pandoc/xelatex; updates `resume_path`/`cover_path` on the job |
-| `web/` | FastAPI app serving the dashboard UI and REST API; all user-facing job management happens here |
+| `react-dashboard/` | React + Vite frontend; job table, overlays, action buttons, settings — communicates with FastAPI via REST API |
+| `web/` | FastAPI app serving the REST API; all backend job management logic and endpoints live here |
 | `3_applicator/` | Application submission — scope TBD |
 | `tray_app/` | Standalone PyQt6 desktop process; receives job payloads from FastAPI over WebSocket; presents draggable resume/cover letter handles; marks jobs applied on checkmark |
