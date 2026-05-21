@@ -400,10 +400,38 @@ def test_put_profile_rejects_injected_llm_key(client, db_session, monkeypatch, t
     db_session.add(row)
     db_session.commit()
 
+    for bad_key in ["sk-abc\nINJECTED=bad", "sk-abc\r\nINJECTED=bad"]:
+        resp = client.put(f"/api/config/profiles/{row.id}", json={
+            "name": "Test",
+            "data": {},
+            "llm_api_key": bad_key,
+        })
+        assert resp.status_code == 422
+
+    assert env_file.read_text() == ""
+
+
+def test_put_profile_accepts_base64_padded_key(client, db_session, monkeypatch, tmp_path):
+    import web.routers.config as config_mod
+    import json
+    from core.user import User as UserProfileModel
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("")
+    monkeypatch.setattr(config_mod, "_ENV_PATH", env_file)
+
+    row = UserProfileModel(name="Test", data=json.dumps({
+        "email": "", "phone": "", "location": "", "skills": [],
+        "work_history": [], "education": [], "target_salary_min": None,
+        "target_salary_max": None, "target_roles": [], "resume_path": "",
+    }))
+    db_session.add(row)
+    db_session.commit()
+
     resp = client.put(f"/api/config/profiles/{row.id}", json={
         "name": "Test",
         "data": {},
-        "llm_api_key": "sk-abc\nINJECTED=bad",
+        "llm_api_key": "sk-validkey==",
     })
-    assert resp.status_code == 422
-    assert env_file.read_text() == ""
+    assert resp.status_code == 200
+    assert f"LLM_KEY_PROFILE_{row.id}=sk-validkey==" in env_file.read_text()
