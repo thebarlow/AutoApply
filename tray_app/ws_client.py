@@ -52,9 +52,10 @@ class WsClient(QObject):
                             self.job_received.emit(payload)
                         except json.JSONDecodeError:
                             pass
-            except Exception:
+            except (websockets.exceptions.WebSocketException, OSError, asyncio.TimeoutError) as exc:
                 if self._stop_event.is_set():
                     return
+                print(f"[tray] WS connection error: {type(exc).__name__}: {exc}")
                 self.connection_state_changed.emit(f"Reconnecting… (retry in {backoff}s)")
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _MAX_BACKOFF)
