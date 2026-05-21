@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 import os
+import threading
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
@@ -16,12 +17,14 @@ class JobCard(QFrame):
     """Card representing one job in the tray panel."""
 
     confirmed = pyqtSignal(str)  # emits job_id on checkmark click
+    _confirm_result = pyqtSignal(bool, str)  # (success, error_msg)
 
     def __init__(self, job_id: str, role: str, company: str,
                  resume_path: str, cover_path: str, parent=None):
         super().__init__(parent)
         self._job_id = job_id
         self._setup_ui(role, company, resume_path, cover_path)
+        self._confirm_result.connect(self._on_confirm_result)
         self._set_style(active=False)
 
     def _setup_ui(self, role: str, company: str, resume_path: str, cover_path: str):
@@ -76,23 +79,34 @@ class JobCard(QFrame):
         self._set_style(active=False)
 
     def _on_checkmark(self):
+        self._check_btn.setEnabled(False)
+        threading.Thread(target=self._do_confirm, daemon=True).start()
+
+    def _do_confirm(self):
         try:
             resp = httpx.post(
                 f"{_API_BASE}/api/jobs/{self._job_id}/confirm-applied",
                 timeout=5,
             )
             if resp.status_code == 200:
-                self.confirmed.emit(self._job_id)
+                self._confirm_result.emit(True, "")
             else:
-                self._show_error(f"Server error {resp.status_code} — retry?")
+                self._confirm_result.emit(False, f"Server error {resp.status_code} — retry?")
         except httpx.TimeoutException:
-            self._show_error("Request timed out — retry?")
+            self._confirm_result.emit(False, "Request timed out — retry?")
         except httpx.RequestError as exc:
             print(f"[tray] Request failed: {exc}")
-            self._show_error("Failed to connect — retry?")
+            self._confirm_result.emit(False, "Failed to connect — retry?")
         except Exception as exc:
             print(f"[tray] Unexpected error: {exc}")
-            self._show_error("Failed to archive — retry?")
+            self._confirm_result.emit(False, "Failed to archive — retry?")
+
+    def _on_confirm_result(self, success: bool, error_msg: str):
+        self._check_btn.setEnabled(True)
+        if success:
+            self.confirmed.emit(self._job_id)
+        else:
+            self._show_error(error_msg)
 
     def _show_error(self, msg: str):
         self._error_label.setText(msg)
