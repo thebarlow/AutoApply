@@ -37,7 +37,11 @@ def _run_in_background(source_ids: list[str]) -> None:
         sources = [_SOURCES[sid]() for sid in source_ids]
         new_jobs = run_scraper(db, sources)
         for job in new_jobs:
-            _broadcast(_json.dumps(job.serialize()))
+            job.intake()
+            try:
+                _broadcast(_json.dumps(job.serialize()))
+            except Exception:
+                pass
     finally:
         db.close()
 

@@ -98,3 +98,31 @@ def test_trigger_scrape_ignores_unknown_source_ids(client, db_session, monkeypat
     resp = client.post("/api/scraper/run")
     assert resp.status_code == 200
     assert resp.json()["sources"] == ["remotive"]
+
+
+def test_scraper_run_background_calls_intake_on_new_jobs(db_session, monkeypatch):
+    import web.routers.scraper as scraper_router
+    from unittest.mock import patch
+    from core.job import Job
+    from scraper.base import ScrapedJob
+
+    fake_scraped = [ScrapedJob(
+        source="remotive", job_key="r_bg_1", title="Dev", company="Co",
+        url="https://remotive.com/bg1", description="Python dev role.",
+        location="Remote", salary="", remote=True, posted_at="2026-01-01",
+    )]
+
+    intake_called = []
+
+    def fake_intake(self):
+        intake_called.append(self.job_key)
+
+    # Run _run_in_background directly (synchronously) using a real DB session
+    with patch.object(Job, "intake", fake_intake), \
+         patch.object(scraper_router, "run_scraper",
+                      return_value=Job.save_batch_returning(fake_scraped, db_session)), \
+         patch.object(scraper_router, "_broadcast", return_value=None), \
+         patch.object(scraper_router, "SessionLocal", return_value=db_session):
+        scraper_router._run_in_background(["remotive"])
+
+    assert "r_bg_1" in intake_called
