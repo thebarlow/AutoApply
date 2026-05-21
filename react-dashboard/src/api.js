@@ -26,3 +26,12 @@ export const saveProvider = (id, body) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+
+export const getProfile = (id) => _fetch(`/api/config/profiles/${id}`)
+
+export const updateProfile = (id, body) =>
+  _fetch(`/api/config/profiles/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
