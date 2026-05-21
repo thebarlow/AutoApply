@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QMimeData, QUrl, pyqtSignal
+from PyQt6.QtCore import QMimeData, QUrl, Qt, pyqtSignal
 from PyQt6.QtGui import QDrag
 from PyQt6.QtWidgets import QLabel
 
@@ -27,13 +27,11 @@ class DragHandle(QLabel):
             self.setToolTip(f"File not found: {file_path}")
 
     def mousePressEvent(self, event):
-        from PyQt6.QtCore import Qt
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_start_pos = event.pos()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        from PyQt6.QtCore import Qt
         if not self._exists:
             return
         if self._drag_start_pos is None:
