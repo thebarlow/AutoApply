@@ -679,8 +679,11 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
     row.data = json.dumps(data)
     db.commit()
     if body.llm_api_key:
+        key_val = body.llm_api_key.strip()
+        if "\n" in key_val or "=" in key_val:
+            raise HTTPException(status_code=422, detail="Invalid llm_api_key format")
         env = _read_env()
-        env[f"LLM_KEY_PROFILE_{profile_id}"] = body.llm_api_key
+        env[f"LLM_KEY_PROFILE_{profile_id}"] = key_val
         _write_env(env)
     return {"id": row.id, "name": row.name, "data": data}
 
