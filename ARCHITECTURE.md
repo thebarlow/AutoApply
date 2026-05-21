@@ -15,6 +15,7 @@ auto_apply/
 │   └── CONTEXT.md
 ├── 3_applicator/               # Stage 3: submit applications (TBD)
 │   └── CONTEXT.md
+├── tray_app/                   # Stage 3: PyQt6 system tray app for drag-and-drop application submission
 ├── scripts/                    # One-time admin scripts (e.g. state migration)
 ├── tests/                      # pytest test suite
 ├── CLAUDE.md                   # Project overview + routing rules
@@ -48,12 +49,22 @@ browser-extension                  scraper/ (Remotive, RemoteOK)
           ┌────────────┼────────────┐
           │            │            │
     Calculate     Generate     Mark Applied
-      Score      Resume/Cover
-          │            │
-          ▼            ▼
+      Score      Resume/Cover       │
+          │            │            ▼
+          ▼            ▼      Apply Button
     score fields   generator/outputs/{key}_resume.pdf
     updated in DB  generator/outputs/{key}_cover.pdf
                    job.resume_path / cover_path set in DB
+                                         │
+                                POST /api/jobs/{key}/apply
+                                         │
+                                  WebSocket → tray_app
+                                         │
+                            User drags files to ATS
+                                         │
+                        POST /api/jobs/{key}/confirm-applied
+                                         │
+                                  state=applied
 ```
 
 ## Module Responsibilities
@@ -68,3 +79,4 @@ browser-extension                  scraper/ (Remotive, RemoteOK)
 | `generator/generator.py` | Generates tailored resume and cover letter via Claude; renders PDF via pandoc/xelatex; updates `resume_path`/`cover_path` on the job |
 | `web/` | FastAPI app serving the dashboard UI and REST API; all user-facing job management happens here |
 | `3_applicator/` | Application submission — scope TBD |
+| `tray_app/` | Standalone PyQt6 desktop process; receives job payloads from FastAPI over WebSocket; presents draggable resume/cover letter handles; marks jobs applied on checkmark |
