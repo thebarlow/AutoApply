@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getProfiles, createProfile, getProviders, saveProvider } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile } from '../../api'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -232,44 +232,116 @@ function ProfileList({ onCreateProfile }) {
   )
 }
 
-function UserTab({ onProfileSettings }) {
+// ─── User tab — profile cards ─────────────────────────────────────────────────
+
+function ProfileCards({ onSelect, onCreateProfile }) {
+  const [profiles, setProfiles] = useState([])
+  const [activeId, setActiveId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    getProfiles()
+      .then((data) => {
+        setProfiles(data.profiles ?? [])
+        setActiveId(data.active_id ?? null)
+      })
+      .catch(() => setError('Failed to load profiles'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <p className="text-xs text-space-dim">Loading…</p>
+  if (error) return <p className="text-xs text-red-400">{error}</p>
+
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        {profiles.length === 0 && (
+          <p className="text-xs text-space-dim">No profiles yet.</p>
+        )}
+        {profiles.map((profile) => (
+          <button
+            key={profile.id}
+            onClick={() => onSelect(profile.id)}
+            className={`flex flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors
+              bg-white/[0.03] border hover:border-purple-500/50
+              ${activeId === profile.id ? 'border-l-2 border-purple-500' : 'border-white/5'}`}
+          >
+            <p className="text-sm font-medium text-space-text">{profile.name || 'Unnamed'}</p>
+            {(profile.first_name || profile.last_name) && (
+              <p className="text-xs text-space-dim">
+                {[profile.first_name, profile.last_name].filter(Boolean).join(' ')}
+              </p>
+            )}
+          </button>
+        ))}
+      </div>
       <button
-        onClick={onProfileSettings}
-        className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors"
+        onClick={onCreateProfile}
+        className="w-full py-2 rounded-lg border border-space-border hover:border-purple-500/50 text-sm text-space-dim hover:text-space-text transition-colors"
       >
-        Profile Settings
+        + Create Profile
       </button>
     </div>
   )
 }
 
-// ─── Advanced tab ─────────────────────────────────────────────────────────────
+// ─── Profile detail view ──────────────────────────────────────────────────────
 
-function AdvancedTab() {
-  const [providers, setProviders] = useState([])
+const PROVIDER_TYPES = ['openrouter', 'anthropic', 'openai', 'gemini']
+
+function ProfileDetailView({ profileId }) {
+  const [form, setForm] = useState(null)
+  const [llmProviderType, setLlmProviderType] = useState('')
+  const [llmModel, setLlmModel] = useState('')
+  const [llmApiKey, setLlmApiKey] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState(null)
   const timerRef = useRef(null)
 
   useEffect(() => {
-    getProviders()
-      .then((data) => setProviders(data.providers ?? []))
-      .catch(console.error)
+    setLoading(true)
+    getProfile(profileId)
+      .then((data) => {
+        setForm({
+          name: data.name || '',
+          first_name: data.data?.first_name || '',
+          last_name: data.data?.last_name || '',
+          email: data.data?.email || '',
+          phone: data.data?.phone || '',
+          location: data.data?.location || '',
+          _raw: data.data || {},
+        })
+        setLlmProviderType(data.llm_provider_type || '')
+        setLlmModel(data.llm_model || '')
+        setLlmApiKey('')
+      })
+      .catch(() => setStatus('Failed to load profile'))
       .finally(() => setLoading(false))
-  }, [])
+    return () => clearTimeout(timerRef.current)
+  }, [profileId])
 
-  useEffect(() => () => clearTimeout(timerRef.current), [])
-
-  const handleSave = async (provider, field, value) => {
+  const handleSave = async () => {
+    if (!form) return
     setSaving(true)
     try {
-      await saveProvider(provider.id, { ...provider, [field]: value })
-      setProviders((prev) =>
-        prev.map((p) => p.id === provider.id ? { ...p, [field]: value } : p)
-      )
+      const firstName = form.first_name.trim()
+      const lastName = form.last_name.trim()
+      await updateProfile(profileId, {
+        name: form.name || `${firstName} ${lastName}`.trim() || 'Unnamed',
+        data: {
+          ...form._raw,
+          first_name: firstName,
+          last_name: lastName,
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          location: form.location.trim(),
+          llm_provider_type: llmProviderType,
+          llm_model: llmModel.trim(),
+        },
+        llm_api_key: llmApiKey,
+      })
       setStatus('Saved ✓')
     } catch {
       setStatus('Save failed')
@@ -280,51 +352,90 @@ function AdvancedTab() {
     }
   }
 
+  const field = (label, key, type = 'text') => (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-space-dim">{label}</label>
+      <input
+        type={type}
+        className={inputClass}
+        value={form?.[key] ?? ''}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+      />
+    </div>
+  )
+
   if (loading) return <p className="text-xs text-space-dim">Loading…</p>
-  if (providers.length === 0) return <p className="text-xs text-space-dim">No providers configured.</p>
 
   return (
-    <div className="flex flex-col gap-6">
-      {providers.map((provider) => (
-        <div key={provider.id} className="flex flex-col gap-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">{provider.name}</p>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">Default Model</label>
-            <input
-              className={inputClass}
-              value={provider.default_model || ''}
-              onChange={(e) => setProviders((prev) =>
-                prev.map((p) => p.id === provider.id ? { ...p, default_model: e.target.value } : p)
-              )}
-              onBlur={(e) => {
-                if (e.target.value !== (provider.default_model || '')) {
-                  handleSave(provider, 'default_model', e.target.value)
-                }
-              }}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">API Key</label>
-            <input
-              type="password"
-              className={inputClass}
-              placeholder="Enter new key to replace existing"
-              onBlur={(e) => { if (e.target.value) handleSave(provider, 'api_key', e.target.value) }}
-            />
-          </div>
-        </div>
-      ))}
-      {status && <p className={`text-xs ${status.includes('failed') ? 'text-red-400' : 'text-green-400'}`}>{status}</p>}
+    <div className="flex flex-col gap-4">
+      {field('First Name', 'first_name')}
+      {field('Last Name', 'last_name')}
+      {field('Email', 'email')}
+      {field('Phone', 'phone')}
+      {field('Location', 'location')}
+
+      <hr className="border-space-border" />
+      <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">LLM Provider</p>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-space-dim">Provider</label>
+        <select
+          className={inputClass}
+          value={llmProviderType}
+          onChange={(e) => setLlmProviderType(e.target.value)}
+        >
+          <option value="">— select —</option>
+          {PROVIDER_TYPES.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-space-dim">Model</label>
+        <input
+          className={inputClass}
+          value={llmModel}
+          onChange={(e) => setLlmModel(e.target.value)}
+          placeholder="e.g. gpt-4o"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-space-dim">API Key</label>
+        <input
+          type="password"
+          className={inputClass}
+          value={llmApiKey}
+          onChange={(e) => setLlmApiKey(e.target.value)}
+          placeholder="Enter new key to replace existing"
+        />
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+
+      {status && (
+        <p className={`text-xs text-center ${status.includes('failed') ? 'text-red-400' : 'text-green-400'}`}>
+          {status}
+        </p>
+      )}
     </div>
   )
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['User', 'Tasks', 'Advanced', 'Preview']
+const TABS = ['User', 'Tasks', 'Preview']
 
 export default function Settings({ selectedJob, activeTab, onTabChange, jobs, processingKeys }) {
-  const [view, setView] = useState('main') // 'main' | 'profiles' | 'createProfile'
+  const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
+  const [detailProfileId, setDetailProfileId] = useState(null)
 
   const isPreviewDisabled = selectedJob === null
 
@@ -368,13 +479,13 @@ export default function Settings({ selectedJob, activeTab, onTabChange, jobs, pr
       ) : (
         <div className="flex items-center gap-2 px-4 py-3 border-b border-space-border shrink-0">
           <button
-            onClick={() => setView(view === 'createProfile' ? 'profiles' : 'main')}
+            onClick={() => setView('main')}
             className="text-space-dim hover:text-purple-400 transition-colors"
           >
             <BackArrow />
           </button>
           <span className="text-xs font-semibold uppercase tracking-widest text-space-dim">
-            {view === 'profiles' ? 'Profile Settings' : 'Create Profile'}
+            {view === 'createProfile' ? 'Create Profile' : 'Edit Profile'}
           </span>
         </div>
       )}
@@ -391,25 +502,25 @@ export default function Settings({ selectedJob, activeTab, onTabChange, jobs, pr
             transition={{ duration: 0.2 }}
           >
             {view === 'main' && activeTab === 'User' && (
-              <UserTab onProfileSettings={() => setView('profiles')} />
+              <ProfileCards
+                onSelect={(id) => { setDetailProfileId(id); setView('profileDetail') }}
+                onCreateProfile={() => setView('createProfile')}
+              />
             )}
             {view === 'main' && activeTab === 'Tasks' && (
               <TasksTab jobs={jobs} processingKeys={processingKeys} />
             )}
-            {view === 'main' && activeTab === 'Advanced' && <AdvancedTab />}
             {view === 'main' && activeTab === 'Preview' && (
               <PreviewTab job={selectedJob} />
             )}
-            {view === 'profiles' && (
-              <ProfileList
-                onCreateProfile={() => setView('createProfile')}
-              />
-            )}
             {view === 'createProfile' && (
               <CreateProfile
-                onBack={() => setView('profiles')}
-                onCreated={() => setView('profiles')}
+                onBack={() => setView('main')}
+                onCreated={() => setView('main')}
               />
+            )}
+            {view === 'profileDetail' && detailProfileId != null && (
+              <ProfileDetailView profileId={detailProfileId} />
             )}
           </motion.div>
         </AnimatePresence>
