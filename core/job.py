@@ -448,15 +448,11 @@ Return only the JSON object, no other text.
         db.flush()
         db.commit()
 
-    def intake(self, db: Session) -> None:
+    def intake(self) -> None:
         """Run post-intake processing (description extraction) in a background thread.
 
         Opens a fresh DB session so the thread is session-safe. Logs start,
         completion, and any failure to stdout.
-
-        Args:
-            db: Caller's session — used only to resolve SessionLocal factory;
-                not passed into the thread.
         """
         import threading
         from db.database import SessionLocal

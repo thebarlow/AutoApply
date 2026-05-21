@@ -360,7 +360,8 @@ def test_generate_resume_md_writes_file(db_session, tmp_path):
 
 
 def test_intake_spawns_background_thread_and_calls_extract(db_session):
-    from unittest.mock import patch, MagicMock
+    import threading
+    from unittest.mock import patch
     from core.job import Job
 
     job = Job.from_scraped(_make_scraped(job_key="r_intake", url="https://x.com/intake"))
@@ -368,15 +369,25 @@ def test_intake_spawns_background_thread_and_calls_extract(db_session):
     db_session.commit()
     db_session.refresh(job)
 
+    spawned_threads = []
     called = []
+
+    original_thread_init = threading.Thread.__init__
+
+    def capturing_init(self, *args, **kwargs):
+        original_thread_init(self, *args, **kwargs)
+        spawned_threads.append(self)
 
     def fake_extract(self, db):
         called.append(self.job_key)
 
-    with patch.object(Job, "extract_description", fake_extract):
-        from db.database import SessionLocal
-        with patch("db.database.SessionLocal", return_value=db_session):
-            job.intake(db_session)
-            import time; time.sleep(0.2)  # let thread finish
+    # Keep all patches active while the thread executes
+    with patch.object(threading.Thread, "__init__", capturing_init), \
+         patch.object(Job, "extract_description", fake_extract), \
+         patch("db.database.SessionLocal", return_value=db_session):
+        job.intake()
+        # Ensure thread completes while patches are still active
+        assert len(spawned_threads) == 1
+        spawned_threads[0].join(timeout=5)
 
     assert called == ["r_intake"]
