@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
 import { getProfiles, createProfile, getProfile, updateProfile } from '../../api'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -59,20 +60,78 @@ function ExtractionView({ data }) {
   )
 }
 
-function PreviewTab({ job }) {
-  const [view, setView] = useState('raw')
+function MarkdownView({ url }) {
+  const [text, setText] = useState(null)
+  const [error, setError] = useState(false)
 
-  // Reset view when a different job is selected
-  useEffect(() => { setView('raw') }, [job?.job_key])
+  useEffect(() => {
+    setText(null)
+    setError(false)
+    fetch(url)
+      .then((r) => { if (!r.ok) throw new Error(); return r.text() })
+      .then(setText)
+      .catch(() => setError(true))
+  }, [url])
+
+  if (error) return <p className="text-xs text-space-dim">Not available.</p>
+  if (text === null) return <p className="text-xs text-space-dim">Loading…</p>
+  return (
+    <div className="prose prose-invert prose-sm max-w-none text-space-text text-xs leading-relaxed">
+      <ReactMarkdown>{text}</ReactMarkdown>
+    </div>
+  )
+}
+
+const CONTENT_TABS = ['description', 'resume', 'cover']
+const CONTENT_TAB_LABELS = { description: 'Description', resume: 'Resume', cover: 'Cover Letter' }
+
+function SubToggle({ options, value, onChange }) {
+  return (
+    <div className="flex gap-2">
+      {options.map(({ key, label, disabled }) => (
+        <button
+          key={key}
+          onClick={() => !disabled && onChange(key)}
+          disabled={disabled}
+          className={`px-3 py-1 rounded text-xs font-semibold capitalize transition-colors
+            ${value === key ? 'bg-purple-600 text-white' : 'text-space-dim hover:text-space-text border border-space-border'}
+            disabled:opacity-30 disabled:cursor-not-allowed`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function PreviewTab({ job }) {
+  const [contentTab, setContentTab] = useState('description')
+  const [descView, setDescView] = useState('raw')
+  const [artifactView, setArtifactView] = useState('markdown')
+
+  // Reset all state when a different job is selected
+  useEffect(() => {
+    setContentTab('description')
+    setDescView('raw')
+    setArtifactView('markdown')
+  }, [job?.job_key])
+
+  // Reset artifactView when switching between resume/cover tabs
+  const handleContentTab = (tab) => {
+    setContentTab(tab)
+    setArtifactView('markdown')
+  }
 
   if (!job) return null
 
   const score = job.final_score != null ? Math.round(job.final_score * 100) + '%' : '—'
   const stateLabel = STATE_LABELS[job.state] ?? job.state
+  const hasResume = !!job.resume_path
+  const hasCover = !!job.cover_path
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {/* Info */}
       <div>
         <h2 className="text-base font-semibold text-space-text leading-tight">{job.title || '(no title)'}</h2>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
@@ -86,35 +145,80 @@ function PreviewTab({ job }) {
 
       <hr className="border-space-border" />
 
-      {/* Toggle */}
+      {/* Content tab bar */}
       <div className="flex gap-2">
-        {['raw', 'extracted'].map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            disabled={v === 'extracted' && !job.extraction_json_exists}
-            className={`px-3 py-1 rounded text-xs font-semibold capitalize transition-colors
-              ${view === v ? 'bg-purple-600 text-white' : 'text-space-dim hover:text-space-text border border-space-border'}
-              disabled:opacity-30 disabled:cursor-not-allowed`}
-          >
-            {v}
-          </button>
-        ))}
+        {CONTENT_TABS.map((tab) => {
+          const disabled = (tab === 'resume' && !hasResume) || (tab === 'cover' && !hasCover)
+          return (
+            <button
+              key={tab}
+              onClick={() => !disabled && handleContentTab(tab)}
+              disabled={disabled}
+              className={`px-3 py-1 rounded text-xs font-semibold transition-colors
+                ${contentTab === tab && !disabled ? 'bg-purple-600 text-white' : 'text-space-dim hover:text-space-text border border-space-border'}
+                disabled:opacity-30 disabled:cursor-not-allowed`}
+            >
+              {CONTENT_TAB_LABELS[tab]}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Description */}
-      <div>
-        {view === 'raw' && (
-          <p className="text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
-            {job.description || 'No description available.'}
-          </p>
-        )}
-        {view === 'extracted' && (
-          job.extraction
-            ? <ExtractionView data={job.extraction} />
-            : <p className="text-xs text-space-dim">No extraction yet.</p>
-        )}
-      </div>
+      <hr className="border-space-border" />
+
+      {/* Content area */}
+      {contentTab === 'description' && (
+        <div className="flex flex-col gap-3">
+          <SubToggle
+            options={[
+              { key: 'raw', label: 'Raw' },
+              { key: 'extracted', label: 'Processed', disabled: !job.extraction_json_exists },
+            ]}
+            value={descView}
+            onChange={setDescView}
+          />
+          {descView === 'raw' && (
+            <p className="text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
+              {job.description || 'No description available.'}
+            </p>
+          )}
+          {descView === 'extracted' && (
+            job.extraction
+              ? <ExtractionView data={job.extraction} />
+              : <p className="text-xs text-space-dim">No extraction yet.</p>
+          )}
+        </div>
+      )}
+
+      {(contentTab === 'resume' || contentTab === 'cover') && (
+        <div className="flex flex-col gap-3">
+          <SubToggle
+            options={[
+              { key: 'markdown', label: 'Markdown' },
+              { key: 'pdf', label: 'PDF' },
+            ]}
+            value={artifactView}
+            onChange={setArtifactView}
+          />
+          {artifactView === 'markdown' && (
+            <MarkdownView
+              url={contentTab === 'resume'
+                ? `/api/jobs/${job.job_key}/resume/markdown`
+                : `/api/jobs/${job.job_key}/cover/markdown`}
+            />
+          )}
+          {artifactView === 'pdf' && (
+            <iframe
+              src={contentTab === 'resume'
+                ? `/api/jobs/${job.job_key}/resume`
+                : `/api/jobs/${job.job_key}/cover`}
+              className="w-full rounded border border-space-border"
+              style={{ height: '600px' }}
+              title={contentTab === 'resume' ? 'Resume PDF' : 'Cover Letter PDF'}
+            />
+          )}
+        </div>
+      )}
     </div>
   )
 }
