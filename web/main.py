@@ -14,6 +14,7 @@ from web.routers import jobs
 from web.routers import scraper
 from web.routers import config
 from web.routers import events
+from web.routers import tray
 
 
 def _timed(label: str, fn):
@@ -56,6 +57,7 @@ app.include_router(jobs.router)
 app.include_router(scraper.router)
 app.include_router(config.router)
 app.include_router(events.router)
+app.include_router(tray.router)
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
