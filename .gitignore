@@ -47,3 +47,5 @@ profiles/
 
 # React build output
 react-dashboard/dist/
+
+node_modules/
