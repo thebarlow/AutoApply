@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getProfiles, createProfile, getProfile, updateProfile } from '../../api'
 import ProfileDetailView from './ProfileDetail'
