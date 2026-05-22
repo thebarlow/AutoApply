@@ -9,7 +9,7 @@ const btnResume = document.getElementById("btn-resume");
 const btnCover = document.getElementById("btn-cover");
 
 async function load() {
-  const { fastapiUrl = "http://localhost:8000" } = await chrome.storage.sync.get("fastapiUrl");
+  const { fastapiUrl = "http://localhost:8080" } = await chrome.storage.sync.get("fastapiUrl");
   urlInput.value = fastapiUrl;
   const { stagedJobKeys = [] } = await chrome.storage.local.get("stagedJobKeys");
   countEl.textContent = stagedJobKeys.length;

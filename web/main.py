@@ -73,23 +73,17 @@ def _spa_index() -> FileResponse:
 
 @app.get("/")
 def index():
-    if (_DIST / "index.html").exists():
-        return _spa_index()
-    return FileResponse(_STATIC / "index.html")
+    return _spa_index()
 
 
 @app.get("/config")
 def config_page():
-    if (_DIST / "index.html").exists():
-        return _spa_index()
-    return FileResponse(_STATIC / "config.html")
+    return _spa_index()
 
 
 @app.get("/setup")
 def setup_page():
-    if (_DIST / "index.html").exists():
-        return _spa_index()
-    return FileResponse(_STATIC / "setup.html")
+    return _spa_index()
 
 
 @app.get("/help")

@@ -60,7 +60,7 @@ async function handleScrape(payload) {
     return { ok: true, status: "duplicate" };
   }
 
-  const { fastapiUrl = "http://localhost:8000" } = await chrome.storage.sync.get("fastapiUrl");
+  const { fastapiUrl = "http://localhost:8080" } = await chrome.storage.sync.get("fastapiUrl");
 
   const res = await fetch(`${fastapiUrl}/api/scraper/stage-job`, {
     method: "POST",

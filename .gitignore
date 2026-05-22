@@ -25,6 +25,13 @@ __pycache__/
 # Database
 auto_apply.db
 
+# Cache / scratch
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+Notes.ipynb
+Obisidan/
+
 # OS
 .DS_Store
 Thumbs.db
