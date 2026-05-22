@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import signal
 import sys
+from pathlib import Path
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
@@ -11,9 +12,9 @@ from tray_app.panel import TrayPanel
 from tray_app.ws_client import WsClient
 
 
-def _make_icon(app: QApplication) -> QIcon:
-    from PyQt6.QtWidgets import QStyle
-    return app.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogStart)
+def _make_icon(_app: QApplication) -> QIcon:
+    icon_path = Path(__file__).parent.parent / "assets" / "icon.png"
+    return QIcon(str(icon_path))
 
 
 def main():
