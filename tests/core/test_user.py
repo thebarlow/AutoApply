@@ -156,3 +156,53 @@ def test_user_master_resume_falls_back_to_render(db_session):
     user = User.load(db_session)
     result = user.master_resume()
     assert "Python" in result
+
+
+def test_user_hydrates_new_fields_from_data(db_session):
+    from core.user import User
+    data = {
+        **SAMPLE_DATA,
+        "website": "https://example.com",
+        "prompt_scoring": "custom scoring prompt",
+        "prompt_resume": "custom resume prompt",
+        "prompt_cover": "custom cover prompt",
+        "prompt_extraction": "custom extraction prompt",
+        "prompt_intake": "custom intake prompt",
+    }
+    db_session.add(User(name="Matt", data=json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+    assert user.website == "https://example.com"
+    assert user.prompt_scoring == "custom scoring prompt"
+    assert user.prompt_resume == "custom resume prompt"
+    assert user.prompt_cover == "custom cover prompt"
+    assert user.prompt_extraction == "custom extraction prompt"
+    assert user.prompt_intake == "custom intake prompt"
+
+
+def test_user_hydrates_new_fields_default_to_empty(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+    user = User.load(db_session)
+    assert user.website == ""
+    assert user.prompt_scoring == ""
+    assert user.prompt_resume == ""
+    assert user.prompt_cover == ""
+    assert user.prompt_extraction == ""
+    assert user.prompt_intake == ""
+
+
+def test_user_to_dict_includes_new_fields(db_session):
+    from core.user import User
+    data = {**SAMPLE_DATA, "website": "https://portfolio.dev", "prompt_resume": "my prompt"}
+    db_session.add(User(name="Matt", data=json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+    serialized = user._to_dict()
+    assert serialized["website"] == "https://portfolio.dev"
+    assert serialized["prompt_resume"] == "my prompt"
+    assert "prompt_scoring" in serialized
+    assert "prompt_cover" in serialized
+    assert "prompt_extraction" in serialized
+    assert "prompt_intake" in serialized

@@ -83,6 +83,12 @@ class User(Base):
         self.target_roles = raw.get("target_roles", [])
         self.resume_path = raw.get("resume_path", "")
         self.md_path = raw.get("md_path", "")
+        self.website = raw.get("website", "")
+        self.prompt_scoring = raw.get("prompt_scoring", "")
+        self.prompt_resume = raw.get("prompt_resume", "")
+        self.prompt_cover = raw.get("prompt_cover", "")
+        self.prompt_extraction = raw.get("prompt_extraction", "")
+        self.prompt_intake = raw.get("prompt_intake", "")
 
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
@@ -104,6 +110,12 @@ class User(Base):
             "target_roles": self.target_roles,
             "resume_path": self.resume_path,
             "md_path": self.md_path,
+            "website": self.website,
+            "prompt_scoring": self.prompt_scoring,
+            "prompt_resume": self.prompt_resume,
+            "prompt_cover": self.prompt_cover,
+            "prompt_extraction": self.prompt_extraction,
+            "prompt_intake": self.prompt_intake,
         }
 
     @classmethod
