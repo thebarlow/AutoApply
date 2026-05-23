@@ -55,42 +55,6 @@ def _apply_template(template: str, sources: dict[str, Any]) -> str:
     return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
 
 
-_DEFAULT_SCORE_PROMPT = """\
-You are evaluating a job posting for a candidate. Score the job on two dimensions.
-
-## Candidate Profile
-Name: {user.first_name} {user.last_name}
-Skills: {user.skills}
-Target roles: {user.target_roles}
-Target salary: ${user.target_salary_min}–${user.target_salary_max}
-
-Work History:
-{user.work_history}
-
-Education:
-{user.education}
-
-## Job Posting
-Title: {job.title}
-Company: {job.company}
-Location: {job.location}
-Salary: {job.salary}
-Description:
-{job.description}
-
-## Instructions
-Return ONLY a JSON object with exactly these four keys:
-- desirability_score: float 0.0–1.0 (how much the candidate would want this job)
-- fit_score: float 0.0–1.0 (how well the candidate matches the job requirements)
-- desirability_justification: string (1–2 sentences explaining desirability score)
-- fit_justification: string (1–2 sentences explaining fit score)
-
-Consider for desirability: salary vs target, remote/location fit, role alignment, company quality.
-Consider for fit: required skills vs candidate skills, experience level, education requirements.
-
-Return only the JSON object, no other text.\
-"""
-
 
 class JobState(str, Enum):
     """Valid states for a job in the pipeline."""
@@ -320,11 +284,9 @@ class Job(Base):
         client: Any,
         model: str,
         db: Session,
+        prompt_content: str,
     ) -> None:
         """Score this job using the LLM. Populates score fields and commits.
-
-        Clamps scores to [0.0, 1.0]. Warns and returns early on LLM error or
-        unparseable response without raising.
 
         Args:
             user: A User instance with profile data.
@@ -332,10 +294,11 @@ class Job(Base):
             client: An OpenAI-compatible client instance.
             model: Model identifier string.
             db: SQLAlchemy session.
+            prompt_content: Rendered scoring prompt template text.
         """
         import warnings
 
-        prompt = self.build_score_prompt(user, user.prompt_scoring or _DEFAULT_SCORE_PROMPT)
+        prompt = self.build_score_prompt(user, prompt_content)
         try:
             response = client.chat.completions.create(
                 model=model,
@@ -394,27 +357,24 @@ class Job(Base):
     def extract_description(self, db: Session) -> None:
         """Extract structured fields from job.description using the LLM.
 
-        Populates all ext_* columns. Skips silently if ext_seniority is already set.
-        Resolves the active description prompt from the Config table.
+        Uses the active profile's extraction prompt and LLM config.
 
         Args:
             db: SQLAlchemy session.
 
         Raises:
-            RuntimeError: If no active description prompt is configured or the LLM fails.
+            PromptNotConfiguredError: If extraction prompt is not configured.
+            RuntimeError: If the LLM fails or returns invalid JSON.
         """
-        if self.ext_seniority is not None:
-            return
-
-        from core.llm import get_client_for_named_provider
         import re
+        from core.user import User, PromptNotConfiguredError
+        from core.llm import get_client_for_profile
 
-        prompt_cfg = self._resolve_active_prompt(db, "description")
-        actual_prompt = self.build_description_prompt(prompt_cfg["content"])
-        client, model = get_client_for_named_provider(
-            db, prompt_cfg["provider_name"], prompt_cfg["model_id"]
-        )
+        user = User.load(db)
+        prompt_content = user.resolve_prompt("extraction")
+        client, model = get_client_for_profile(user, user.prompt_extraction_model)
 
+        actual_prompt = self.build_description_prompt(prompt_content)
         response = client.chat.completions.create(
             model=model,
             max_tokens=2048,
@@ -475,31 +435,6 @@ class Job(Base):
 
         t = threading.Thread(target=_run, daemon=True)
         t.start()
-
-    @staticmethod
-    def _resolve_active_prompt(db: Session, type_: str) -> dict:
-        """Return the active prompt config dict for a given type.
-
-        Args:
-            db: SQLAlchemy session.
-            type_: Prompt type key (e.g., 'description', 'resume', 'cover').
-
-        Returns:
-            Prompt config dict with keys: id, content, provider_name, model_id.
-
-        Raises:
-            RuntimeError: If no active prompt is configured for the given type.
-        """
-        from db.database import Config
-        def _get(key: str) -> str:
-            row = db.query(Config).filter_by(key=key).first()
-            return row.value if row else ""
-        active_id = _get(f"active_{type_}_prompt_id")
-        prompts = json.loads(_get(f"{type_}_prompts") or "[]")
-        prompt = next((p for p in prompts if p["id"] == active_id), None)
-        if not prompt:
-            raise RuntimeError(f"No active {type_} prompt configured. Set one under Config → Scaffolding.")
-        return prompt
 
     # ── Generation ─────────────────────────────────────────────────────────────
 
