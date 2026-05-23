@@ -652,7 +652,7 @@ const DEFAULT_PROMPTS = {
 Name: {user.first_name} {user.last_name}
 Skills: {user.skills}
 Target roles: {user.target_roles}
-Target salary: ${user.target_salary_min} – ${user.target_salary_max}
+Target salary: \${user.target_salary_min} – \${user.target_salary_max}
 
 Work History:
 {user.work_history}
