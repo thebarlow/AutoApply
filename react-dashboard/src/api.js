@@ -3,6 +3,7 @@ const BASE = ''
 async function _fetch(url, options) {
   const res = await fetch(BASE + url, options)
   if (!res.ok) throw new Error(`${options?.method ?? 'GET'} ${url} → ${res.status}`)
+  if (res.status === 204) return null
   const ct = res.headers.get('content-type')
   return ct && ct.includes('application/json') ? res.json() : null
 }
@@ -34,4 +35,14 @@ export const updateProfile = (id, body) =>
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  })
+
+export const deleteProfile = (id) =>
+  _fetch(`/api/config/profiles/${id}`, { method: 'DELETE' })
+
+export const setActiveProfile = (id) =>
+  _fetch('/api/config/profiles/active', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active_id: id }),
   })

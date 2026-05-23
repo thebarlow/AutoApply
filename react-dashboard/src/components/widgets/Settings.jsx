@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile } from '../../api'
+import ProfileDetailView from './ProfileDetail'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -352,6 +353,7 @@ function ProfileCards({ onSelect, onCreateProfile }) {
   const [activeId, setActiveId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [settingActive, setSettingActive] = useState(null)
 
   useEffect(() => {
     getProfiles()
@@ -363,6 +365,16 @@ function ProfileCards({ onSelect, onCreateProfile }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const handleSetActive = async (id) => {
+    setSettingActive(id)
+    try {
+      await setActiveProfile(id)
+      setActiveId(id)
+    } finally {
+      setSettingActive(null)
+    }
+  }
+
   if (loading) return <p className="text-xs text-space-dim">Loading…</p>
   if (error) return <p className="text-xs text-red-400">{error}</p>
 
@@ -373,20 +385,37 @@ function ProfileCards({ onSelect, onCreateProfile }) {
           <p className="text-xs text-space-dim">No profiles yet.</p>
         )}
         {profiles.map((profile) => (
-          <button
+          <div
             key={profile.id}
-            onClick={() => onSelect(profile.id)}
-            className={`flex flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors
-              bg-white/[0.03] border border-white/5 border-l-4 hover:border-purple-500/50
+            className={`flex items-center gap-2 rounded-lg border border-white/5 border-l-4 bg-white/[0.03]
               ${activeId === profile.id ? 'border-l-purple-500' : 'border-l-transparent'}`}
           >
-            <p className="text-sm font-medium text-space-text">{profile.name || 'Unnamed'}</p>
-            {(profile.first_name || profile.last_name) && (
-              <p className="text-xs text-space-dim">
-                {[profile.first_name, profile.last_name].filter(Boolean).join(' ')}
-              </p>
-            )}
-          </button>
+            <button
+              onClick={() => onSelect(profile.id)}
+              className="flex-1 flex flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors rounded-lg min-w-0"
+            >
+              <p className="text-sm font-medium text-space-text">{profile.name || 'Unnamed'}</p>
+              {(profile.first_name || profile.last_name) && (
+                <p className="text-xs text-space-dim">
+                  {[profile.first_name, profile.last_name].filter(Boolean).join(' ')}
+                </p>
+              )}
+            </button>
+            <div className="pr-2 shrink-0">
+              {activeId === profile.id
+                ? <span className="text-xs font-medium text-purple-400">Active</span>
+                : (
+                  <button
+                    onClick={() => handleSetActive(profile.id)}
+                    disabled={settingActive === profile.id}
+                    className="text-xs text-space-dim hover:text-space-text border border-space-border hover:border-purple-500/50 rounded px-2 py-0.5 transition-colors disabled:opacity-50"
+                  >
+                    {settingActive === profile.id ? '…' : 'Set Active'}
+                  </button>
+                )
+              }
+            </div>
+          </div>
         ))}
       </div>
       <button
@@ -399,149 +428,6 @@ function ProfileCards({ onSelect, onCreateProfile }) {
   )
 }
 
-// ─── Profile detail view ──────────────────────────────────────────────────────
-
-const PROVIDER_TYPES = ['openrouter', 'anthropic', 'openai', 'gemini']
-
-function ProfileDetailView({ profileId }) {
-  const [form, setForm] = useState(null)
-  const [llmProviderType, setLlmProviderType] = useState('')
-  const [llmModel, setLlmModel] = useState('')
-  const [llmApiKey, setLlmApiKey] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [status, setStatus] = useState(null)
-  const timerRef = useRef(null)
-
-  useEffect(() => {
-    setLoading(true)
-    getProfile(profileId)
-      .then((data) => {
-        setForm({
-          name: data.name || '',
-          first_name: data.data?.first_name || '',
-          last_name: data.data?.last_name || '',
-          email: data.data?.email || '',
-          phone: data.data?.phone || '',
-          location: data.data?.location || '',
-          _raw: data.data || {},
-        })
-        setLlmProviderType(data.llm_provider_type || '')
-        setLlmModel(data.llm_model || '')
-        setLlmApiKey('')
-      })
-      .catch(() => setStatus('Failed to load profile'))
-      .finally(() => setLoading(false))
-  }, [profileId])
-
-  useEffect(() => () => clearTimeout(timerRef.current), [])
-
-  const handleSave = async () => {
-    if (!form) return
-    setSaving(true)
-    try {
-      const firstName = form.first_name.trim()
-      const lastName = form.last_name.trim()
-      await updateProfile(profileId, {
-        name: form.name || `${firstName} ${lastName}`.trim() || 'Unnamed',
-        data: {
-          ...form._raw,
-          first_name: firstName,
-          last_name: lastName,
-          email: form.email.trim(),
-          phone: form.phone.trim(),
-          location: form.location.trim(),
-          llm_provider_type: llmProviderType,
-          llm_model: llmModel.trim(),
-        },
-        llm_api_key: llmApiKey,
-      })
-      setStatus('Saved ✓')
-    } catch {
-      setStatus('Save failed')
-    } finally {
-      setSaving(false)
-      clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => setStatus(null), 2500)
-    }
-  }
-
-  const field = (label, key, type = 'text') => (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs text-space-dim">{label}</label>
-      <input
-        type={type}
-        className={inputClass}
-        value={form?.[key] ?? ''}
-        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-      />
-    </div>
-  )
-
-  if (loading) return <p className="text-xs text-space-dim">Loading…</p>
-
-  return (
-    <div className="flex flex-col gap-4">
-      {field('First Name', 'first_name')}
-      {field('Last Name', 'last_name')}
-      {field('Email', 'email')}
-      {field('Phone', 'phone')}
-      {field('Location', 'location')}
-
-      <hr className="border-space-border" />
-      <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">LLM Provider</p>
-
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-space-dim">Provider</label>
-        <select
-          className={inputClass}
-          value={llmProviderType}
-          onChange={(e) => setLlmProviderType(e.target.value)}
-        >
-          <option value="">— select —</option>
-          {PROVIDER_TYPES.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-space-dim">Model</label>
-        <input
-          className={inputClass}
-          value={llmModel}
-          onChange={(e) => setLlmModel(e.target.value)}
-          placeholder="e.g. gpt-4o"
-        />
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-space-dim">API Key</label>
-        <input
-          type="password"
-          className={inputClass}
-          value={llmApiKey}
-          onChange={(e) => setLlmApiKey(e.target.value)}
-          placeholder="Enter new key to replace existing"
-        />
-      </div>
-
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
-      >
-        {saving ? 'Saving…' : 'Save'}
-      </button>
-
-      {status && (
-        <p className={`text-xs text-center ${status.includes('failed') ? 'text-red-400' : 'text-green-400'}`}>
-          {status}
-        </p>
-      )}
-    </div>
-  )
-}
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
@@ -634,7 +520,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, jobs, pr
               />
             )}
             {view === 'profileDetail' && detailProfileId != null && (
-              <ProfileDetailView profileId={detailProfileId} />
+              <ProfileDetailView profileId={detailProfileId} onDelete={() => setView('main')} />
             )}
           </motion.div>
         </AnimatePresence>
