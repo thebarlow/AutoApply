@@ -853,7 +853,99 @@ function PromptsSection({ data, onSave }) {
   )
 }
 
-function LlmSection({ profile, onSave }) { return null }
+function LlmSection({ profile, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [providerType, setProviderType] = useState('')
+  const [model, setModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [keyEdited, setKeyEdited] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const openModal = () => {
+    setProviderType(profile.llm_provider_type || '')
+    setModel(profile.llm_model || '')
+    setApiKey('')
+    setKeyEdited(false)
+    setError(null)
+    setOpen(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave({
+        providerType,
+        model,
+        apiKey: keyEdited ? apiKey : '',
+      })
+      setOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <AccordionSection title="LLM Config" editButton={<EditBtn onClick={openModal} />}>
+        <div className="flex flex-col gap-1.5">
+          {profile.llm_provider_type
+            ? <Field label="Provider" value={profile.llm_provider_type} />
+            : <p className="text-xs text-space-dim">No LLM provider configured.</p>
+          }
+          {profile.llm_model && <Field label="Model" value={profile.llm_model} />}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-space-dim">API Key</span>
+            <span className={`text-xs font-medium ${profile.has_llm_key ? 'text-green-400' : 'text-space-dim/50'}`}>
+              {profile.has_llm_key ? 'Configured' : 'Not set'}
+            </span>
+          </div>
+        </div>
+      </AccordionSection>
+
+      {open && (
+        <ItemOverlay title="LLM Config" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-space-dim">Provider</label>
+            <select
+              className={inputClass}
+              value={providerType}
+              onChange={e => setProviderType(e.target.value)}
+            >
+              <option value="">— select —</option>
+              {PROVIDER_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-space-dim">Model</label>
+            <input
+              className={inputClass}
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              placeholder="e.g. gpt-4o"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-space-dim">API Key</label>
+            <input
+              type="password"
+              className={inputClass}
+              value={!keyEdited && profile.has_llm_key ? '••••••••' : apiKey}
+              onFocus={() => { if (!keyEdited && profile.has_llm_key) { setKeyEdited(true); setApiKey('') } }}
+              onChange={e => { setKeyEdited(true); setApiKey(e.target.value) }}
+              placeholder={profile.has_llm_key ? '' : 'Enter API key'}
+            />
+            {profile.has_llm_key && !keyEdited && (
+              <p className="text-xs text-space-dim">Click to replace existing key</p>
+            )}
+          </div>
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
 
 // ─── ProfileDetailView ─────────────────────────────────────────────────────────
 
