@@ -206,3 +206,48 @@ def test_user_to_dict_includes_new_fields(db_session):
     assert "prompt_cover" in serialized
     assert "prompt_extraction" in serialized
     assert "prompt_intake" in serialized
+
+
+def test_user_prompt_resume_parse_round_trips(db_session):
+    from core.user import User
+    import json as _json
+    data = {**SAMPLE_DATA, "prompt_resume_parse": "Custom parse prompt: {user.first_name}"}
+    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+    assert user.prompt_resume_parse == "Custom parse prompt: {user.first_name}"
+
+
+def test_from_markdown_uses_custom_system_prompt(db_session):
+    from core.user import User
+    from db.database import Config
+    import json as _json
+    import unittest.mock as mock
+
+    db_session.add(Config(key="llm_active_provider", value="test"))
+    db_session.add(Config(key="llm_providers", value='[{"name":"test","base_url":"http://x","model":"m"}]'))
+    data = {**SAMPLE_DATA, "prompt_resume_parse": "You parse resumes for {user.first_name}."}
+    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    db_session.commit()
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = _json.dumps({
+        "name": "Ada L", "email": "ada@x.com", "phone": "", "location": "",
+        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
+        "target_roles": [],
+    })
+
+    captured = {}
+    configured_return = mock_client.chat.completions.create.return_value
+
+    def capture_create(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return configured_return
+
+    mock_client.chat.completions.create.side_effect = capture_create
+
+    with mock.patch("core.llm.get_openai_client", return_value=(mock_client, "m")):
+        User.from_markdown("resume text here", db_session)
+
+    system_msg = next(m for m in captured["messages"] if m["role"] == "system")
+    assert "You parse resumes for Matt." == system_msg["content"]

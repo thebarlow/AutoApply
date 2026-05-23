@@ -12,6 +12,39 @@ from db.database import Base
 import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp registered with Base.metadata
 
 
+_DEFAULT_RESUME_PARSE_PROMPT = """\
+You are a resume parser. Extract structured data from the resume text the user provides.
+Return ONLY a JSON object — no markdown fences, no prose, no explanation.
+
+Use this exact schema:
+{
+  "name": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "phone": "string",
+  "location": "string",
+  "skills": ["string"],
+  "work_history": [
+    {"title": "string", "company": "string", "start": "string", "end": "string", "summary": "string"}
+  ],
+  "education": [
+    {"institution": "string", "degree": "string", "field": "string", "graduated": "string", "gpa": number}
+  ],
+  "projects": [
+    {"name": "string", "description": "string", "url": "string", "technologies": ["string"]}
+  ]
+}
+
+Rules:
+- Use empty string "" for missing string fields.
+- Use 0.0 for missing gpa.
+- Use [] for missing list fields.
+- For start/end dates use the format found in the resume (e.g. "2022-01" or "Jan 2022").
+- "end" should be "Present" if the role is current.\
+"""
+
+
 @dataclasses.dataclass
 class WorkHistoryEntry:
     """A single entry in a user's work history."""
@@ -89,6 +122,7 @@ class User(Base):
         self.prompt_cover = raw.get("prompt_cover", "")
         self.prompt_extraction = raw.get("prompt_extraction", "")
         self.prompt_intake = raw.get("prompt_intake", "")
+        self.prompt_resume_parse = raw.get("prompt_resume_parse", "")
 
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
@@ -116,6 +150,7 @@ class User(Base):
             "prompt_cover": self.prompt_cover,
             "prompt_extraction": self.prompt_extraction,
             "prompt_intake": self.prompt_intake,
+            "prompt_resume_parse": self.prompt_resume_parse,
         }
 
     @classmethod
@@ -187,7 +222,7 @@ class User(Base):
 
         Args:
             md_text: Plain text or markdown of a resume.
-            db: SQLAlchemy session (used to resolve the active LLM provider).
+            db: SQLAlchemy session (used to resolve the active LLM provider and user prefs).
 
         Returns:
             Dict conforming to the profile schema. resume_path and md_path are
@@ -198,38 +233,18 @@ class User(Base):
         """
         import re
         from core.llm import get_openai_client
+        from core.job import _apply_template
 
-        _SYSTEM_PROMPT = """\
-You are a resume parser. Extract structured data from the resume text the user provides.
-Return ONLY a JSON object — no markdown fences, no prose, no explanation.
+        system_prompt = _DEFAULT_RESUME_PARSE_PROMPT
+        try:
+            active_user = cls.load(db)
+            if active_user.prompt_resume_parse:
+                system_prompt = _apply_template(
+                    active_user.prompt_resume_parse, {"user": active_user}
+                )
+        except Exception:
+            pass
 
-Use this exact schema:
-{
-  "name": "string",
-  "first_name": "string",
-  "last_name": "string",
-  "email": "string",
-  "phone": "string",
-  "location": "string",
-  "skills": ["string"],
-  "work_history": [
-    {"title": "string", "company": "string", "start": "string", "end": "string", "summary": "string"}
-  ],
-  "education": [
-    {"institution": "string", "degree": "string", "field": "string", "graduated": "string", "gpa": number}
-  ],
-  "projects": [
-    {"name": "string", "description": "string", "url": "string", "technologies": ["string"]}
-  ]
-}
-
-Rules:
-- Use empty string "" for missing string fields.
-- Use 0.0 for missing gpa.
-- Use [] for missing list fields.
-- For start/end dates use the format found in the resume (e.g. "2022-01" or "Jan 2022").
-- "end" should be "Present" if the role is current.
-"""
         client, model = get_openai_client(db)
         response = client.chat.completions.create(
             model=model,
@@ -237,7 +252,7 @@ Rules:
             timeout=30,
             max_tokens=1500,
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": md_text},
             ],
         )
