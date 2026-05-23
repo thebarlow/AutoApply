@@ -100,7 +100,91 @@ function Field({ label, value }) {
 
 // ─── Placeholder section components (filled in subsequent tasks) ───────────────
 
-function IdentitySection({ data, onSave }) { return null }
+function IdentitySection({ data, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const openModal = () => {
+    setForm({
+      first_name: data.first_name || '',
+      last_name: data.last_name || '',
+      hero: data.hero || '',
+      location: data.location || '',
+      email: data.email || '',
+      phone: data.phone || '',
+      linkedin: data.linkedin || '',
+      github: data.github || '',
+      website: data.website || '',
+    })
+    setError(null)
+    setOpen(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave(form)
+      setOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const f = (label, key, type = 'text') => (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-space-dim">{label}</label>
+      <input
+        type={type}
+        className={inputClass}
+        value={form[key] ?? ''}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+      />
+    </div>
+  )
+
+  const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ')
+
+  return (
+    <>
+      <AccordionSection title="Identity" editButton={<EditBtn onClick={openModal} />}>
+        <div className="flex flex-col gap-1.5">
+          {fullName && <p className="text-sm font-medium text-space-text">{fullName}</p>}
+          {data.hero && <p className="text-xs text-space-dim italic">{data.hero}</p>}
+          <Field label="Email" value={data.email} />
+          <Field label="Phone" value={data.phone} />
+          <Field label="Location" value={data.location} />
+          {data.linkedin && <Field label="LinkedIn" value={data.linkedin} />}
+          {data.github && <Field label="GitHub" value={data.github} />}
+          {data.website && <Field label="Website" value={data.website} />}
+          {!fullName && !data.email && <p className="text-xs text-space-dim">No identity info yet.</p>}
+        </div>
+      </AccordionSection>
+
+      {open && (
+        <ItemOverlay title="Edit Identity" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
+          <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Personal</p>
+          {f('First Name', 'first_name')}
+          {f('Last Name', 'last_name')}
+          {f('Tagline / Hero', 'hero')}
+          {f('Location', 'location')}
+          <hr className="border-space-border" />
+          <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Contact</p>
+          {f('Email', 'email', 'email')}
+          {f('Phone', 'phone', 'tel')}
+          <hr className="border-space-border" />
+          <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Socials</p>
+          {f('LinkedIn URL', 'linkedin', 'url')}
+          {f('GitHub URL', 'github', 'url')}
+          {f('Website URL', 'website', 'url')}
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
 function SkillsSection({ data, onSave }) { return null }
 function ExperienceSection({ data, onSave }) { return null }
 function EducationSection({ data, onSave }) { return null }
