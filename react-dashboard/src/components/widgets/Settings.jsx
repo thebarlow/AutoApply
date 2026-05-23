@@ -273,30 +273,6 @@ function PreviewTab({ job }) {
   )
 }
 
-// ─── Tasks tab ────────────────────────────────────────────────────────────────
-
-function TasksTab({ jobs, processingKeys }) {
-  const processing = jobs.filter((j) => processingKeys.has(j.job_key))
-  if (processing.length === 0) {
-    return <p className="text-sm text-space-dim">No active tasks.</p>
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {processing.map((job) => (
-        <div key={job.job_key} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-white/[0.03] border border-white/5">
-          <svg className="shrink-0 animate-spin text-purple-400" width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-            <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="20 18" />
-          </svg>
-          <div className="min-w-0">
-            <p className="text-sm text-space-text truncate">{job.title || '(no title)'}</p>
-            <p className="text-xs text-space-dim">{job.company || ''}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ─── User tab ─────────────────────────────────────────────────────────────────
 
 function CreateProfile({ onBack, onCreated }) {
@@ -431,9 +407,9 @@ function ProfileCards({ onSelect, onCreateProfile }) {
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['User', 'Tasks', 'Preview']
+const TABS = ['User', 'Preview']
 
-export default function Settings({ selectedJob, activeTab, onTabChange, jobs, processingKeys }) {
+export default function Settings({ selectedJob, activeTab, onTabChange }) {
   const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
   const [detailProfileId, setDetailProfileId] = useState(null)
 
@@ -507,9 +483,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, jobs, pr
                 onCreateProfile={() => setView('createProfile')}
               />
             )}
-            {view === 'main' && activeTab === 'Tasks' && (
-              <TasksTab jobs={jobs} processingKeys={processingKeys} />
-            )}
+
             {view === 'main' && activeTab === 'Preview' && (
               <PreviewTab job={selectedJob} />
             )}

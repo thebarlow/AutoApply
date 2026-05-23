@@ -78,8 +78,6 @@ export default function App() {
             selectedJob={selectedJob}
             activeTab={settingsTab}
             onTabChange={setSettingsTab}
-            jobs={jobs}
-            processingKeys={processingKeys}
           />
         </div>
       </Dashboard>
