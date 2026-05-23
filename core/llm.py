@@ -130,11 +130,11 @@ def get_client_for_profile(user: Any, model_override: str = "") -> tuple:
         base_url = _NAMED_PROVIDER_BASE_URLS.get(provider_type.lower())
         if not base_url:
             raise RuntimeError(f"Unknown provider_type '{provider_type}' on user profile.")
-        env_key = f"LLM_KEY_{provider_type.upper()}"
+        env_key = f"LLM_KEY_PROFILE_{user.id}"
         api_key = os.getenv(env_key) or _read_env_file().get(env_key, "")
         if not api_key:
             raise RuntimeError(
-                f"No API key for provider '{provider_type}'. Set {env_key} in .env."
+                f"No API key for user profile {user.id}. Set {env_key} in .env."
             )
         if not model:
             raise RuntimeError(f"No model configured for provider '{provider_type}'.")
