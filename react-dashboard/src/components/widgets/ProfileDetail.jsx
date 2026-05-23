@@ -1059,7 +1059,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   )
 }
 
-function PromptsSection({ data, profileId, defaultModel, onSave }) {
+function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) {
   const [openModal, setOpenModal] = useState(null) // typeKey or null
 
   const handleSaved = (typeKey, filePath, modelOverride) => {
@@ -1282,6 +1282,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         <PromptsSection
           data={d}
           profileId={profileId}
+          profileName={profile.name}
           defaultModel={profile.llm_model || ''}
           onSave={handleSave}
         />
