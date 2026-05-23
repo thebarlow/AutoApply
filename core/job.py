@@ -39,18 +39,57 @@ def _field_to_str(value: Any) -> str:
 
 
 def _apply_template(template: str, sources: dict[str, Any]) -> str:
-    """Replace {table.field} placeholders using attribute values from sources dict."""
+    """Replace {table.field} placeholders using attribute values from sources dict.
+
+    Unknown tables or missing attributes are left as-is. None field values render as "".
+    """
     import re
     def _replace(m: "re.Match[str]") -> str:
         table, field = m.group(1), m.group(2)
         obj = sources.get(table)
         if obj is None:
             return m.group(0)
-        value = getattr(obj, field, None)
-        if value is None:
+        if not hasattr(obj, field):
             return m.group(0)
-        return _field_to_str(value)
+        return _field_to_str(getattr(obj, field))
     return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
+
+
+_DEFAULT_SCORE_PROMPT = """\
+You are evaluating a job posting for a candidate. Score the job on two dimensions.
+
+## Candidate Profile
+Name: {user.first_name} {user.last_name}
+Skills: {user.skills}
+Target roles: {user.target_roles}
+Target salary: ${user.target_salary_min}–${user.target_salary_max}
+
+Work History:
+{user.work_history}
+
+Education:
+{user.education}
+
+## Job Posting
+Title: {job.title}
+Company: {job.company}
+Location: {job.location}
+Salary: {job.salary}
+Description:
+{job.description}
+
+## Instructions
+Return ONLY a JSON object with exactly these four keys:
+- desirability_score: float 0.0–1.0 (how much the candidate would want this job)
+- fit_score: float 0.0–1.0 (how well the candidate matches the job requirements)
+- desirability_justification: string (1–2 sentences explaining desirability score)
+- fit_justification: string (1–2 sentences explaining fit score)
+
+Consider for desirability: salary vs target, remote/location fit, role alignment, company quality.
+Consider for fit: required skills vs candidate skills, experience level, education requirements.
+
+Return only the JSON object, no other text.\
+"""
 
 
 class JobState(str, Enum):
@@ -262,57 +301,17 @@ class Job(Base):
 
     # ── Scoring ────────────────────────────────────────────────────────────────
 
-    def build_score_prompt(self, user: Any) -> str:
-        """Build the LLM scoring prompt for this job.
+    def build_score_prompt(self, user: Any, template: str) -> str:
+        """Render the scoring prompt template against this job and user.
 
         Args:
             user: A User instance with profile data.
+            template: Prompt template string with {job.*} and {user.*} placeholders.
 
         Returns:
-            Prompt string ready to send to the LLM.
+            Rendered prompt string ready to send to the LLM.
         """
-        work_history_text = "\n".join(
-            f"- {e.title} at {e.company} ({e.start}–{e.end}): {e.summary}"
-            for e in user.work_history
-        )
-        education_text = "\n".join(
-            f"- {e.degree} in {e.field} from {e.institution} ({e.graduated}), GPA {e.gpa}"
-            for e in user.education
-        )
-        return f"""You are evaluating a job posting for a candidate. Score the job on two dimensions.
-
-## Candidate Profile
-Name: {f"{user.first_name} {user.last_name}".strip() or user.full_name()}
-Skills: {", ".join(user.skills)}
-Target roles: {", ".join(user.target_roles)}
-Target salary: ${user.target_salary_min}–${user.target_salary_max}
-
-Work History:
-{work_history_text}
-
-Education:
-{education_text}
-
-## Job Posting
-Title: {self.title}
-Company: {self.company}
-Location: {self.location}
-Salary: {self.salary or "Not specified"}
-Description:
-{self.description or "Not provided"}
-
-## Instructions
-Return ONLY a JSON object with exactly these four keys:
-- desirability_score: float 0.0–1.0 (how much the candidate would want this job)
-- fit_score: float 0.0–1.0 (how well the candidate matches the job requirements)
-- desirability_justification: string (1–2 sentences explaining desirability score)
-- fit_justification: string (1–2 sentences explaining fit score)
-
-Consider for desirability: salary vs target, remote/location fit, role alignment, company quality.
-Consider for fit: required skills vs candidate skills, experience level, education requirements.
-
-Return only the JSON object, no other text.
-"""
+        return _apply_template(template, {"job": self, "user": user})
 
     def score(
         self,
@@ -336,7 +335,7 @@ Return only the JSON object, no other text.
         """
         import warnings
 
-        prompt = self.build_score_prompt(user)
+        prompt = self.build_score_prompt(user, user.prompt_scoring or _DEFAULT_SCORE_PROMPT)
         try:
             response = client.chat.completions.create(
                 model=model,

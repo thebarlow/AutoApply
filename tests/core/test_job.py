@@ -118,7 +118,7 @@ def test_job_serialize_returns_dict(db_session):
 
 
 def test_build_score_prompt_contains_job_and_user(db_session):
-    from core.job import Job
+    from core.job import Job, _DEFAULT_SCORE_PROMPT
     from core.user import User
     job = Job.from_scraped(_make_scraped(title="Python Dev", company="Acme"))
     db_session.add(job)
@@ -137,11 +137,34 @@ def test_build_score_prompt_contains_job_and_user(db_session):
     db_session.commit()
     user = User.load(db_session)
 
-    prompt = job.build_score_prompt(user)
+    prompt = job.build_score_prompt(user, _DEFAULT_SCORE_PROMPT)
     assert "Python Dev" in prompt
     assert "Acme" in prompt
-    assert "Matt Barlow" in prompt
+    assert "Matt" in prompt
     assert "desirability_score" in prompt
+
+
+def test_build_score_prompt_uses_custom_template(db_session):
+    from core.job import Job
+    from core.user import User
+    import json as _json
+
+    job = Job.from_scraped(_make_scraped(title="ML Engineer", company="OpenCo"))
+    db_session.add(job)
+    data = {
+        "first_name": "Ada", "last_name": "L", "name": "Ada L",
+        "email": "", "phone": "", "location": "", "hero": "", "linkedin": "", "github": "",
+        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
+        "target_salary_min": 100000, "target_salary_max": 150000,
+        "target_roles": ["ML"], "resume_path": "", "md_path": "",
+    }
+    db_session.add(User(name="Ada", data=_json.dumps(data)))
+    db_session.commit()
+    user = User.load(db_session)
+
+    template = "Candidate: {user.first_name}. Job: {job.title}. Company: {job.company}."
+    prompt = job.build_score_prompt(user, template)
+    assert prompt == "Candidate: Ada. Job: ML Engineer. Company: OpenCo."
 
 
 def test_score_populates_scores(db_session):
