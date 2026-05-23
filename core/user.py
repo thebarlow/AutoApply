@@ -12,6 +12,24 @@ from db.database import Base
 import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp registered with Base.metadata
 
 
+_PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+
+_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "intake", "resume_parse")
+
+_PROMPT_LABELS: dict[str, str] = {
+    "scoring": "Scoring",
+    "resume": "Resume Generation",
+    "cover": "Cover Letter Generation",
+    "extraction": "Description Processing",
+    "intake": "Intake",
+    "resume_parse": "Resume Parsing",
+}
+
+
+class PromptNotConfiguredError(Exception):
+    """Raised when a required prompt is not configured for the active profile."""
+
+
 _DEFAULT_RESUME_PARSE_PROMPT = """\
 You are a resume parser. Extract structured data from the resume text the user provides.
 Return ONLY a JSON object — no markdown fences, no prose, no explanation.
