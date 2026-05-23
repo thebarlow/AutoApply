@@ -447,7 +447,111 @@ function EducationSection({ data, onSave }) {
     </>
   )
 }
-function ProjectsSection({ data, onSave }) { return null }
+const EMPTY_PROJECT = { name: '', description: '', url: '', technologies: [] }
+
+function ProjectsSection({ data, onSave }) {
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  const [editingIndex, setEditingIndex] = useState(null)
+  const [form, setForm] = useState(EMPTY_PROJECT)
+  const [techInput, setTechInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const items = data.projects || []
+
+  const openAdd = () => {
+    setEditingIndex(null); setForm(EMPTY_PROJECT)
+    setTechInput(''); setError(null); setOverlayOpen(true)
+  }
+  const openEdit = (i) => {
+    setEditingIndex(i)
+    setForm({ ...items[i], technologies: [...(items[i].technologies || [])] })
+    setTechInput((items[i].technologies || []).join(', '))
+    setError(null); setOverlayOpen(true)
+  }
+
+  const handleSave = async () => {
+    if (!form.name.trim()) { setError('Project name is required'); return }
+    const technologies = techInput.split(',').map(t => t.trim()).filter(Boolean)
+    const entry = { ...form, technologies }
+    const updated = editingIndex === null
+      ? [...items, entry]
+      : items.map((item, i) => i === editingIndex ? entry : item)
+    setSaving(true)
+    try {
+      await onSave({ projects: updated })
+      setOverlayOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemove = async (i) => {
+    await onSave({ projects: items.filter((_, idx) => idx !== i) })
+  }
+
+  const f = (label, key, multiline = false) => (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-space-dim">{label}</label>
+      {multiline
+        ? <textarea rows={3} className={inputClass + ' resize-none'} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+        : <input className={inputClass} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+      }
+    </div>
+  )
+
+  return (
+    <>
+      <AccordionSection title="Projects">
+        <div className="flex flex-col gap-2">
+          {items.map((item, i) => (
+            <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-space-text truncate">{item.name}</p>
+                {item.technologies?.length > 0 && (
+                  <p className="text-xs text-space-dim truncate">{item.technologies.join(', ')}</p>
+                )}
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <EditBtn onClick={() => openEdit(i)} />
+                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">✕</button>
+              </div>
+            </div>
+          ))}
+          {items.length === 0 && <p className="text-xs text-space-dim">No projects added yet.</p>}
+          <button onClick={openAdd} className="self-start text-xs text-space-dim hover:text-space-text border border-space-border hover:border-purple-500/50 rounded px-2 py-1 transition-colors">
+            + Add Project
+          </button>
+        </div>
+      </AccordionSection>
+
+      {overlayOpen && (
+        <ItemOverlay
+          title={editingIndex === null ? 'Add Project' : 'Edit Project'}
+          onClose={() => setOverlayOpen(false)}
+          onSave={handleSave}
+          saving={saving}
+          error={error}
+        >
+          {f('Project Name', 'name')}
+          {f('Description', 'description', true)}
+          {f('URL', 'url')}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-space-dim">Technologies (comma-separated)</label>
+            <input
+              className={inputClass}
+              value={techInput}
+              onChange={e => setTechInput(e.target.value)}
+              placeholder="e.g. Python, React, Docker"
+            />
+          </div>
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
 function JobPrefsSection({ data, onSave }) { return null }
 function PromptsSection({ data, onSave }) { return null }
 function LlmSection({ profile, onSave }) { return null }
