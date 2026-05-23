@@ -552,7 +552,97 @@ function ProjectsSection({ data, onSave }) {
     </>
   )
 }
-function JobPrefsSection({ data, onSave }) { return null }
+function JobPrefsSection({ data, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({})
+  const [rolesInput, setRolesInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const openModal = () => {
+    setForm({
+      target_salary_min: data.target_salary_min ?? '',
+      target_salary_max: data.target_salary_max ?? '',
+    })
+    setRolesInput((data.target_roles || []).join(', '))
+    setError(null)
+    setOpen(true)
+  }
+
+  const handleSave = async () => {
+    const target_roles = rolesInput.split(',').map(r => r.trim()).filter(Boolean)
+    const patch = {
+      target_roles,
+      target_salary_min: form.target_salary_min !== '' ? Number(form.target_salary_min) : null,
+      target_salary_max: form.target_salary_max !== '' ? Number(form.target_salary_max) : null,
+    }
+    setSaving(true)
+    try {
+      await onSave(patch)
+      setOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const salaryStr = data.target_salary_min != null && data.target_salary_max != null
+    ? `$${data.target_salary_min.toLocaleString()} – $${data.target_salary_max.toLocaleString()}`
+    : data.target_salary_min != null ? `From $${data.target_salary_min.toLocaleString()}` : null
+
+  return (
+    <>
+      <AccordionSection title="Job Preferences" editButton={<EditBtn onClick={openModal} />}>
+        <div className="flex flex-col gap-1.5">
+          {(data.target_roles || []).length > 0 && (
+            <Field label="Target Roles" value={data.target_roles.join(', ')} />
+          )}
+          {salaryStr && <Field label="Target Salary" value={salaryStr} />}
+          {!(data.target_roles?.length) && !salaryStr && (
+            <p className="text-xs text-space-dim">No preferences set yet.</p>
+          )}
+        </div>
+      </AccordionSection>
+
+      {open && (
+        <ItemOverlay title="Job Preferences" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-space-dim">Target Roles (comma-separated)</label>
+            <input
+              className={inputClass}
+              value={rolesInput}
+              onChange={e => setRolesInput(e.target.value)}
+              placeholder="e.g. Backend Engineer, Staff Engineer"
+            />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-xs text-space-dim">Salary Min ($)</label>
+              <input
+                type="number"
+                className={inputClass}
+                value={form.target_salary_min ?? ''}
+                onChange={e => setForm(f => ({ ...f, target_salary_min: e.target.value }))}
+                placeholder="120000"
+              />
+            </div>
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-xs text-space-dim">Salary Max ($)</label>
+              <input
+                type="number"
+                className={inputClass}
+                value={form.target_salary_max ?? ''}
+                onChange={e => setForm(f => ({ ...f, target_salary_max: e.target.value }))}
+                placeholder="160000"
+              />
+            </div>
+          </div>
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
 function PromptsSection({ data, onSave }) { return null }
 function LlmSection({ profile, onSave }) { return null }
 
