@@ -225,12 +225,13 @@ def test_delete_job_not_found(client):
 # --- POST /api/jobs/{job_key}/score ---
 
 def test_score_job_endpoint(client, db_session, monkeypatch):
+    import unittest.mock as mock
+    import web.routers.jobs as jobs_router
     from core.job import Job
-    from core.user import User
 
     _make_job(db_session, "job_score")
 
-    def mock_score(self, user, config, llm_client, model, db):
+    def mock_score(self, user, config, client, model, db, prompt_content):
         self.desirability_score = 0.9
         self.fit_score = 0.8
         self.final_score = 0.85
@@ -238,9 +239,13 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
         db.commit()
 
     monkeypatch.setattr(Job, "score", mock_score)
-    monkeypatch.setattr(User, "load", classmethod(lambda cls, db, profile_id=None: None))
-    import web.routers.jobs as jobs_router
-    monkeypatch.setattr(jobs_router, "get_openai_client", lambda db: (None, "test-model"))
+
+    fake_user = mock.MagicMock()
+    fake_user.prompt_scoring_model = ""
+    fake_user.resolve_prompt.return_value = "Score this job."
+
+    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db: fake_user))
+    monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
     resp = client.post("/api/jobs/job_score/score")
     assert resp.status_code == 200
@@ -456,12 +461,17 @@ def _seed_description_prompt(db_session, content: str = "Extract: {description}"
 
 
 def test_extract_description_stores_result(client, db_session, monkeypatch):
+    import unittest.mock as mock
     import web.routers.jobs as jobs_router
 
     _make_job(db_session, "job_extract", description="We need Python.")
-    _seed_description_prompt(db_session)
 
-    monkeypatch.setattr(jobs_router, "_get_client_for_named_provider", lambda db, pn, mi: (None, "test-model"))
+    fake_user = mock.MagicMock()
+    fake_user.prompt_extraction_model = ""
+    fake_user.resolve_prompt.return_value = "Extract: {description}"
+
+    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db: fake_user))
+    monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
     def mock_llm_call(client, model, prompt):
         return '{"required_skills": ["Python"]}'
@@ -474,7 +484,19 @@ def test_extract_description_stores_result(client, db_session, monkeypatch):
 
 
 def test_extract_description_no_template(client, db_session):
+    from core.user import User
+    import json as _json
     _make_job(db_session, "job_extract_notpl")
+    # Seed user with no extraction prompt — resolve_prompt raises PromptNotConfiguredError → 400
+    minimal_data = {
+        "first_name": "Matt", "last_name": "Barlow", "email": "matt@example.com",
+        "phone": "", "location": "", "skills": [], "work_history": [], "education": [],
+        "projects": [], "target_salary_min": 0, "target_salary_max": 0,
+        "target_roles": [], "resume_path": "", "md_path": "", "hero": "",
+        "linkedin": "", "github": "",
+    }
+    db_session.add(User(name="Matt", data=_json.dumps(minimal_data)))
+    db_session.commit()
     resp = client.post("/api/jobs/job_extract_notpl/description/extract")
     assert resp.status_code == 400
 
@@ -485,12 +507,17 @@ def test_extract_description_not_found(client):
 
 
 def test_extract_description_llm_failure_returns_500(client, db_session, monkeypatch):
+    import unittest.mock as mock
     import web.routers.jobs as jobs_router
 
     _make_job(db_session, "job_extract_fail", description="We need Python.")
-    _seed_description_prompt(db_session)
 
-    monkeypatch.setattr(jobs_router, "_get_client_for_named_provider", lambda db, pn, mi: (None, "test-model"))
+    fake_user = mock.MagicMock()
+    fake_user.prompt_extraction_model = ""
+    fake_user.resolve_prompt.return_value = "Extract: {description}"
+
+    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db: fake_user))
+    monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
     def raise_error(c, m, p):
         raise RuntimeError("LLM down")

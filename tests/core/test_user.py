@@ -118,9 +118,14 @@ def test_user_full_name_falls_back_to_first_last(db_session):
 
 def test_user_from_markdown_returns_profile_dict(db_session):
     from core.user import User
-    from db.database import Config
-    db_session.add(Config(key="llm_active_provider", value="test"))
-    db_session.add(Config(key="llm_providers", value='[{"name":"test","base_url":"http://x","model":"m"}]'))
+    import unittest.mock as mock
+
+    db_session.add(User(name="Matt", data=json.dumps({
+        **SAMPLE_DATA,
+        "llm_provider_type": "openai",
+        "llm_model": "gpt-4o",
+        "prompt_resume_parse": "Parse this resume.",
+    })))
     db_session.commit()
 
     mock_client = MagicMock()
@@ -130,8 +135,7 @@ def test_user_from_markdown_returns_profile_dict(db_session):
         "target_roles": [],
     })
 
-    import unittest.mock as mock
-    with mock.patch("core.llm.get_openai_client", return_value=(mock_client, "m")):
+    with mock.patch("core.llm.get_client_for_profile", return_value=(mock_client, "gpt-4o")):
         result = User.from_markdown("resume text here", db_session)
 
     assert result["email"] == "matt@x.com"
@@ -160,6 +164,7 @@ def test_user_master_resume_falls_back_to_render(db_session):
 
 def test_user_hydrates_new_fields_from_data(db_session):
     from core.user import User
+    from pathlib import Path
     data = {
         **SAMPLE_DATA,
         "website": "https://example.com",
@@ -173,11 +178,12 @@ def test_user_hydrates_new_fields_from_data(db_session):
     db_session.commit()
     user = User.load(db_session)
     assert user.website == "https://example.com"
-    assert user.prompt_scoring == "custom scoring prompt"
-    assert user.prompt_resume == "custom resume prompt"
-    assert user.prompt_cover == "custom cover prompt"
-    assert user.prompt_extraction == "custom extraction prompt"
-    assert user.prompt_intake == "custom intake prompt"
+    assert user.prompt_scoring.endswith(".md")
+    assert Path(user.prompt_scoring).read_text(encoding="utf-8") == "custom scoring prompt"
+    assert user.prompt_resume.endswith(".md")
+    assert user.prompt_cover.endswith(".md")
+    assert user.prompt_extraction.endswith(".md")
+    assert user.prompt_intake.endswith(".md")
 
 
 def test_user_hydrates_new_fields_default_to_empty(db_session):
@@ -201,7 +207,7 @@ def test_user_to_dict_includes_new_fields(db_session):
     user = User.load(db_session)
     serialized = user._to_dict()
     assert serialized["website"] == "https://portfolio.dev"
-    assert serialized["prompt_resume"] == "my prompt"
+    assert serialized["prompt_resume"].endswith(".md")
     assert "prompt_scoring" in serialized
     assert "prompt_cover" in serialized
     assert "prompt_extraction" in serialized
@@ -210,23 +216,27 @@ def test_user_to_dict_includes_new_fields(db_session):
 
 def test_user_prompt_resume_parse_round_trips(db_session):
     from core.user import User
+    from pathlib import Path
     import json as _json
     data = {**SAMPLE_DATA, "prompt_resume_parse": "Custom parse prompt: {user.first_name}"}
     db_session.add(User(name="Matt", data=_json.dumps(data)))
     db_session.commit()
     user = User.load(db_session)
-    assert user.prompt_resume_parse == "Custom parse prompt: {user.first_name}"
+    assert user.prompt_resume_parse.endswith(".md")
+    assert Path(user.prompt_resume_parse).read_text(encoding="utf-8") == "Custom parse prompt: {user.first_name}"
 
 
 def test_from_markdown_uses_custom_system_prompt(db_session):
     from core.user import User
-    from db.database import Config
     import json as _json
     import unittest.mock as mock
 
-    db_session.add(Config(key="llm_active_provider", value="test"))
-    db_session.add(Config(key="llm_providers", value='[{"name":"test","base_url":"http://x","model":"m"}]'))
-    data = {**SAMPLE_DATA, "prompt_resume_parse": "You parse resumes for {user.first_name}."}
+    data = {
+        **SAMPLE_DATA,
+        "prompt_resume_parse": "You parse resumes for {user.first_name}.",
+        "llm_provider_type": "openai",
+        "llm_model": "gpt-4o",
+    }
     db_session.add(User(name="Matt", data=_json.dumps(data)))
     db_session.commit()
 
@@ -246,7 +256,7 @@ def test_from_markdown_uses_custom_system_prompt(db_session):
 
     mock_client.chat.completions.create.side_effect = capture_create
 
-    with mock.patch("core.llm.get_openai_client", return_value=(mock_client, "m")):
+    with mock.patch("core.llm.get_client_for_profile", return_value=(mock_client, "gpt-4o")):
         User.from_markdown("resume text here", db_session)
 
     system_msg = next(m for m in captured["messages"] if m["role"] == "system")
