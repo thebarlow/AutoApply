@@ -51,8 +51,10 @@ def upload_prompt(file: UploadFile = File(...)) -> dict:
 @router.get("/file", response_class=PlainTextResponse)
 def get_prompt_file(path: str) -> str:
     """Return the text content of a prompt file by absolute path."""
-    p = Path(path)
-    if not p.exists() or p.suffix.lower() != ".md":
+    p = Path(path).resolve()
+    _PROMPTS_DIR.mkdir(exist_ok=True)
+    prompts_dir_resolved = _PROMPTS_DIR.resolve()
+    if not p.is_relative_to(prompts_dir_resolved) or p.suffix.lower() != ".md" or not p.exists():
         raise HTTPException(status_code=404, detail="Prompt file not found")
     return p.read_text(encoding="utf-8")
 
@@ -64,8 +66,10 @@ class PromptFileBody(BaseModel):
 @router.put("/file")
 def put_prompt_file(path: str, body: PromptFileBody) -> dict:
     """Overwrite the content of a prompt file in place."""
-    p = Path(path)
-    if not p.exists() or p.suffix.lower() != ".md":
+    p = Path(path).resolve()
+    _PROMPTS_DIR.mkdir(exist_ok=True)
+    prompts_dir_resolved = _PROMPTS_DIR.resolve()
+    if not p.is_relative_to(prompts_dir_resolved) or p.suffix.lower() != ".md" or not p.exists():
         raise HTTPException(status_code=404, detail="Prompt file not found")
     p.write_text(body.content, encoding="utf-8")
     return _prompt_meta(p)
