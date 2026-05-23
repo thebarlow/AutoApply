@@ -31,9 +31,9 @@ function AccordionSection({ title, editButton, children }) {
         onClick={() => setOpen(o => !o)}
       >
         <span className="text-xs font-semibold uppercase tracking-widest text-space-dim">{title}</span>
-        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-          {editButton}
-          <span className="text-space-dim pointer-events-none">
+        <div className="flex items-center gap-2">
+          {editButton && <span onClick={e => e.stopPropagation()}>{editButton}</span>}
+          <span className="text-space-dim">
             <ChevronDown open={open} />
           </span>
         </div>
@@ -134,15 +134,13 @@ function IdentitySection({ data, onSave }) {
     }
   }
 
-  const f = (label, key, type = 'text') => (
+  const f = (label, key, type = 'text', multiline = false) => (
     <div className="flex flex-col gap-1">
       <label className="text-xs text-space-dim">{label}</label>
-      <input
-        type={type}
-        className={inputClass}
-        value={form[key] ?? ''}
-        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-      />
+      {multiline
+        ? <textarea rows={3} className={inputClass + ' resize-none'} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+        : <input type={type} className={inputClass} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+      }
     </div>
   )
 
@@ -169,7 +167,7 @@ function IdentitySection({ data, onSave }) {
           <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Personal</p>
           {f('First Name', 'first_name')}
           {f('Last Name', 'last_name')}
-          {f('Tagline / Hero', 'hero')}
+          {f('Tagline / Hero', 'hero', 'text', true)}
           {f('Location', 'location')}
           <hr className="border-space-border" />
           <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Contact</p>
@@ -983,7 +981,7 @@ export default function ProfileDetailView({ profileId }) {
     const body = { name: profile.name, data: newData }
     if (apiKey) body.llm_api_key = apiKey
     await updateProfile(profileId, body)
-    setProfile(p => ({ ...p, data: newData, llm_provider_type: providerType, llm_model: model }))
+    setProfile(p => ({ ...p, data: newData, llm_provider_type: providerType, llm_model: model, has_llm_key: apiKey ? true : p.has_llm_key }))
   }
 
   if (loading) return <p className="text-xs text-space-dim">Loading…</p>
