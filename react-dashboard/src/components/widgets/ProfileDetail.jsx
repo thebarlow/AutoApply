@@ -185,7 +185,100 @@ function IdentitySection({ data, onSave }) {
     </>
   )
 }
-function SkillsSection({ data, onSave }) { return null }
+function SkillsSection({ data, onSave }) {
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  const [editingIndex, setEditingIndex] = useState(null)
+  const [inputVal, setInputVal] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const skills = data.skills || []
+
+  const openAdd = () => { setEditingIndex(null); setInputVal(''); setError(null); setOverlayOpen(true) }
+  const openEdit = (i) => { setEditingIndex(i); setInputVal(skills[i]); setError(null); setOverlayOpen(true) }
+
+  const handleSave = async () => {
+    const val = inputVal.trim()
+    if (!val) { setError('Skill cannot be empty'); return }
+    let updated
+    if (editingIndex === null) {
+      if (skills.includes(val)) { setError('Skill already exists'); return }
+      updated = [...skills, val]
+    } else {
+      updated = skills.map((s, i) => i === editingIndex ? val : s)
+    }
+    setSaving(true)
+    try {
+      await onSave({ skills: updated })
+      setOverlayOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemove = async (i) => {
+    const updated = skills.filter((_, idx) => idx !== i)
+    await onSave({ skills: updated })
+  }
+
+  return (
+    <>
+      <AccordionSection title="Skills">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {skills.map((s, i) => (
+              <div key={i} className="flex items-center gap-1 bg-white/5 border border-space-border rounded-full px-2.5 py-0.5">
+                <button
+                  onClick={() => openEdit(i)}
+                  className="text-xs text-space-text hover:text-purple-400 transition-colors"
+                >
+                  {s}
+                </button>
+                <button
+                  onClick={() => handleRemove(i)}
+                  className="text-space-dim hover:text-red-400 text-xs leading-none transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          {skills.length === 0 && <p className="text-xs text-space-dim">No skills added yet.</p>}
+          <button
+            onClick={openAdd}
+            className="self-start text-xs text-space-dim hover:text-space-text border border-space-border hover:border-purple-500/50 rounded px-2 py-1 transition-colors"
+          >
+            + Add Skill
+          </button>
+        </div>
+      </AccordionSection>
+
+      {overlayOpen && (
+        <ItemOverlay
+          title={editingIndex === null ? 'Add Skill' : 'Edit Skill'}
+          onClose={() => setOverlayOpen(false)}
+          onSave={handleSave}
+          saving={saving}
+          error={error}
+        >
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-space-dim">Skill</label>
+            <input
+              autoFocus
+              className={inputClass}
+              value={inputVal}
+              onChange={e => setInputVal(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+              placeholder="e.g. Python"
+            />
+          </div>
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
 function ExperienceSection({ data, onSave }) { return null }
 function EducationSection({ data, onSave }) { return null }
 function ProjectsSection({ data, onSave }) { return null }
