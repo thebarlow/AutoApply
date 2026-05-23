@@ -46,3 +46,24 @@ export const setActiveProfile = (id) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ active_id: id }),
   })
+
+export const listPrompts = () => _fetch('/api/prompts')
+
+export const getPromptFile = (path) =>
+  fetch(`/api/prompts/file?path=${encodeURIComponent(path)}`).then((r) => {
+    if (!r.ok) throw new Error(`GET prompt file → ${r.status}`)
+    return r.text()
+  })
+
+export const putPromptFile = (path, content) =>
+  _fetch('/api/prompts/file', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content }),
+  })
+
+export const uploadPromptFile = (file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return _fetch('/api/prompts/upload', { method: 'POST', body: fd })
+}

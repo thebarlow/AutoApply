@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { getProfile, updateProfile, deleteProfile } from '../../api'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, uploadPromptFile } from '../../api'
 
 // ─── Shared ────────────────────────────────────────────────────────────────────
 
@@ -643,6 +643,38 @@ function JobPrefsSection({ data, onSave }) {
 }
 // ─── Prompts constants ────────────────────────────────────────────────────────
 
+const USER_CHIPS = [
+  { label: 'first name', token: '{user.first_name}' },
+  { label: 'last name', token: '{user.last_name}' },
+  { label: 'skills', token: '{user.skills}' },
+  { label: 'work history', token: '{user.work_history}' },
+  { label: 'education', token: '{user.education}' },
+  { label: 'target roles', token: '{user.target_roles}' },
+  { label: 'salary min', token: '{user.target_salary_min}' },
+  { label: 'salary max', token: '{user.target_salary_max}' },
+  { label: 'full profile', token: '{profile}' },
+]
+
+const JOB_CHIPS = [
+  { label: 'title', token: '{job.title}' },
+  { label: 'company', token: '{job.company}' },
+  { label: 'location', token: '{job.location}' },
+  { label: 'salary', token: '{job.salary}' },
+  { label: 'description', token: '{job.description}' },
+  { label: 'full job', token: '{job}' },
+]
+
+const PROMPT_TYPE_KEYS = ['scoring', 'resume', 'cover', 'extraction', 'intake', 'resume_parse']
+
+const PROMPT_TYPE_LABELS = {
+  scoring: 'Scoring',
+  resume: 'Resume Generation',
+  cover: 'Cover Letter Generation',
+  extraction: 'Description Processing',
+  intake: 'Intake',
+  resume_parse: 'Resume Parsing',
+}
+
 const DEFAULT_PROMPTS = {
   prompt_scoring: `You are evaluating a job posting for a candidate. Score the job on two dimensions.
 
@@ -807,77 +839,278 @@ const PROMPT_LABELS = {
   prompt_resume_parse: 'Resume Parsing',
 }
 
-function PromptsSection({ data, onSave }) {
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({})
+function PromptModal({ typeKey, profileId, profileData, defaultModel, onClose, onSaved }) {
+  const label = PROMPT_TYPE_LABELS[typeKey]
+  const currentFile = profileData[`prompt_${typeKey}`] || ''
+  const currentModel = profileData[`prompt_${typeKey}_model`] || ''
+
+  const [promptFiles, setPromptFiles] = useState([])
+  const [selectedFile, setSelectedFile] = useState(currentFile)
+  const [modelOverride, setModelOverride] = useState(currentModel)
+  const [content, setContent] = useState('')
+  const [loadingContent, setLoadingContent] = useState(false)
+  const [contentError, setContentError] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
+  const [saveError, setSaveError] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const textareaRef = useRef(null)
+  const originalContent = useRef('')
 
-  const promptKeys = Object.keys(DEFAULT_PROMPTS)
+  // Load file list on mount
+  useEffect(() => {
+    listPrompts().then((r) => setPromptFiles(r.prompts || []))
+  }, [])
 
-  const openModal = () => {
-    const initial = {}
-    promptKeys.forEach(k => { initial[k] = data[k] || '' })
-    setForm(initial)
-    setError(null)
-    setOpen(true)
+  // Load file content when selection changes
+  useEffect(() => {
+    if (!selectedFile) { setContent(''); return }
+    setLoadingContent(true)
+    setContentError(null)
+    getPromptFile(selectedFile)
+      .then((text) => { setContent(text); originalContent.current = text })
+      .catch(() => setContentError('Could not load file'))
+      .finally(() => setLoadingContent(false))
+  }, [selectedFile])
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await uploadPromptFile(file)
+      const updated = await listPrompts()
+      setPromptFiles(updated.prompts || [])
+      setSelectedFile(result.path)
+    } catch {
+      setSaveError('Upload failed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
   }
 
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    const token = e.dataTransfer.getData('text/plain')
+    if (!token || !textareaRef.current) return
+    const ta = textareaRef.current
+    let offset = ta.selectionStart ?? 0
+    // Try to get precise drop position
+    if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(e.clientX, e.clientY)
+      if (pos && pos.offsetNode === ta) offset = pos.offset
+    }
+    const before = content.slice(0, offset)
+    const after = content.slice(offset)
+    const next = before + token + after
+    setContent(next)
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(offset + token.length, offset + token.length)
+    })
+  }, [content])
+
+  const handleDragOver = (e) => { e.preventDefault() }
+
   const handleSave = async () => {
+    if (!selectedFile) { setSaveError('Select a prompt file first'); return }
     setSaving(true)
+    setSaveError(null)
     try {
-      await onSave(form)
-      setOpen(false)
+      if (content !== originalContent.current) {
+        await putPromptFile(selectedFile, content)
+        originalContent.current = content
+      }
+      // Patch profile with updated file ref and model
+      const newData = {
+        ...profileData,
+        [`prompt_${typeKey}`]: selectedFile,
+        [`prompt_${typeKey}_model`]: modelOverride,
+      }
+      await updateProfile(profileId, { name: profileData.name || '', data: newData })
+      onSaved(typeKey, selectedFile, modelOverride)
+      onClose()
     } catch {
-      setError('Save failed')
+      setSaveError('Save failed')
     } finally {
       setSaving(false)
     }
   }
 
-  const configuredCount = promptKeys.filter(k => data[k]).length
+  const basename = (path) => path.split(/[\\/]/).pop()
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
+          <span className="text-sm font-semibold text-space-text">{label}</span>
+          <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {/* Zone 1: File selector */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File</label>
+            <div className="flex gap-2">
+              <select
+                className={inputClass + ' flex-1'}
+                value={selectedFile}
+                onChange={(e) => setSelectedFile(e.target.value)}
+              >
+                <option value="">— select a file —</option>
+                {promptFiles.map((f) => (
+                  <option key={f.path} value={f.path}>{f.name}</option>
+                ))}
+              </select>
+              <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {uploading ? '…' : 'Upload'}
+                <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
+              </label>
+            </div>
+          </div>
+
+          {/* Zone 2: Model override */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model Override</label>
+            <input
+              className={inputClass}
+              value={modelOverride}
+              onChange={(e) => setModelOverride(e.target.value)}
+              placeholder={defaultModel || 'e.g. gpt-4o-mini (leave blank to use profile default)'}
+            />
+          </div>
+
+          {/* Zone 3: Chip tray */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable</label>
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs text-space-dim">User</p>
+              <div className="flex flex-wrap gap-1.5">
+                {USER_CHIPS.map(({ label: l, token }) => (
+                  <div
+                    key={token}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
+                    className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab active:cursor-grabbing select-none"
+                  >
+                    {l}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-space-dim mt-1">Job</p>
+              <div className="flex flex-wrap gap-1.5">
+                {JOB_CHIPS.map(({ label: l, token }) => (
+                  <div
+                    key={token}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
+                    className="px-2 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/10 text-xs text-blue-300 cursor-grab active:cursor-grabbing select-none"
+                  >
+                    {l}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Zone 4: Editor */}
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt Text</label>
+            {loadingContent && <p className="text-xs text-space-dim">Loading…</p>}
+            {contentError && <p className="text-xs text-red-400">{contentError}</p>}
+            {!loadingContent && !contentError && (
+              <textarea
+                ref={textareaRef}
+                rows={14}
+                className={inputClass + ' resize-y font-mono text-xs'}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                placeholder={selectedFile ? '' : 'Select a file above to edit'}
+                disabled={!selectedFile}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
+          {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || loadingContent || !!contentError}
+              className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PromptsSection({ data, profileId, defaultModel, onSave }) {
+  const [openModal, setOpenModal] = useState(null) // typeKey or null
+
+  const handleSaved = (typeKey, filePath, modelOverride) => {
+    onSave({
+      [`prompt_${typeKey}`]: filePath,
+      [`prompt_${typeKey}_model`]: modelOverride,
+    })
+  }
 
   return (
     <>
-      <AccordionSection title="Prompts" editButton={<EditBtn onClick={openModal} />}>
-        <div className="flex flex-col gap-1">
-          {promptKeys.map(k => (
-            <div key={k} className="flex items-center justify-between">
-              <span className="text-xs text-space-dim">{PROMPT_LABELS[k]}</span>
-              <span className={`text-xs font-medium ${data[k] ? 'text-green-400' : 'text-space-dim/50'}`}>
-                {data[k] ? 'Custom' : 'Default'}
-              </span>
-            </div>
-          ))}
-          {configuredCount === 0 && (
-            <p className="text-xs text-space-dim mt-1">All prompts using system defaults.</p>
-          )}
+      <AccordionSection title="Prompts">
+        <div className="flex flex-col gap-2">
+          {PROMPT_TYPE_KEYS.map((typeKey) => {
+            const filePath = data[`prompt_${typeKey}`] || ''
+            const model = data[`prompt_${typeKey}_model`] || ''
+            const configured = filePath && filePath.endsWith('.md')
+            const basename = filePath ? filePath.split(/[\\/]/).pop() : null
+            return (
+              <button
+                key={typeKey}
+                onClick={() => setOpenModal(typeKey)}
+                className="flex items-start justify-between gap-3 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5 hover:border-purple-500/30 transition-colors text-left w-full"
+              >
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-xs font-semibold text-space-text">{PROMPT_TYPE_LABELS[typeKey]}</span>
+                  {basename
+                    ? <span className="text-xs text-space-dim truncate">{basename}</span>
+                    : <span className="text-xs text-red-400/80">Not configured</span>
+                  }
+                  {model && <span className="text-xs text-purple-400/70 truncate">{model}</span>}
+                  {!model && defaultModel && <span className="text-xs text-space-dim/50 truncate">{defaultModel} (default)</span>}
+                </div>
+                <span className={`shrink-0 text-xs font-medium mt-0.5 ${configured ? 'text-green-400' : 'text-space-dim/40'}`}>
+                  {configured ? 'Custom' : 'Default'}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </AccordionSection>
 
-      {open && (
-        <ItemOverlay title="Edit Prompts" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
-          {promptKeys.map(k => (
-            <div key={k} className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-space-dim">{PROMPT_LABELS[k]}</label>
-                <button
-                  onClick={() => setForm(f => ({ ...f, [k]: DEFAULT_PROMPTS[k] }))}
-                  className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                >
-                  Reset to Default
-                </button>
-              </div>
-              <textarea
-                rows={4}
-                className={inputClass + ' resize-y font-mono text-xs'}
-                value={form[k] ?? ''}
-                onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
-                placeholder={DEFAULT_PROMPTS[k].slice(0, 80) + '…'}
-              />
-            </div>
-          ))}
-        </ItemOverlay>
+      {openModal && (
+        <PromptModal
+          typeKey={openModal}
+          profileId={profileId}
+          profileData={data}
+          defaultModel={defaultModel}
+          onClose={() => setOpenModal(null)}
+          onSaved={handleSaved}
+        />
       )}
     </>
   )
@@ -1045,7 +1278,12 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         <EducationSection data={d} onSave={handleSave} />
         <ProjectsSection data={d} onSave={handleSave} />
         <JobPrefsSection data={d} onSave={handleSave} />
-        <PromptsSection data={d} onSave={handleSave} />
+        <PromptsSection
+          data={d}
+          profileId={profileId}
+          defaultModel={profile.llm_model || ''}
+          onSave={handleSave}
+        />
         <LlmSection profile={profile} onSave={handleSaveLlm} />
 
         <button
