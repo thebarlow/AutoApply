@@ -364,7 +364,89 @@ function ExperienceSection({ data, onSave }) {
     </>
   )
 }
-function EducationSection({ data, onSave }) { return null }
+const EMPTY_EDUCATION = { institution: '', degree: '', field: '', graduated: '', gpa: '' }
+
+function EducationSection({ data, onSave }) {
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  const [editingIndex, setEditingIndex] = useState(null)
+  const [form, setForm] = useState(EMPTY_EDUCATION)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const items = data.education || []
+
+  const openAdd = () => { setEditingIndex(null); setForm(EMPTY_EDUCATION); setError(null); setOverlayOpen(true) }
+  const openEdit = (i) => { setEditingIndex(i); setForm({ ...items[i], gpa: String(items[i].gpa ?? '') }); setError(null); setOverlayOpen(true) }
+
+  const handleSave = async () => {
+    if (!form.institution.trim()) { setError('Institution is required'); return }
+    const entry = { ...form, gpa: parseFloat(form.gpa) || 0 }
+    const updated = editingIndex === null
+      ? [...items, entry]
+      : items.map((item, i) => i === editingIndex ? entry : item)
+    setSaving(true)
+    try {
+      await onSave({ education: updated })
+      setOverlayOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemove = async (i) => {
+    await onSave({ education: items.filter((_, idx) => idx !== i) })
+  }
+
+  const f = (label, key) => (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-space-dim">{label}</label>
+      <input className={inputClass} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+    </div>
+  )
+
+  return (
+    <>
+      <AccordionSection title="Education">
+        <div className="flex flex-col gap-2">
+          {items.map((item, i) => (
+            <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-space-text truncate">{item.degree} in {item.field}</p>
+                <p className="text-xs text-space-dim">{item.institution} · {item.graduated}{item.gpa ? ` · GPA ${item.gpa}` : ''}</p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <EditBtn onClick={() => openEdit(i)} />
+                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">✕</button>
+              </div>
+            </div>
+          ))}
+          {items.length === 0 && <p className="text-xs text-space-dim">No education added yet.</p>}
+          <button onClick={openAdd} className="self-start text-xs text-space-dim hover:text-space-text border border-space-border hover:border-purple-500/50 rounded px-2 py-1 transition-colors">
+            + Add Education
+          </button>
+        </div>
+      </AccordionSection>
+
+      {overlayOpen && (
+        <ItemOverlay
+          title={editingIndex === null ? 'Add Education' : 'Edit Education'}
+          onClose={() => setOverlayOpen(false)}
+          onSave={handleSave}
+          saving={saving}
+          error={error}
+        >
+          {f('Institution', 'institution')}
+          {f('Degree (e.g. B.S.)', 'degree')}
+          {f('Field of Study', 'field')}
+          {f('Graduated (e.g. 2018)', 'graduated')}
+          {f('GPA', 'gpa')}
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
 function ProjectsSection({ data, onSave }) { return null }
 function JobPrefsSection({ data, onSave }) { return null }
 function PromptsSection({ data, onSave }) { return null }
