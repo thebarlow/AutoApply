@@ -288,6 +288,8 @@ class Job(Base):
     ) -> None:
         """Score this job using the LLM. Populates score fields and commits.
 
+        Warns and returns early (without raising) on LLM API error or unparseable response.
+
         Args:
             user: A User instance with profile data.
             config: Dict with keys w1, w2 (scoring weights).
