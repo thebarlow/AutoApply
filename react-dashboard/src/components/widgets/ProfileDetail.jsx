@@ -839,7 +839,7 @@ const PROMPT_LABELS = {
   prompt_resume_parse: 'Resume Parsing',
 }
 
-function PromptModal({ typeKey, profileId, profileData, defaultModel, onClose, onSaved }) {
+function PromptModal({ typeKey, profileId, profileName, profileData, defaultModel, onClose, onSaved }) {
   const label = PROMPT_TYPE_LABELS[typeKey]
   const currentFile = profileData[`prompt_${typeKey}`] || ''
   const currentModel = profileData[`prompt_${typeKey}_model`] || ''
@@ -927,7 +927,7 @@ function PromptModal({ typeKey, profileId, profileData, defaultModel, onClose, o
         [`prompt_${typeKey}`]: selectedFile,
         [`prompt_${typeKey}_model`]: modelOverride,
       }
-      await updateProfile(profileId, { name: profileData.name || '', data: newData })
+      await updateProfile(profileId, { name: profileName || '', data: newData })
       onSaved(typeKey, selectedFile, modelOverride)
       onClose()
     } catch {
@@ -1106,6 +1106,7 @@ function PromptsSection({ data, profileId, defaultModel, onSave }) {
         <PromptModal
           typeKey={openModal}
           profileId={profileId}
+          profileName={profileName}
           profileData={data}
           defaultModel={defaultModel}
           onClose={() => setOpenModal(null)}
