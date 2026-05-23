@@ -925,7 +925,7 @@ function LlmSection({ profile, onSave }) {
             ? <Field label="Provider" value={profile.llm_provider_type} />
             : <p className="text-xs text-space-dim">No LLM provider configured.</p>
           }
-          {profile.llm_model && <Field label="Model" value={profile.llm_model} />}
+          {profile.llm_model && <Field label="Default Model" value={profile.llm_model} />}
           <div className="flex items-center justify-between">
             <span className="text-xs text-space-dim">API Key</span>
             <span className={`text-xs font-medium ${profile.has_llm_key ? 'text-green-400' : 'text-space-dim/50'}`}>
@@ -949,7 +949,7 @@ function LlmSection({ profile, onSave }) {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">Model</label>
+            <label className="text-xs text-space-dim">Default Model</label>
             <input
               className={inputClass}
               value={model}
