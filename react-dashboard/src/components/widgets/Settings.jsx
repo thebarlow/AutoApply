@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getProfiles, createProfile, getProfile, updateProfile } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -200,6 +200,7 @@ function ProfileCards({ onSelect, onCreateProfile }) {
   const [activeId, setActiveId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [settingActive, setSettingActive] = useState(null)
 
   useEffect(() => {
     getProfiles()
@@ -211,6 +212,16 @@ function ProfileCards({ onSelect, onCreateProfile }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const handleSetActive = async (id) => {
+    setSettingActive(id)
+    try {
+      await setActiveProfile(id)
+      setActiveId(id)
+    } finally {
+      setSettingActive(null)
+    }
+  }
+
   if (loading) return <p className="text-xs text-space-dim">Loading…</p>
   if (error) return <p className="text-xs text-red-400">{error}</p>
 
@@ -221,20 +232,37 @@ function ProfileCards({ onSelect, onCreateProfile }) {
           <p className="text-xs text-space-dim">No profiles yet.</p>
         )}
         {profiles.map((profile) => (
-          <button
+          <div
             key={profile.id}
-            onClick={() => onSelect(profile.id)}
-            className={`flex flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors
-              bg-white/[0.03] border border-white/5 border-l-4 hover:border-purple-500/50
+            className={`flex items-center gap-2 rounded-lg border border-white/5 border-l-4 bg-white/[0.03]
               ${activeId === profile.id ? 'border-l-purple-500' : 'border-l-transparent'}`}
           >
-            <p className="text-sm font-medium text-space-text">{profile.name || 'Unnamed'}</p>
-            {(profile.first_name || profile.last_name) && (
-              <p className="text-xs text-space-dim">
-                {[profile.first_name, profile.last_name].filter(Boolean).join(' ')}
-              </p>
-            )}
-          </button>
+            <button
+              onClick={() => onSelect(profile.id)}
+              className="flex-1 flex flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors rounded-lg min-w-0"
+            >
+              <p className="text-sm font-medium text-space-text">{profile.name || 'Unnamed'}</p>
+              {(profile.first_name || profile.last_name) && (
+                <p className="text-xs text-space-dim">
+                  {[profile.first_name, profile.last_name].filter(Boolean).join(' ')}
+                </p>
+              )}
+            </button>
+            <div className="pr-2 shrink-0">
+              {activeId === profile.id
+                ? <span className="text-xs font-medium text-purple-400">Active</span>
+                : (
+                  <button
+                    onClick={() => handleSetActive(profile.id)}
+                    disabled={settingActive === profile.id}
+                    className="text-xs text-space-dim hover:text-space-text border border-space-border hover:border-purple-500/50 rounded px-2 py-0.5 transition-colors disabled:opacity-50"
+                  >
+                    {settingActive === profile.id ? '…' : 'Set Active'}
+                  </button>
+                )
+              }
+            </div>
+          </div>
         ))}
       </div>
       <button
