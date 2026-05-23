@@ -646,9 +646,11 @@ function JobPrefsSection({ data, onSave }) {
 const USER_CHIPS = [
   { label: 'first name', token: '{user.first_name}' },
   { label: 'last name', token: '{user.last_name}' },
+  { label: 'hero', token: '{user.hero}' },
   { label: 'skills', token: '{user.skills}' },
   { label: 'work history', token: '{user.work_history}' },
   { label: 'education', token: '{user.education}' },
+  { label: 'projects', token: '{user.projects}' },
   { label: 'target roles', token: '{user.target_roles}' },
   { label: 'salary min', token: '{user.target_salary_min}' },
   { label: 'salary max', token: '{user.target_salary_max}' },
@@ -663,6 +665,25 @@ const JOB_CHIPS = [
   { label: 'description', token: '{job.description}' },
   { label: 'full job', token: '{job}' },
 ]
+
+function resolveTokenValue(token, data) {
+  if (!data) return ''
+  const raw = {
+    '{user.first_name}': data.first_name || '',
+    '{user.last_name}': data.last_name || '',
+    '{user.hero}': data.hero || '',
+    '{user.skills}': (data.skills || []).join(', '),
+    '{user.work_history}': (data.work_history || []).map(e => `${e.title} at ${e.company}`).join(' · '),
+    '{user.education}': (data.education || []).map(e => `${e.degree} ${e.field}, ${e.institution}`).join(' · '),
+    '{user.projects}': (data.projects || []).map(e => e.name).join(', '),
+    '{user.target_roles}': (data.target_roles || []).join(', '),
+    '{user.target_salary_min}': data.target_salary_min != null ? `$${data.target_salary_min.toLocaleString()}` : '',
+    '{user.target_salary_max}': data.target_salary_max != null ? `$${data.target_salary_max.toLocaleString()}` : '',
+    '{profile}': (() => { try { return JSON.stringify(data) } catch { return '' } })(),
+  }
+  const v = raw[token] ?? ''
+  return v.length > 220 ? v.slice(0, 220) + '…' : v
+}
 
 const PROMPT_TYPE_KEYS = ['scoring', 'resume', 'cover', 'extraction', 'intake', 'resume_parse']
 
@@ -987,16 +1008,25 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
             <div className="flex flex-col gap-1.5">
               <p className="text-xs text-space-dim">User</p>
               <div className="flex flex-wrap gap-1.5">
-                {USER_CHIPS.map(({ label: l, token }) => (
-                  <div
-                    key={token}
-                    draggable
-                    onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
-                    className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab active:cursor-grabbing select-none"
-                  >
-                    {l}
-                  </div>
-                ))}
+                {USER_CHIPS.map(({ label: l, token }) => {
+                  const tipValue = resolveTokenValue(token, profileData)
+                  return (
+                    <div key={token} className="relative group">
+                      <div
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
+                        className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab active:cursor-grabbing select-none"
+                      >
+                        {l}
+                      </div>
+                      <div className="absolute bottom-full left-0 mb-1.5 z-50 w-56 bg-[#12121f] border border-space-border rounded-lg px-2.5 py-2 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+                        <p className="text-[10px] font-mono break-all text-space-text leading-relaxed">
+                          {tipValue || <span className="italic text-space-dim/50">empty</span>}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
               <p className="text-xs text-space-dim mt-1">Job</p>
               <div className="flex flex-wrap gap-1.5">

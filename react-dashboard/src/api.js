@@ -56,10 +56,10 @@ export const getPromptFile = (path) =>
   })
 
 export const putPromptFile = (path, content) =>
-  _fetch('/api/prompts/file', {
+  _fetch(`/api/prompts/file?path=${encodeURIComponent(path)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, content }),
+    body: JSON.stringify({ content }),
   })
 
 export const uploadPromptFile = (file) => {
