@@ -339,7 +339,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, jobs, pr
               />
             )}
             {view === 'profileDetail' && detailProfileId != null && (
-              <ProfileDetailView profileId={detailProfileId} />
+              <ProfileDetailView profileId={detailProfileId} onDelete={() => setView('main')} />
             )}
           </motion.div>
         </AnimatePresence>

@@ -35,3 +35,6 @@ export const updateProfile = (id, body) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+
+export const deleteProfile = (id) =>
+  _fetch(`/api/config/profiles/${id}`, { method: 'DELETE' })

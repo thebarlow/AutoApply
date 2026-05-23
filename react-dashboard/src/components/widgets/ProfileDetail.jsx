@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProfile, updateProfile } from '../../api'
+import { getProfile, updateProfile, deleteProfile } from '../../api'
 
 // ─── Shared ────────────────────────────────────────────────────────────────────
 
@@ -956,10 +956,13 @@ const PROFILE_DATA_DEFAULTS = {
   prompt_extraction: '', prompt_intake: '',
 }
 
-export default function ProfileDetailView({ profileId }) {
+export default function ProfileDetailView({ profileId, onDelete }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -984,21 +987,71 @@ export default function ProfileDetailView({ profileId }) {
     setProfile(p => ({ ...p, data: newData, llm_provider_type: providerType, llm_model: model, has_llm_key: apiKey ? true : p.has_llm_key }))
   }
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteProfile(profileId)
+      onDelete?.()
+    } catch {
+      setDeleteError('Delete failed')
+      setDeleting(false)
+    }
+  }
+
   if (loading) return <p className="text-xs text-space-dim">Loading…</p>
   if (error) return <p className="text-xs text-red-400">{error}</p>
 
   const d = profile.data
 
   return (
-    <div className="flex flex-col gap-3">
-      <IdentitySection data={d} onSave={handleSave} />
-      <SkillsSection data={d} onSave={handleSave} />
-      <ExperienceSection data={d} onSave={handleSave} />
-      <EducationSection data={d} onSave={handleSave} />
-      <ProjectsSection data={d} onSave={handleSave} />
-      <JobPrefsSection data={d} onSave={handleSave} />
-      <PromptsSection data={d} onSave={handleSave} />
-      <LlmSection profile={profile} onSave={handleSaveLlm} />
-    </div>
+    <>
+      <div className="flex flex-col gap-3">
+        <IdentitySection data={d} onSave={handleSave} />
+        <SkillsSection data={d} onSave={handleSave} />
+        <ExperienceSection data={d} onSave={handleSave} />
+        <EducationSection data={d} onSave={handleSave} />
+        <ProjectsSection data={d} onSave={handleSave} />
+        <JobPrefsSection data={d} onSave={handleSave} />
+        <PromptsSection data={d} onSave={handleSave} />
+        <LlmSection profile={profile} onSave={handleSaveLlm} />
+
+        <button
+          onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
+          className="w-full py-2 rounded-lg border border-red-500/30 text-sm text-red-400 hover:bg-red-500/10 transition-colors mt-2"
+        >
+          Delete Profile
+        </button>
+      </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-sm p-5 flex flex-col gap-4 shadow-2xl">
+            <div>
+              <p className="text-sm font-semibold text-space-text">Delete profile?</p>
+              <p className="text-xs text-space-dim mt-1">
+                This will permanently delete <span className="text-space-text">{profile.name}</span> and cannot be undone.
+              </p>
+            </div>
+            {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
