@@ -643,7 +643,216 @@ function JobPrefsSection({ data, onSave }) {
     </>
   )
 }
-function PromptsSection({ data, onSave }) { return null }
+// ─── Prompts constants ────────────────────────────────────────────────────────
+
+const DEFAULT_PROMPTS = {
+  prompt_scoring: `You are evaluating a job posting for a candidate. Score the job on two dimensions.
+
+## Candidate Profile
+Name: {user.first_name} {user.last_name}
+Skills: {user.skills}
+Target roles: {user.target_roles}
+Target salary: ${user.target_salary_min} – ${user.target_salary_max}
+
+Work History:
+{user.work_history}
+
+Education:
+{user.education}
+
+## Job Posting
+Title: {job.title}
+Company: {job.company}
+Location: {job.location}
+Salary: {job.salary}
+Description:
+{job.description}
+
+## Instructions
+Return ONLY a JSON object with exactly these four keys:
+- desirability_score: float 0.0–1.0 (how much the candidate would want this job)
+- fit_score: float 0.0–1.0 (how well the candidate matches the job requirements)
+- desirability_justification: string (1–2 sentences explaining desirability score)
+- fit_justification: string (1–2 sentences explaining fit score)
+
+Consider for desirability: salary vs target, remote/location fit, role alignment, company quality.
+Consider for fit: required skills vs candidate skills, experience level, education requirements.
+
+Return only the JSON object, no other text.`,
+
+  prompt_resume: `You are writing a tailored one-page resume in Markdown for a job application.
+
+# Candidate Profile
+{profile}
+
+# Job Posting
+{job}
+
+# Instructions
+- Output ONLY the resume Markdown body. No preamble, no explanation.
+- Do NOT include a name or contact block — those are handled separately.
+- Start directly with the first section header (e.g. ## Profile).
+- Do not use \`---\` horizontal rules between sections.
+- Do not invent experience or skills not in the candidate profile.
+- Drop the Soft Skills section entirely.
+
+## Profile
+- Max 500 characters total.
+
+## Education
+- Always include all degrees exactly as written. No bullets.
+
+## Experience
+- Always include all entries.
+- Max 2 bullets per entry, each bullet max 120 characters.
+- Stress skills and responsibilities directly mentioned in the job description.
+
+## Projects
+- Reorder by relevance to this job. Drop least relevant project(s) if needed.
+- Always include at least 2, max 4 projects.
+- 1 bullet per project, max 120 characters.
+
+## Skills
+- Always include Python, Git, Docker, SQL regardless of job description.
+- Include only categories that have 2 or more relevant skills for this job.
+- Max 6 categories.`,
+
+  prompt_cover: `You are writing a concise cover letter in Markdown for a job application.
+
+# Candidate Profile
+{profile}
+
+# Job Posting
+{job}
+
+# Instructions
+- Output ONLY the cover letter Markdown. No preamble, no explanation.
+- Do not use \`---\` horizontal rules anywhere in the output.
+- Exactly 3 paragraphs: (1) fit and interest, (2) specific value-add tied to the job description, (3) close.
+- Address it to the hiring team at the company listed in the job posting.
+- Do not include a sign-off, name, or contact information at the end — those are added automatically.
+- Do not invent experience or skills not in the candidate profile.`,
+
+  prompt_extraction: `Extract structured data from the job description.
+
+Job Title: {job.title}
+Company: {job.company}
+Description:
+{job.description}
+
+Return ONLY a JSON object with these keys:
+- seniority: string (Junior/Mid/Senior/Lead/Staff/Principal/Director/VP)
+- role_type: string (e.g. Backend Engineer, Frontend Engineer, ML Engineer)
+- domain: string (e.g. FinTech, HealthTech, SaaS)
+- work_arrangement: string (Remote/Hybrid/On-site)
+- employment_type: string (Full-time/Part-time/Contract)
+- required_skills: array of strings
+- preferred_skills: array of strings
+- tech_stack: array of strings
+- key_responsibilities: array of strings (max 5)
+- company_signals: array of strings (culture, growth, red flags)
+
+Return only the JSON object, no other text.`,
+
+  prompt_intake: `Review the newly scraped job posting and determine if it should be queued for scoring.
+
+Job Title: {job.title}
+Company: {job.company}
+Location: {job.location}
+Description:
+{job.description}
+
+Return ONLY a JSON object:
+- should_score: boolean (true if the job is worth scoring)
+- reason: string (brief explanation)
+
+Return only the JSON object, no other text.`,
+}
+
+const PROMPT_LABELS = {
+  prompt_scoring: 'Scoring',
+  prompt_resume: 'Resume Generation',
+  prompt_cover: 'Cover Letter Generation',
+  prompt_extraction: 'Description Extraction',
+  prompt_intake: 'Intake',
+}
+
+function PromptsSection({ data, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const promptKeys = Object.keys(DEFAULT_PROMPTS)
+
+  const openModal = () => {
+    const initial = {}
+    promptKeys.forEach(k => { initial[k] = data[k] || '' })
+    setForm(initial)
+    setError(null)
+    setOpen(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave(form)
+      setOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const configuredCount = promptKeys.filter(k => data[k]).length
+
+  return (
+    <>
+      <AccordionSection title="Prompts" editButton={<EditBtn onClick={openModal} />}>
+        <div className="flex flex-col gap-1">
+          {promptKeys.map(k => (
+            <div key={k} className="flex items-center justify-between">
+              <span className="text-xs text-space-dim">{PROMPT_LABELS[k]}</span>
+              <span className={`text-xs font-medium ${data[k] ? 'text-green-400' : 'text-space-dim/50'}`}>
+                {data[k] ? 'Custom' : 'Default'}
+              </span>
+            </div>
+          ))}
+          {configuredCount === 0 && (
+            <p className="text-xs text-space-dim mt-1">All prompts using system defaults.</p>
+          )}
+        </div>
+      </AccordionSection>
+
+      {open && (
+        <ItemOverlay title="Edit Prompts" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
+          {promptKeys.map(k => (
+            <div key={k} className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-space-dim">{PROMPT_LABELS[k]}</label>
+                <button
+                  onClick={() => setForm(f => ({ ...f, [k]: DEFAULT_PROMPTS[k] }))}
+                  className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  Reset to Default
+                </button>
+              </div>
+              <textarea
+                rows={4}
+                className={inputClass + ' resize-y font-mono text-xs'}
+                value={form[k] ?? ''}
+                onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
+                placeholder={DEFAULT_PROMPTS[k].slice(0, 80) + '…'}
+              />
+            </div>
+          ))}
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
+
 function LlmSection({ profile, onSave }) { return null }
 
 // ─── ProfileDetailView ─────────────────────────────────────────────────────────
