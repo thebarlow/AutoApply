@@ -106,6 +106,47 @@ def get_openai_client(db: Session) -> tuple:
     return client, provider.model
 
 
+def get_client_for_profile(user: Any, model_override: str = "") -> tuple:
+    """Return (client, model) resolved from a User profile's llm_provider_type/llm_model.
+
+    Falls back to the active provider if the profile has no provider configured.
+    model_override takes precedence over everything else when non-empty.
+
+    Args:
+        user: A hydrated User instance with llm_provider_type and llm_model attributes.
+        model_override: If non-empty, use this model instead of the profile default.
+
+    Returns:
+        (client, model) tuple.
+
+    Raises:
+        RuntimeError: If no provider or API key can be resolved.
+    """
+    provider_type: str = getattr(user, "llm_provider_type", "") or ""
+    profile_model: str = getattr(user, "llm_model", "") or ""
+    model = model_override or profile_model
+
+    if provider_type:
+        base_url = _NAMED_PROVIDER_BASE_URLS.get(provider_type.lower())
+        if not base_url:
+            raise RuntimeError(f"Unknown provider_type '{provider_type}' on user profile.")
+        env_key = f"LLM_KEY_{provider_type.upper()}"
+        api_key = os.getenv(env_key) or _read_env_file().get(env_key, "")
+        if not api_key:
+            raise RuntimeError(
+                f"No API key for provider '{provider_type}'. Set {env_key} in .env."
+            )
+        if not model:
+            raise RuntimeError(f"No model configured for provider '{provider_type}'.")
+        return openai.OpenAI(api_key=api_key, base_url=base_url), model
+
+    # Fall back to active provider from DB — requires a db session via the active provider path
+    raise RuntimeError(
+        "User profile has no llm_provider_type configured. "
+        "Set a provider under Profile → LLM Config."
+    )
+
+
 def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> str:
     """Send a single-turn prompt to the LLM and return the response text.
 

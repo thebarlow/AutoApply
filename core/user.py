@@ -114,8 +114,11 @@ class User(Base):
 
     # Profile attributes are not columns — set as instance attrs by _hydrate()
 
-    def _hydrate(self) -> None:
-        """Deserialize the JSON data column into typed instance attributes."""
+    def _hydrate(self) -> bool:
+        """Deserialize the JSON data column into typed instance attributes.
+
+        Returns True if legacy text-blob prompts were migrated to files (caller should save).
+        """
         raw = json.loads(self.data or "{}")
         self.first_name = raw.get("first_name", "")
         self.last_name = raw.get("last_name", "")
@@ -135,16 +138,28 @@ class User(Base):
         self.resume_path = raw.get("resume_path", "")
         self.md_path = raw.get("md_path", "")
         self.website = raw.get("website", "")
-        self.prompt_scoring = raw.get("prompt_scoring", "")
-        self.prompt_resume = raw.get("prompt_resume", "")
-        self.prompt_cover = raw.get("prompt_cover", "")
-        self.prompt_extraction = raw.get("prompt_extraction", "")
-        self.prompt_intake = raw.get("prompt_intake", "")
-        self.prompt_resume_parse = raw.get("prompt_resume_parse", "")
+        self.llm_provider_type = raw.get("llm_provider_type", "")
+        self.llm_model = raw.get("llm_model", "")
+
+        migrated = False
+        for type_key in _PROMPT_TYPES:
+            field = f"prompt_{type_key}"
+            model_field = f"prompt_{type_key}_model"
+            val = raw.get(field, "")
+            # Migration: if value is a text blob (not a .md file path), write to file
+            if val and ("\n" in val or not val.endswith(".md")):
+                _PROMPTS_DIR.mkdir(exist_ok=True)
+                dest = _PROMPTS_DIR / f"{type_key}_{self.id}.md"
+                dest.write_text(val, encoding="utf-8")
+                val = str(dest)
+                migrated = True
+            setattr(self, field, val)
+            setattr(self, model_field, raw.get(model_field, ""))
+        return migrated
 
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
-        return {
+        d = {
             "first_name": self.first_name,
             "last_name": self.last_name,
             "hero": self.hero,
@@ -163,13 +178,13 @@ class User(Base):
             "resume_path": self.resume_path,
             "md_path": self.md_path,
             "website": self.website,
-            "prompt_scoring": self.prompt_scoring,
-            "prompt_resume": self.prompt_resume,
-            "prompt_cover": self.prompt_cover,
-            "prompt_extraction": self.prompt_extraction,
-            "prompt_intake": self.prompt_intake,
-            "prompt_resume_parse": self.prompt_resume_parse,
+            "llm_provider_type": self.llm_provider_type,
+            "llm_model": self.llm_model,
         }
+        for type_key in _PROMPT_TYPES:
+            d[f"prompt_{type_key}"] = getattr(self, f"prompt_{type_key}", "")
+            d[f"prompt_{type_key}_model"] = getattr(self, f"prompt_{type_key}_model", "")
+        return d
 
     @classmethod
     def load(cls, db: Session, profile_id: Optional[int] = None) -> "User":
@@ -207,7 +222,9 @@ class User(Base):
         if row is None:
             raise RuntimeError("No user profile found. Add one via /config.")
 
-        row._hydrate()
+        migrated = row._hydrate()
+        if migrated:
+            row.save(db)
         return row
 
     @classmethod
@@ -250,20 +267,19 @@ class User(Base):
             ValueError: If the LLM returns invalid JSON.
         """
         import re
-        from core.llm import get_openai_client
+        from core.llm import get_client_for_profile
         from core.job import _apply_template
 
-        system_prompt = _DEFAULT_RESUME_PARSE_PROMPT
+        active_user = cls.load(db)
         try:
-            active_user = cls.load(db)
-            if active_user.prompt_resume_parse:
-                system_prompt = _apply_template(
-                    active_user.prompt_resume_parse, {"user": active_user}
-                )
-        except Exception:
-            pass
-
-        client, model = get_openai_client(db)
+            prompt_text = active_user.resolve_prompt("resume_parse")
+            system_prompt = _apply_template(prompt_text, {"user": active_user})
+        except PromptNotConfiguredError:
+            raise
+        try:
+            client, model = get_client_for_profile(active_user, active_user.prompt_resume_parse_model)
+        except RuntimeError:
+            raise
         response = client.chat.completions.create(
             model=model,
             temperature=0,
@@ -407,3 +423,27 @@ class User(Base):
             if p.exists():
                 return p.read_text(encoding="utf-8")
         return self.render_for_prompt()
+
+    def resolve_prompt(self, type_key: str) -> str:
+        """Read and return the prompt file content for the given type.
+
+        Args:
+            type_key: One of the keys in _PROMPT_TYPES (e.g. "scoring", "resume").
+
+        Returns:
+            Prompt text content.
+
+        Raises:
+            PromptNotConfiguredError: If path is empty, file does not exist, or content is empty.
+        """
+        label = _PROMPT_LABELS.get(type_key, type_key)
+        path_str = getattr(self, f"prompt_{type_key}", "")
+        if not path_str:
+            raise PromptNotConfiguredError(f"{label} not configured")
+        p = Path(path_str)
+        if not p.exists():
+            raise PromptNotConfiguredError(f"{label} not configured")
+        content = p.read_text(encoding="utf-8").strip()
+        if not content:
+            raise PromptNotConfiguredError(f"{label} not configured")
+        return content
