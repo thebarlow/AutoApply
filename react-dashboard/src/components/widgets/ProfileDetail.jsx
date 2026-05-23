@@ -765,6 +765,37 @@ Return ONLY a JSON object:
 - reason: string (brief explanation)
 
 Return only the JSON object, no other text.`,
+
+  prompt_resume_parse: `You are a resume parser. Extract structured data from the resume text the user provides.
+Return ONLY a JSON object — no markdown fences, no prose, no explanation.
+
+Use this exact schema:
+{
+  "name": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "phone": "string",
+  "location": "string",
+  "skills": ["string"],
+  "work_history": [
+    {"title": "string", "company": "string", "start": "string", "end": "string", "summary": "string"}
+  ],
+  "education": [
+    {"institution": "string", "degree": "string", "field": "string", "graduated": "string", "gpa": number}
+  ],
+  "projects": [
+    {"name": "string", "description": "string", "url": "string", "technologies": ["string"]}
+  ]
+}
+
+Rules:
+- Use empty string "" for missing string fields.
+- Use 0.0 for missing gpa.
+- Use [] for missing list fields.
+- For start/end dates use the format found in the resume (e.g. "2022-01" or "Jan 2022").
+- "end" should be "Present" if the role is current.
+- Supports {user.*} placeholders (e.g. {user.first_name}) resolved against the active profile.`,
 }
 
 const PROMPT_LABELS = {
@@ -773,6 +804,7 @@ const PROMPT_LABELS = {
   prompt_cover: 'Cover Letter Generation',
   prompt_extraction: 'Description Extraction',
   prompt_intake: 'Intake',
+  prompt_resume_parse: 'Resume Parsing',
 }
 
 function PromptsSection({ data, onSave }) {
@@ -953,7 +985,7 @@ const PROFILE_DATA_DEFAULTS = {
   skills: [], work_history: [], education: [], projects: [],
   target_roles: [], target_salary_min: null, target_salary_max: null,
   prompt_scoring: '', prompt_resume: '', prompt_cover: '',
-  prompt_extraction: '', prompt_intake: '',
+  prompt_extraction: '', prompt_intake: '', prompt_resume_parse: '',
 }
 
 export default function ProfileDetailView({ profileId, onDelete }) {
