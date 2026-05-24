@@ -108,11 +108,20 @@ function SubToggle({ options, value, onChange }) {
   )
 }
 
-function PreviewTab({ job }) {
+const ACTION_PROMPT_KEY = { description: 'extraction', resume: 'resume', cover: 'cover' }
+const ACTION_PROMPT_LABEL = { extraction: 'Description Processing', resume: 'Resume Generation', cover: 'Cover Letter Generation' }
+
+function PreviewTab({ job, promptStatus = {} }) {
   const [contentTab, setContentTab] = useState('description')
   const [descView, setDescView] = useState(() => job?.extraction_json_exists ? 'extracted' : 'raw')
   const [artifactView, setArtifactView] = useState(() => job?.resume_path ? 'pdf' : 'markdown')
   const [actionLoading, setActionLoading] = useState(false)
+
+  const promptKey = ACTION_PROMPT_KEY[contentTab]
+  const promptOk = promptStatus[promptKey] === true
+  const promptMissingTitle = promptOk
+    ? ''
+    : `Configure the ${ACTION_PROMPT_LABEL[promptKey]} prompt in User → Prompts to enable this action.`
 
   // Reset all state when a different job is selected
   useEffect(() => {
@@ -130,7 +139,7 @@ function PreviewTab({ job }) {
   }
 
   const handleAction = async () => {
-    if (!job || actionLoading) return
+    if (!job || actionLoading || !promptOk) return
     const urlMap = {
       description: `/api/jobs/${job.job_key}/description/extract`,
       resume: `/api/jobs/${job.job_key}/generate/resume`,
@@ -213,10 +222,11 @@ function PreviewTab({ job }) {
             />
             <button
               onClick={handleAction}
-              disabled={actionLoading}
-              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+              disabled={actionLoading || !promptOk}
+              title={promptMissingTitle}
+              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {actionLoading ? '…' : job.extraction_json_exists ? 'Reprocess' : 'Process'}
+              {actionLoading ? '…' : !promptOk ? 'Prompt not set' : job.extraction_json_exists ? 'Reprocess' : 'Process'}
             </button>
           </div>
           {descView === 'raw' && (
@@ -245,10 +255,11 @@ function PreviewTab({ job }) {
             />
             <button
               onClick={handleAction}
-              disabled={actionLoading}
-              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+              disabled={actionLoading || !promptOk}
+              title={promptMissingTitle}
+              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {actionLoading ? '…' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
+              {actionLoading ? '…' : !promptOk ? 'Prompt not set' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
             </button>
           </div>
           {artifactView === 'markdown' && (
@@ -346,6 +357,7 @@ function ProfileCards({ onSelect, onCreateProfile }) {
     try {
       await setActiveProfile(id)
       setActiveId(id)
+      window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
     } finally {
       setSettingActive(null)
     }
@@ -409,7 +421,7 @@ function ProfileCards({ onSelect, onCreateProfile }) {
 
 const TABS = ['User', 'Preview']
 
-export default function Settings({ selectedJob, activeTab, onTabChange }) {
+export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {} }) {
   const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
   const [detailProfileId, setDetailProfileId] = useState(null)
 
@@ -485,7 +497,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange }) {
             )}
 
             {view === 'main' && activeTab === 'Preview' && (
-              <PreviewTab job={selectedJob} />
+              <PreviewTab job={selectedJob} promptStatus={promptStatus} />
             )}
             {view === 'createProfile' && (
               <CreateProfile

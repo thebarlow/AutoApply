@@ -47,6 +47,9 @@ export const setActiveProfile = (id) =>
     body: JSON.stringify({ active_id: id }),
   })
 
+export const getActivePromptStatus = () =>
+  _fetch('/api/config/profiles/active/prompt-status')
+
 export const listPrompts = () => _fetch('/api/prompts')
 
 export const getPromptFile = (path) =>

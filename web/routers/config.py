@@ -567,6 +567,31 @@ def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -
     return {"active_id": body.active_id}
 
 
+_PROFILE_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "intake", "resume_parse")
+
+
+# IMPORTANT: /active/prompt-status must be registered before /{profile_id}.
+@router.get("/api/config/profiles/active/prompt-status")
+def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
+    """Return {type_key: configured_bool} for the active profile's prompts.
+
+    Returns all False if no active profile or profile row missing.
+    """
+    active_raw = _get(db, "active_profile_id")
+    row: Optional[User] = None
+    if active_raw:
+        try:
+            row = db.query(User).filter_by(id=int(active_raw)).first()
+        except (ValueError, TypeError):
+            row = None
+    if row is None:
+        row = db.query(User).first()
+    if row is None:
+        return {t: False for t in _PROFILE_PROMPT_TYPES}
+    data = json.loads(row.data) if row.data else {}
+    return {t: _prompt_configured(data.get(f"prompt_{t}", "")) for t in _PROFILE_PROMPT_TYPES}
+
+
 @router.get("/api/config/profiles/{profile_id}")
 def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     row = db.query(User).filter_by(id=profile_id).first()

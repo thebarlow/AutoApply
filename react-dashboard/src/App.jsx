@@ -3,13 +3,25 @@ import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
 import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
-import { getJobs } from './api'
+import { getJobs, getActivePromptStatus } from './api'
 
 export default function App() {
   const [jobs, setJobs] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
   const [processingKeys, setProcessingKeys] = useState(new Set())
   const [settingsTab, setSettingsTab] = useState('User')
+  const [promptStatus, setPromptStatus] = useState({})
+
+  const refetchPromptStatus = useCallback(() => {
+    getActivePromptStatus().then(setPromptStatus).catch(() => setPromptStatus({}))
+  }, [])
+
+  useEffect(() => {
+    refetchPromptStatus()
+    const handler = () => refetchPromptStatus()
+    window.addEventListener('auto-apply:prompt-status-stale', handler)
+    return () => window.removeEventListener('auto-apply:prompt-status-stale', handler)
+  }, [refetchPromptStatus])
 
   // Upsert a single job into the jobs list
   const upsertJob = useCallback((job) => {
@@ -78,6 +90,7 @@ export default function App() {
             selectedJob={selectedJob}
             activeTab={settingsTab}
             onTabChange={setSettingsTab}
+            promptStatus={promptStatus}
           />
         </div>
       </Dashboard>

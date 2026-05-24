@@ -30,39 +30,6 @@ class PromptNotConfiguredError(Exception):
     """Raised when a required prompt is not configured for the active profile."""
 
 
-_DEFAULT_RESUME_PARSE_PROMPT = """\
-You are a resume parser. Extract structured data from the resume text the user provides.
-Return ONLY a JSON object — no markdown fences, no prose, no explanation.
-
-Use this exact schema:
-{
-  "name": "string",
-  "first_name": "string",
-  "last_name": "string",
-  "email": "string",
-  "phone": "string",
-  "location": "string",
-  "skills": ["string"],
-  "work_history": [
-    {"title": "string", "company": "string", "start": "string", "end": "string", "summary": "string"}
-  ],
-  "education": [
-    {"institution": "string", "degree": "string", "field": "string", "graduated": "string", "gpa": number}
-  ],
-  "projects": [
-    {"name": "string", "description": "string", "url": "string", "technologies": ["string"]}
-  ]
-}
-
-Rules:
-- Use empty string "" for missing string fields.
-- Use 0.0 for missing gpa.
-- Use [] for missing list fields.
-- For start/end dates use the format found in the resume (e.g. "2022-01" or "Jan 2022").
-- "end" should be "Present" if the role is current.\
-"""
-
-
 @dataclasses.dataclass
 class WorkHistoryEntry:
     """A single entry in a user's work history."""
