@@ -8,6 +8,16 @@ export const inputClass =
 
 const PROVIDER_TYPES = ['openrouter', 'anthropic', 'openai', 'gemini']
 
+// Close-on-Escape hook for modals. Active controls whether the listener is registered.
+function useEscape(active, handler) {
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e) => { if (e.key === 'Escape') handler() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, handler])
+}
+
 function ChevronDown({ open }) {
   return (
     <svg
@@ -65,6 +75,7 @@ function AccordionSection({ id, title, editButton, children }) {
 // ─── ItemOverlay ───────────────────────────────────────────────────────────────
 
 function ItemOverlay({ title, onClose, onSave, saving, error, children }) {
+  useEscape(true, onClose)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-md max-h-[80vh] flex flex-col shadow-2xl">
@@ -738,13 +749,9 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
     listPrompts().then((r) => setPromptFiles(r.prompts || []))
   }, [])
 
-  // Close pop-out on Escape (instead of closing the parent modal)
-  useEffect(() => {
-    if (!popOut) return
-    const onKey = (e) => { if (e.key === 'Escape') setPopOut(false) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [popOut])
+  // Escape closes the pop-out when open, otherwise closes the modal.
+  useEscape(popOut, () => setPopOut(false))
+  useEscape(!popOut, onClose)
 
   // Load file content when selection changes
   useEffect(() => {
@@ -1170,6 +1177,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  useEscape(confirmDelete, () => setConfirmDelete(false))
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
 
