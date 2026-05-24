@@ -6,6 +6,7 @@ queue synchronously — safe to call from FastAPI's threadpool workers.
 """
 from __future__ import annotations
 
+import json
 import queue
 import threading
 
@@ -41,5 +42,4 @@ def broadcast(payload: str) -> None:
 
 def send(type_: str, data: dict) -> None:
     """Broadcast an envelope-shaped SSE event."""
-    import json
     broadcast(json.dumps({"type": type_, "data": data}))

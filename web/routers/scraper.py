@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json as _json
 import threading
 from typing import Any
 
@@ -14,7 +13,7 @@ from scraper.remotive import RemotiveSource
 from scraper.remoteok import RemoteOKSource
 from core.job import Job
 from scraper.runner import run_scraper
-from web.sse import broadcast as _broadcast
+from web.sse import send as _sse_send
 
 router = APIRouter(prefix="/api/scraper")
 
@@ -39,7 +38,7 @@ def _run_in_background(source_ids: list[str]) -> None:
         for job in new_jobs:
             job.intake()
             try:
-                _broadcast(_json.dumps(job.serialize()))
+                _sse_send("job", job.serialize())
             except Exception as exc:
                 print(f"[scraper] broadcast failed for {job.job_key}: {exc}", flush=True)
     finally:
@@ -106,7 +105,7 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
     for job in inserted_jobs:
         job.intake()
         try:
-            _broadcast(_json.dumps(job.serialize()))
+            _sse_send("job", job.serialize())
         except Exception as exc:
             print(f"[stage_job] broadcast failed for {job.job_key}: {exc}", flush=True)
     return {"status": status, "job_key": body.job_key}

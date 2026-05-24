@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from core.job import Job
 from db.database import get_db
-from web.sse import broadcast as _broadcast
+from web.sse import send as _sse_send
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ _tray_ws: WebSocket | None = None
 
 
 def _emit(job: Job) -> None:
-    _broadcast(_json.dumps(job.serialize()))
+    _sse_send("job", job.serialize())
 
 
 @router.websocket("/ws/tray")

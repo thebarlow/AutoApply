@@ -38,6 +38,7 @@ def finish(job_key: str) -> None:
 
 
 def is_processing(job_key: str) -> bool:
+    """Return True if an LLM op is currently in flight for job_key."""
     with _lock:
         return _counts.get(job_key, 0) > 0
 
