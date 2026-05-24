@@ -682,6 +682,7 @@ const JOB_CHIPS = [
   { label: 'location', token: '{job.location}' },
   { label: 'salary', token: '{job.salary}' },
   { label: 'description', token: '{job.description}' },
+  { label: 'processed description', token: '{job.extracted_description}' },
   { label: 'full job', token: '{job}' },
 ]
 
