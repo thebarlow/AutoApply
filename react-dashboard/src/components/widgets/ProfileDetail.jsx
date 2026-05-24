@@ -22,13 +22,32 @@ function ChevronDown({ open }) {
 
 // ─── AccordionSection ──────────────────────────────────────────────────────────
 
-function AccordionSection({ title, editButton, children }) {
-  const [open, setOpen] = useState(true)
+function AccordionSection({ id, title, editButton, children }) {
+  const storageKey = id ? `profile-accordion:${id}` : null
+  const [open, setOpen] = useState(() => {
+    if (!storageKey) return false
+    try {
+      return sessionStorage.getItem(storageKey) === '1'
+    } catch {
+      return false
+    }
+  })
+
+  const toggle = () => {
+    setOpen(prev => {
+      const next = !prev
+      if (storageKey) {
+        try { sessionStorage.setItem(storageKey, next ? '1' : '0') } catch {}
+      }
+      return next
+    })
+  }
+
   return (
     <div className="border border-space-border rounded-lg overflow-hidden">
       <div
         className="flex items-center justify-between px-3 py-2.5 bg-white/[0.03] cursor-pointer select-none"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
       >
         <span className="text-xs font-semibold uppercase tracking-widest text-space-dim">{title}</span>
         <div className="flex items-center gap-2">
@@ -148,7 +167,7 @@ function IdentitySection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection title="Identity" editButton={<EditBtn onClick={openModal} />}>
+      <AccordionSection id="identity" title="Identity" editButton={<EditBtn onClick={openModal} />}>
         <div className="flex flex-col gap-1.5">
           {fullName && <p className="text-sm font-medium text-space-text">{fullName}</p>}
           {data.hero && <p className="text-xs text-space-dim italic">{data.hero}</p>}
@@ -223,7 +242,7 @@ function SkillsSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection title="Skills">
+      <AccordionSection id="skills" title="Skills">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-1.5">
             {skills.map((s, i) => (
@@ -323,7 +342,7 @@ function ExperienceSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection title="Experience">
+      <AccordionSection id="experience" title="Experience">
         <div className="flex flex-col gap-2">
           {items.map((item, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
@@ -406,7 +425,7 @@ function EducationSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection title="Education">
+      <AccordionSection id="education" title="Education">
         <div className="flex flex-col gap-2">
           {items.map((item, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
@@ -502,7 +521,7 @@ function ProjectsSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection title="Projects">
+      <AccordionSection id="projects" title="Projects">
         <div className="flex flex-col gap-2">
           {items.map((item, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
@@ -591,7 +610,7 @@ function JobPrefsSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection title="Job Preferences" editButton={<EditBtn onClick={openModal} />}>
+      <AccordionSection id="job-preferences" title="Job Preferences" editButton={<EditBtn onClick={openModal} />}>
         <div className="flex flex-col gap-1.5">
           {(data.target_roles || []).length > 0 && (
             <Field label="Target Roles" value={data.target_roles.join(', ')} />
@@ -937,7 +956,7 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
 
   return (
     <>
-      <AccordionSection title="Prompts">
+      <AccordionSection id="prompts" title="Prompts">
         <div className="flex flex-col gap-2">
           {PROMPT_TYPE_KEYS.map((typeKey) => {
             const filePath = data[`prompt_${typeKey}`] || ''
@@ -1019,7 +1038,7 @@ function LlmSection({ profile, onSave }) {
 
   return (
     <>
-      <AccordionSection title="LLM Config" editButton={<EditBtn onClick={openModal} />}>
+      <AccordionSection id="llm-config" title="LLM Config" editButton={<EditBtn onClick={openModal} />}>
         <div className="flex flex-col gap-1.5">
           {profile.llm_provider_type
             ? <Field label="Provider" value={profile.llm_provider_type} />
