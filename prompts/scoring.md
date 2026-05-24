@@ -17,7 +17,9 @@ For each axis, return an object with two arrays of short bullet-style strings:
 - `raised`: factors that **increased** that score (positive signals).
 - `lowered`: factors that **decreased** that score (negative signals, gaps, mismatches).
 
-Each bullet should be a single concrete observation, ideally under 12 words. Cite specifics from the job or profile (a skill name, a salary number, a role title) rather than generic praise. Aim for 2–5 bullets per array; omit (use empty array) only when truly nothing applies.
+Each bullet must be a single concrete observation, **under 12 words**. Cite specifics from the job or profile (a skill name, a salary number, a role title) rather than generic praise. **Maximum 4 bullets per array.** Use an empty array only when truly nothing applies.
+
+Be terse. Do not include any reasoning, preamble, or explanation outside the JSON object.
 
 # Output
 

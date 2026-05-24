@@ -16,5 +16,4 @@ Description:
 - Exactly 3 paragraphs: (1) fit and interest, (2) specific value-add tied to the job description, (3) close.
 - Address it to the hiring team at {job.company}.
 - Do not include a sign-off, name, or contact information at the end — those are added automatically.
-- Do not mention n8n or any no-code tools.
 - Do not invent experience or skills not in the master resume.

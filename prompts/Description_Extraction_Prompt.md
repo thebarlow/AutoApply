@@ -2,10 +2,10 @@ You are analyzing a job description to extract structured information for resume
 no markdown fences, no explanation, just the raw JSON object.
 
 # Job Posting
-Job Title: {title}
-Company: {company}
+Job Title: {job.title}
+Company: {job.company}
 Job Description:
-{description}
+{job.description}
 
 # Instructions
 
