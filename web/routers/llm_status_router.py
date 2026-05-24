@@ -9,6 +9,6 @@ router = APIRouter(prefix="/api")
 
 
 @router.get("/llm-status")
-def get_llm_status():
+def get_llm_status() -> dict[str, list[str]]:
     """Return job_keys currently in an in-flight LLM op."""
     return {"processing": llm_status.snapshot()}

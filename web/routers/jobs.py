@@ -143,6 +143,8 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as exc:
+        db.rollback()
+        job = Job.get(job_key, db)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
@@ -204,6 +206,8 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as exc:
+        db.rollback()
+        job = Job.get(job_key, db)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
@@ -231,6 +235,8 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as exc:
+        db.rollback()
+        job = Job.get(job_key, db)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
@@ -334,6 +340,8 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as exc:
+        db.rollback()
+        job = Job.get(job_key, db)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
