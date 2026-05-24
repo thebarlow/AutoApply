@@ -1,5 +1,7 @@
 # Environment
 .env
+.env.*
+!.env.example
 
 # Job data
 jobs/
@@ -24,6 +26,12 @@ __pycache__/
 
 # Database
 auto_apply.db
+db/*.db
+
+# Claude local
+.claude/worktrees/
+.claude/settings.local.json
+react-dashboard/.claude/
 
 # Cache / scratch
 .pytest_cache/
