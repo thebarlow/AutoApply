@@ -738,6 +738,14 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
     listPrompts().then((r) => setPromptFiles(r.prompts || []))
   }, [])
 
+  // Close pop-out on Escape (instead of closing the parent modal)
+  useEffect(() => {
+    if (!popOut) return
+    const onKey = (e) => { if (e.key === 'Escape') setPopOut(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [popOut])
+
   // Load file content when selection changes
   useEffect(() => {
     if (!selectedFile) { setContent(''); return }
