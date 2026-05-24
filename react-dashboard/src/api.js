@@ -69,6 +69,13 @@ export const putPromptFile = (path, content) =>
     body: JSON.stringify({ content }),
   })
 
+export const createPromptFile = (filename, content) =>
+  _fetch('/api/prompts/file', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content }),
+  })
+
 export const uploadPromptFile = (file) => {
   const form = new FormData()
   form.append('file', file)

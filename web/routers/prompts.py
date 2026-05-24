@@ -61,11 +61,35 @@ class PromptFileBody(BaseModel):
 
 @router.put("/file")
 def put_prompt_file(path: str, body: PromptFileBody) -> dict:
-    """Overwrite the content of a prompt file in place."""
+    """Overwrite the content of a prompt file in place. Default prompts are immutable."""
     p = Path(path).resolve()
     _PROMPTS_DIR.mkdir(exist_ok=True)
     prompts_dir_resolved = _PROMPTS_DIR.resolve()
+    defaults_dir = (prompts_dir_resolved / "defaults").resolve()
     if not p.is_relative_to(prompts_dir_resolved) or p.suffix.lower() != ".md" or not p.exists():
         raise HTTPException(status_code=404, detail="Prompt file not found")
+    if p.is_relative_to(defaults_dir):
+        raise HTTPException(status_code=403, detail="Default prompts are read-only")
     p.write_text(body.content, encoding="utf-8")
     return _prompt_meta(p)
+
+
+class CreatePromptFileBody(BaseModel):
+    filename: str
+    content: str
+
+
+@router.post("/file")
+def create_prompt_file(body: CreatePromptFileBody) -> dict:
+    """Create a new prompt file in prompts/. Fails if the file already exists."""
+    filename = body.filename.strip()
+    if not filename.lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="Only .md files are accepted")
+    _PROMPTS_DIR.mkdir(exist_ok=True)
+    dest = (_PROMPTS_DIR / filename).resolve()
+    if not dest.is_relative_to(_PROMPTS_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if dest.exists():
+        raise HTTPException(status_code=409, detail="File already exists")
+    dest.write_text(body.content, encoding="utf-8")
+    return _prompt_meta(dest)

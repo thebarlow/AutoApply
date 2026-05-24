@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, uploadPromptFile } from '../../api'
+import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, createPromptFile, uploadPromptFile } from '../../api'
 
 // ─── Shared ────────────────────────────────────────────────────────────────────
 
@@ -804,23 +804,35 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
 
   const handleDragOver = (e) => { e.preventDefault() }
 
+  const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
+
   const handleSave = async () => {
     if (!selectedFile) { setSaveError('Select a prompt file first'); return }
     setSaving(true)
     setSaveError(null)
     try {
+      let resolvedFile = selectedFile
       if (content !== originalContent.current) {
-        await putPromptFile(selectedFile, content)
+        if (isDefaultPrompt(selectedFile)) {
+          // Fork: save as a new file in prompts/ so defaults stay immutable
+          const baseName = selectedFile.split(/[\\/]/).pop().replace(/\.md$/i, '')
+          const filename = `${baseName}_${Date.now()}.md`
+          const result = await createPromptFile(filename, content)
+          resolvedFile = result.path
+        } else {
+          await putPromptFile(selectedFile, content)
+        }
         originalContent.current = content
+        setSelectedFile(resolvedFile)
       }
       // Patch profile with updated file ref and model
       const newData = {
         ...profileData,
-        [`prompt_${typeKey}`]: selectedFile,
+        [`prompt_${typeKey}`]: resolvedFile,
         [`prompt_${typeKey}_model`]: modelOverride,
       }
       await updateProfile(profileId, { name: profileName || '', data: newData })
-      onSaved(typeKey, selectedFile, modelOverride)
+      onSaved(typeKey, resolvedFile, modelOverride)
       window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
       onClose()
     } catch {
