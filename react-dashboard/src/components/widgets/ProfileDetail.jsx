@@ -729,6 +729,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [popOut, setPopOut] = useState(false)
   const textareaRef = useRef(null)
   const originalContent = useRef('')
 
@@ -816,132 +817,180 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
 
   const basename = (path) => path.split(/[\\/]/).pop()
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
-          <span className="text-sm font-semibold text-space-text">{label}</span>
-          <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-          {/* Zone 1: File selector */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File</label>
-            <div className="flex gap-2">
-              <select
-                className={inputClass + ' flex-1'}
-                value={selectedFile}
-                onChange={(e) => setSelectedFile(e.target.value)}
-              >
-                <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
-                {promptFiles.map((f) => (
-                  <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
-                ))}
-              </select>
-              <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                {uploading ? '…' : 'Upload'}
-                <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
-              </label>
-            </div>
-          </div>
-
-          {/* Zone 2: Model override */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model Override</label>
-            <input
-              className={inputClass}
-              value={modelOverride}
-              onChange={(e) => setModelOverride(e.target.value)}
-              placeholder={defaultModel || 'e.g. gpt-4o-mini (leave blank to use profile default)'}
-            />
-          </div>
-
-          {/* Zone 3: Chip tray */}
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable</label>
-            <div className="flex flex-col gap-1.5">
-              <p className="text-xs text-space-dim">User</p>
-              <div className="flex flex-wrap gap-1.5">
-                {USER_CHIPS.map(({ label: l, token }) => {
-                  const tipValue = resolveTokenValue(token, profileData)
-                  return (
-                    <div key={token} className="relative group">
-                      <div
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
-                        className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab active:cursor-grabbing select-none"
-                      >
-                        {l}
-                      </div>
-                      <div className="absolute bottom-full left-0 mb-1.5 z-50 w-56 bg-[#12121f] border border-space-border rounded-lg px-2.5 py-2 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-                        <p className="text-[10px] font-mono break-all text-space-text leading-relaxed">
-                          {tipValue || <span className="italic text-space-dim/50">empty</span>}
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })}
+  const renderChipTray = () => (
+    <div className="flex flex-col gap-2">
+      <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable</label>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs text-space-dim">User</p>
+        <div className="flex flex-wrap gap-1.5">
+          {USER_CHIPS.map(({ label: l, token }) => {
+            const tipValue = resolveTokenValue(token, profileData)
+            return (
+              <div key={token} className="relative group">
+                <div
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
+                  className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab active:cursor-grabbing select-none"
+                >
+                  {l}
+                </div>
+                <div className="absolute bottom-full left-0 mb-1.5 z-50 w-56 bg-[#12121f] border border-space-border rounded-lg px-2.5 py-2 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+                  <p className="text-[10px] font-mono break-all text-space-text leading-relaxed">
+                    {tipValue || <span className="italic text-space-dim/50">empty</span>}
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-space-dim mt-1">Job</p>
-              <div className="flex flex-wrap gap-1.5">
-                {JOB_CHIPS.map(({ label: l, token }) => (
-                  <div
-                    key={token}
-                    draggable
-                    onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
-                    className="px-2 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/10 text-xs text-blue-300 cursor-grab active:cursor-grabbing select-none"
-                  >
-                    {l}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Zone 4: Editor */}
-          <div className="flex flex-col gap-1.5 flex-1">
-            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt Text</label>
-            {loadingContent && <p className="text-xs text-space-dim">Loading…</p>}
-            {contentError && <p className="text-xs text-red-400">{contentError}</p>}
-            {!loadingContent && !contentError && (
-              <textarea
-                ref={textareaRef}
-                rows={14}
-                className={inputClass + ' resize-y font-mono text-xs'}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                placeholder={selectedFile ? '' : 'Select a file above to edit'}
-                disabled={!selectedFile}
-              />
-            )}
-          </div>
+            )
+          })}
         </div>
-
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
-          {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saving || loadingContent || !!contentError}
-              className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+        <p className="text-xs text-space-dim mt-1">Job</p>
+        <div className="flex flex-wrap gap-1.5">
+          {JOB_CHIPS.map(({ label: l, token }) => (
+            <div
+              key={token}
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData('text/plain', token)}
+              className="px-2 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/10 text-xs text-blue-300 cursor-grab active:cursor-grabbing select-none"
             >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+              {l}
+            </div>
+          ))}
         </div>
       </div>
     </div>
+  )
+
+  const renderEditor = (extraTextareaClass = '') => {
+    if (loadingContent) return <p className="text-xs text-space-dim">Loading…</p>
+    if (contentError) return <p className="text-xs text-red-400">{contentError}</p>
+    return (
+      <textarea
+        ref={textareaRef}
+        rows={14}
+        className={inputClass + ' resize-y font-mono text-xs ' + extraTextareaClass}
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        placeholder={selectedFile ? '' : 'Select a file above to edit'}
+        disabled={!selectedFile}
+      />
+    )
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
+            <span className="text-sm font-semibold text-space-text">{label}</span>
+            <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            {/* Zone 1: File selector */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File</label>
+              <div className="flex gap-2">
+                <select
+                  className={inputClass + ' flex-1'}
+                  value={selectedFile}
+                  onChange={(e) => setSelectedFile(e.target.value)}
+                >
+                  <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
+                  {promptFiles.map((f) => (
+                    <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
+                  ))}
+                </select>
+                <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {uploading ? '…' : 'Upload'}
+                  <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
+                </label>
+              </div>
+            </div>
+
+            {/* Zone 2: Model override */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model Override</label>
+              <input
+                className={inputClass}
+                value={modelOverride}
+                onChange={(e) => setModelOverride(e.target.value)}
+                placeholder={defaultModel || 'e.g. gpt-4o-mini (leave blank to use profile default)'}
+              />
+            </div>
+
+            {/* Zone 3: Chip tray (hidden while pop-out is open) */}
+            {!popOut && renderChipTray()}
+
+            {/* Zone 4: Editor (hidden while pop-out is open) */}
+            {!popOut && (
+              <div className="flex flex-col gap-1.5 flex-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt Text</label>
+                  <button
+                    type="button"
+                    onClick={() => setPopOut(true)}
+                    title="Open full-viewport editor"
+                    className="text-space-dim hover:text-space-text p-1 rounded hover:bg-white/5 transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 2h4v4" />
+                      <path d="M14 2L8.5 7.5" />
+                      <path d="M6 14H2v-4" />
+                      <path d="M2 14l5.5-5.5" />
+                    </svg>
+                  </button>
+                </div>
+                {renderEditor()}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
+            {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={handleSave}
+                disabled={saving || loadingContent || !!contentError}
+                className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {popOut && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-[#0a0a14]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
+            <span className="text-sm font-semibold text-space-text">{label} — Full Editor</span>
+            <button
+              onClick={() => setPopOut(false)}
+              className="text-space-dim hover:text-space-text text-lg leading-none"
+              title="Close full editor"
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex-1 flex flex-col gap-3 p-4 min-h-0">
+            {renderChipTray()}
+            <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt Text</label>
+              {renderEditor('flex-1 !h-full')}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
