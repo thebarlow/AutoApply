@@ -19,12 +19,24 @@ from core.job import Job
 router = APIRouter()
 
 
-def _prompt_configured(path: str) -> bool:
-    """Return True if path points to a non-empty .md file."""
-    if not path:
-        return False
-    p = Path(path)
-    return p.exists() and bool(p.read_text(encoding="utf-8").strip())
+_PROMPTS_DEFAULTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "defaults"
+
+
+def _prompt_configured(path: str, type_key: str = "") -> bool:
+    """Return True if a usable prompt exists for this slot.
+
+    Checks the profile-specific path first; falls back to prompts/defaults/{type_key}.md.
+    """
+    def _usable(p: Path) -> bool:
+        return p.exists() and bool(p.read_text(encoding="utf-8").strip())
+
+    if path:
+        p = Path(path)
+        if _usable(p):
+            return True
+    if type_key:
+        return _usable(_PROMPTS_DEFAULTS_DIR / f"{type_key}.md")
+    return False
 
 
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
@@ -255,7 +267,7 @@ def _read_env() -> dict[str, str]:
     if not _ENV_PATH.exists():
         return {}
     result: dict[str, str] = {}
-    for line in _ENV_PATH.read_text().splitlines():
+    for line in _ENV_PATH.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if "=" in line and not line.startswith("#"):
             k, _, v = line.partition("=")
@@ -265,7 +277,7 @@ def _read_env() -> dict[str, str]:
 
 def _write_env(env: dict[str, str]) -> None:
     lines = [f"{k}={v}" for k, v in env.items()]
-    _ENV_PATH.write_text("\n".join(lines) + "\n")
+    _ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _validate_api_key(key: str) -> str:
@@ -589,7 +601,7 @@ def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
     if row is None:
         return {t: False for t in _PROFILE_PROMPT_TYPES}
     data = json.loads(row.data) if row.data else {}
-    return {t: _prompt_configured(data.get(f"prompt_{t}", "")) for t in _PROFILE_PROMPT_TYPES}
+    return {t: _prompt_configured(data.get(f"prompt_{t}", ""), t) for t in _PROFILE_PROMPT_TYPES}
 
 
 @router.get("/api/config/profiles/{profile_id}")
@@ -606,7 +618,7 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
         file_val = data.get(f"prompt_{t}", "")
         prompt_fields[f"prompt_{t}_file"] = file_val
         prompt_fields[f"prompt_{t}_model"] = data.get(f"prompt_{t}_model", "")
-        prompt_fields[f"prompt_{t}_configured"] = _prompt_configured(file_val)
+        prompt_fields[f"prompt_{t}_configured"] = _prompt_configured(file_val, t)
     return {
         "id": row.id,
         "name": row.name,
@@ -705,9 +717,9 @@ def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) ->
         raise HTTPException(status_code=404, detail="Resume file not found on disk")
     try:
         if path.suffix.lower() == ".pdf":
-            parsed = User.from_pdf(path.read_bytes(), db)
+            parsed = User.from_pdf(path.read_bytes(), db, profile_id=profile_id)
         else:
-            parsed = User.from_markdown(path.read_text(errors="replace"), db)
+            parsed = User.from_markdown(path.read_text(encoding="utf-8", errors="replace"), db, profile_id=profile_id)
     except PromptNotConfiguredError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:

@@ -13,6 +13,7 @@ import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp regist
 
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+_PROMPTS_DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
 
 _PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_parse")
 
@@ -216,7 +217,7 @@ class User(Base):
         db.commit()
 
     @classmethod
-    def from_markdown(cls, md_text: str, db: Session) -> dict:
+    def from_markdown(cls, md_text: str, db: Session, profile_id: Optional[int] = None) -> dict:
         """Parse resume markdown into a structured profile dict via LLM.
 
         Does not persist — caller decides what to do with the result.
@@ -236,7 +237,7 @@ class User(Base):
         from core.llm import get_client_for_profile
         from core.job import _apply_template
 
-        active_user = cls.load(db)
+        active_user = cls.load(db, profile_id=profile_id)
         try:
             prompt_text = active_user.resolve_prompt("resume_parse")
             system_prompt = _apply_template(prompt_text, {"user": active_user})
@@ -250,19 +251,25 @@ class User(Base):
             model=model,
             temperature=0,
             timeout=30,
-            max_tokens=1500,
+            max_tokens=8000,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": md_text},
             ],
         )
         raw = response.choices[0].message.content or ""
-        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
-        raw = re.sub(r"\s*```$", "", raw)
+        cleaned = raw.strip()
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        first = cleaned.find("{")
+        last = cleaned.rfind("}")
+        if first != -1 and last > first:
+            cleaned = cleaned[first : last + 1]
         try:
-            parsed = json.loads(raw)
+            parsed = json.loads(cleaned)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"LLM returned invalid JSON: {exc}") from exc
+            preview = raw[:300].replace("\n", " ")
+            raise ValueError(f"LLM returned invalid JSON ({exc}). Response preview: {preview!r}") from exc
         if not isinstance(parsed, dict):
             raise ValueError("LLM returned unexpected JSON shape")
         for key in ("skills", "work_history", "education", "projects", "target_roles"):
@@ -275,7 +282,7 @@ class User(Base):
         return {**defaults, **parsed}
 
     @classmethod
-    def from_pdf(cls, pdf_bytes: bytes, db: Session) -> dict:
+    def from_pdf(cls, pdf_bytes: bytes, db: Session, profile_id: Optional[int] = None) -> dict:
         """Convert raw PDF bytes into a structured profile dict via LLM.
 
         Does not persist — caller decides what to do with the result.
@@ -314,7 +321,7 @@ class User(Base):
         except Exception as exc:
             raise ValueError(f"Could not parse PDF: {exc}") from exc
         md_text = "\n".join(lines)
-        return cls.from_markdown(md_text, db)
+        return cls.from_markdown(md_text, db, profile_id=profile_id)
 
     def save(self, db: Session) -> None:
         """Persist the current state of this user to the database.
@@ -404,9 +411,9 @@ class User(Base):
         """
         label = _PROMPT_LABELS.get(type_key, type_key)
         path_str = getattr(self, f"prompt_{type_key}", "")
-        if not path_str:
-            raise PromptNotConfiguredError(f"{label} not configured")
-        p = Path(path_str)
+        p = Path(path_str) if path_str else None
+        if p is None or not p.exists():
+            p = _PROMPTS_DEFAULTS_DIR / f"{type_key}.md"
         if not p.exists():
             raise PromptNotConfiguredError(f"{label} not configured")
         content = p.read_text(encoding="utf-8").strip()

@@ -71,3 +71,12 @@ export const uploadPromptFile = (file) => {
   form.append('file', file)
   return _fetch('/api/prompts/upload', { method: 'POST', body: form })
 }
+
+export const uploadProfileResume = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return _fetch('/api/config/profile/upload', { method: 'POST', body: form })
+}
+
+export const parseProfileResume = (profileId) =>
+  _fetch(`/api/config/profiles/${profileId}/parse`, { method: 'POST' })

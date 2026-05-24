@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -286,47 +286,166 @@ function PreviewTab({ job, promptStatus = {} }) {
 
 // ─── User tab ─────────────────────────────────────────────────────────────────
 
+const PROVIDER_TYPES = ['openrouter', 'anthropic', 'openai', 'gemini']
+
 function CreateProfile({ onBack, onCreated }) {
+  const [step, setStep] = useState(1)
+  const [createdId, setCreatedId] = useState(null)
+
+  // Step 1
   const [name, setName] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [providerType, setProviderType] = useState('')
+  const [model, setModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [savingStep1, setSavingStep1] = useState(false)
   const [error, setError] = useState(null)
 
-  const handleSave = async () => {
+  // Step 2
+  const [file, setFile] = useState(null)
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState(null)
+
+  const handleStep1 = async () => {
     const trimmed = name.trim()
     if (!trimmed) { setError('Name is required'); return }
-    setSaving(true)
+    if (!providerType) { setError('LLM provider is required'); return }
+    if (!model.trim()) { setError('Model is required'); return }
+    if (!apiKey.trim()) { setError('API key is required'); return }
+    setSavingStep1(true)
+    setError(null)
     try {
       const profile = await createProfile(trimmed)
-      onCreated(profile)
+      await updateProfile(profile.id, {
+        name: trimmed,
+        data: { llm_provider_type: providerType, llm_model: model.trim() },
+        llm_api_key: apiKey.trim(),
+      })
+      setCreatedId(profile.id)
+      setStep(2)
     } catch {
       setError('Failed to create profile')
     } finally {
-      setSaving(false)
+      setSavingStep1(false)
     }
+  }
+
+  const handleUploadAndParse = async () => {
+    if (!file) { setParseError('Select a file first'); return }
+    setParsing(true)
+    setParseError(null)
+    try {
+      const { path, filename } = await uploadProfileResume(file)
+      const current = await getProfile(createdId)
+      await updateProfile(createdId, {
+        name: current.name,
+        data: { ...current.data, resume_path: path, resume_filename: filename },
+      })
+      await parseProfileResume(createdId)
+      onCreated({ id: createdId, name: current.name })
+    } catch (e) {
+      setParseError(e?.message?.includes('400') ? 'Parsing failed — check LLM config and prompt' : 'Upload/parse failed')
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  const handleSkip = () => onCreated({ id: createdId, name })
+
+  if (step === 1) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-xs text-space-dim">Step 1 of 2 — Profile shell</p>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-space-dim">Profile Name</label>
+          <input
+            className={inputClass}
+            value={name}
+            onChange={(e) => { setName(e.target.value); setError(null) }}
+            placeholder="e.g. Software Engineer"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-space-dim">LLM Provider</label>
+          <select className={inputClass} value={providerType} onChange={(e) => setProviderType(e.target.value)}>
+            <option value="">— select —</option>
+            {PROVIDER_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-space-dim">Model</label>
+          <input
+            className={inputClass}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="e.g. gpt-4o-mini"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-space-dim">API Key</label>
+          <input
+            type="password"
+            className={inputClass}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-…"
+          />
+        </div>
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleStep1}
+            disabled={savingStep1}
+            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+          >
+            {savingStep1 ? 'Saving…' : 'Continue'}
+          </button>
+          <button onClick={onBack} className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-xs text-space-dim">Step 2 of 2 — Upload Master Resume (optional)</p>
+      <p className="text-xs text-space-dim">
+        Upload a PDF or Markdown resume to auto-populate this profile. Skip to fill in fields manually.
+      </p>
+
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-space-dim">Profile Name</label>
+        <label className="text-xs text-space-dim">Master Resume (.pdf or .md)</label>
         <input
-          className={inputClass}
-          value={name}
-          onChange={(e) => { setName(e.target.value); setError(null) }}
-          placeholder="e.g. Software Engineer"
+          type="file"
+          accept=".pdf,.md"
+          onChange={(e) => { setFile(e.target.files?.[0] ?? null); setParseError(null) }}
+          className="text-xs text-space-text file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-space-border file:bg-white/5 file:text-space-text file:hover:border-purple-500/50 file:cursor-pointer"
         />
-        {error && <p className="text-xs text-red-400">{error}</p>}
       </div>
+
+      {parseError && <p className="text-xs text-red-400">{parseError}</p>}
+
       <div className="flex gap-2">
         <button
-          onClick={handleSave}
-          disabled={saving}
+          onClick={handleUploadAndParse}
+          disabled={parsing || !file}
           className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
         >
-          {saving ? 'Saving…' : 'Save Profile'}
+          {parsing ? 'Parsing…' : 'Upload & Parse'}
         </button>
-        <button onClick={onBack} className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors">
-          Cancel
+        <button
+          onClick={handleSkip}
+          disabled={parsing}
+          className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors disabled:opacity-50"
+        >
+          Skip
         </button>
       </div>
     </div>
