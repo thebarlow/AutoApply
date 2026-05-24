@@ -985,7 +985,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
             {renderChipTray()}
             <div className="flex flex-col gap-1.5 flex-1 min-h-0">
               <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt Text</label>
-              {renderEditor('flex-1 !h-full')}
+              {renderEditor('flex-1 min-h-0')}
             </div>
           </div>
         </div>
