@@ -244,6 +244,20 @@ function PreviewTab({ job, promptStatus = {} }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {job.last_result_error && (
+        <div className="bg-red-900/20 border border-red-500/40 rounded-lg px-3 py-2 flex items-start gap-2">
+          <svg width="16" height="16" viewBox="0 0 18 18" className="shrink-0 mt-0.5">
+            <path d="M9 1.5 L17 16 L1 16 Z" stroke="#EF4444" strokeWidth="1.2" strokeLinejoin="round" fill="none"/>
+            <text x="9" y="13.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#EF4444">!</text>
+          </svg>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-red-400">Last LLM call failed</p>
+            <p className="text-xs text-red-200/80 break-words mt-0.5">
+              {job.last_result_error.length > 400 ? job.last_result_error.slice(0, 400) + '…' : job.last_result_error}
+            </p>
+          </div>
+        </div>
+      )}
       {/* Info */}
       <div>
         <h2 className="text-base font-semibold text-space-text leading-tight">{job.title || '(no title)'}</h2>

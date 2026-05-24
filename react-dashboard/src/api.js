@@ -80,3 +80,8 @@ export const uploadProfileResume = (file) => {
 
 export const parseProfileResume = (profileId) =>
   _fetch(`/api/config/profiles/${profileId}/parse`, { method: 'POST' })
+
+export const markJobSeen = (jobKey) =>
+  _fetch(`/api/jobs/${jobKey}/seen`, { method: 'POST' })
+
+export const getLlmStatus = () => _fetch('/api/llm-status')

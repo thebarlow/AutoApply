@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import JobCard, { NewIcon, ProcessingIcon } from '../shared/JobCard'
+import JobCard, { NewIcon, ProcessingIcon, EyeIcon, WarningIcon } from '../shared/JobCard'
 
-const TABS = ['Inbox', 'Processing', 'Outbound', 'Archives']
+const TABS = ['Inbox', 'Outbound', 'Archives']
 
 const INBOX_STATES = new Set(['new', 'pending_review'])
 const OUTBOUND_STATES = new Set(['ready'])
@@ -13,6 +13,8 @@ const ARCHIVE_COLORS = { applied: 'text-green-400', contact: 'text-blue-400', re
 
 function statusIconFor(job, processingKeys) {
   if (processingKeys.has(job.job_key)) return <ProcessingIcon />
+  if (job.unread_indicator === 'error') return <WarningIcon />
+  if (job.unread_indicator === 'ok') return <EyeIcon />
   if (job.state === 'new') return <NewIcon />
   return null
 }
@@ -57,11 +59,10 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
   const [activeTab, setActiveTab] = useState('Inbox')
 
   const tabJobs = useMemo(() => ({
-    Inbox: jobs.filter((j) => INBOX_STATES.has(j.state) && !processingKeys.has(j.job_key)),
-    Processing: jobs.filter((j) => processingKeys.has(j.job_key)),
+    Inbox: jobs.filter((j) => INBOX_STATES.has(j.state)),
     Outbound: jobs.filter((j) => OUTBOUND_STATES.has(j.state)),
     Archives: jobs.filter((j) => ARCHIVE_STATES.has(j.state)),
-  }), [jobs, processingKeys])
+  }), [jobs])
 
   return (
     <motion.div

@@ -3,7 +3,7 @@ import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
 import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
-import { getJobs, getActivePromptStatus } from './api'
+import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen } from './api'
 
 export default function App() {
   const [jobs, setJobs] = useState([])
@@ -39,11 +39,22 @@ export default function App() {
   // Initial load + SSE subscription
   useEffect(() => {
     getJobs().then(setJobs).catch(console.error)
+    getLlmStatus().then((res) => setProcessingKeys(new Set(res?.processing || []))).catch(console.error)
 
     const es = new EventSource('/api/events')
     es.onmessage = (e) => {
       try {
-        upsertJob(JSON.parse(e.data))
+        const payload = JSON.parse(e.data)
+        if (payload.type === 'job') {
+          upsertJob(payload.data)
+        } else if (payload.type === 'llm_status') {
+          setProcessingKeys((prev) => {
+            const next = new Set(prev)
+            if (payload.data.processing) next.add(payload.data.job_key)
+            else next.delete(payload.data.job_key)
+            return next
+          })
+        }
       } catch { /* malformed event — ignore */ }
     }
     let refetchScheduled = false
@@ -51,6 +62,7 @@ export default function App() {
       if (!refetchScheduled) {
         refetchScheduled = true
         getJobs().then(setJobs).catch(console.error).finally(() => { refetchScheduled = false })
+        getLlmStatus().then((res) => setProcessingKeys(new Set(res?.processing || []))).catch(console.error)
       }
     }
     return () => es.close()
@@ -71,6 +83,9 @@ export default function App() {
   const handleJobSelect = useCallback((job) => {
     setSelectedJob(job)
     setSettingsTab('Preview')
+    if (job?.unread_indicator) {
+      markJobSeen(job.job_key).catch(() => {})
+    }
   }, [])
 
   return (

@@ -66,4 +66,23 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
   )
 }
 
-export { NewIcon, ProcessingIcon }
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0">
+      <path d="M1.5 9 C 3.5 5, 6 4, 9 4 C 12 4, 14.5 5, 16.5 9 C 14.5 13, 12 14, 9 14 C 6 14, 3.5 13, 1.5 9 Z" stroke="#60A5FA" strokeWidth="1.2" fill="none"/>
+      <circle cx="9" cy="9" r="2.2" stroke="#60A5FA" strokeWidth="1.2" fill="none"/>
+      <circle cx="9" cy="9" r="0.9" fill="#60A5FA"/>
+    </svg>
+  )
+}
+
+function WarningIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0">
+      <path d="M9 1.5 L17 16 L1 16 Z" stroke="#EF4444" strokeWidth="1.2" strokeLinejoin="round" fill="none"/>
+      <text x="9" y="13.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#EF4444">!</text>
+    </svg>
+  )
+}
+
+export { NewIcon, ProcessingIcon, EyeIcon, WarningIcon }
