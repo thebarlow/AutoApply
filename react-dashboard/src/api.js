@@ -10,6 +10,9 @@ async function _fetch(url, options) {
 
 export const getJobs = () => _fetch('/api/jobs')
 
+export const deleteJob = (jobKey) =>
+  _fetch(`/api/jobs/${jobKey}`, { method: 'DELETE' })
+
 export const getProfiles = () => _fetch('/api/config/profiles')
 
 export const createProfile = (name) =>

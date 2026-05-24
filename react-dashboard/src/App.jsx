@@ -121,6 +121,11 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
+  const handleJobDeleted = useCallback((jobKey) => {
+    setJobs((prev) => prev.filter((j) => j.job_key !== jobKey))
+    setSelectedJob((prev) => (prev?.job_key === jobKey ? null : prev))
+  }, [])
+
   const handleJobSelect = useCallback((job) => {
     setSelectedJob(job)
     setSettingsTab('Preview')
@@ -150,6 +155,7 @@ export default function App() {
             onTabChange={setSettingsTab}
             promptStatus={promptStatus}
             jobActionsInFlight={selectedJob ? (processingActions[selectedJob.job_key] || new Set()) : new Set()}
+            onJobDeleted={handleJobDeleted}
           />
         </div>
       </Dashboard>

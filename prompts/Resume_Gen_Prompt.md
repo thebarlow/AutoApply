@@ -12,8 +12,8 @@ Projects: {user.projects}
 Title: {job.title}
 Company: {job.company}
 Location: {job.location}
-Description:
-{job.description}
+Description: {job.extracted_description}
+
 
 # Instructions
 - Output ONLY the resume Markdown body. No preamble, no explanation.

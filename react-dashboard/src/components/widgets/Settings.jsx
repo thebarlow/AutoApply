@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 import { WarningIcon } from '../shared/JobCard'
 
@@ -179,7 +179,35 @@ function ScoreView({ job }) {
   )
 }
 
-function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set() }) {
+function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJobDeleted }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
+
+  useEffect(() => {
+    if (!confirmDelete) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setConfirmDelete(false)
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [confirmDelete])
+
+  const handleDelete = async () => {
+    if (!job) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteJob(job.job_key)
+      onJobDeleted?.(job.job_key)
+    } catch {
+      setDeleteError('Delete failed')
+      setDeleting(false)
+    }
+  }
   const [contentTab, setContentTab] = useState('description')
   const [descView, setDescView] = useState(() => job?.extraction_json_exists ? 'extracted' : 'raw')
   const [artifactView, setArtifactView] = useState(() => job?.resume_path ? 'pdf' : 'markdown')
@@ -234,6 +262,9 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set() }) {
     setActionError(null)
     setArtifactNonce({ resume: 0, cover: 0 })
     prevInFlight.current = new Set()
+    setConfirmDelete(false)
+    setDeleting(false)
+    setDeleteError(null)
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
@@ -301,15 +332,28 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set() }) {
         </div>
       )}
       {/* Info */}
-      <div>
-        <h2 className="text-base font-semibold text-space-text leading-tight">{job.title || '(no title)'}</h2>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-          {job.company && <span className="text-xs text-space-dim">{job.company}</span>}
-          {job.location && <span className="text-xs text-space-dim">{job.location}</span>}
-          {job.salary && <span className="text-xs text-space-dim">{job.salary}</span>}
-          <span className="text-xs font-semibold text-purple-400">{score}</span>
-          <span className="text-xs text-space-dim">{stateLabel}</span>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold text-space-text leading-tight">{job.title || '(no title)'}</h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+            {job.company && <span className="text-xs text-space-dim">{job.company}</span>}
+            {job.location && <span className="text-xs text-space-dim">{job.location}</span>}
+            {job.salary && <span className="text-xs text-space-dim">{job.salary}</span>}
+            <span className="text-xs font-semibold text-purple-400">{score}</span>
+            <span className="text-xs text-space-dim">{stateLabel}</span>
+          </div>
         </div>
+        <button
+          onClick={() => {
+            if (job.url) window.open(job.url, '_blank')
+            fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
+              .then(res => { if (!res.ok) console.error(`Apply failed: ${res.status}`) })
+              .catch(err => console.error('Apply request failed:', err))
+          }}
+          className="shrink-0 px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#198754] text-white hover:opacity-90"
+        >
+          {hasResume ? 'Apply' : 'View Post'}
+        </button>
       </div>
 
       <hr className="border-space-border" />
@@ -336,15 +380,11 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set() }) {
           )
         })}
         <button
-          onClick={() => {
-            if (job.url) window.open(job.url, '_blank')
-            fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
-              .then(res => { if (!res.ok) console.error(`Apply failed: ${res.status}`) })
-              .catch(err => console.error('Apply request failed:', err))
-          }}
-          className="ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#198754] text-white hover:opacity-90"
+          onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
+          title="Delete job"
+          className="ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors border border-red-500/30 text-red-400 hover:bg-red-500/10"
         >
-          {hasResume ? 'Apply' : 'View Post'}
+          Delete
         </button>
       </div>
 
@@ -399,6 +439,35 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set() }) {
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
           <ScoreView job={job} />
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-sm p-5 flex flex-col gap-4 shadow-2xl">
+            <div>
+              <p className="text-sm font-semibold text-space-text">Delete job?</p>
+              <p className="text-xs text-space-dim mt-1">
+                This will permanently delete <span className="text-space-text">{job.title || job.job_key}</span> and cannot be undone.
+              </p>
+            </div>
+            {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Confirm'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -701,7 +770,7 @@ function ProfileCards({ onSelect, onCreateProfile }) {
 
 const TABS = ['User', 'Preview']
 
-export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {}, jobActionsInFlight = new Set() }) {
+export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {}, jobActionsInFlight = new Set(), onJobDeleted }) {
   const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
   const [detailProfileId, setDetailProfileId] = useState(null)
 
@@ -777,7 +846,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
             )}
 
             {view === 'main' && activeTab === 'Preview' && (
-              <PreviewTab job={selectedJob} promptStatus={promptStatus} actionsInFlight={jobActionsInFlight} />
+              <PreviewTab job={selectedJob} promptStatus={promptStatus} actionsInFlight={jobActionsInFlight} onJobDeleted={onJobDeleted} />
             )}
             {view === 'createProfile' && (
               <CreateProfile

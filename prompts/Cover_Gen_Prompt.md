@@ -7,8 +7,7 @@ You are writing a concise cover letter in Markdown for a job application.
 Title: {job.title}
 Company: {job.company}
 Location: {job.location}
-Description:
-{job.description}
+Description: {job.extracted_description}
 
 # Instructions
 - Output ONLY the cover letter Markdown. No preamble, no explanation.
