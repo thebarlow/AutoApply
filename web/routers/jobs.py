@@ -133,7 +133,10 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc))
 
     config = _load_score_config(db)
-    job.score(user, config, client, model, db, prompt_content)
+    try:
+        job.score(user, config, client, model, db, prompt_content)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     db.refresh(job)
     _emit(job)
     return job.serialize()

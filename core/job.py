@@ -304,22 +304,30 @@ class Job(Base):
         try:
             response = client.chat.completions.create(
                 model=model,
-                max_tokens=512,
+                max_tokens=8192,
                 messages=[{"role": "user", "content": prompt}],
             )
-            raw = response.choices[0].message.content
         except Exception as e:
-            warnings.warn(f"LLM API error for {self.job_key}: {e}")
-            return
+            raise RuntimeError(f"LLM API error: {e}") from e
+        choice = response.choices[0]
+        raw = choice.message.content
+        finish = getattr(choice, "finish_reason", None)
+        if finish and finish != "stop":
+            raise RuntimeError(
+                f"LLM stopped early (finish_reason={finish!r}); "
+                f"consider raising max_tokens or shortening the prompt."
+            )
+        if not raw:
+            raise RuntimeError("LLM returned empty content")
 
         required = {"desirability_score", "fit_score", "desirability_justification", "fit_justification"}
         try:
             parsed = json.loads(raw.strip())
             if not required.issubset(parsed.keys()):
-                raise ValueError("Missing required keys")
-        except (json.JSONDecodeError, ValueError, AttributeError):
-            warnings.warn(f"Unparseable LLM response for {self.job_key}: {raw!r}")
-            return
+                raise ValueError(f"Missing required keys; got {sorted(parsed.keys())}")
+        except (json.JSONDecodeError, ValueError, AttributeError) as e:
+            preview = (raw or "")[:300].replace("\n", " ")
+            raise RuntimeError(f"Unparseable LLM response: {e}. Preview: {preview!r}") from e
 
         desirability = max(0.0, min(1.0, float(parsed["desirability_score"])))
         fit = max(0.0, min(1.0, float(parsed["fit_score"])))

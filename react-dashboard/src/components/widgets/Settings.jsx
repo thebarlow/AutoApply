@@ -86,8 +86,8 @@ function MarkdownView({ url }) {
   )
 }
 
-const CONTENT_TABS = ['description', 'resume', 'cover']
-const CONTENT_TAB_LABELS = { description: 'Description', resume: 'Resume', cover: 'Cover Letter' }
+const CONTENT_TABS = ['description', 'resume', 'cover', 'score']
+const CONTENT_TAB_LABELS = { description: 'Description', resume: 'Resume', cover: 'Cover Letter', score: 'Score' }
 
 function SubToggle({ options, value, onChange }) {
   return (
@@ -108,14 +108,82 @@ function SubToggle({ options, value, onChange }) {
   )
 }
 
-const ACTION_PROMPT_KEY = { description: 'extraction', resume: 'resume', cover: 'cover' }
-const ACTION_PROMPT_LABEL = { extraction: 'Description Processing', resume: 'Resume Generation', cover: 'Cover Letter Generation' }
+const ACTION_PROMPT_KEY = { description: 'extraction', resume: 'resume', cover: 'cover', score: 'scoring' }
+const ACTION_PROMPT_LABEL = { extraction: 'Description Processing', resume: 'Resume Generation', cover: 'Cover Letter Generation', scoring: 'Scoring' }
+
+// Reduce a justification field (string | {raised, lowered} | undefined) to two arrays.
+function _splitJustification(j) {
+  if (!j) return { raised: [], lowered: [] }
+  if (typeof j === 'string') return { raised: [j], lowered: [] }
+  return {
+    raised: Array.isArray(j.raised) ? j.raised : [],
+    lowered: Array.isArray(j.lowered) ? j.lowered : [],
+  }
+}
+
+function ScoreView({ job }) {
+  const score = job.final_score
+  if (score == null) {
+    return <p className="text-xs text-space-dim">Not scored yet. Click Calculate to score this job.</p>
+  }
+  const display = (score * 10).toFixed(1)
+  // Red (hue 0) → Green (hue 120) gradient
+  const hue = Math.round(score * 120)
+  const color = `hsl(${hue}, 75%, 55%)`
+
+  const fit = _splitJustification(job.score_justification?.fit)
+  const des = _splitJustification(job.score_justification?.desirability)
+  const raised = [...fit.raised, ...des.raised]
+  const lowered = [...fit.lowered, ...des.lowered]
+
+  const fitPct = job.fit_score != null ? (job.fit_score * 10).toFixed(1) : '—'
+  const desPct = job.desirability_score != null ? (job.desirability_score * 10).toFixed(1) : '—'
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        <div
+          className="text-5xl font-bold leading-none tabular-nums"
+          style={{ color }}
+        >
+          {display}
+        </div>
+        <div className="flex flex-col gap-0.5 text-xs text-space-dim">
+          <span>Fit: <span className="text-space-text font-medium">{fitPct}</span></span>
+          <span>Desirability: <span className="text-space-text font-medium">{desPct}</span></span>
+          <span className="opacity-70">out of 10.0</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5 rounded-lg border border-space-border p-3 bg-white/[0.02]">
+          <p className="text-xs font-semibold text-emerald-400">Raised</p>
+          {raised.length === 0
+            ? <p className="text-xs text-space-dim italic">None</p>
+            : <ul className="text-xs text-space-text space-y-1 list-disc list-inside">
+                {raised.map((r, i) => <li key={i}>{r}</li>)}
+              </ul>
+          }
+        </div>
+        <div className="flex flex-col gap-1.5 rounded-lg border border-space-border p-3 bg-white/[0.02]">
+          <p className="text-xs font-semibold text-red-400">Lowered</p>
+          {lowered.length === 0
+            ? <p className="text-xs text-space-dim italic">None</p>
+            : <ul className="text-xs text-space-text space-y-1 list-disc list-inside">
+                {lowered.map((r, i) => <li key={i}>{r}</li>)}
+              </ul>
+          }
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function PreviewTab({ job, promptStatus = {} }) {
   const [contentTab, setContentTab] = useState('description')
   const [descView, setDescView] = useState(() => job?.extraction_json_exists ? 'extracted' : 'raw')
   const [artifactView, setArtifactView] = useState(() => job?.resume_path ? 'pdf' : 'markdown')
   const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState(null)
 
   const promptKey = ACTION_PROMPT_KEY[contentTab]
   const promptOk = promptStatus[promptKey] === true
@@ -129,11 +197,13 @@ function PreviewTab({ job, promptStatus = {} }) {
     setDescView(job?.extraction_json_exists ? 'extracted' : 'raw')
     setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
     setActionLoading(false)
+    setActionError(null)
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
   const handleContentTab = (tab) => {
     setContentTab(tab)
+    setActionError(null)
     if (tab === 'resume') setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
     else if (tab === 'cover') setArtifactView(job?.cover_path ? 'pdf' : 'markdown')
   }
@@ -144,10 +214,22 @@ function PreviewTab({ job, promptStatus = {} }) {
       description: `/api/jobs/${job.job_key}/description/extract`,
       resume: `/api/jobs/${job.job_key}/generate/resume`,
       cover: `/api/jobs/${job.job_key}/generate/cover`,
+      score: `/api/jobs/${job.job_key}/score`,
     }
     setActionLoading(true)
+    setActionError(null)
     try {
-      await fetch(urlMap[contentTab], { method: 'POST' })
+      const res = await fetch(urlMap[contentTab], { method: 'POST' })
+      if (!res.ok) {
+        let detail = `Request failed (${res.status})`
+        try {
+          const body = await res.json()
+          if (body?.detail) detail = body.detail
+        } catch { /* non-JSON body */ }
+        setActionError(detail)
+      }
+    } catch (e) {
+      setActionError(e?.message || 'Request failed')
     } finally {
       setActionLoading(false)
     }
@@ -229,6 +311,7 @@ function PreviewTab({ job, promptStatus = {} }) {
               {actionLoading ? '…' : !promptOk ? 'Prompt not set' : job.extraction_json_exists ? 'Reprocess' : 'Process'}
             </button>
           </div>
+          {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
           {descView === 'raw' && (
             <p className="text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
               {job.description || 'No description available.'}
@@ -239,6 +322,23 @@ function PreviewTab({ job, promptStatus = {} }) {
               ? <ExtractionView data={job.extraction} />
               : <p className="text-xs text-space-dim">No extraction yet.</p>
           )}
+        </div>
+      )}
+
+      {contentTab === 'score' && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-end">
+            <button
+              onClick={handleAction}
+              disabled={actionLoading || !promptOk}
+              title={promptMissingTitle}
+              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {actionLoading ? '…' : !promptOk ? 'Prompt not set' : job.final_score != null ? 'Recalculate' : 'Calculate'}
+            </button>
+          </div>
+          {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
+          <ScoreView job={job} />
         </div>
       )}
 
@@ -262,6 +362,7 @@ function PreviewTab({ job, promptStatus = {} }) {
               {actionLoading ? '…' : !promptOk ? 'Prompt not set' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
             </button>
           </div>
+          {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
           {artifactView === 'markdown' && (
             <MarkdownView
               url={contentTab === 'resume'
