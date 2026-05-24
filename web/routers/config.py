@@ -13,10 +13,19 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.database import Config, FieldHelp
-from core.user import User
+from core.user import User, PromptNotConfiguredError
 from core.job import Job
 
 router = APIRouter()
+
+
+def _prompt_configured(path: str) -> bool:
+    """Return True if path points to a non-empty .md file."""
+    if not path:
+        return False
+    p = Path(path)
+    return p.exists() and bool(p.read_text(encoding="utf-8").strip())
+
 
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
 
@@ -566,6 +575,13 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
     data = json.loads(row.data) if row.data else {}
     env = _read_env()
     has_llm_key = bool(env.get(f"LLM_KEY_PROFILE_{profile_id}"))
+    prompt_types = ("scoring", "resume", "cover", "extraction", "intake", "resume_parse")
+    prompt_fields = {}
+    for t in prompt_types:
+        file_val = data.get(f"prompt_{t}", "")
+        prompt_fields[f"prompt_{t}_file"] = file_val
+        prompt_fields[f"prompt_{t}_model"] = data.get(f"prompt_{t}_model", "")
+        prompt_fields[f"prompt_{t}_configured"] = _prompt_configured(file_val)
     return {
         "id": row.id,
         "name": row.name,
@@ -573,6 +589,7 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
         "llm_provider_type": data.get("llm_provider_type", ""),
         "llm_model": data.get("llm_model", ""),
         "has_llm_key": has_llm_key,
+        **prompt_fields,
     }
 
 
@@ -666,6 +683,8 @@ def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) ->
             parsed = User.from_pdf(path.read_bytes(), db)
         else:
             parsed = User.from_markdown(path.read_text(errors="replace"), db)
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     merged = {**_EMPTY_PROFILE_DATA, **parsed}
@@ -740,6 +759,8 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
             return User.from_pdf(contents, db)
         else:
             return User.from_markdown(contents.decode("utf-8", errors="replace"), db)
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

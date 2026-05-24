@@ -10,9 +10,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.job import Job, JobState
-from core.user import User
-from core.llm import get_openai_client
-from core.llm import get_client_for_named_provider as _get_client_for_named_provider
+from core.user import User, PromptNotConfiguredError
+from core.llm import get_client_for_profile
 from db.database import get_db, Config
 from web.sse import broadcast as _broadcast
 
@@ -35,25 +34,6 @@ def _cfg_val(db: Session, key: str) -> str:
     return row.value if row else ""
 
 
-def _resolve_prompt(db: Session, type_: str) -> dict:
-    """Return the active prompt dict for a type; raises HTTP 400 if not configured."""
-    active_id = _cfg_val(db, f"active_{type_}_prompt_id")
-    prompts = _json.loads(_cfg_val(db, f"{type_}_prompts") or "[]")
-    prompt = next((p for p in prompts if p["id"] == active_id), None)
-    if not prompt:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No active {type_} prompt configured. Set one under Config → Scaffolding.",
-        )
-    for required_key in ("content", "provider_name", "model_id"):
-        if required_key not in prompt:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Active {type_} prompt is missing required field '{required_key}'. Re-save it in Config → Scaffolding.",
-            )
-    return prompt
-
-
 def _resolve_template(db: Session, template_name: str) -> Path:
     """Return Path for a named LaTeX template; raises HTTP 400 if not found."""
     if not template_name:
@@ -69,6 +49,17 @@ def _resolve_template(db: Session, template_name: str) -> Path:
     if not p.exists():
         raise HTTPException(status_code=400, detail=f"LaTeX template file missing on disk: {p}")
     return p
+
+
+def _get_default_template_name(db: Session) -> str:
+    """Return the first configured LaTeX template name; raises HTTP 400 if none."""
+    templates = _json.loads(_cfg_val(db, "latex_templates") or "[]")
+    if not templates:
+        raise HTTPException(
+            status_code=400,
+            detail="No LaTeX template configured. Upload one under Config.",
+        )
+    return templates[0]["name"]
 
 
 router = APIRouter(prefix="/api/jobs")
@@ -132,9 +123,17 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
 
     user = User.load(db)
+    try:
+        prompt_content = user.resolve_prompt("scoring")
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        client, model = get_client_for_profile(user, user.prompt_scoring_model)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     config = _load_score_config(db)
-    client, model = get_openai_client(db)
-    job.score(user, config, client, model, db)
+    job.score(user, config, client, model, db, prompt_content)
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -142,21 +141,35 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
 
 def _do_generate_resume(job: Job, db: Session) -> None:
     """Resolve active resume prompt and generate MD + PDF for job."""
-    prompt = _resolve_prompt(db, "resume")
-    client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
     user = User.load(db)
-    job.generate_resume_md(user, prompt["content"], client, model, db)
-    template_path = _resolve_template(db, prompt.get("template_name", ""))
+    try:
+        prompt_content = user.resolve_prompt("resume")
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        client, model = get_client_for_profile(user, user.prompt_resume_model)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    template_name = _get_default_template_name(db)
+    template_path = _resolve_template(db, template_name)
+    job.generate_resume_md(user, prompt_content, client, model, db)
     job.generate_resume_pdf(template_path, db)
 
 
 def _do_generate_cover(job: Job, db: Session) -> None:
     """Resolve active cover prompt and generate MD + PDF for job."""
-    prompt = _resolve_prompt(db, "cover")
-    client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
     user = User.load(db)
-    job.generate_cover_md(user, prompt["content"], client, model, db)
-    template_path = _resolve_template(db, prompt.get("template_name", ""))
+    try:
+        prompt_content = user.resolve_prompt("cover")
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        client, model = get_client_for_profile(user, user.prompt_cover_model)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    template_name = _get_default_template_name(db)
+    template_path = _resolve_template(db, template_name)
+    job.generate_cover_md(user, prompt_content, client, model, db)
     job.generate_cover_pdf(template_path, db)
 
 
@@ -241,12 +254,17 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    prompt = _resolve_prompt(db, "description")
-    actual_prompt = job.build_description_prompt(prompt["content"])
+    user = User.load(db)
     try:
-        client, model = _get_client_for_named_provider(db, prompt["provider_name"], prompt["model_id"])
+        prompt_content = user.resolve_prompt("extraction")
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        client, model = get_client_for_profile(user, user.prompt_extraction_model)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    actual_prompt = job.build_description_prompt(prompt_content)
     try:
         raw = _call_llm_for_extraction(client, model, actual_prompt)
     except Exception as exc:
