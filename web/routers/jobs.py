@@ -14,6 +14,7 @@ from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
 from db.database import get_db, Config
 from web.sse import send as _sse_send
+from web import llm_status
 
 _GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
 
@@ -133,10 +134,23 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc))
 
     config = _load_score_config(db)
+    llm_status.start(job_key)
     try:
         job.score(user, config, client, model, db, prompt_content)
-    except RuntimeError as exc:
+        job.unread_indicator = "ok"
+        job.last_result_error = None
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        job.unread_indicator = "error"
+        job.last_result_error = str(exc)
+        db.commit()
+        db.refresh(job)
+        _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        llm_status.finish(job_key)
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -181,10 +195,23 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    llm_status.start(job_key)
     try:
         _do_generate_resume(job, db)
+        job.unread_indicator = "ok"
+        job.last_result_error = None
+        db.commit()
+    except HTTPException:
+        raise
     except Exception as exc:
+        job.unread_indicator = "error"
+        job.last_result_error = str(exc)
+        db.commit()
+        db.refresh(job)
+        _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        llm_status.finish(job_key)
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -195,10 +222,23 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    llm_status.start(job_key)
     try:
         _do_generate_cover(job, db)
+        job.unread_indicator = "ok"
+        job.last_result_error = None
+        db.commit()
+    except HTTPException:
+        raise
     except Exception as exc:
+        job.unread_indicator = "error"
+        job.last_result_error = str(exc)
+        db.commit()
+        db.refresh(job)
+        _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        llm_status.finish(job_key)
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -268,25 +308,52 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc))
 
     actual_prompt = job.build_description_prompt(prompt_content)
+    llm_status.start(job_key)
     try:
-        raw = _call_llm_for_extraction(client, model, actual_prompt)
+        try:
+            raw = _call_llm_for_extraction(client, model, actual_prompt)
+        except Exception as exc:
+            raise RuntimeError(f"Description extraction failed: {exc}") from exc
+        try:
+            data = _json.loads(raw)
+        except (_json.JSONDecodeError, TypeError):
+            raise RuntimeError("Description extraction failed: LLM returned invalid JSON")
+        job.ext_seniority = data.get("seniority", "")
+        job.ext_role_type = data.get("role_type", "")
+        job.ext_domain = data.get("domain", "")
+        job.ext_work_arrangement = data.get("work_arrangement", "")
+        job.ext_employment_type = data.get("employment_type", "")
+        job.ext_required_skills = ", ".join(data.get("required_skills") or [])
+        job.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
+        job.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
+        job.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
+        job.ext_company_signals = ", ".join(data.get("company_signals") or [])
+        job.unread_indicator = "ok"
+        job.last_result_error = None
+        db.commit()
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Description extraction failed: {exc}")
-    # Parse and store into ext_* columns via job method
-    try:
-        data = _json.loads(raw)
-    except (_json.JSONDecodeError, TypeError):
-        raise HTTPException(status_code=500, detail="Description extraction failed: LLM returned invalid JSON")
-    job.ext_seniority = data.get("seniority", "")
-    job.ext_role_type = data.get("role_type", "")
-    job.ext_domain = data.get("domain", "")
-    job.ext_work_arrangement = data.get("work_arrangement", "")
-    job.ext_employment_type = data.get("employment_type", "")
-    job.ext_required_skills = ", ".join(data.get("required_skills") or [])
-    job.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
-    job.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
-    job.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
-    job.ext_company_signals = ", ".join(data.get("company_signals") or [])
+        job.unread_indicator = "error"
+        job.last_result_error = str(exc)
+        db.commit()
+        db.refresh(job)
+        _emit(job)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        llm_status.finish(job_key)
+    db.refresh(job)
+    _emit(job)
+    return job.serialize()
+
+
+@router.post("/{job_key}/seen")
+def mark_job_seen(job_key: str, db: Session = Depends(get_db)):
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job.unread_indicator = None
+    job.last_result_error = None
     db.commit()
     db.refresh(job)
     _emit(job)

@@ -431,18 +431,32 @@ class Job(Base):
         job_key = self.job_key
 
         def _run() -> None:
+            from web import llm_status
+            from web.sse import send as _sse_send
+
             thread_db = SessionLocal()
+            llm_status.start(job_key)
             try:
                 print(f"[intake] {job_key}: extraction started", flush=True)
                 thread_job = thread_db.query(Job).filter_by(job_key=job_key).first()
                 if thread_job is None:
                     print(f"[intake] {job_key}: job not found in thread session", flush=True)
                     return
-                thread_job.extract_description(thread_db)
-                print(f"[intake] {job_key}: extraction complete", flush=True)
-            except Exception as exc:
-                print(f"[intake] {job_key}: extraction failed — {exc}", flush=True)
+                try:
+                    thread_job.extract_description(thread_db)
+                    thread_job.unread_indicator = "ok"
+                    thread_job.last_result_error = None
+                    thread_db.commit()
+                    _sse_send("job", thread_job.serialize())
+                    print(f"[intake] {job_key}: extraction complete", flush=True)
+                except Exception as exc:
+                    thread_job.unread_indicator = "error"
+                    thread_job.last_result_error = str(exc)
+                    thread_db.commit()
+                    _sse_send("job", thread_job.serialize())
+                    print(f"[intake] {job_key}: extraction failed — {exc}", flush=True)
             finally:
+                llm_status.finish(job_key)
                 thread_db.close()
 
         t = threading.Thread(target=_run, daemon=True)
