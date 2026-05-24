@@ -115,6 +115,8 @@ class Job(Base):
     cover_path = Column(String)
     applied_at = Column(String)
     sheets_row_id = Column(String)
+    unread_indicator = Column(String)   # null | "ok" | "error"
+    last_result_error = Column(Text)
 
     @classmethod
     def from_scraped(cls, scraped: Any) -> "Job":
@@ -708,4 +710,6 @@ class Job(Base):
                 "company_signals": [s.strip() for s in (self.ext_company_signals or "").split(",") if s.strip()],
             } if has_extraction else None,
             "scraped_at": self.scraped_at or "",
+            "unread_indicator": self.unread_indicator,
+            "last_result_error": self.last_result_error,
         }

@@ -37,3 +37,9 @@ def broadcast(payload: str) -> None:
         clients = list(_clients)
     for q in clients:
         q.put_nowait(payload)
+
+
+def send(type_: str, data: dict) -> None:
+    """Broadcast an envelope-shaped SSE event."""
+    import json
+    broadcast(json.dumps({"type": type_, "data": data}))

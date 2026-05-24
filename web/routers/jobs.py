@@ -13,7 +13,7 @@ from core.job import Job, JobState
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
 from db.database import get_db, Config
-from web.sse import broadcast as _broadcast
+from web.sse import send as _sse_send
 
 _GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
 
@@ -74,7 +74,7 @@ _VALID_STATES = {s.value for s in JobState}
 
 def _emit(job: Job) -> None:
     """Serialize job and push to all SSE clients."""
-    _broadcast(_json.dumps(job.serialize()))
+    _sse_send("job", job.serialize())
 
 
 @router.get("")

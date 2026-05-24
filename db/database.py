@@ -121,6 +121,17 @@ def _migrate_ext_columns() -> None:
         conn.commit()
 
 
+def _migrate_unread_indicator_columns() -> None:
+    """Add unread_indicator + last_result_error columns to jobs table if missing."""
+    new_cols = [("unread_indicator", "TEXT"), ("last_result_error", "TEXT")]
+    with engine.connect() as conn:
+        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
+        for col, typ in new_cols:
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {typ}"))
+        conn.commit()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -129,6 +140,7 @@ def init_db() -> None:
     _migrate_profile_name()
     _migrate_legacy_config()
     _migrate_ext_columns()
+    _migrate_unread_indicator_columns()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates
     db = SessionLocal()
     try:
