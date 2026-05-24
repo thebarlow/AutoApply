@@ -19,7 +19,7 @@ Automated job application pipeline with three stages:
 | Resume/cover letter generation, Claude prompts, PDF rendering, LaTeX templates | `generator/` | Modifying generation pipeline or PDF layout |
 | Job scoring logic, Claude prompts for scoring | `core/scorer.py` | Modifying scoring behavior or weights |
 | Job state machine, shared types | `core/types.py` | Adding/changing job states or shared dataclasses |
-| Job application submission, ATS automation, application tracking | `3_applicator/` | Building or modifying the submission pipeline |
+
 
 ## Running the App
 

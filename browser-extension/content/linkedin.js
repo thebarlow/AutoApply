@@ -32,27 +32,39 @@ if (_IS_VIEW) {
 
 if (_IS_SEARCH || _IS_SAVED) {
   registerSource({
+    // LinkedIn replaced stable class names with hashed tokens.
+    // componentkey="job-card-component-ref-{jobId}" is the only stable hook on search cards.
     cardSelector: _IS_SEARCH
-      ? ".scaffold-layout__list-item"
+      ? "[componentkey^='job-card-component-ref']"
       : ".entity-result",
 
     getJobData(card) {
-      const anchor = card.querySelector(
-        "a.job-card-list__title--link, a.job-card-container__link, .entity-result__title-text a"
-      );
-      const rawUrl = anchor?.href ?? "";
-      const url = rawUrl.split("?")[0];
-      const jobIdMatch = url.match(/\/view\/(\d+)/);
-      const job_key = jobIdMatch
-        ? `linkedin_${jobIdMatch[1]}`
-        : `linkedin_${Date.now()}`;
-      const title = anchor?.innerText?.trim() ?? "";
-      const company = card.querySelector(
-        ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle, .entity-result__primary-subtitle"
-      )?.innerText?.trim() ?? "";
-      const jobLocation = card.querySelector(
-        ".artdeco-entity-lockup__caption li, .entity-result__secondary-subtitle"
-      )?.innerText?.trim() ?? "";
+      // Job ID lives in the componentkey attribute; URL is constructable from it.
+      const componentKey = card.getAttribute("componentkey") ?? "";
+      const jobIdMatch = componentKey.match(/job-card-component-ref-(\d+)/);
+      const jobId = jobIdMatch?.[1] ?? null;
+      const job_key = jobId ? `linkedin_${jobId}` : `linkedin_${Date.now()}`;
+      const url = jobId ? `https://www.linkedin.com/jobs/view/${jobId}/` : "";
+
+      // Title: dismiss button carries a stable aria-label "Dismiss {title} job".
+      const dismissBtn = card.querySelector('button[aria-label^="Dismiss"]');
+      const title = (dismissBtn?.getAttribute("aria-label") ?? "")
+        .replace(/^Dismiss\s+/i, "")
+        .replace(/\s+job$/i, "")
+        .trim();
+
+      // Company/location: no stable selectors; grab visible <p> text in order.
+      // Paragraphs[0] = title text (skip), [1] = company, [2] = location.
+      const paragraphs = [...card.querySelectorAll("p")]
+        .map((p) => {
+          // Prefer aria-hidden span (visual text) over screen-reader span to avoid duplication.
+          const visual = p.querySelector("[aria-hidden='true']");
+          return (visual ?? p).innerText?.trim() ?? "";
+        })
+        .filter((t) => t.length > 1 && !/^[\s·•]+$/.test(t));
+      const company = paragraphs[1] ?? "";
+      const jobLocation = paragraphs[2] ?? "";
+
       return { source: "linkedin", job_key, title, company, location: jobLocation, url };
     },
 
@@ -63,21 +75,11 @@ if (_IS_SEARCH || _IS_SAVED) {
     },
 
     clickCard(card) {
-      const anchor = card.querySelector(
-        "a.job-card-list__title--link, a.job-card-container__link, .entity-result__title-text a"
-      );
-      anchor?.click();
+      card.click();
     },
 
     detailReadySelector: ".jobs-description__content, #job-details, .jobs-description-content__text",
 
-    bookmarkCard: _IS_SEARCH
-      ? (card) => {
-          const btn = card.querySelector(
-            "button.jobs-save-button, button[aria-label*='Save job'], button[aria-label*='save job']"
-          );
-          btn?.click();
-        }
-      : null,
+    bookmarkCard: null,
   });
 }

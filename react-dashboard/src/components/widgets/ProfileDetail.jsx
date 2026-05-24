@@ -807,11 +807,8 @@ const PROMPT_LABELS = {
   prompt_resume_parse: 'Resume Parsing',
 }
 
-function PromptsSection({ data, onSave }) {
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({})
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
+function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) {
+  const [openModal, setOpenModal] = useState(null)
 
   const promptKeys = Object.keys(DEFAULT_PROMPTS)
 
@@ -1045,7 +1042,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         <EducationSection data={d} onSave={handleSave} />
         <ProjectsSection data={d} onSave={handleSave} />
         <JobPrefsSection data={d} onSave={handleSave} />
-        <PromptsSection data={d} onSave={handleSave} />
+        <PromptsSection data={d} profileId={profileId} profileName={profile.name} defaultModel={profile.llm_model || ''} onSave={handleSave} />
         <LlmSection profile={profile} onSave={handleSaveLlm} />
 
         <button
