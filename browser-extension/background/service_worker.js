@@ -21,35 +21,6 @@ async function handleMessage(message, sender, sendResponse) {
     }
     return;
   }
-
-  if (message.type === "REGISTER_JOB_TAB") {
-    const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
-    jobTabs[sender.tab.id] = message.job_key;
-    await chrome.storage.session.set({ jobTabs });
-    sendResponse({ ok: true });
-    return;
-  }
-
-  if (message.type === "GET_JOB_KEY") {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tabId = tabs[0]?.id;
-    const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
-    sendResponse({ job_key: jobTabs[tabId] ?? null });
-    return;
-  }
-
-  if (message.type === "NATIVE_UPLOAD") {
-    const port = chrome.runtime.connectNative("com.auto_apply.host");
-    port.onMessage.addListener((response) => {
-      sendResponse(response);
-      port.disconnect();
-    });
-    port.onDisconnect.addListener(() => {
-      sendResponse({ ok: false, error: "native_host_disconnected" });
-    });
-    port.postMessage({ job_key: message.job_key, file_type: message.file_type });
-    return;
-  }
 }
 
 async function handleScrape(payload) {
@@ -77,17 +48,3 @@ async function handleScrape(payload) {
   await chrome.storage.local.set({ [DEDUP_KEY]: [...keySet] });
   return { ok: true, status: data.status };
 }
-
-chrome.webNavigation.onCreatedNavigationTarget.addListener(async ({ sourceTabId, tabId }) => {
-  const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
-  if (jobTabs[sourceTabId]) {
-    jobTabs[tabId] = jobTabs[sourceTabId];
-    await chrome.storage.session.set({ jobTabs });
-  }
-});
-
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const { jobTabs = {} } = await chrome.storage.session.get("jobTabs");
-  delete jobTabs[tabId];
-  await chrome.storage.session.set({ jobTabs });
-});
