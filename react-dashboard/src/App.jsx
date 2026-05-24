@@ -9,6 +9,7 @@ export default function App() {
   const [jobs, setJobs] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
   const [processingKeys, setProcessingKeys] = useState(new Set())
+  const [processingActions, setProcessingActions] = useState({}) // { job_key: Set<action> }
   const [settingsTab, setSettingsTab] = useState('User')
   const [promptStatus, setPromptStatus] = useState({})
 
@@ -56,8 +57,28 @@ export default function App() {
             else next.delete(payload.data.job_key)
             return next
           })
+        } else if (payload.type === 'llm_action') {
+          const { job_key, action, processing } = payload.data
+          setProcessingActions((prev) => {
+            const next = { ...prev }
+            const cur = new Set(next[job_key] || [])
+            if (processing) cur.add(action)
+            else cur.delete(action)
+            if (cur.size === 0) delete next[job_key]
+            else next[job_key] = cur
+            return next
+          })
         }
       } catch { /* malformed event — ignore */ }
+    }
+
+    const seedFromStatus = (res) => {
+      setProcessingKeys(new Set(res?.processing || []))
+      const actionsMap = {}
+      for (const [jk, list] of Object.entries(res?.actions || {})) {
+        actionsMap[jk] = new Set(list)
+      }
+      setProcessingActions(actionsMap)
     }
 
     const onError = () => {
@@ -65,15 +86,15 @@ export default function App() {
         refetchScheduled = true
         Promise.allSettled([
           getJobs().then(setJobs),
-          getLlmStatus().then((res) => setProcessingKeys(new Set(res?.processing || []))),
+          getLlmStatus().then(seedFromStatus),
         ]).finally(() => { refetchScheduled = false })
       }
     }
 
-    // Seed processingKeys BEFORE attaching the SSE stream so a concurrent
-    // llm_status event can't be overwritten by a late-arriving seed.
+    // Seed processing state BEFORE attaching the SSE stream so a concurrent
+    // event can't be overwritten by a late-arriving seed.
     getLlmStatus()
-      .then((res) => setProcessingKeys(new Set(res?.processing || [])))
+      .then(seedFromStatus)
       .catch(console.error)
       .finally(() => {
         if (cancelled) return
@@ -103,7 +124,9 @@ export default function App() {
   const handleJobSelect = useCallback((job) => {
     setSelectedJob(job)
     setSettingsTab('Preview')
-    if (job?.unread_indicator) {
+    // Auto-dismiss only for errors (so the warning banner clears on view).
+    // "ok"/pending-review state clears per-subtab when the user views each one.
+    if (job?.unread_indicator === 'error') {
       markJobSeen(job.job_key).catch(() => {})
     }
   }, [])
@@ -126,6 +149,7 @@ export default function App() {
             activeTab={settingsTab}
             onTabChange={setSettingsTab}
             promptStatus={promptStatus}
+            jobActionsInFlight={selectedJob ? (processingActions[selectedJob.job_key] || new Set()) : new Set()}
           />
         </div>
       </Dashboard>

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 import { WarningIcon } from '../shared/JobCard'
 
@@ -179,12 +179,34 @@ function ScoreView({ job }) {
   )
 }
 
-function PreviewTab({ job, promptStatus = {} }) {
+function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set() }) {
   const [contentTab, setContentTab] = useState('description')
   const [descView, setDescView] = useState(() => job?.extraction_json_exists ? 'extracted' : 'raw')
   const [artifactView, setArtifactView] = useState(() => job?.resume_path ? 'pdf' : 'markdown')
-  const [actionLoading, setActionLoading] = useState(false)
+  const [localLoadingTabs, setLocalLoadingTabs] = useState(() => new Set())
   const [actionError, setActionError] = useState(null)
+  // Bump on each completed (re)generation to bust iframe / fetch caches.
+  const [artifactNonce, setArtifactNonce] = useState({ resume: 0, cover: 0 })
+  const prevInFlight = useRef(new Set())
+
+  useEffect(() => {
+    const prev = prevInFlight.current
+    const bumps = {}
+    for (const k of ['resume', 'cover']) {
+      if (prev.has(k) && !actionsInFlight.has(k)) bumps[k] = true
+    }
+    prevInFlight.current = new Set(actionsInFlight)
+    if (Object.keys(bumps).length > 0) {
+      setArtifactNonce((cur) => ({
+        resume: bumps.resume ? cur.resume + 1 : cur.resume,
+        cover: bumps.cover ? cur.cover + 1 : cur.cover,
+      }))
+    }
+  }, [actionsInFlight])
+  // SSE-driven actions use server action names; tabs use the same keys.
+  const isLoading = (tab) =>
+    localLoadingTabs.has(tab) || actionsInFlight.has(tab)
+  const actionLoading = isLoading(contentTab)
 
   const promptKey = ACTION_PROMPT_KEY[contentTab]
   const promptOk = promptStatus[promptKey] === true
@@ -192,13 +214,26 @@ function PreviewTab({ job, promptStatus = {} }) {
     ? ''
     : `Configure the ${ACTION_PROMPT_LABEL[promptKey]} prompt in User → Prompts to enable this action.`
 
+  const pendingReview = new Set(job?.pending_review_actions || [])
+  const isPendingReview = (tab) => pendingReview.has(tab)
+
+  // Auto-clear pending-review for whichever subtab the user is currently viewing.
+  useEffect(() => {
+    if (!job) return
+    if (pendingReview.has(contentTab)) {
+      markJobActionSeen(job.job_key, contentTab).catch(() => {})
+    }
+  }, [job?.job_key, contentTab, job?.pending_review_actions?.join(',')])
+
   // Reset all state when a different job is selected
   useEffect(() => {
     setContentTab('description')
     setDescView(job?.extraction_json_exists ? 'extracted' : 'raw')
     setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
-    setActionLoading(false)
+    setLocalLoadingTabs(new Set())
     setActionError(null)
+    setArtifactNonce({ resume: 0, cover: 0 })
+    prevInFlight.current = new Set()
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
@@ -217,10 +252,15 @@ function PreviewTab({ job, promptStatus = {} }) {
       cover: `/api/jobs/${job.job_key}/generate/cover`,
       score: `/api/jobs/${job.job_key}/score`,
     }
-    setActionLoading(true)
+    const tab = contentTab
+    setLocalLoadingTabs((prev) => {
+      const next = new Set(prev)
+      next.add(tab)
+      return next
+    })
     setActionError(null)
     try {
-      const res = await fetch(urlMap[contentTab], { method: 'POST' })
+      const res = await fetch(urlMap[tab], { method: 'POST' })
       if (!res.ok) {
         let detail = `Request failed (${res.status})`
         try {
@@ -232,7 +272,11 @@ function PreviewTab({ job, promptStatus = {} }) {
     } catch (e) {
       setActionError(e?.message || 'Request failed')
     } finally {
-      setActionLoading(false)
+      setLocalLoadingTabs((prev) => {
+        const next = new Set(prev)
+        next.delete(tab)
+        return next
+      })
     }
   }
 
@@ -274,6 +318,8 @@ function PreviewTab({ job, promptStatus = {} }) {
       <div className="flex items-center gap-2">
         {CONTENT_TABS.map((tab) => {
           const disabled = false
+          const tabLoading = isLoading(tab)
+          const tabPending = !tabLoading && isPendingReview(tab)
           return (
             <button
               key={tab}
@@ -281,6 +327,8 @@ function PreviewTab({ job, promptStatus = {} }) {
               disabled={disabled}
               className={`px-3 py-1 rounded text-xs font-semibold transition-colors
                 ${contentTab === tab && !disabled ? 'bg-purple-600 text-white' : 'text-space-dim hover:text-space-text border border-space-border'}
+                ${tabLoading ? 'shiny-border' : ''}
+                ${tabPending ? 'review-pending' : ''}
                 disabled:opacity-30 disabled:cursor-not-allowed`}
             >
               {CONTENT_TAB_LABELS[tab]}
@@ -378,15 +426,15 @@ function PreviewTab({ job, promptStatus = {} }) {
           {artifactView === 'markdown' && (
             <MarkdownView
               url={contentTab === 'resume'
-                ? `/api/jobs/${job.job_key}/resume/markdown`
-                : `/api/jobs/${job.job_key}/cover/markdown`}
+                ? `/api/jobs/${job.job_key}/resume/markdown?v=${artifactNonce.resume}`
+                : `/api/jobs/${job.job_key}/cover/markdown?v=${artifactNonce.cover}`}
             />
           )}
           {artifactView === 'pdf' && (
             <iframe
               src={contentTab === 'resume'
-                ? `/api/jobs/${job.job_key}/resume`
-                : `/api/jobs/${job.job_key}/cover`}
+                ? `/api/jobs/${job.job_key}/resume?v=${artifactNonce.resume}`
+                : `/api/jobs/${job.job_key}/cover?v=${artifactNonce.cover}`}
               className="w-full h-[600px] rounded border border-space-border"
               title={contentTab === 'resume' ? 'Resume PDF' : 'Cover Letter PDF'}
             />
@@ -653,7 +701,7 @@ function ProfileCards({ onSelect, onCreateProfile }) {
 
 const TABS = ['User', 'Preview']
 
-export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {} }) {
+export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {}, jobActionsInFlight = new Set() }) {
   const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
   const [detailProfileId, setDetailProfileId] = useState(null)
 
@@ -729,7 +777,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
             )}
 
             {view === 'main' && activeTab === 'Preview' && (
-              <PreviewTab job={selectedJob} promptStatus={promptStatus} />
+              <PreviewTab job={selectedJob} promptStatus={promptStatus} actionsInFlight={jobActionsInFlight} />
             )}
             {view === 'createProfile' && (
               <CreateProfile

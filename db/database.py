@@ -132,6 +132,15 @@ def _migrate_unread_indicator_columns() -> None:
         conn.commit()
 
 
+def _migrate_pending_review_actions() -> None:
+    """Add pending_review_actions column (JSON list of action names)."""
+    with engine.connect() as conn:
+        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
+        if "pending_review_actions" not in existing:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN pending_review_actions TEXT"))
+        conn.commit()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -141,6 +150,7 @@ def init_db() -> None:
     _migrate_legacy_config()
     _migrate_ext_columns()
     _migrate_unread_indicator_columns()
+    _migrate_pending_review_actions()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates
     db = SessionLocal()
     try:

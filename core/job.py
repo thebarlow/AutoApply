@@ -117,6 +117,7 @@ class Job(Base):
     sheets_row_id = Column(String)
     unread_indicator = Column(String)   # null | "ok" | "error"
     last_result_error = Column(Text)
+    pending_review_actions = Column(Text)  # JSON list of action names awaiting review
 
     @classmethod
     def from_scraped(cls, scraped: Any) -> "Job":
@@ -528,7 +529,7 @@ class Job(Base):
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         frontmatter = self._build_frontmatter(user, db)
         prompt = self.build_resume_prompt(user, prompt_content, db)
-        content = call_llm(prompt, client, model)
+        content = call_llm(prompt, client, model, max_tokens=16384)
         content = strip_header_block(content)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
         md_path.write_text(frontmatter + content, encoding="utf-8")
@@ -557,7 +558,7 @@ class Job(Base):
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         frontmatter = self._build_frontmatter(user, db)
         prompt = self.build_cover_prompt(user, prompt_content, db)
-        content = call_llm(prompt, client, model)
+        content = call_llm(prompt, client, model, max_tokens=16384)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
         md_path.write_text(frontmatter + content, encoding="utf-8")
 
@@ -726,4 +727,5 @@ class Job(Base):
             "scraped_at": self.scraped_at or "",
             "unread_indicator": self.unread_indicator,
             "last_result_error": self.last_result_error,
+            "pending_review_actions": json.loads(self.pending_review_actions or "[]"),
         }

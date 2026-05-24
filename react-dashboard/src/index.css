@@ -25,3 +25,41 @@ body::before {
   position: relative;
   z-index: 1;
 }
+
+/* Shiny rotating border for in-flight LLM action tabs. */
+@property --shiny-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes shiny-spin {
+  to { --shiny-angle: 360deg; }
+}
+.shiny-border {
+  position: relative;
+  isolation: isolate;
+}
+.review-pending {
+  box-shadow: 0 0 0 1.5px #60A5FA, 0 0 12px 1px rgba(96, 165, 250, 0.55);
+}
+
+.shiny-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--shiny-angle),
+    #a855f7,
+    #ec4899,
+    #06b6d4,
+    #a855f7
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: shiny-spin 1.6s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}

@@ -72,6 +72,24 @@ class StateUpdate(BaseModel):
 
 _VALID_STATES = {s.value for s in JobState}
 
+_REVIEW_ACTIONS = {"score", "resume", "cover", "description"}
+
+
+def _add_pending_review(job: Job, action: str) -> None:
+    """Append `action` to job.pending_review_actions (deduped)."""
+    cur = _json.loads(job.pending_review_actions or "[]")
+    if action not in cur:
+        cur.append(action)
+    job.pending_review_actions = _json.dumps(cur)
+
+
+def _remove_pending_review(job: Job, action: str) -> bool:
+    """Remove `action` from job.pending_review_actions. Returns True if list is now empty."""
+    cur = _json.loads(job.pending_review_actions or "[]")
+    cur = [a for a in cur if a != action]
+    job.pending_review_actions = _json.dumps(cur)
+    return len(cur) == 0
+
 
 def _emit(job: Job) -> None:
     """Serialize job and push to all SSE clients."""
@@ -134,9 +152,10 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc))
 
     config = _load_score_config(db)
-    llm_status.start(job_key)
+    llm_status.start(job_key, "score")
     try:
         job.score(user, config, client, model, db, prompt_content)
+        _add_pending_review(job, "score")
         job.unread_indicator = "ok"
         job.last_result_error = None
         db.commit()
@@ -152,7 +171,7 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key)
+        llm_status.finish(job_key, "score")
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -197,9 +216,10 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    llm_status.start(job_key)
+    llm_status.start(job_key, "resume")
     try:
         _do_generate_resume(job, db)
+        _add_pending_review(job, "resume")
         job.unread_indicator = "ok"
         job.last_result_error = None
         db.commit()
@@ -215,7 +235,7 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key)
+        llm_status.finish(job_key, "resume")
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -226,9 +246,10 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    llm_status.start(job_key)
+    llm_status.start(job_key, "cover")
     try:
         _do_generate_cover(job, db)
+        _add_pending_review(job, "cover")
         job.unread_indicator = "ok"
         job.last_result_error = None
         db.commit()
@@ -244,7 +265,7 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key)
+        llm_status.finish(job_key, "cover")
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -314,7 +335,7 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc))
 
     actual_prompt = job.build_description_prompt(prompt_content)
-    llm_status.start(job_key)
+    llm_status.start(job_key, "description")
     try:
         try:
             raw = _call_llm_for_extraction(client, model, actual_prompt)
@@ -334,6 +355,7 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         job.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
         job.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
         job.ext_company_signals = ", ".join(data.get("company_signals") or [])
+        _add_pending_review(job, "description")
         job.unread_indicator = "ok"
         job.last_result_error = None
         db.commit()
@@ -349,7 +371,7 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key)
+        llm_status.finish(job_key, "description")
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -362,6 +384,24 @@ def mark_job_seen(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     job.unread_indicator = None
     job.last_result_error = None
+    job.pending_review_actions = "[]"
+    db.commit()
+    db.refresh(job)
+    _emit(job)
+    return job.serialize()
+
+
+@router.post("/{job_key}/seen/{action}")
+def mark_job_action_seen(job_key: str, action: str, db: Session = Depends(get_db)):
+    if action not in _REVIEW_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action!r}")
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    now_empty = _remove_pending_review(job, action)
+    # Only clear the "ok" indicator when nothing is pending. Leave "error" alone.
+    if now_empty and job.unread_indicator == "ok":
+        job.unread_indicator = None
     db.commit()
     db.refresh(job)
     _emit(job)

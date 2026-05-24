@@ -84,4 +84,7 @@ export const parseProfileResume = (profileId) =>
 export const markJobSeen = (jobKey) =>
   _fetch(`/api/jobs/${jobKey}/seen`, { method: 'POST' })
 
+export const markJobActionSeen = (jobKey, action) =>
+  _fetch(`/api/jobs/${jobKey}/seen/${action}`, { method: 'POST' })
+
 export const getLlmStatus = () => _fetch('/api/llm-status')
