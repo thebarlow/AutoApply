@@ -39,10 +39,12 @@ export default function App() {
   // Initial load + SSE subscription
   useEffect(() => {
     getJobs().then(setJobs).catch(console.error)
-    getLlmStatus().then((res) => setProcessingKeys(new Set(res?.processing || []))).catch(console.error)
 
-    const es = new EventSource('/api/events')
-    es.onmessage = (e) => {
+    let es = null
+    let cancelled = false
+    let refetchScheduled = false
+
+    const onMessage = (e) => {
       try {
         const payload = JSON.parse(e.data)
         if (payload.type === 'job') {
@@ -57,15 +59,33 @@ export default function App() {
         }
       } catch { /* malformed event — ignore */ }
     }
-    let refetchScheduled = false
-    es.onerror = () => {
+
+    const onError = () => {
       if (!refetchScheduled) {
         refetchScheduled = true
-        getJobs().then(setJobs).catch(console.error).finally(() => { refetchScheduled = false })
-        getLlmStatus().then((res) => setProcessingKeys(new Set(res?.processing || []))).catch(console.error)
+        Promise.allSettled([
+          getJobs().then(setJobs),
+          getLlmStatus().then((res) => setProcessingKeys(new Set(res?.processing || []))),
+        ]).finally(() => { refetchScheduled = false })
       }
     }
-    return () => es.close()
+
+    // Seed processingKeys BEFORE attaching the SSE stream so a concurrent
+    // llm_status event can't be overwritten by a late-arriving seed.
+    getLlmStatus()
+      .then((res) => setProcessingKeys(new Set(res?.processing || [])))
+      .catch(console.error)
+      .finally(() => {
+        if (cancelled) return
+        es = new EventSource('/api/events')
+        es.onmessage = onMessage
+        es.onerror = onError
+      })
+
+    return () => {
+      cancelled = true
+      if (es) es.close()
+    }
   }, [upsertJob])
 
   // Escape key clears selection
