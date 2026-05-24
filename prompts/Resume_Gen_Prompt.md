@@ -9,11 +9,11 @@ Projects: {user.projects}
 
 
 # Job Posting
-Title: {title}
-Company: {company}
-Location: {location}
+Title: {job.title}
+Company: {job.company}
+Location: {job.location}
 Description:
-{description}
+{job.description}
 
 # Instructions
 - Output ONLY the resume Markdown body. No preamble, no explanation.

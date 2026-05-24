@@ -485,7 +485,7 @@ class Job(Base):
                 self.extract_description(db)
             extracted_md = self._ext_to_markdown()
             template = template.replace("{job.extracted_description}", extracted_md)
-        return _apply_template(template, {"job": self, "user_profile": user})
+        return _apply_template(template, {"job": self, "user": user, "user_profile": user})
 
     def build_cover_prompt(self, user: Any, template: str, db: Session) -> str:
         """Render the cover letter generation prompt.
