@@ -1,14 +1,5 @@
 import { motion } from 'framer-motion'
 
-function NewIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0">
-      <circle cx="9" cy="9" r="8.5" stroke="#EAB308" strokeWidth="1" />
-      <text x="9" y="13.5" textAnchor="middle" fontSize="11" fontWeight="700" fill="#EAB308">!</text>
-    </svg>
-  )
-}
-
 function ProcessingIcon() {
   const dots = Array.from({ length: 8 }, (_, i) => {
     const angle = (i / 8) * 2 * Math.PI
@@ -85,4 +76,4 @@ function WarningIcon() {
   )
 }
 
-export { NewIcon, ProcessingIcon, EyeIcon, WarningIcon }
+export { ProcessingIcon, EyeIcon, WarningIcon }

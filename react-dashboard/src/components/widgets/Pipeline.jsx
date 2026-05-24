@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import JobCard, { NewIcon, ProcessingIcon, EyeIcon, WarningIcon } from '../shared/JobCard'
+import JobCard, { ProcessingIcon, EyeIcon, WarningIcon } from '../shared/JobCard'
 
 const TABS = ['Inbox', 'Outbound', 'Archives']
 
@@ -15,7 +15,6 @@ function statusIconFor(job, processingKeys) {
   if (processingKeys.has(job.job_key)) return <ProcessingIcon />
   if (job.unread_indicator === 'error') return <WarningIcon />
   if (job.unread_indicator === 'ok') return <EyeIcon />
-  if (job.state === 'new') return <NewIcon />
   return null
 }
 
