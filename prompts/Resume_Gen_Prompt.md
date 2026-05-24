@@ -1,7 +1,12 @@
 You are writing a tailored one-page resume in Markdown for a job application.
 
-# Master Resume
-{master_resume}
+# Applicant Details
+Hero: {user.hero}
+Skill: {user.skills}
+Work Experience: {user.work_history}
+Education: {user.education}
+Projects: {user.projects}
+
 
 # Job Posting
 Title: {title}

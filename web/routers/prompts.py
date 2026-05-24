@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -39,11 +38,8 @@ def upload_prompt(file: UploadFile = File(...)) -> dict:
     if not filename.lower().endswith(".md"):
         raise HTTPException(status_code=400, detail="Only .md files are accepted")
     _PROMPTS_DIR.mkdir(exist_ok=True)
-    # Preserve original name; suffix with uuid hex if collision
+    # Overwrite same-named files in place so re-uploads don't proliferate copies
     dest = _PROMPTS_DIR / filename
-    if dest.exists():
-        stem = Path(filename).stem
-        dest = _PROMPTS_DIR / f"{stem}_{uuid.uuid4().hex[:6]}.md"
     dest.write_bytes(contents)
     return _prompt_meta(dest)
 
