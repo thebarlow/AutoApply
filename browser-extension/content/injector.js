@@ -13,7 +13,7 @@ function registerViewSource(config) {
 }
 
 async function _initView() {
-  const ready = await _waitForSelector(_viewSource.detailReadySelector, 10000);
+  const ready = await _waitForReady(_viewSource, 10000);
   if (!ready) return;
   _injectViewButton();
 }
@@ -129,9 +129,13 @@ async function _handleScrape(card, btn) {
       return;
     }
 
+    // Mark current detail pane stale so we wait for the NEW one to load
+    // after clicking the card.
+    if (typeof _source.markStale === "function") _source.markStale();
+
     _source.clickCard(card);
 
-    const ready = await _waitForSelector(_source.detailReadySelector, 10000);
+    const ready = await _waitForReady(_source, 10000);
     if (!ready) {
       btn.textContent = "✗ Timeout";
       return;
@@ -169,11 +173,17 @@ async function _handleScrape(card, btn) {
   }
 }
 
-function _waitForSelector(selector, timeoutMs) {
+function _waitForReady(source, timeoutMs) {
+  const check = () => {
+    if (typeof source.isDetailReady === 'function') return source.isDetailReady();
+    return source.detailReadySelector
+      ? !!document.querySelector(source.detailReadySelector)
+      : false;
+  };
   return new Promise((resolve) => {
-    if (document.querySelector(selector)) { resolve(true); return; }
+    if (check()) { resolve(true); return; }
     const obs = new MutationObserver(() => {
-      if (document.querySelector(selector)) {
+      if (check()) {
         obs.disconnect();
         clearTimeout(timer);
         resolve(true);
@@ -196,8 +206,3 @@ function _msg(message) {
   });
 }
 
-(function _registerJobTab() {
-  const match = location.hash.match(/#aajob=([^&]+)/);
-  if (!match) return;
-  chrome.runtime.sendMessage({ type: 'REGISTER_JOB_TAB', job_key: match[1] });
-})();
