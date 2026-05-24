@@ -25,7 +25,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | User profile list, active profile selector, Create Profile modal | `src/components/widgets/Settings.jsx` — User tab |
 | Tasks / processing jobs monitor | `src/components/widgets/Settings.jsx` — Tasks tab |
 | Profile editor sections (Identity, Skills, Experience, Education, Projects, Preferences) | `src/components/widgets/ProfileDetail.jsx` |
-| Prompts editor (scoring, resume, cover letter, extraction, intake, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
+| Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
 | API calls (jobs, profiles, providers, generate, apply) | `src/api.js` |

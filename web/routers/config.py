@@ -567,7 +567,7 @@ def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -
     return {"active_id": body.active_id}
 
 
-_PROFILE_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "intake", "resume_parse")
+_PROFILE_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_parse")
 
 
 # IMPORTANT: /active/prompt-status must be registered before /{profile_id}.
@@ -600,7 +600,7 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
     data = json.loads(row.data) if row.data else {}
     env = _read_env()
     has_llm_key = bool(env.get(f"LLM_KEY_PROFILE_{profile_id}"))
-    prompt_types = ("scoring", "resume", "cover", "extraction", "intake", "resume_parse")
+    prompt_types = ("scoring", "resume", "cover", "extraction", "resume_parse")
     prompt_fields = {}
     for t in prompt_types:
         file_val = data.get(f"prompt_{t}", "")

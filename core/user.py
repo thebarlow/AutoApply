@@ -14,14 +14,13 @@ import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp regist
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
-_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "intake", "resume_parse")
+_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_parse")
 
 _PROMPT_LABELS: dict[str, str] = {
     "scoring": "Scoring",
     "resume": "Resume Generation",
     "cover": "Cover Letter Generation",
     "extraction": "Description Processing",
-    "intake": "Intake",
     "resume_parse": "Resume Parsing",
 }
 

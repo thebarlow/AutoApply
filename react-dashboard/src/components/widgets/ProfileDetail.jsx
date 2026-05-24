@@ -685,14 +685,13 @@ function resolveTokenValue(token, data) {
   return v.length > 220 ? v.slice(0, 220) + '…' : v
 }
 
-const PROMPT_TYPE_KEYS = ['scoring', 'resume', 'cover', 'extraction', 'intake', 'resume_parse']
+const PROMPT_TYPE_KEYS = ['scoring', 'resume', 'cover', 'extraction', 'resume_parse']
 
 const PROMPT_TYPE_LABELS = {
   scoring: 'Scoring',
   resume: 'Resume Generation',
   cover: 'Cover Letter Generation',
   extraction: 'Description Processing',
-  intake: 'Intake',
   resume_parse: 'Resume Parsing',
 }
 
@@ -816,9 +815,9 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
                 value={selectedFile}
                 onChange={(e) => setSelectedFile(e.target.value)}
               >
-                <option value="">— select a file —</option>
+                <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
                 {promptFiles.map((f) => (
-                  <option key={f.path} value={f.path}>{f.name}</option>
+                  <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
                 ))}
               </select>
               <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -1086,7 +1085,7 @@ const PROFILE_DATA_DEFAULTS = {
   skills: [], work_history: [], education: [], projects: [],
   target_roles: [], target_salary_min: null, target_salary_max: null,
   prompt_scoring: '', prompt_resume: '', prompt_cover: '',
-  prompt_extraction: '', prompt_intake: '', prompt_resume_parse: '',
+  prompt_extraction: '', prompt_resume_parse: '',
 }
 
 export default function ProfileDetailView({ profileId, onDelete }) {

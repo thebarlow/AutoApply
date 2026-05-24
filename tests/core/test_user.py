@@ -172,7 +172,6 @@ def test_user_hydrates_new_fields_from_data(db_session):
         "prompt_resume": "custom resume prompt",
         "prompt_cover": "custom cover prompt",
         "prompt_extraction": "custom extraction prompt",
-        "prompt_intake": "custom intake prompt",
     }
     db_session.add(User(name="Matt", data=json.dumps(data)))
     db_session.commit()
@@ -183,7 +182,6 @@ def test_user_hydrates_new_fields_from_data(db_session):
     assert user.prompt_resume.endswith(".md")
     assert user.prompt_cover.endswith(".md")
     assert user.prompt_extraction.endswith(".md")
-    assert user.prompt_intake.endswith(".md")
 
 
 def test_user_hydrates_new_fields_default_to_empty(db_session):
@@ -196,7 +194,6 @@ def test_user_hydrates_new_fields_default_to_empty(db_session):
     assert user.prompt_resume == ""
     assert user.prompt_cover == ""
     assert user.prompt_extraction == ""
-    assert user.prompt_intake == ""
 
 
 def test_user_to_dict_includes_new_fields(db_session):
@@ -211,7 +208,6 @@ def test_user_to_dict_includes_new_fields(db_session):
     assert "prompt_scoring" in serialized
     assert "prompt_cover" in serialized
     assert "prompt_extraction" in serialized
-    assert "prompt_intake" in serialized
 
 
 def test_user_prompt_resume_parse_round_trips(db_session):
