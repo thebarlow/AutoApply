@@ -98,3 +98,12 @@ export const markJobActionSeen = (jobKey, action) =>
   _fetch(`/api/jobs/${jobKey}/seen/${action}`, { method: 'POST' })
 
 export const getLlmStatus = () => _fetch('/api/llm-status')
+
+export const getSetupStatus = () => _fetch('/api/setup-status')
+
+export const testLlmConnection = (body) =>
+  _fetch('/api/llm/test-connection', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
