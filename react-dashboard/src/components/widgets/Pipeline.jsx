@@ -2,10 +2,9 @@ import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import JobCard, { ProcessingIcon, EyeIcon, WarningIcon } from '../shared/JobCard'
 
-const TABS = ['Inbox', 'Outbound', 'Archives']
+const TABS = ['Inbox', 'Archives']
 
 const INBOX_STATES = new Set(['new', 'pending_review'])
-const OUTBOUND_STATES = new Set(['ready'])
 const ARCHIVE_STATES = new Set(['applied', 'contact', 'rejected'])
 
 const ARCHIVE_LABELS = { applied: 'Applied', contact: 'In Contact', rejected: 'Rejected' }
@@ -26,9 +25,32 @@ function archiveBadge(state) {
   )
 }
 
-function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, showArchiveBadge }) {
+function InboxEmpty() {
+  return (
+    <div className="text-center py-12 text-space-dim">
+      <p className="mb-2">No jobs to see here!</p>
+      <a
+        href="#/docs/uploading-jobs"
+        className="text-purple-400 hover:underline"
+      >
+        How to upload jobs →
+      </a>
+    </div>
+  )
+}
+
+function ArchiveEmpty() {
+  return (
+    <div className="text-center py-12 text-space-dim">
+      <p className="mb-1">No archived jobs yet.</p>
+      <p className="text-xs">Jobs you mark applied, irrelevant, or delete will appear here.</p>
+    </div>
+  )
+}
+
+function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, showArchiveBadge, activeTab }) {
   if (jobs.length === 0) {
-    return <p className="text-xs text-space-dim py-1">Empty</p>
+    return activeTab === 'Archives' ? <ArchiveEmpty /> : <InboxEmpty />
   }
   return (
     <div className="flex flex-col gap-2">
@@ -59,7 +81,6 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
 
   const tabJobs = useMemo(() => ({
     Inbox: jobs.filter((j) => INBOX_STATES.has(j.state)),
-    Outbound: jobs.filter((j) => OUTBOUND_STATES.has(j.state)),
     Archives: jobs.filter((j) => ARCHIVE_STATES.has(j.state)),
   }), [jobs])
 
@@ -99,6 +120,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
           selectedJob={selectedJob}
           onJobSelect={onJobSelect}
           showArchiveBadge={activeTab === 'Archives'}
+          activeTab={activeTab}
         />
       </div>
     </motion.div>
