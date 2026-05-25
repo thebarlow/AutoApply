@@ -18,8 +18,10 @@ export default function Wizard({ onFinish, onSkip }) {
       } catch (e) {
         console.error("Skip-time profile creation failed:", e);
       }
+      onSkip(true);
+    } else {
+      onSkip(false);
     }
-    onSkip();
   };
 
   return (

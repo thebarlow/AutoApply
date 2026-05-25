@@ -166,8 +166,8 @@ export default function App() {
       )}
       {showWizard && (
         <Wizard
-          onFinish={() => { setWizardSkipped(true); prereqs.refresh(); }}
-          onSkip={() => setWizardSkipped(true)}
+          onFinish={() => { window.location.reload(); }}
+          onSkip={(didCreate) => { if (didCreate) window.location.reload(); else setWizardSkipped(true); }}
         />
       )}
       <Navbar />

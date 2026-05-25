@@ -733,6 +733,10 @@ def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) ->
     merged["cover_uploaded_at"] = data.get("cover_uploaded_at", "")
     merged["resume_filename"] = data.get("resume_filename", "")
     merged["cover_filename"] = data.get("cover_filename", "")
+    # Preserve LLM config — the parse step must not overwrite provider/model/base_url
+    for _key in ("llm_provider_type", "llm_model", "llm_base_url"):
+        if data.get(_key):
+            merged[_key] = data[_key]
     name = parsed.get("name") or row.name
     row.name = name
     row.data = json.dumps(merged)

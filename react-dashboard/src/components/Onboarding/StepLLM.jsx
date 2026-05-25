@@ -5,6 +5,18 @@ import Spinner from "../shared/Spinner";
 
 const PROVIDERS = [
   {
+    value: "openrouter",
+    label: "OpenRouter",
+    defaultModel: "openrouter/auto:free",
+    models: [
+      "openrouter/auto",
+      "openrouter/auto:free",
+      "anthropic/claude-3.5-sonnet",
+      "openai/gpt-4o-mini",
+      "meta-llama/llama-3.1-8b-instruct:free",
+    ],
+  },
+  {
     value: "anthropic",
     label: "Anthropic",
     defaultModel: "claude-sonnet-4-6",
@@ -21,18 +33,6 @@ const PROVIDERS = [
     label: "OpenAI",
     defaultModel: "gpt-4o-mini",
     models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-  },
-  {
-    value: "openrouter",
-    label: "OpenRouter",
-    defaultModel: "openrouter/auto:free",
-    models: [
-      "openrouter/auto",
-      "openrouter/auto:free",
-      "anthropic/claude-3.5-sonnet",
-      "openai/gpt-4o-mini",
-      "meta-llama/llama-3.1-8b-instruct:free",
-    ],
   },
   {
     value: "gemini",
@@ -119,7 +119,7 @@ function ModelCombobox({ value, onChange, models, disabled }) {
 }
 
 export default function StepLLM({ onNext }) {
-  const [provider, setProvider] = useState("anthropic");
+  const [provider, setProvider] = useState("openrouter");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(PROVIDERS[0].defaultModel);
   const [baseUrl, setBaseUrl] = useState("");
