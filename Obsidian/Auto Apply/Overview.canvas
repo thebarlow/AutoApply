@@ -1,0 +1,13 @@
+{
+	"nodes":[
+		{"id":"a777db00cc112417","type":"text","text":"## Starting the app","x":240,"y":-250,"width":320,"height":260},
+		{"id":"7220813b32c075ce","type":"file","file":"Excalidraw/Generate Resume.md","x":200,"y":80,"width":400,"height":195},
+		{"id":"861e5ede5405da9d","type":"text","text":"## Initial Setup","x":240,"y":-340,"width":250,"height":60},
+		{"id":"360d20075bbd21b3","type":"text","text":"## Generate the Docs","x":234,"y":-440,"width":326,"height":60},
+		{"id":"33d7d5c4dd416d46","type":"text","text":"## Submit the application","x":240,"y":-540,"width":320,"height":60},
+		{"id":"79154068a3b6d0e2","type":"text","text":"## Scraping the Job","x":-540,"y":-500,"width":325,"height":60},
+		{"id":"a8921749069023f6","type":"text","text":"Auto Apply covers three functions:\n1. Scrapes jobs from LinkedIn\n2. Generates Custom Documents for the Job\n3. Semi automates the application submission","x":-570,"y":-494,"width":460,"height":428},
+		{"id":"4a81e085c7bfa4bd","x":-540,"y":-250,"width":400,"height":120,"type":"file","file":"Excalidraw/Project Value Add.md"}
+	],
+	"edges":[]
+}

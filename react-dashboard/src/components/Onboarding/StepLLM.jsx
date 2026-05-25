@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { testLlmConnection, createProvider } from "../../api";
 import HelpIcon from "../shared/HelpIcon";
 import Spinner from "../shared/Spinner";
@@ -72,7 +72,7 @@ function mapError(raw) {
   if (lower.includes("model") && (lower.includes("not found") || lower.includes("does not exist"))) {
     return "Invalid model";
   }
-  return raw.length > 120 ? raw.slice(0, 117) + "…" : raw;
+  return raw.length > 120 ? raw.slice(0, 117) + "â€¦" : raw;
 }
 
 /** Simple combobox: text input + filtered dropdown. Allows free-text. */
@@ -205,7 +205,7 @@ export default function StepLLM({ onNext }) {
           Provider
           <HelpIcon
             text="Which LLM service to use. Anthropic and OpenAI are well-supported; pick Custom for any OpenAI-compatible endpoint."
-            docHref="#/docs/llm-providers"
+            docHref="/docs"
           />
         </label>
         <select
@@ -244,7 +244,7 @@ export default function StepLLM({ onNext }) {
           API Key <span className="text-red-400 ml-1">*</span>
           <HelpIcon
             text="Your provider's secret API key. The app uses this to call the LLM on your behalf."
-            docHref="#/docs/llm-providers"
+            docHref="/docs"
           />
         </label>
         <input
@@ -263,7 +263,7 @@ export default function StepLLM({ onNext }) {
           Model
           <HelpIcon
             text="The specific model to use. Smaller models are cheaper; larger ones produce better results."
-            docHref="#/docs/llm-providers"
+            docHref="/docs"
           />
         </label>
         {isCustom ? (
@@ -295,10 +295,11 @@ export default function StepLLM({ onNext }) {
         disabled={state !== "idle" || !apiKey.trim()}
         className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
       >
-        {state === "verifying" ? <><Spinner /> <span>Verifying API key…</span></>
-         : state === "saving" ? <><Spinner /> <span>Saving…</span></>
-         : "Next →"}
+        {state === "verifying" ? <><Spinner /> <span>Verifying API keyâ€¦</span></>
+         : state === "saving" ? <><Spinner /> <span>Savingâ€¦</span></>
+         : "Next â†’"}
       </button>
     </div>
   );
 }
+

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
 import Pipeline from './components/widgets/Pipeline'
@@ -18,20 +19,6 @@ export default function App() {
   const prereqs = usePrerequisites()
   const [wizardSkipped, setWizardSkipped] = useState(false)
   const showWizard = prereqs.loaded && prereqs.isFirstRun && !wizardSkipped
-  const [docsSlug, setDocsSlug] = useState(null)
-
-  useEffect(() => {
-    const update = () => {
-      const h = window.location.hash
-      const m = h.match(/^#\/docs\/(.+)$/)
-      if (m) setDocsSlug(m[1])
-      else if (h === '#/docs') setDocsSlug('')
-      else setDocsSlug(null)
-    }
-    update()
-    window.addEventListener('hashchange', update)
-    return () => window.removeEventListener('hashchange', update)
-  }, [])
 
   const refetchPromptStatus = useCallback(() => {
     getActivePromptStatus().then(setPromptStatus).catch(() => setPromptStatus({}))
@@ -158,40 +145,39 @@ export default function App() {
   }, [])
 
   return (
-    <div className="min-h-screen text-space-text">
-      {docsSlug !== null && (
-        <Docs
-          slug={docsSlug || undefined}
-          onClose={() => { window.location.hash = ''; setDocsSlug(null); }}
-        />
-      )}
-      {showWizard && (
-        <Wizard
-          onFinish={() => { window.location.reload(); }}
-          onSkip={(didCreate) => { if (didCreate) window.location.reload(); else setWizardSkipped(true); }}
-        />
-      )}
-      <Navbar />
-      <Dashboard>
-        <div className="col-span-3 overflow-hidden h-full">
-          <Pipeline
-            jobs={jobs}
-            processingKeys={processingKeys}
-            selectedJob={selectedJob}
-            onJobSelect={handleJobSelect}
-          />
+    <Routes>
+      <Route path="/docs" element={<Docs />} />
+      <Route path="*" element={
+        <div className="min-h-screen text-space-text">
+          {showWizard && (
+            <Wizard
+              onFinish={() => { window.location.reload(); }}
+              onSkip={(didCreate) => { if (didCreate) window.location.reload(); else setWizardSkipped(true); }}
+            />
+          )}
+          <Navbar />
+          <Dashboard>
+            <div className="col-span-3 overflow-hidden h-full">
+              <Pipeline
+                jobs={jobs}
+                processingKeys={processingKeys}
+                selectedJob={selectedJob}
+                onJobSelect={handleJobSelect}
+              />
+            </div>
+            <div className="col-span-2 overflow-hidden h-full">
+              <Settings
+                selectedJob={selectedJob}
+                activeTab={settingsTab}
+                onTabChange={setSettingsTab}
+                promptStatus={promptStatus}
+                jobActionsInFlight={selectedJob ? (processingActions[selectedJob.job_key] || new Set()) : new Set()}
+                onJobDeleted={handleJobDeleted}
+              />
+            </div>
+          </Dashboard>
         </div>
-        <div className="col-span-2 overflow-hidden h-full">
-          <Settings
-            selectedJob={selectedJob}
-            activeTab={settingsTab}
-            onTabChange={setSettingsTab}
-            promptStatus={promptStatus}
-            jobActionsInFlight={selectedJob ? (processingActions[selectedJob.job_key] || new Set()) : new Set()}
-            onJobDeleted={handleJobDeleted}
-          />
-        </div>
-      </Dashboard>
-    </div>
+      } />
+    </Routes>
   )
 }
