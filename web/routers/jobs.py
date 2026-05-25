@@ -413,6 +413,8 @@ def delete_job(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    db.delete(job)
+    job.state = JobState.DELETED.value
     db.commit()
-    return {"deleted": job_key}
+    db.refresh(job)
+    _emit(job)
+    return job.serialize()

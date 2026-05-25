@@ -65,6 +65,7 @@ class JobState(str, Enum):
     APPLIED = "applied"
     CONTACT = "contact"
     REJECTED = "rejected"
+    DELETED = "deleted"
 
 
 class Job(Base):

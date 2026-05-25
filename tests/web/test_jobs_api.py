@@ -205,16 +205,25 @@ def test_get_jobs_remote_none_when_not_set(client, db_session):
 
 # --- DELETE /api/jobs/{job_key} ---
 
-def test_delete_job(client, db_session):
+def test_delete_job_soft_deletes(client, db_session):
+    """DELETE sets state to 'deleted'; row is still present in the DB."""
     _make_job(db_session, "job_del")
 
     resp = client.delete("/api/jobs/job_del")
     assert resp.status_code == 200
-    assert resp.json() == {"deleted": "job_del"}
+    data = resp.json()
+    assert data["job_key"] == "job_del"
+    assert data["state"] == "deleted"
 
+    # Row still present in the jobs list
     get_resp = client.get("/api/jobs")
     keys = [j["job_key"] for j in get_resp.json()]
-    assert "job_del" not in keys
+    assert "job_del" in keys
+
+    # State is persisted in the DB
+    db_job = db_session.query(Job).filter_by(job_key="job_del").first()
+    assert db_job is not None
+    assert db_job.state == "deleted"
 
 
 def test_delete_job_not_found(client):

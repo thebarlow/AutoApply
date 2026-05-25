@@ -13,6 +13,13 @@ export const getJobs = () => _fetch('/api/jobs')
 export const deleteJob = (jobKey) =>
   _fetch(`/api/jobs/${jobKey}`, { method: 'DELETE' })
 
+export const updateJobState = (jobKey, state) =>
+  _fetch(`/api/jobs/${jobKey}/state`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state }),
+  })
+
 export const getProfiles = () => _fetch('/api/config/profiles')
 
 export const createProfile = (name) =>
@@ -23,6 +30,13 @@ export const createProfile = (name) =>
   })
 
 export const getProviders = () => _fetch('/api/config/providers')
+
+export const createProvider = (body) =>
+  _fetch('/api/config/providers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 
 export const saveProvider = (id, body) =>
   _fetch(`/api/config/providers/${id}`, {
@@ -54,6 +68,8 @@ export const getActivePromptStatus = () =>
   _fetch('/api/config/profiles/active/prompt-status')
 
 export const listPrompts = () => _fetch('/api/prompts')
+
+export const getDefaultPrompt = (typeKey) => _fetch(`/api/prompts/defaults/${typeKey}`)
 
 export const getPromptFile = (path) =>
   fetch('/api/prompts/file?' + new URLSearchParams({ path }))
@@ -98,3 +114,55 @@ export const markJobActionSeen = (jobKey, action) =>
   _fetch(`/api/jobs/${jobKey}/seen/${action}`, { method: 'POST' })
 
 export const getLlmStatus = () => _fetch('/api/llm-status')
+
+export const getSetupStatus = () => _fetch('/api/setup-status')
+
+export const testLlmConnection = (body) =>
+  _fetch('/api/llm/test-connection', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+/**
+ * Ensures a profile named `name` exists, with the given LLM provider linked,
+ * and sets it as the active profile.
+ *
+ * If a profile with that name already exists, it reuses it and updates the
+ * LLM link. Otherwise creates a new profile.
+ *
+ * @param {string} name - Profile display name (e.g. "Master")
+ * @param {{ providerType: string, model: string, apiKey: string, baseUrl?: string }} llm
+ * @returns {Promise<{ id: number, name: string }>}
+ */
+export async function ensureProfileWithProvider(name, llm) {
+  const { profiles, active_id } = await getProfiles()
+
+  // Find existing profile by name (case-insensitive), or the active one.
+  let profile = profiles.find((p) => p.name.toLowerCase() === name.toLowerCase())
+
+  if (!profile) {
+    profile = await createProfile(name)
+  }
+
+  // Link the LLM provider onto the profile row.
+  const existingData = profile.data || {}
+  const llmData = {
+    llm_provider_type: llm.providerType,
+    llm_model: llm.model,
+  }
+  if (llm.baseUrl) llmData.llm_base_url = llm.baseUrl
+  await updateProfile(profile.id, {
+    name: profile.name || name,
+    data: {
+      ...existingData,
+      ...llmData,
+    },
+    llm_api_key: llm.apiKey,
+  })
+
+  // Make it the active profile.
+  await setActiveProfile(profile.id)
+
+  return { id: profile.id, name: profile.name || name }
+}

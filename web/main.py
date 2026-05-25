@@ -17,6 +17,8 @@ from web.routers import events
 from web.routers import tray
 from web.routers import prompts
 from web.routers import llm_status_router
+from web.routers import llm_test
+from web.routers import setup_status
 
 
 def _timed(label: str, fn):
@@ -34,10 +36,25 @@ def _warm_lazy_imports() -> None:
     print("[startup] Background warm-up complete — all imports ready.")
 
 
+def _purge_deleted_jobs() -> None:
+    """Permanently remove any jobs left in state='deleted' from a prior session."""
+    from db.database import SessionLocal
+    from core.job import Job
+    db = SessionLocal()
+    try:
+        count = db.query(Job).filter(Job.state == "deleted").delete(synchronize_session=False)
+        db.commit()
+        if count:
+            print(f"[startup] Purged {count} deleted job(s) from prior session.")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[startup] Initialising database...")
     _timed("init_db", init_db)
+    _timed("purge_deleted", _purge_deleted_jobs)
 
     t = threading.Thread(target=_warm_lazy_imports, daemon=True)
     t.start()
@@ -62,6 +79,8 @@ app.include_router(events.router)
 app.include_router(tray.router)
 app.include_router(prompts.router)
 app.include_router(llm_status_router.router)
+app.include_router(llm_test.router)
+app.include_router(setup_status.router)
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
