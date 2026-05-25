@@ -100,6 +100,7 @@ class TrayPanel(QWidget):
             parent=self._inner,
         )
         card.confirmed.connect(self._remove_card)
+        card.dismissed.connect(self._remove_card)
         self._cards[job_id] = card
         self._layout.insertWidget(self._layout.count() - 1, card)
         self.adjustSize()
