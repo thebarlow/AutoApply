@@ -719,10 +719,11 @@ def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) ->
         if path.suffix.lower() == ".pdf":
             parsed = User.from_pdf(path.read_bytes(), db, profile_id=profile_id)
         else:
+            # .md, .txt, or any plain-text format: pass content directly to the LLM
             parsed = User.from_markdown(path.read_text(encoding="utf-8", errors="replace"), db, profile_id=profile_id)
     except PromptNotConfiguredError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     merged = {**_EMPTY_PROFILE_DATA, **parsed}
     merged["resume_path"] = data.get("resume_path", "")
@@ -751,8 +752,8 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
         raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
     filename = file.filename or "resume"
     suffix = Path(filename).suffix.lower()
-    if suffix not in (".pdf", ".md"):
-        raise HTTPException(status_code=400, detail="Only .pdf and .md files are accepted")
+    if suffix not in (".pdf", ".md", ".txt"):
+        raise HTTPException(status_code=400, detail="Only .pdf, .md, and .txt files are accepted")
     _PROFILES_DIR.mkdir(exist_ok=True)
     dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
     dest.write_bytes(contents)

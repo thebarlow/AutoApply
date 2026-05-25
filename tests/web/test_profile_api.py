@@ -437,6 +437,92 @@ def test_put_profile_accepts_base64_padded_key(client, db_session, monkeypatch, 
     assert f"LLM_KEY_PROFILE_{row.id}=sk-validkey==" in env_file.read_text()
 
 
+def _make_md_profile(db_session, tmp_path, suffix=".md"):
+    """Helper: create a profile row with a real resume file on disk."""
+    from core.user import User as UserProfileModel
+    resume_file = tmp_path / f"resume{suffix}"
+    resume_file.write_text("# John Doe\nSoftware Engineer", encoding="utf-8")
+    data = {
+        "email": "", "phone": "", "location": "", "skills": [],
+        "work_history": [], "education": [], "target_salary_min": None,
+        "target_salary_max": None, "target_roles": [], "resume_path": str(resume_file),
+        "md_path": "", "cover_letter_path": "",
+        "resume_uploaded_at": "", "cover_uploaded_at": "",
+        "resume_filename": f"resume{suffix}", "cover_filename": "",
+    }
+    row = UserProfileModel(name="John Doe", data=json.dumps(data))
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+_PARSED_RESULT = {
+    "name": "John Doe", "email": "john@example.com", "phone": "", "location": "",
+    "skills": ["Python"], "work_history": [], "education": [],
+    "target_salary_min": None, "target_salary_max": None,
+    "target_roles": [], "resume_path": "", "md_path": "",
+}
+
+
+def test_parse_profile_md_calls_from_markdown(client, db_session, monkeypatch, tmp_path):
+    from core.user import User
+    calls = []
+
+    def fake_from_markdown(cls, text, db, profile_id=None):
+        calls.append(text)
+        return dict(_PARSED_RESULT)
+
+    monkeypatch.setattr(User, "from_markdown", classmethod(fake_from_markdown))
+    row = _make_md_profile(db_session, tmp_path, ".md")
+
+    resp = client.post(f"/api/config/profiles/{row.id}/parse")
+    assert resp.status_code == 200, resp.text
+    assert len(calls) == 1
+    assert "John Doe" in calls[0]
+
+
+def test_parse_profile_txt_calls_from_markdown(client, db_session, monkeypatch, tmp_path):
+    from core.user import User
+    calls = []
+
+    def fake_from_markdown(cls, text, db, profile_id=None):
+        calls.append(text)
+        return dict(_PARSED_RESULT)
+
+    monkeypatch.setattr(User, "from_markdown", classmethod(fake_from_markdown))
+    row = _make_md_profile(db_session, tmp_path, ".txt")
+
+    resp = client.post(f"/api/config/profiles/{row.id}/parse")
+    assert resp.status_code == 200, resp.text
+    assert len(calls) == 1
+
+
+def test_parse_profile_runtime_error_returns_422(client, db_session, monkeypatch, tmp_path):
+    from core.user import User
+
+    def fake_from_markdown(cls, text, db, profile_id=None):
+        raise RuntimeError("No API key for user profile 1.")
+
+    monkeypatch.setattr(User, "from_markdown", classmethod(fake_from_markdown))
+    row = _make_md_profile(db_session, tmp_path, ".md")
+
+    resp = client.post(f"/api/config/profiles/{row.id}/parse")
+    assert resp.status_code == 422
+    assert "No API key" in resp.json()["detail"]
+
+
+def test_parse_profile_no_resume_returns_400(client, db_session):
+    from core.user import User as UserProfileModel
+    row = UserProfileModel(name="Empty", data=json.dumps({
+        "resume_path": "", "md_path": "",
+    }))
+    db_session.add(row)
+    db_session.commit()
+
+    resp = client.post(f"/api/config/profiles/{row.id}/parse")
+    assert resp.status_code == 400
+
+
 def test_get_profiles_includes_first_last_name(client, db_session):
     import json
     from core.user import User as UserProfileModel
