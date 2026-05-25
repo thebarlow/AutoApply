@@ -5,6 +5,7 @@ import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile
 import ProfileDetailView from './ProfileDetail'
 import { WarningIcon } from '../shared/JobCard'
 import GatedButton from '../shared/GatedButton'
+import HelpIcon from '../shared/HelpIcon'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -429,7 +430,8 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
 
       {contentTab === 'score' && (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-1">
+            <HelpIcon text="Calls the LLM to rate how well this job matches your profile. Consumes a small amount of API credit per job." />
             <GatedButton
               action="score"
               onClick={handleAction}
@@ -485,15 +487,18 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               value={artifactView}
               onChange={setArtifactView}
             />
-            <GatedButton
-              action="generate"
-              onClick={handleAction}
-              disabled={actionLoading || !promptOk}
-              title={promptMissingTitle || undefined}
-              className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {actionLoading ? '…' : !promptOk ? 'Prompt not set' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
-            </GatedButton>
+            <div className="flex items-center gap-1">
+              <HelpIcon text="Generates a tailored resume and cover letter for this job, rendered to PDF. Uses more credits than scoring." />
+              <GatedButton
+                action="generate"
+                onClick={handleAction}
+                disabled={actionLoading || !promptOk}
+                title={promptMissingTitle || undefined}
+                className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading ? '…' : !promptOk ? 'Prompt not set' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
+              </GatedButton>
+            </div>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
           {artifactView === 'markdown' && (
@@ -674,6 +679,7 @@ function CreateProfile({ onBack, onCreated }) {
         >
           {parsing ? 'Parsing…' : 'Upload & Parse'}
         </button>
+        <HelpIcon text="Uploads your resume to the LLM and extracts structured fields (experience, education, skills) into your profile. You can edit anything afterward." />
         <button
           onClick={handleSkip}
           disabled={parsing}

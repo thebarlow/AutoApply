@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, createPromptFile, uploadPromptFile } from '../../api'
 import { validateProvider } from '../../validation'
+import HelpIcon from '../shared/HelpIcon'
 
 // ─── Shared ────────────────────────────────────────────────────────────────────
 
@@ -852,7 +853,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
 
   const renderChipTray = () => (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable</label>
+      <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable<HelpIcon text="Use placeholders like {job_description}, {resume}, {company_name} — they're substituted with actual job/profile data at generation time." /></label>
       <div className="flex flex-col gap-1.5">
         <p className="text-xs text-space-dim">User</p>
         <div className="flex flex-wrap gap-1.5">
@@ -1164,7 +1165,7 @@ function LlmSection({ profile, onSave }) {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">Model <span className="text-red-400">*</span></label>
+            <label className="text-xs text-space-dim">Model <span className="text-red-400">*</span><HelpIcon text="The specific model to use (e.g., claude-haiku-4-5-20251001 for Anthropic, gpt-4o-mini for OpenAI)." docHref="#/docs/llm-providers" /></label>
             <input
               className={inputClass}
               value={model}
@@ -1175,7 +1176,7 @@ function LlmSection({ profile, onSave }) {
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-space-dim">
-              API Key {(!profile.has_llm_key || keyEdited) && <span className="text-red-400">*</span>}
+              API Key {(!profile.has_llm_key || keyEdited) && <span className="text-red-400">*</span>}<HelpIcon text="Your provider's secret API key. The app uses this to call the LLM on your behalf. Keep it private — never share it." docHref="#/docs/llm-providers" />
             </label>
             <input
               type="password"
