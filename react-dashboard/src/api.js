@@ -123,7 +123,7 @@ export const testLlmConnection = (body) =>
  * LLM link. Otherwise creates a new profile.
  *
  * @param {string} name - Profile display name (e.g. "Master")
- * @param {{ providerType: string, model: string, apiKey: string }} llm
+ * @param {{ providerType: string, model: string, apiKey: string, baseUrl?: string }} llm
  * @returns {Promise<{ id: number, name: string }>}
  */
 export async function ensureProfileWithProvider(name, llm) {
@@ -138,12 +138,16 @@ export async function ensureProfileWithProvider(name, llm) {
 
   // Link the LLM provider onto the profile row.
   const existingData = profile.data || {}
+  const llmData = {
+    llm_provider_type: llm.providerType,
+    llm_model: llm.model,
+  }
+  if (llm.baseUrl) llmData.llm_base_url = llm.baseUrl
   await updateProfile(profile.id, {
     name: profile.name || name,
     data: {
       ...existingData,
-      llm_provider_type: llm.providerType,
-      llm_model: llm.model,
+      ...llmData,
     },
     llm_api_key: llm.apiKey,
   })
