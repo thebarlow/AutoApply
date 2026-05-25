@@ -13,6 +13,13 @@ export const getJobs = () => _fetch('/api/jobs')
 export const deleteJob = (jobKey) =>
   _fetch(`/api/jobs/${jobKey}`, { method: 'DELETE' })
 
+export const updateJobState = (jobKey, state) =>
+  _fetch(`/api/jobs/${jobKey}/state`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state }),
+  })
+
 export const getProfiles = () => _fetch('/api/config/profiles')
 
 export const createProfile = (name) =>

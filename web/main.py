@@ -36,10 +36,25 @@ def _warm_lazy_imports() -> None:
     print("[startup] Background warm-up complete — all imports ready.")
 
 
+def _purge_deleted_jobs() -> None:
+    """Permanently remove any jobs left in state='deleted' from a prior session."""
+    from db.database import SessionLocal
+    from core.job import Job
+    db = SessionLocal()
+    try:
+        count = db.query(Job).filter(Job.state == "deleted").delete(synchronize_session=False)
+        db.commit()
+        if count:
+            print(f"[startup] Purged {count} deleted job(s) from prior session.")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[startup] Initialising database...")
     _timed("init_db", init_db)
+    _timed("purge_deleted", _purge_deleted_jobs)
 
     t = threading.Thread(target=_warm_lazy_imports, daemon=True)
     t.start()

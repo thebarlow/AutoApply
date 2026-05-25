@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 import { WarningIcon } from '../shared/JobCard'
 import GatedButton from '../shared/GatedButton'
@@ -30,7 +30,8 @@ const slideVariants = {
 
 // ─── Preview tab ──────────────────────────────────────────────────────────────
 
-const STATE_LABELS = { new: 'New', pending_review: 'Pending Review', ready: 'Ready', applied: 'Applied', contact: 'In Contact', rejected: 'Rejected' }
+const STATE_LABELS = { new: 'New', pending_review: 'Pending Review', ready: 'Ready', applied: 'Applied', contact: 'In Contact', rejected: 'Rejected', deleted: 'Deleted' }
+const ALL_STATES = Object.keys(STATE_LABELS)
 
 function ExtractionView({ data }) {
   const fields = [
@@ -185,6 +186,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [stateChanging, setStateChanging] = useState(false)
 
   useEffect(() => {
     if (!confirmDelete) return
@@ -267,6 +269,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setConfirmDelete(false)
     setDeleting(false)
     setDeleteError(null)
+    setStateChanging(false)
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
@@ -275,6 +278,17 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setActionError(null)
     if (tab === 'resume') setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
     else if (tab === 'cover') setArtifactView(job?.cover_path ? 'pdf' : 'markdown')
+  }
+
+  const handleStateChange = async (newState) => {
+    if (!job || stateChanging || newState === job.state) return
+    setStateChanging(true)
+    try {
+      await updateJobState(job.job_key, newState)
+    } catch { /* SSE will sync state; ignore errors silently */ }
+    finally {
+      setStateChanging(false)
+    }
   }
 
   const handleAction = async () => {
@@ -342,7 +356,17 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             {job.location && <span className="text-xs text-space-dim">{job.location}</span>}
             {job.salary && <span className="text-xs text-space-dim">{job.salary}</span>}
             <span className="text-xs font-semibold text-purple-400">{score}</span>
-            <span className="text-xs text-space-dim">{stateLabel}</span>
+            <select
+              value={job.state}
+              onChange={(e) => handleStateChange(e.target.value)}
+              disabled={stateChanging}
+              title="Change job status"
+              className="text-xs text-space-dim bg-transparent border border-space-border rounded px-1.5 py-0.5 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              {ALL_STATES.map((s) => (
+                <option key={s} value={s} className="bg-[#0f0f1a]">{STATE_LABELS[s]}</option>
+              ))}
+            </select>
           </div>
         </div>
         <button
@@ -453,7 +477,8 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             <div>
               <p className="text-sm font-semibold text-space-text">Delete job?</p>
               <p className="text-xs text-space-dim mt-1">
-                This will permanently delete <span className="text-space-text">{job.title || job.job_key}</span> and cannot be undone.
+                <span className="text-space-text">{job.title || job.job_key}</span> will move to the Archive tab.
+                You can restore it by changing its status. It will be permanently removed on next app launch.
               </p>
             </div>
             {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}

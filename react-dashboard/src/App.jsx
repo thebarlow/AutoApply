@@ -142,8 +142,9 @@ export default function App() {
   }, [])
 
   const handleJobDeleted = useCallback((jobKey) => {
-    setJobs((prev) => prev.filter((j) => j.job_key !== jobKey))
+    // Job is soft-deleted: SSE will upsert it with state='deleted'; just deselect.
     setSelectedJob((prev) => (prev?.job_key === jobKey ? null : prev))
+    setSettingsTab('User')
   }, [])
 
   const handleJobSelect = useCallback((job) => {

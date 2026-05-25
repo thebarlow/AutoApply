@@ -5,10 +5,10 @@ import JobCard, { ProcessingIcon, EyeIcon, WarningIcon } from '../shared/JobCard
 const TABS = ['Inbox', 'Archives']
 
 const INBOX_STATES = new Set(['new', 'pending_review'])
-const ARCHIVE_STATES = new Set(['applied', 'contact', 'rejected'])
+const ARCHIVE_STATES = new Set(['applied', 'contact', 'rejected', 'deleted'])
 
-const ARCHIVE_LABELS = { applied: 'Applied', contact: 'In Contact', rejected: 'Rejected' }
-const ARCHIVE_COLORS = { applied: 'text-green-400', contact: 'text-blue-400', rejected: 'text-red-400' }
+const ARCHIVE_LABELS = { applied: 'Applied', contact: 'In Contact', rejected: 'Rejected', deleted: 'Deleted' }
+const ARCHIVE_COLORS = { applied: 'text-green-400', contact: 'text-blue-400', rejected: 'text-red-400', deleted: 'text-space-dim' }
 
 function statusIconFor(job, processingKeys) {
   if (processingKeys.has(job.job_key)) return <ProcessingIcon />
@@ -59,6 +59,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
           <JobCard
             title={job.title || '(no title)'}
             company={job.company || ''}
+            state={job.state}
             docs={{
               resume: !!(job.resume_path || job.resume_md_exists),
               coverLetter: !!(job.cover_path || job.cover_md_exists),
