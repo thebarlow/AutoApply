@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard'
 import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
 import Wizard from './components/Onboarding/Wizard'
+import Docs from './components/Docs'
 import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
 
@@ -17,6 +18,20 @@ export default function App() {
   const prereqs = usePrerequisites()
   const [wizardSkipped, setWizardSkipped] = useState(false)
   const showWizard = prereqs.loaded && prereqs.isFirstRun && !wizardSkipped
+  const [docsSlug, setDocsSlug] = useState(null)
+
+  useEffect(() => {
+    const update = () => {
+      const h = window.location.hash
+      const m = h.match(/^#\/docs\/(.+)$/)
+      if (m) setDocsSlug(m[1])
+      else if (h === '#/docs') setDocsSlug('')
+      else setDocsSlug(null)
+    }
+    update()
+    window.addEventListener('hashchange', update)
+    return () => window.removeEventListener('hashchange', update)
+  }, [])
 
   const refetchPromptStatus = useCallback(() => {
     getActivePromptStatus().then(setPromptStatus).catch(() => setPromptStatus({}))
@@ -143,6 +158,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-space-text">
+      {docsSlug !== null && (
+        <Docs
+          slug={docsSlug || undefined}
+          onClose={() => { window.location.hash = ''; setDocsSlug(null); }}
+        />
+      )}
       {showWizard && (
         <Wizard
           onFinish={() => { setWizardSkipped(true); prereqs.refresh(); }}
