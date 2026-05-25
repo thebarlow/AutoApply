@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, createPromptFile, uploadPromptFile } from '../../api'
+import { validateProvider } from '../../validation'
 
 // ─── Shared ────────────────────────────────────────────────────────────────────
 
@@ -806,8 +807,13 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
 
   const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
 
+  const [fieldErrors, setFieldErrors] = useState({})
+
   const handleSave = async () => {
-    if (!selectedFile) { setSaveError('Select a prompt file first'); return }
+    const fe = {}
+    if (!selectedFile) fe.selectedFile = 'A prompt file must be selected'
+    setFieldErrors(fe)
+    if (Object.keys(fe).length > 0) return
     setSaving(true)
     setSaveError(null)
     try {
@@ -918,12 +924,12 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             {/* Zone 1: File selector */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File <span className="text-red-400">*</span></label>
               <div className="flex gap-2">
                 <select
                   className={inputClass + ' flex-1'}
                   value={selectedFile}
-                  onChange={(e) => setSelectedFile(e.target.value)}
+                  onChange={(e) => { setSelectedFile(e.target.value); setFieldErrors(prev => { const n = { ...prev }; delete n.selectedFile; return n }) }}
                 >
                   <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
                   {promptFiles.map((f) => (
@@ -935,6 +941,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
                   <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
                 </label>
               </div>
+              {fieldErrors.selectedFile && <div className="text-red-400 text-sm mt-1">{fieldErrors.selectedFile}</div>}
             </div>
 
             {/* Zone 2: Model override */}
@@ -1087,6 +1094,7 @@ function LlmSection({ profile, onSave }) {
   const [keyEdited, setKeyEdited] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [errors, setErrors] = useState({})
 
   const openModal = () => {
     setProviderType(profile.llm_provider_type || '')
@@ -1094,10 +1102,21 @@ function LlmSection({ profile, onSave }) {
     setApiKey('')
     setKeyEdited(false)
     setError(null)
+    setErrors({})
     setOpen(true)
   }
 
   const handleSave = async () => {
+    // Validate: api_key required when no existing key or actively editing
+    const needsKey = !profile.has_llm_key || keyEdited
+    const errs = validateProvider({
+      api_key: needsKey ? apiKey : 'placeholder',
+      model,
+    })
+    // If key is not being changed and one already exists, skip api_key error
+    if (!needsKey) delete errs.api_key
+    setErrors(errs)
+    if (Object.keys(errs).length > 0) return
     setSaving(true)
     try {
       await onSave({
@@ -1145,27 +1164,31 @@ function LlmSection({ profile, onSave }) {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">Model</label>
+            <label className="text-xs text-space-dim">Model <span className="text-red-400">*</span></label>
             <input
               className={inputClass}
               value={model}
-              onChange={e => setModel(e.target.value)}
+              onChange={e => { setModel(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.model; return n }) }}
               placeholder="e.g. gpt-4o"
             />
+            {errors.model && <div className="text-red-400 text-sm mt-1">{errors.model}</div>}
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">API Key</label>
+            <label className="text-xs text-space-dim">
+              API Key {(!profile.has_llm_key || keyEdited) && <span className="text-red-400">*</span>}
+            </label>
             <input
               type="password"
               className={inputClass}
               value={!keyEdited && profile.has_llm_key ? '••••••••' : apiKey}
               onFocus={() => { if (!keyEdited && profile.has_llm_key) { setKeyEdited(true); setApiKey('') } }}
-              onChange={e => { setKeyEdited(true); setApiKey(e.target.value) }}
+              onChange={e => { setKeyEdited(true); setApiKey(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.api_key; return n }) }}
               placeholder={profile.has_llm_key ? '' : 'Enter API key'}
             />
             {profile.has_llm_key && !keyEdited && (
               <p className="text-xs text-space-dim">Click to replace existing key</p>
             )}
+            {errors.api_key && <div className="text-red-400 text-sm mt-1">{errors.api_key}</div>}
           </div>
         </ItemOverlay>
       )}
