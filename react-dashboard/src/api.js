@@ -24,6 +24,13 @@ export const createProfile = (name) =>
 
 export const getProviders = () => _fetch('/api/config/providers')
 
+export const createProvider = (body) =>
+  _fetch('/api/config/providers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
 export const saveProvider = (id, body) =>
   _fetch(`/api/config/providers/${id}`, {
     method: 'PUT',
