@@ -62,7 +62,8 @@ export default function StepLLM({ onNext }) {
         default_model: model,
         api_key: apiKey,
       });
-      onNext();
+      // Pass provider details up so the wizard can link them to the profile.
+      onNext({ providerType: provider, model, apiKey });
     } catch (e) {
       setError("Failed to save: " + e.message);
       setStatus("error");

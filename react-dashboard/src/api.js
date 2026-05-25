@@ -114,3 +114,42 @@ export const testLlmConnection = (body) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+
+/**
+ * Ensures a profile named `name` exists, with the given LLM provider linked,
+ * and sets it as the active profile.
+ *
+ * If a profile with that name already exists, it reuses it and updates the
+ * LLM link. Otherwise creates a new profile.
+ *
+ * @param {string} name - Profile display name (e.g. "Master")
+ * @param {{ providerType: string, model: string, apiKey: string }} llm
+ * @returns {Promise<{ id: number, name: string }>}
+ */
+export async function ensureProfileWithProvider(name, llm) {
+  const { profiles, active_id } = await getProfiles()
+
+  // Find existing profile by name (case-insensitive), or the active one.
+  let profile = profiles.find((p) => p.name.toLowerCase() === name.toLowerCase())
+
+  if (!profile) {
+    profile = await createProfile(name)
+  }
+
+  // Link the LLM provider onto the profile row.
+  const existingData = profile.data || {}
+  await updateProfile(profile.id, {
+    name: profile.name || name,
+    data: {
+      ...existingData,
+      llm_provider_type: llm.providerType,
+      llm_model: llm.model,
+    },
+    llm_api_key: llm.apiKey,
+  })
+
+  // Make it the active profile.
+  await setActiveProfile(profile.id)
+
+  return { id: profile.id, name: profile.name || name }
+}

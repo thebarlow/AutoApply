@@ -3,39 +3,15 @@ import GatedButton from "../shared/GatedButton";
 import {
   uploadProfileResume,
   parseProfileResume,
-  getProfiles,
   getProfile,
-  createProfile,
   updateProfile,
-  setActiveProfile,
+  ensureProfileWithProvider,
 } from "../../api";
 
 const inputClass =
   "w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors";
 
-// Returns the full profile object (with nested data) for the active profile,
-// creating one if none exist yet.
-async function getOrCreateActiveProfile() {
-  const { profiles, active_id } = await getProfiles();
-  let profileId = null;
-
-  if (active_id) {
-    profileId = active_id;
-  } else if (profiles && profiles.length > 0) {
-    profileId = profiles[0].id;
-    await setActiveProfile(profileId);
-  } else {
-    // No profiles at all — create a default one.
-    const created = await createProfile("My Profile");
-    profileId = created.id;
-    await setActiveProfile(profileId);
-  }
-
-  // Fetch the full profile row (includes nested data object).
-  return getProfile(profileId);
-}
-
-export default function StepResume({ onBack, onFinish }) {
+export default function StepResume({ onBack, onFinish, profileName, setProfileName, llmInfo }) {
   const [file, setFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [parsed, setParsed] = useState(null); // { name, first_name, last_name, work_history, skills, education }
@@ -49,16 +25,21 @@ export default function StepResume({ onBack, onFinish }) {
       // Step 1: Upload the file to get its server-side path.
       const { path, filename } = await uploadProfileResume(file);
 
-      // Step 2: Get or create the active profile.
-      const profile = await getOrCreateActiveProfile();
+      // Step 2: Ensure a named profile exists with the LLM provider linked.
+      //         This guarantees get_client_for_profile won't 500 on parse.
+      const { id: profileId } = await ensureProfileWithProvider(
+        profileName || "Master",
+        llmInfo || { providerType: "", model: "", apiKey: "" },
+      );
+
+      // Fetch the full profile row to get any existing data fields.
+      const profile = await getProfile(profileId);
 
       // Step 3: Associate the uploaded file with the profile so the parse
-      //         endpoint can read it from disk. getProfile returns a flat object
-      //         where top-level fields come from the row and profile data lives
-      //         in a nested `data` key.
+      //         endpoint can read it from disk.
       const existingData = profile.data || {};
-      await updateProfile(profile.id, {
-        name: profile.name || "My Profile",
+      await updateProfile(profileId, {
+        name: profile.name || profileName || "Master",
         data: {
           ...existingData,
           resume_path: path,
@@ -71,7 +52,7 @@ export default function StepResume({ onBack, onFinish }) {
       //         work_history, education, etc.) back into the profile row so
       //         /api/setup-status returns resume_parsed: true.
       //         Returns { id, name } — the name may have been updated from the resume.
-      const result = await parseProfileResume(profile.id);
+      const result = await parseProfileResume(profileId);
 
       // Fetch the updated profile to build the preview card.
       const updated = await getProfile(result.id);
@@ -95,6 +76,17 @@ export default function StepResume({ onBack, onFinish }) {
         The app will parse your resume into structured fields using AI. You can
         edit anything afterwards in the Profile tab.
       </p>
+
+      {/* Profile name */}
+      <div className="flex flex-col gap-1 mb-4">
+        <label className="text-xs text-space-dim">Profile name</label>
+        <input
+          className={inputClass}
+          value={profileName}
+          onChange={(e) => setProfileName(e.target.value)}
+          placeholder="Master"
+        />
+      </div>
 
       {/* File picker */}
       <div className="mb-4">
