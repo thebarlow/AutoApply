@@ -19,6 +19,22 @@ def _prompt_meta(p: Path) -> dict:
     }
 
 
+_DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
+
+_VALID_DEFAULT_KEYS = {"scoring", "resume", "cover", "extraction", "resume_parse"}
+
+
+@router.get("/defaults/{type_key}")
+def get_default_prompt(type_key: str) -> dict:
+    """Return the path and content of a default prompt file."""
+    if type_key not in _VALID_DEFAULT_KEYS:
+        raise HTTPException(status_code=404, detail="Unknown prompt type")
+    p = (_DEFAULTS_DIR / f"{type_key}.md").resolve()
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Default prompt file not found")
+    return {"path": str(p), "content": p.read_text(encoding="utf-8")}
+
+
 @router.get("")
 def list_prompts() -> dict:
     """List all .md files in the prompts/ directory."""

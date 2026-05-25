@@ -62,6 +62,8 @@ export const getActivePromptStatus = () =>
 
 export const listPrompts = () => _fetch('/api/prompts')
 
+export const getDefaultPrompt = (typeKey) => _fetch(`/api/prompts/defaults/${typeKey}`)
+
 export const getPromptFile = (path) =>
   fetch('/api/prompts/file?' + new URLSearchParams({ path }))
     .then((r) => {

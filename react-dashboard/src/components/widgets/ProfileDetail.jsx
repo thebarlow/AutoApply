@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, createPromptFile, uploadPromptFile } from '../../api'
+import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, createPromptFile, uploadPromptFile, getDefaultPrompt } from '../../api'
 import { validateProvider } from '../../validation'
 import HelpIcon from '../shared/HelpIcon'
 
@@ -675,6 +675,14 @@ function JobPrefsSection({ data, onSave }) {
 }
 // ─── Prompts constants ────────────────────────────────────────────────────────
 
+const PROMPT_HELP = {
+  scoring: 'Scores how well a job matches your profile. Returns a numeric score and reasoning used to prioritize or filter jobs.',
+  resume: 'Generates a tailored resume for a specific job, emphasizing your most relevant experience and skills.',
+  cover: 'Generates a tailored cover letter for a job using your profile and the job posting details.',
+  extraction: 'Extracts structured fields (title, requirements, location, salary) from a raw job description before scoring or generation.',
+  resume_parse: 'Parses your uploaded resume into structured profile fields (experience, education, skills, etc.).',
+}
+
 const USER_CHIPS = [
   { label: 'first name', token: '{user.first_name}' },
   { label: 'last name', token: '{user.last_name}' },
@@ -732,10 +740,11 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   const label = PROMPT_TYPE_LABELS[typeKey]
   const currentFile = profileData[`prompt_${typeKey}`] || ''
   const currentModel = profileData[`prompt_${typeKey}_model`] || ''
+  const isUnconfigured = !currentFile
 
   const [promptFiles, setPromptFiles] = useState([])
   const [selectedFile, setSelectedFile] = useState(currentFile)
-  const [modelOverride, setModelOverride] = useState(currentModel)
+  const [modelOverride, setModelOverride] = useState(currentModel || (isUnconfigured ? defaultModel : ''))
   const [content, setContent] = useState('')
   const [loadingContent, setLoadingContent] = useState(false)
   const [contentError, setContentError] = useState(null)
@@ -746,9 +755,20 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   const textareaRef = useRef(null)
   const originalContent = useRef('')
 
-  // Load file list on mount
+  // Load file list on mount; also fetch default content when unconfigured
   useEffect(() => {
     listPrompts().then((r) => setPromptFiles(r.prompts || []))
+    if (isUnconfigured) {
+      setLoadingContent(true)
+      getDefaultPrompt(typeKey)
+        .then(({ path, content: text }) => {
+          setSelectedFile(path)
+          setContent(text)
+          originalContent.current = text
+        })
+        .catch(() => { /* leave blank if no default */ })
+        .finally(() => setLoadingContent(false))
+    }
   }, [])
 
   // Escape closes the pop-out when open, otherwise closes the modal.
@@ -819,18 +839,19 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
     setSaveError(null)
     try {
       let resolvedFile = selectedFile
-      if (content !== originalContent.current) {
-        if (isDefaultPrompt(selectedFile)) {
-          // Fork: save as a new file in prompts/ so defaults stay immutable
+      if (isDefaultPrompt(selectedFile)) {
+        // Always fork defaults into a profile-specific file; never mutate defaults
+        if (content !== originalContent.current || isUnconfigured) {
           const baseName = selectedFile.split(/[\\/]/).pop().replace(/\.md$/i, '')
           const filename = `${baseName}_${Date.now()}.md`
           const result = await createPromptFile(filename, content)
           resolvedFile = result.path
-        } else {
-          await putPromptFile(selectedFile, content)
+          originalContent.current = content
+          setSelectedFile(resolvedFile)
         }
+      } else if (content !== originalContent.current) {
+        await putPromptFile(selectedFile, content)
         originalContent.current = content
-        setSelectedFile(resolvedFile)
       }
       // Patch profile with updated file ref and model
       const newData = {
@@ -945,9 +966,9 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
               {fieldErrors.selectedFile && <div className="text-red-400 text-sm mt-1">{fieldErrors.selectedFile}</div>}
             </div>
 
-            {/* Zone 2: Model override */}
+            {/* Zone 2: Model */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model Override</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model</label>
               <input
                 className={inputClass}
                 value={modelOverride}
@@ -1055,7 +1076,12 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
                 className="flex items-start justify-between gap-3 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5 hover:border-purple-500/30 transition-colors text-left w-full"
               >
                 <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="text-xs font-semibold text-space-text">{PROMPT_TYPE_LABELS[typeKey]}</span>
+                  <span className="text-xs font-semibold text-space-text flex items-center gap-1">
+                    {PROMPT_TYPE_LABELS[typeKey]}
+                    <span onClick={e => e.stopPropagation()}>
+                      <HelpIcon text={PROMPT_HELP[typeKey] || 'A prompt template used by the LLM.'} />
+                    </span>
+                  </span>
                   {basename
                     ? <span className="text-xs text-space-dim truncate">{basename}</span>
                     : <span className="text-xs text-red-400/80">Not configured</span>
@@ -1098,8 +1124,8 @@ function LlmSection({ profile, onSave }) {
   const [errors, setErrors] = useState({})
 
   const openModal = () => {
-    setProviderType(profile.llm_provider_type || '')
-    setModel(profile.llm_model || '')
+    setProviderType(profile.llm_provider_type || profile.data?.llm_provider_type || '')
+    setModel(profile.llm_model || profile.data?.llm_model || '')
     setApiKey('')
     setKeyEdited(false)
     setError(null)
@@ -1137,11 +1163,11 @@ function LlmSection({ profile, onSave }) {
     <>
       <AccordionSection id="llm-config" title="LLM Config" editButton={<EditBtn onClick={openModal} />}>
         <div className="flex flex-col gap-1.5">
-          {profile.llm_provider_type
-            ? <Field label="Provider" value={profile.llm_provider_type} />
+          {(profile.llm_provider_type || profile.data?.llm_provider_type)
+            ? <Field label="Provider" value={profile.llm_provider_type || profile.data?.llm_provider_type} />
             : <p className="text-xs text-space-dim">No LLM provider configured.</p>
           }
-          {profile.llm_model && <Field label="Model" value={profile.llm_model} />}
+          {(profile.llm_model || profile.data?.llm_model) && <Field label="Model" value={profile.llm_model || profile.data?.llm_model} />}
           <div className="flex items-center justify-between">
             <span className="text-xs text-space-dim">API Key</span>
             <span className={`text-xs font-medium ${profile.has_llm_key ? 'text-green-400' : 'text-space-dim/50'}`}>
