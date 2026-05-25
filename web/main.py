@@ -17,6 +17,7 @@ from web.routers import events
 from web.routers import tray
 from web.routers import prompts
 from web.routers import llm_status_router
+from web.routers import setup_status
 
 
 def _timed(label: str, fn):
@@ -62,6 +63,7 @@ app.include_router(events.router)
 app.include_router(tray.router)
 app.include_router(prompts.router)
 app.include_router(llm_status_router.router)
+app.include_router(setup_status.router)
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
