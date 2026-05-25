@@ -3,7 +3,9 @@ import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
 import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
+import Wizard from './components/Onboarding/Wizard'
 import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen } from './api'
+import { usePrerequisites } from './hooks/usePrerequisites'
 
 export default function App() {
   const [jobs, setJobs] = useState([])
@@ -12,6 +14,9 @@ export default function App() {
   const [processingActions, setProcessingActions] = useState({}) // { job_key: Set<action> }
   const [settingsTab, setSettingsTab] = useState('User')
   const [promptStatus, setPromptStatus] = useState({})
+  const prereqs = usePrerequisites()
+  const [wizardSkipped, setWizardSkipped] = useState(false)
+  const showWizard = prereqs.loaded && prereqs.isFirstRun && !wizardSkipped
 
   const refetchPromptStatus = useCallback(() => {
     getActivePromptStatus().then(setPromptStatus).catch(() => setPromptStatus({}))
@@ -138,6 +143,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-space-text">
+      {showWizard && (
+        <Wizard
+          onFinish={() => { setWizardSkipped(true); prereqs.refresh(); }}
+          onSkip={() => setWizardSkipped(true)}
+        />
+      )}
       <Navbar />
       <Dashboard>
         <div className="col-span-3 overflow-hidden h-full">
