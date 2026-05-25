@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 import { WarningIcon } from '../shared/JobCard'
+import GatedButton from '../shared/GatedButton'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -402,14 +403,15 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               value={descView}
               onChange={setDescView}
             />
-            <button
+            <GatedButton
+              action="score"
               onClick={handleAction}
               disabled={actionLoading || !promptOk}
-              title={promptMissingTitle}
+              title={promptMissingTitle || undefined}
               className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading ? '…' : !promptOk ? 'Prompt not set' : job.extraction_json_exists ? 'Reprocess' : 'Process'}
-            </button>
+            </GatedButton>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
           {descView === 'raw' && (
@@ -428,14 +430,15 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       {contentTab === 'score' && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-end">
-            <button
+            <GatedButton
+              action="score"
               onClick={handleAction}
               disabled={actionLoading || !promptOk}
-              title={promptMissingTitle}
+              title={promptMissingTitle || undefined}
               className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading ? '…' : !promptOk ? 'Prompt not set' : job.final_score != null ? 'Recalculate' : 'Calculate'}
-            </button>
+            </GatedButton>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
           <ScoreView job={job} />
@@ -482,14 +485,15 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               value={artifactView}
               onChange={setArtifactView}
             />
-            <button
+            <GatedButton
+              action="generate"
               onClick={handleAction}
               disabled={actionLoading || !promptOk}
-              title={promptMissingTitle}
+              title={promptMissingTitle || undefined}
               className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading ? '…' : !promptOk ? 'Prompt not set' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
-            </button>
+            </GatedButton>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
           {artifactView === 'markdown' && (

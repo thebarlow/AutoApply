@@ -1,4 +1,5 @@
 import { useState } from "react";
+import GatedButton from "../shared/GatedButton";
 import {
   uploadProfileResume,
   parseProfileResume,
@@ -115,13 +116,14 @@ export default function StepResume({ onBack, onFinish }) {
 
       {/* Parse button */}
       <div className="mb-5">
-        <button
+        <GatedButton
+          action="parse_resume"
           onClick={onParse}
           disabled={!file || parsing}
           className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
         >
           {parsing ? "Parsing…" : "Parse with AI"}
-        </button>
+        </GatedButton>
         {parsing && (
           <p className="text-xs text-space-dim mt-2">
             This may take a few seconds…
