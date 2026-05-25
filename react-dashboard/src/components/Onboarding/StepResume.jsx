@@ -1,5 +1,6 @@
 import { useState } from "react";
 import GatedButton from "../shared/GatedButton";
+import Spinner from "../shared/Spinner";
 import {
   uploadProfileResume,
   parseProfileResume,
@@ -112,9 +113,9 @@ export default function StepResume({ onBack, onFinish, profileName, setProfileNa
           action="parse_resume"
           onClick={onParse}
           disabled={!file || parsing}
-          className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+          className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center gap-2"
         >
-          {parsing ? "Parsing…" : "Parse with AI"}
+          {parsing ? <><Spinner /> <span>Parsing…</span></> : "Parse with AI"}
         </GatedButton>
         {parsing && (
           <p className="text-xs text-space-dim mt-2">

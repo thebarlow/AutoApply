@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { testLlmConnection, createProvider } from "../../api";
 import HelpIcon from "../shared/HelpIcon";
+import Spinner from "../shared/Spinner";
 
 const PROVIDERS = [
   {
@@ -122,7 +123,8 @@ export default function StepLLM({ onNext }) {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(PROVIDERS[0].defaultModel);
   const [baseUrl, setBaseUrl] = useState("");
-  const [testing, setTesting] = useState(false);
+  // "idle" | "verifying" | "saving"
+  const [state, setState] = useState("idle");
   const [error, setError] = useState("");
 
   const providerDef = PROVIDERS.find((p) => p.value === provider);
@@ -145,7 +147,7 @@ export default function StepLLM({ onNext }) {
       return;
     }
 
-    setTesting(true);
+    setState("verifying");
     setError("");
 
     // Test connection
@@ -156,16 +158,17 @@ export default function StepLLM({ onNext }) {
       const r = await testLlmConnection(payload);
       if (!r || !r.ok) {
         setError(mapError((r && r.error) || ""));
-        setTesting(false);
+        setState("idle");
         return;
       }
     } catch (e) {
       setError(mapError(e.message));
-      setTesting(false);
+      setState("idle");
       return;
     }
 
     // Save provider
+    setState("saving");
     try {
       const label = providerDef?.label ?? provider;
       const createPayload = {
@@ -185,7 +188,7 @@ export default function StepLLM({ onNext }) {
       });
     } catch (e) {
       setError("Failed to save: " + e.message);
-      setTesting(false);
+      setState("idle");
     }
   };
 
@@ -276,7 +279,7 @@ export default function StepLLM({ onNext }) {
             value={model}
             onChange={(v) => setModel(v)}
             models={providerDef?.models ?? []}
-            disabled={testing}
+            disabled={state !== "idle"}
           />
         )}
       </div>
@@ -289,10 +292,12 @@ export default function StepLLM({ onNext }) {
       {/* Next (merged with test) */}
       <button
         onClick={onNextClick}
-        disabled={testing || !apiKey.trim()}
-        className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+        disabled={state !== "idle" || !apiKey.trim()}
+        className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
       >
-        {testing ? "Testing…" : "Next →"}
+        {state === "verifying" ? <><Spinner /> <span>Verifying API key…</span></>
+         : state === "saving" ? <><Spinner /> <span>Saving…</span></>
+         : "Next →"}
       </button>
     </div>
   );

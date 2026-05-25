@@ -20,8 +20,6 @@ export default function HelpIcon({ text, docHref, label = "Help" }) {
     };
   }, [open]);
 
-  const isExternal = docHref && /^https?:\/\//.test(docHref);
-
   return (
     <span ref={ref} className="relative inline-block ml-1">
       <button
@@ -42,8 +40,8 @@ export default function HelpIcon({ text, docHref, label = "Help" }) {
           {docHref && (
             <a
               href={docHref}
-              target={isExternal ? "_blank" : undefined}
-              rel={isExternal ? "noopener noreferrer" : undefined}
+              target="_blank"
+              rel="noopener noreferrer"
               className="mt-2 inline-block text-purple-400 hover:text-purple-300 transition-colors"
             >
               Learn more →

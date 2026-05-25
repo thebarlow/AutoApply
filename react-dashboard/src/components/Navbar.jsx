@@ -8,7 +8,10 @@ export default function Navbar() {
         <span className="text-sm font-medium text-purple-400">
           Credits: $0.00
         </span>
-        <button
+        <a
+          href="#/docs"
+          target="_blank"
+          rel="noopener noreferrer"
           className="text-space-dim hover:text-purple-400 transition-colors"
           aria-label="Help"
         >
@@ -17,7 +20,7 @@ export default function Navbar() {
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-        </button>
+        </a>
       </div>
     </nav>
   )
