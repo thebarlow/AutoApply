@@ -3,21 +3,24 @@ from __future__ import annotations
 import httpx
 import os
 import threading
+from pathlib import Path
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
 )
 
 from tray_app.drag_handle import DragHandle
 
 _API_BASE = os.getenv("AUTO_APPLY_API_BASE", "http://localhost:8080")
+_ASSETS = Path(__file__).parent / "assets"
 
 
 class JobCard(QFrame):
     """Card representing one job in the tray panel."""
 
-    confirmed = pyqtSignal(str)  # emits job_id on checkmark click
-    _confirm_result = pyqtSignal(bool, str)  # (success, error_msg)
+    confirmed = pyqtSignal(str)   # emits job_id when applied
+    dismissed = pyqtSignal(str)   # emits job_id when X is clicked
+    _confirm_result = pyqtSignal(bool, str)
 
     def __init__(self, job_id: str, role: str, company: str,
                  resume_path: str, cover_path: str, parent=None):
@@ -32,36 +35,74 @@ class JobCard(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
 
-        header = QLabel(f"<b>{role}</b><br><small>{company}</small>")
-        header.setStyleSheet("color: #212529; background: transparent;")
-        layout.addWidget(header)
+        # --- Label row ---
+        label_row = QHBoxLayout()
+        label_row.setSpacing(6)
 
-        handles_row = QHBoxLayout()
-        self._resume_handle = DragHandle(resume_path, "📄 Resume")
-        self._cover_handle = DragHandle(cover_path, "📝 Cover Letter")
+        title_label = QLabel(f"<b>{role}</b>")
+        title_label.setStyleSheet("color: #212529; background: transparent;")
+
+        sep_label = QLabel("|")
+        sep_label.setStyleSheet("color: #adb5bd; background: transparent;")
+
+        company_label = QLabel(company)
+        company_label.setStyleSheet("color: #495057; background: transparent;")
+
+        label_row.addWidget(title_label)
+        label_row.addWidget(sep_label)
+        label_row.addWidget(company_label)
+        label_row.addStretch()
+        layout.addLayout(label_row)
+
+        # --- Content row ---
+        content_row = QHBoxLayout()
+        content_row.setSpacing(6)
+
+        self._resume_handle = DragHandle(
+            resume_path,
+            "📄 Resume",
+            icon_path=str(_ASSETS / "resume_icon_64.png"),
+        )
+        self._cover_handle = DragHandle(
+            cover_path,
+            "📝 Cover Letter",
+            icon_path=str(_ASSETS / "coverletter_icon_64.png"),
+        )
         self._resume_handle.drag_started.connect(self._on_drag_started)
         self._cover_handle.drag_started.connect(self._on_drag_started)
-        handles_row.addWidget(self._resume_handle)
-        handles_row.addWidget(self._cover_handle)
-        handles_row.addStretch()
-        layout.addLayout(handles_row)
 
-        footer = QHBoxLayout()
+        content_row.addWidget(self._resume_handle)
+        content_row.addWidget(self._cover_handle)
+
         self._error_label = QLabel("")
         self._error_label.setStyleSheet("color: red; font-size: 10px;")
         self._error_label.hide()
-        footer.addWidget(self._error_label)
-        footer.addStretch()
+        content_row.addWidget(self._error_label)
+
+        content_row.addStretch()
 
         self._check_btn = QPushButton("✓")
         self._check_btn.setFixedSize(28, 28)
         self._check_btn.setStyleSheet(
-            "QPushButton { background: #198754; color: white; border-radius: 14px; font-weight: bold; }"
+            "QPushButton { background: #198754; color: white; border-radius: 14px;"
+            " font-weight: bold; border: none; }"
             "QPushButton:hover { background: #157347; }"
         )
         self._check_btn.clicked.connect(self._on_checkmark)
-        footer.addWidget(self._check_btn)
-        layout.addLayout(footer)
+
+        self._dismiss_btn = QPushButton("✕")
+        self._dismiss_btn.setFixedSize(28, 28)
+        self._dismiss_btn.setStyleSheet(
+            "QPushButton { background: #dc3545; color: white; border-radius: 14px;"
+            " font-weight: bold; border: none; }"
+            "QPushButton:hover { background: #b02a37; }"
+        )
+        self._dismiss_btn.clicked.connect(lambda: self.dismissed.emit(self._job_id))
+
+        content_row.addWidget(self._check_btn)
+        content_row.addWidget(self._dismiss_btn)
+
+        layout.addLayout(content_row)
 
     def _set_style(self, active: bool):
         border_color = "#0d6efd" if active else "#dee2e6"
