@@ -123,3 +123,33 @@ def test_scraper_run_background_calls_intake_on_new_jobs(db_session, monkeypatch
         scraper_router._run_in_background(["remotive"])
 
     assert "r_bg_1" in intake_called
+
+
+def test_stage_job_triggers_pipeline(monkeypatch):
+    """run_pipeline is called for each newly staged job."""
+    from unittest.mock import patch, MagicMock
+
+    pipeline_calls = []
+
+    with patch("web.routers.scraper.run_pipeline", side_effect=lambda jk: pipeline_calls.append(jk)) as mock_pipe, \
+         patch("web.routers.scraper.Job") as MockJob, \
+         patch("web.routers.scraper._sse_send"):
+
+        fake_job = MagicMock()
+        fake_job.job_key = "test-key-1"
+        MockJob.save_batch_returning.return_value = [fake_job]
+
+        from fastapi.testclient import TestClient
+        from web.main import app
+        c = TestClient(app)
+        resp = c.post("/api/scraper/stage-job", json={
+            "source": "linkedin",
+            "job_key": "test-key-1",
+            "title": "Engineer",
+            "company": "Acme",
+            "url": "https://example.com/job/1",
+            "description": "Do stuff.",
+        })
+
+    assert resp.status_code == 200
+    mock_pipe.assert_called_once_with("test-key-1")
