@@ -20,6 +20,7 @@ router = APIRouter()
 
 
 _PROMPTS_DEFAULTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "defaults"
+_PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
 
 
 def _prompt_configured(path: str, type_key: str = "") -> bool:
@@ -224,6 +225,43 @@ def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> 
     if active_id == prompt_id:
         _set(db, f"active_{type_}_prompt_id", "")
         _sync_active_prompt(db, type_, "", remaining)
+
+
+# ---- Templates ----
+
+class TemplatesBody(BaseModel):
+    resume_template_path: str = "generator/resume_template.tex"
+    cover_template_path: str = "generator/cover_template.tex"
+    resume_prompt_template: str = ""
+    cover_prompt_template: str = ""
+    github: str = ""
+    linkedin: str = ""
+    website: str = ""
+
+
+@router.get("/api/config/templates")
+def get_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
+    return {
+        "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
+        "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
+        "resume_prompt_template": _get(db, "resume_prompt_template", ""),
+        "cover_prompt_template": _get(db, "cover_prompt_template", ""),
+        "github": _get(db, "resume_github", ""),
+        "linkedin": _get(db, "resume_linkedin", ""),
+        "website": _get(db, "resume_website", ""),
+    }
+
+
+@router.put("/api/config/templates")
+def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    _set(db, "resume_template_path", body.resume_template_path)
+    _set(db, "cover_template_path", body.cover_template_path)
+    _set(db, "resume_prompt_template", body.resume_prompt_template)
+    _set(db, "cover_prompt_template", body.cover_prompt_template)
+    _set(db, "resume_github", body.github)
+    _set(db, "resume_linkedin", body.linkedin)
+    _set(db, "resume_website", body.website)
+    return get_templates(db)
 
 
 # ---- Scoring ----
@@ -655,10 +693,11 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
 
 @router.delete("/api/config/profiles/{profile_id}", status_code=204)
 def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
-    """Delete a profile and clear active_profile_id if it pointed to this profile."""
+    """Delete a profile, clear active_profile_id if needed, and remove owned files from profiles/."""
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
+    data = json.loads(row.data)
     db.delete(row)
     active_raw = _get(db, "active_profile_id")
     if active_raw and int(active_raw) == profile_id:
@@ -671,6 +710,16 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
     env = _read_env()
     if env.pop(f"LLM_KEY_PROFILE_{profile_id}", None) is not None:
         _write_env(env)
+    for key in ("resume_path", "md_path", "cover_letter_path"):
+        path_str = data.get(key, "")
+        if not path_str:
+            continue
+        path = Path(path_str)
+        try:
+            if path.is_relative_to(_PROFILES_DIR) and path.exists():
+                path.unlink()
+        except Exception:
+            pass
 
 
 @router.get("/api/config/profiles/{profile_id}/file")
@@ -744,9 +793,6 @@ def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) ->
     return {"id": row.id, "name": name}
 
 
-_PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
-
-
 @router.post("/api/config/profile/upload")
 def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     """Save an uploaded resume file to the profiles/ directory and return its absolute path."""
@@ -762,6 +808,51 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
     dest.write_bytes(contents)
     return {"path": str(dest.resolve()), "filename": filename}
+
+
+# ---- Sources ----
+
+class SourcesBody(BaseModel):
+    remotive: bool = False
+    remoteok: bool = False
+
+
+@router.get("/api/config/sources")
+def get_sources(db: Session = Depends(get_db)) -> dict[str, Any]:
+    remotive = _get(db, "source_remotive", "false") == "true"
+    remoteok = _get(db, "source_remoteok", "false") == "true"
+    return {"remotive": remotive, "remoteok": remoteok}
+
+
+@router.put("/api/config/sources")
+def put_sources(body: SourcesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    _set(db, "source_remotive", "true" if body.remotive else "false")
+    _set(db, "source_remoteok", "true" if body.remoteok else "false")
+    return {"remotive": body.remotive, "remoteok": body.remoteok}
+
+
+# ---- Search Config ----
+
+class SearchBody(BaseModel):
+    keywords_whitelist: list[str] = []
+    keywords_blacklist: list[str] = []
+    max_jobs_per_source: int = 50
+
+
+@router.get("/api/config/search")
+def get_search(db: Session = Depends(get_db)) -> dict[str, Any]:
+    whitelist = json.loads(_get(db, "keywords_whitelist", "[]"))
+    blacklist = json.loads(_get(db, "keywords_blacklist", "[]"))
+    max_jobs = int(_get(db, "max_jobs_per_source", "50"))
+    return {"keywords_whitelist": whitelist, "keywords_blacklist": blacklist, "max_jobs_per_source": max_jobs}
+
+
+@router.put("/api/config/search")
+def put_search(body: SearchBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    _set(db, "keywords_whitelist", json.dumps(body.keywords_whitelist))
+    _set(db, "keywords_blacklist", json.dumps(body.keywords_blacklist))
+    _set(db, "max_jobs_per_source", str(body.max_jobs_per_source))
+    return body.model_dump()
 
 
 # ---- Job Searches ----
