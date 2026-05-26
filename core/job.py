@@ -569,19 +569,20 @@ class Job(Base):
         Requires generator/outputs/{job_key}_resume.md to exist.
 
         Args:
-            template_path: Path to the LaTeX template file.
+            template_path: Path to the Jinja2 HTML template file.
             db: SQLAlchemy session.
 
         Raises:
             FileNotFoundError: If the resume markdown file does not exist.
+            RuntimeError: If the rendered resume exceeds one page.
         """
-        from core.utils import render_resume_pdf
+        from core.utils import render_pdf
 
         md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
-        render_resume_pdf(md_path, pdf_path, self.job_key, template_path)
+        render_pdf(md_path, pdf_path, template_path, max_pages=1)
         self.resume_path = str(pdf_path)
         db.commit()
 
@@ -591,7 +592,7 @@ class Job(Base):
         Requires generator/outputs/{job_key}_cover.md to exist.
 
         Args:
-            template_path: Path to the LaTeX template file.
+            template_path: Path to the Jinja2 HTML template file.
             db: SQLAlchemy session.
 
         Raises:
