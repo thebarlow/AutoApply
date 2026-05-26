@@ -1,22 +1,131 @@
 @page {
   size: letter;
-  margin: 1.0in;
+  margin: 0;
 }
 
 html, body {
   margin: 0;
   padding: 0;
   font-family: "Georgia", "Times New Roman", serif;
-  font-size: 11pt;
-  line-height: 1.5;
+  font-size: 10.5pt;
+  line-height: 1.55;
   color: #111;
 }
 
-.cover p {
-  margin: 0 0 0.14in 0;
+/* ── Black bars ── */
+.top-bar {
+  width: 100%;
+  height: 30px;
+  background: #000;
 }
 
-.cover h1, .cover h2, .cover h3 {
-  font-family: "Helvetica", "Arial", sans-serif;
-  font-weight: 600;
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: #000;
+}
+
+/* ── Gray header ── */
+.cover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #e8e8e8;
+  padding: 0.28in 0.75in 0.22in 0.75in;
+}
+
+.cover-header-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.cover-name {
+  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  font-size: 18pt;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  color: #111;
+  line-height: 1.1;
+}
+
+.cover-name strong {
+  font-weight: 700;
+}
+
+.name-rule {
+  width: 1.4in;
+  height: 1.5px;
+  background: #555;
+  margin-top: 0.08in;
+}
+
+.cover-header-right {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05in;
+  align-items: flex-start;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  font-size: 10.5pt;
+  color: #222;
+}
+
+.contact-item svg {
+  flex-shrink: 0;
+  color: #444;
+}
+
+.contact-item a {
+  color: #222;
+  text-decoration: none;
+}
+
+.contact-item a:hover {
+  text-decoration: underline;
+}
+
+/* ── Body ── */
+.cover-body {
+  padding: 0.35in 1.05in 0.6in 1.05in;
+}
+
+.cover-date {
+  text-align: right;
+  font-size: 10pt;
+  color: #444;
+  margin: 0 0 0.3in 0;
+}
+
+.cover-body p {
+  margin: 0 0 0.16in 0;
+  text-align: justify;
+}
+
+/* ── Sign-off ── */
+.cover-signoff {
+  margin-top: 0.25in;
+}
+
+.cover-signoff p {
+  margin: 0 0 0.08in 0;
+  text-align: left;
+}
+
+.signoff-name {
+  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  font-size: 10.5pt;
+  font-weight: 300;
+  letter-spacing: 0.06em;
+}
+
+.signoff-name strong {
+  font-weight: 700;
 }

@@ -4,7 +4,6 @@ You are writing a tailored one-page resume in Markdown for a job application.
 Hero: {user.hero}
 Skills: {user.skills}
 Work Experience: {user.work_history}
-Education: {user.education}
 Projects: {user.projects}
 
 
@@ -27,9 +26,6 @@ Description:
 - Max 500 characters total.
 - Lead with the role title or specialization that matches the job posting.
 
-## Education
-- Include all degrees exactly as written. No bullets.
-
 ## Experience
 - Include all listed work history entries, most recent first.
 - Max 2 bullets per entry, each bullet max 120 characters.
@@ -38,7 +34,7 @@ Description:
 ## Projects
 - Reorder by relevance to this job. Drop the least relevant project(s) if space requires.
 - Include at least 2 and at most 4 projects (omit the section entirely if none are listed).
-- 1 bullet per project, max 120 characters.
+- Do NOT use bullet points. Write each project as a paragraph: bold the project name, then a colon, then a one-sentence description. Max 120 characters per project.
 
 ## Skills
 - Group skills into categories (e.g. Languages, Frameworks, Tools).

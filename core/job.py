@@ -667,16 +667,16 @@ class Job(Base):
             row = db.query(Config).filter_by(key=key).first()
             return row.value if row else ""
 
-        full_name = user.full_name()
-        first = user.first_name or full_name.split(" ", 1)[0]
-        last = user.last_name or (full_name.split(" ", 1)[1] if " " in full_name else "")
+        first = user.first_name or ""
+        last = user.last_name or ""
+        display_name = f"{first} {last}".strip() or user.full_name()
         github = _cfg("resume_github")
         linkedin = _cfg("resume_linkedin")
         website = _cfg("resume_website")
 
         lines = [
             "---",
-            f"name: {full_name}", f"firstname: {first}", f"lastname: {last}",
+            f"name: {display_name}", f"firstname: {first}", f"lastname: {last}",
             f"email: {user.email}", f"phone: {user.phone}", f"location: {user.location}",
         ]
         if github:
@@ -685,6 +685,16 @@ class Job(Base):
             lines.append(f"linkedin: {linkedin}")
         if website:
             lines.append(f"website: {website}")
+        if getattr(user, "education", None):
+            import dataclasses
+            lines.append("education:")
+            for e in user.education:
+                d = dataclasses.asdict(e)
+                lines.append(f"  - institution: \"{d['institution']}\"")
+                lines.append(f"    degree: \"{d['degree']}\"")
+                lines.append(f"    field: \"{d['field']}\"")
+                lines.append(f"    graduated: \"{d['graduated']}\"")
+                lines.append(f"    gpa: {d['gpa']}")
         lines.extend(["---", ""])
         return "\n".join(lines) + "\n"
 

@@ -1,48 +1,137 @@
 @page {
   size: letter;
-  margin: 0.65in 0.65in 0.65in 0.65in;
+  margin: 0.55in 0.6in 0.55in 0.6in;
 }
 
 html, body {
   margin: 0;
   padding: 0;
-  font-family: "Helvetica", "Arial", sans-serif;
-  font-size: 10.5pt;
+  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  font-size: 10pt;
   line-height: 1.35;
   color: #111;
 }
 
-.resume h1 {
-  font-size: 18pt;
-  margin: 0 0 0.05in 0;
+/* ── Header ── */
+.resume-header {
+  margin-bottom: 0.1in;
 }
 
-.resume h2 {
-  font-size: 11.5pt;
+.resume-header h1 {
+  font-size: 20pt;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.06in 0;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  row-gap: 0.04in;
+  column-gap: 0.1in;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10pt;
+  color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.contact-item svg {
+  flex-shrink: 0;
+  color: #444;
+}
+
+.contact-item span,
+.contact-item a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #222;
+  text-decoration: none;
+}
+
+.contact-item a:hover {
+  text-decoration: underline;
+}
+
+/* Projects rendered as prose paragraphs, not bullets */
+.resume h2#projects ~ ul,
+.resume h2#projects + ul {
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.resume h2#projects ~ ul li,
+.resume h2#projects + ul li {
+  margin-bottom: 0.04in;
+}
+
+/* ── Section headings (LLM-generated + injected) ── */
+.resume h2,
+.injected-section h2 {
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 10.5pt;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid #333;
-  margin: 0.18in 0 0.06in 0;
+  letter-spacing: 0.07em;
+  border-bottom: 1px solid #111;
   padding-bottom: 2px;
+  margin: 0.16in 0 0.06in 0;
 }
 
 .resume h3 {
-  font-size: 10.5pt;
-  margin: 0.08in 0 0.02in 0;
+  font-size: 10pt;
+  font-weight: 700;
+  margin: 0.07in 0 0.02in 0;
 }
 
 .resume p {
-  margin: 0.04in 0;
+  margin: 0.03in 0;
 }
 
 .resume ul {
-  margin: 0.02in 0 0.06in 0.22in;
+  margin: 0.02in 0 0.05in 0.2in;
   padding: 0;
 }
 
 .resume li {
-  margin: 0.015in 0;
+  margin: 0.01in 0;
 }
 
-.resume strong { font-weight: 600; }
+.resume strong { font-weight: 700; }
 .resume em { font-style: italic; color: #444; }
+
+/* ── Injected education ── */
+.injected-section {
+  margin: 0;
+}
+
+.edu-entry {
+  margin-bottom: 0.07in;
+}
+
+.edu-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.edu-degree {
+  font-weight: 600;
+  font-size: 10pt;
+}
+
+.edu-graduated {
+  font-size: 9pt;
+  color: #444;
+}
+
+.edu-institution {
+  font-size: 9.5pt;
+  color: #333;
+}
