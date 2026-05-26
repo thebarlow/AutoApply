@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -325,8 +326,15 @@ class Job(Base):
             raise RuntimeError("LLM returned empty content")
 
         required = {"desirability_score", "fit_score", "desirability_justification", "fit_justification"}
+        cleaned = raw.strip()
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        first = cleaned.find("{")
+        last = cleaned.rfind("}")
+        if first != -1 and last > first:
+            cleaned = cleaned[first : last + 1]
         try:
-            parsed = json.loads(raw.strip())
+            parsed = json.loads(cleaned)
             if not required.issubset(parsed.keys()):
                 raise ValueError(f"Missing required keys; got {sorted(parsed.keys())}")
         except (json.JSONDecodeError, ValueError, AttributeError) as e:
