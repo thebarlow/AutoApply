@@ -16,7 +16,10 @@ from db.database import get_db, Config
 from web.sse import send as _sse_send
 from web import llm_status
 
-_GENERATOR_OUTPUTS = Path(__file__).parent.parent.parent / "generator" / "outputs"
+_GENERATOR_DIR = Path(__file__).parent.parent.parent / "generator"
+_GENERATOR_OUTPUTS = _GENERATOR_DIR / "outputs"
+_RESUME_TEMPLATE = _GENERATOR_DIR / "resume_template.html"
+_COVER_TEMPLATE = _GENERATOR_DIR / "cover_template.html"
 
 
 def _call_llm_for_extraction(client, model: str, prompt: str) -> str:
@@ -188,10 +191,8 @@ def _do_generate_resume(job: Job, db: Session) -> None:
         client, model = get_client_for_profile(user, user.prompt_resume_model)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    template_name = _get_default_template_name(db)
-    template_path = _resolve_template(db, template_name)
     job.generate_resume_md(user, prompt_content, client, model, db)
-    job.generate_resume_pdf(template_path, db)
+    job.generate_resume_pdf(_RESUME_TEMPLATE, db)
 
 
 def _do_generate_cover(job: Job, db: Session) -> None:
@@ -205,10 +206,8 @@ def _do_generate_cover(job: Job, db: Session) -> None:
         client, model = get_client_for_profile(user, user.prompt_cover_model)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    template_name = _get_default_template_name(db)
-    template_path = _resolve_template(db, template_name)
     job.generate_cover_md(user, prompt_content, client, model, db)
-    job.generate_cover_pdf(template_path, db)
+    job.generate_cover_pdf(_COVER_TEMPLATE, db)
 
 
 @router.post("/{job_key}/generate/resume")
