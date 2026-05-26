@@ -667,6 +667,9 @@ class Job(Base):
             row = db.query(Config).filter_by(key=key).first()
             return row.value if row else ""
 
+        import dataclasses
+        import yaml
+
         first = user.first_name or ""
         last = user.last_name or ""
         display_name = f"{first} {last}".strip() or user.full_name()
@@ -674,29 +677,24 @@ class Job(Base):
         linkedin = _cfg("resume_linkedin")
         website = _cfg("resume_website")
 
-        lines = [
-            "---",
-            f"name: {display_name}", f"firstname: {first}", f"lastname: {last}",
-            f"email: {user.email}", f"phone: {user.phone}", f"location: {user.location}",
-        ]
+        data: dict = {
+            "name": display_name,
+            "firstname": first,
+            "lastname": last,
+            "email": user.email or "",
+            "phone": user.phone or "",
+            "location": user.location or "",
+        }
         if github:
-            lines.append(f"github: {github}")
+            data["github"] = github
         if linkedin:
-            lines.append(f"linkedin: {linkedin}")
+            data["linkedin"] = linkedin
         if website:
-            lines.append(f"website: {website}")
+            data["website"] = website
         if getattr(user, "education", None):
-            import dataclasses
-            lines.append("education:")
-            for e in user.education:
-                d = dataclasses.asdict(e)
-                lines.append(f"  - institution: \"{d['institution']}\"")
-                lines.append(f"    degree: \"{d['degree']}\"")
-                lines.append(f"    field: \"{d['field']}\"")
-                lines.append(f"    graduated: \"{d['graduated']}\"")
-                lines.append(f"    gpa: {d['gpa']}")
-        lines.extend(["---", ""])
-        return "\n".join(lines) + "\n"
+            data["education"] = [dataclasses.asdict(e) for e in user.education]
+
+        return "---\n" + yaml.dump(data, allow_unicode=True, default_flow_style=False) + "---\n\n"
 
     def serialize(self) -> dict:
         """Return a JSON-serializable dict of all job fields for the API.
