@@ -7,8 +7,9 @@ const PROVIDERS = [
   {
     value: "openrouter",
     label: "OpenRouter",
-    defaultModel: "openrouter/auto:free",
+    defaultModel: "deepseek/deepseek-v4-flash",
     models: [
+      "deepseek/deepseek-v4-flash",
       "openrouter/auto",
       "openrouter/auto:free",
       "anthropic/claude-3.5-sonnet",
@@ -270,7 +271,7 @@ export default function StepLLM({ onNext }) {
         <label className="text-xs text-space-dim flex items-center">
           Model <span className="text-red-400 ml-1">*</span>
           <HelpIcon
-            text="The specific model to use. Smaller models are cheaper; larger ones produce better results."
+            text="The default model for your LLM calls. Check your provider's docs for the full list of available models they offer."
           />
         </label>
         {isCustom ? (

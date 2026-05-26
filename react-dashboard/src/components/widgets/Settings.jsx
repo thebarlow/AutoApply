@@ -550,7 +550,84 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
 
 // ─── User tab ─────────────────────────────────────────────────────────────────
 
-const PROVIDER_TYPES = ['openrouter', 'anthropic', 'openai', 'gemini']
+const PROVIDERS = [
+  {
+    value: 'openrouter',
+    label: 'OpenRouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
+    models: [
+      'deepseek/deepseek-v4-flash',
+      'openrouter/auto',
+      'openrouter/auto:free',
+      'anthropic/claude-3.5-sonnet',
+      'openai/gpt-4o-mini',
+      'meta-llama/llama-3.1-8b-instruct:free',
+    ],
+  },
+  {
+    value: 'anthropic',
+    label: 'Anthropic',
+    defaultModel: 'claude-sonnet-4-6',
+    models: [
+      'claude-opus-4-7',
+      'claude-sonnet-4-6',
+      'claude-haiku-4-5-20251001',
+      'claude-3-7-sonnet-latest',
+      'claude-3-5-haiku-latest',
+    ],
+  },
+  {
+    value: 'openai',
+    label: 'OpenAI',
+    defaultModel: 'gpt-4o-mini',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  },
+  {
+    value: 'gemini',
+    label: 'Gemini',
+    defaultModel: 'gemini-1.5-flash',
+    models: [
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-8b',
+    ],
+  },
+]
+
+function ModelCombobox({ value, onChange, models }) {
+  const [open, setOpen] = useState(false)
+  const filtered = value
+    ? models.filter((m) => m.toLowerCase().includes(value.toLowerCase()))
+    : models
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="e.g. gpt-4o-mini"
+        className={inputClass}
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-10 mt-1 w-full max-h-48 overflow-auto bg-white text-black border border-space-border rounded shadow-lg">
+          {filtered.map((m) => (
+            <li
+              key={m}
+              onMouseDown={(e) => { e.preventDefault(); onChange(m); setOpen(false) }}
+              className="px-2 py-1 hover:bg-gray-200 cursor-pointer text-sm"
+            >
+              {m}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 function CreateProfile({ onBack, onCreated }) {
   const [step, setStep] = useState(1)
@@ -560,6 +637,7 @@ function CreateProfile({ onBack, onCreated }) {
   const [name, setName] = useState('')
   const [providerType, setProviderType] = useState('')
   const [model, setModel] = useState('')
+  const providerDef = PROVIDERS.find((p) => p.value === providerType)
   const [apiKey, setApiKey] = useState('')
   const [savingStep1, setSavingStep1] = useState(false)
   const [error, setError] = useState(null)
@@ -658,21 +736,38 @@ function CreateProfile({ onBack, onCreated }) {
           <select
             className={inputClass + fe('providerType')}
             value={providerType}
-            onChange={(e) => { setProviderType(e.target.value); clearFe('providerType') }}
+            onChange={(e) => {
+              const v = e.target.value
+              setProviderType(v)
+              const p = PROVIDERS.find((x) => x.value === v)
+              if (p) setModel(p.defaultModel)
+              clearFe('providerType')
+              clearFe('model')
+            }}
           >
-            <option value="">— select —</option>
-            {PROVIDER_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="" className="text-black bg-white">— select —</option>
+            {PROVIDERS.map((p) => (
+              <option key={p.value} value={p.value} className="text-black bg-white">{p.label}</option>
+            ))}
           </select>
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-space-dim">Model <span className="text-red-400">*</span></label>
-          <input
-            className={inputClass + fe('model')}
-            value={model}
-            onChange={(e) => { setModel(e.target.value); clearFe('model') }}
-            placeholder="e.g. gpt-4o-mini"
-          />
+          <label className="text-xs text-space-dim flex items-center">Model <span className="text-red-400 ml-1">*</span><HelpIcon text="The default model for your LLM calls. Check your provider's docs for the full list of available models they offer." /></label>
+          {providerDef ? (
+            <ModelCombobox
+              value={model}
+              onChange={(v) => { setModel(v); clearFe('model') }}
+              models={providerDef.models}
+            />
+          ) : (
+            <input
+              className={inputClass + fe('model')}
+              value={model}
+              onChange={(e) => { setModel(e.target.value); clearFe('model') }}
+              placeholder="e.g. gpt-4o-mini"
+            />
+          )}
         </div>
 
         <div className="flex flex-col gap-1">
