@@ -61,6 +61,11 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
             company={job.company || ''}
             state={job.state}
             score={job.final_score ?? null}
+            appliedAt={job.applied_at || null}
+            scrapedAt={job.scraped_at || null}
+            salaryMin={job.ext_salary_min ?? null}
+            salaryMax={job.ext_salary_max ?? null}
+            salaryRaw={job.salary || null}
             docs={{
               resume: !!(job.resume_path || job.resume_md_exists),
               coverLetter: !!(job.cover_path || job.cover_md_exists),
