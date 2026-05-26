@@ -515,6 +515,24 @@ def test_extract_description_not_found(client):
     assert resp.status_code == 404
 
 
+def test_extract_description_endpoint_delegates_to_helper(client, db_session, monkeypatch):
+    """_do_extract_description is called by the route handler."""
+    job = _make_job(db_session, "exttest", JobState.NEW)
+
+    called = {}
+
+    def fake_helper(j, db):
+        called["job_key"] = j.job_key
+
+    monkeypatch.setattr("web.routers.jobs._do_extract_description", fake_helper)
+    monkeypatch.setattr("web.llm_status.start", lambda *a: None)
+    monkeypatch.setattr("web.llm_status.finish", lambda *a: None)
+
+    resp = client.post(f"/api/jobs/{job.job_key}/description/extract")
+    assert resp.status_code == 200
+    assert called.get("job_key") == job.job_key
+
+
 def test_extract_description_llm_failure_returns_500(client, db_session, monkeypatch):
     import unittest.mock as mock
     import web.routers.jobs as jobs_router

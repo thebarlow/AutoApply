@@ -318,11 +318,8 @@ def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
     return path.read_text(encoding="utf-8")
 
 
-@router.post("/{job_key}/description/extract")
-def extract_description(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+def _do_extract_description(job: Job, db: Session) -> None:
+    """Run description extraction LLM call and persist structured fields."""
     user = User.load(db)
     try:
         prompt_content = user.resolve_prompt("extraction")
@@ -334,30 +331,40 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc))
 
     actual_prompt = job.build_description_prompt(prompt_content)
+    try:
+        raw = _call_llm_for_extraction(client, model, actual_prompt)
+    except Exception as exc:
+        raise RuntimeError(f"Description extraction failed: {exc}") from exc
+    try:
+        data = _json.loads(raw)
+    except (_json.JSONDecodeError, TypeError):
+        raise RuntimeError("Description extraction failed: LLM returned invalid JSON")
+
+    job.ext_seniority = data.get("seniority", "")
+    job.ext_role_type = data.get("role_type", "")
+    job.ext_domain = data.get("domain", "")
+    job.ext_work_arrangement = data.get("work_arrangement", "")
+    job.ext_employment_type = data.get("employment_type", "")
+    job.ext_required_skills = ", ".join(data.get("required_skills") or [])
+    job.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
+    job.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
+    job.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
+    job.ext_company_signals = ", ".join(data.get("company_signals") or [])
+    _add_pending_review(job, "description")
+    job.unread_indicator = "ok"
+    job.last_result_error = None
+    db.commit()
+
+
+@router.post("/{job_key}/description/extract")
+def extract_description(job_key: str, db: Session = Depends(get_db)):
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
     llm_status.start(job_key, "description")
     try:
-        try:
-            raw = _call_llm_for_extraction(client, model, actual_prompt)
-        except Exception as exc:
-            raise RuntimeError(f"Description extraction failed: {exc}") from exc
-        try:
-            data = _json.loads(raw)
-        except (_json.JSONDecodeError, TypeError):
-            raise RuntimeError("Description extraction failed: LLM returned invalid JSON")
-        job.ext_seniority = data.get("seniority", "")
-        job.ext_role_type = data.get("role_type", "")
-        job.ext_domain = data.get("domain", "")
-        job.ext_work_arrangement = data.get("work_arrangement", "")
-        job.ext_employment_type = data.get("employment_type", "")
-        job.ext_required_skills = ", ".join(data.get("required_skills") or [])
-        job.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
-        job.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
-        job.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
-        job.ext_company_signals = ", ".join(data.get("company_signals") or [])
-        _add_pending_review(job, "description")
-        job.unread_indicator = "ok"
-        job.last_result_error = None
-        db.commit()
+        _do_extract_description(job, db)
     except HTTPException:
         raise
     except Exception as exc:
