@@ -34,6 +34,7 @@ def render_pdf(
     pdf_path: Path,
     template_path: Path,
     max_pages: int | None = None,
+    meta: dict | None = None,
 ) -> None:
     """Render a Markdown file to PDF via pandoc → Jinja2 HTML → Chromium.
 
@@ -66,7 +67,8 @@ def render_pdf(
     css_path = template_path.parent / f"{css_stem}.css"
     css = css_path.read_text(encoding="utf-8") if css_path.exists() else ""
 
-    meta = _parse_frontmatter(md_path)
+    if meta is None:
+        meta = _parse_frontmatter(md_path)
     today = _date.today()
     date_str = f"{today.day} {today.strftime('%B')} {today.year}"
 
