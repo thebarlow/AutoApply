@@ -230,8 +230,8 @@ def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> 
 # ---- Templates ----
 
 class TemplatesBody(BaseModel):
-    resume_template_path: str = "generator/resume_template.tex"
-    cover_template_path: str = "generator/cover_template.tex"
+    resume_template_path: str = "generator/resume_template.html"
+    cover_template_path: str = "generator/cover_template.html"
     resume_prompt_template: str = ""
     cover_prompt_template: str = ""
     github: str = ""
@@ -242,8 +242,8 @@ class TemplatesBody(BaseModel):
 @router.get("/api/config/templates")
 def get_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
     return {
-        "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.tex"),
-        "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.tex"),
+        "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.html"),
+        "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.html"),
         "resume_prompt_template": _get(db, "resume_prompt_template", ""),
         "cover_prompt_template": _get(db, "cover_prompt_template", ""),
         "github": _get(db, "resume_github", ""),
@@ -502,11 +502,11 @@ def create_latex_template(
         raise HTTPException(status_code=413, detail="File too large (max 2 MB)")
     filename = file.filename or ""
     suffix = Path(filename).suffix.lower()
-    if suffix != ".tex":
-        raise HTTPException(status_code=400, detail="Only .tex files are accepted")
+    if suffix not in (".tex", ".html"):
+        raise HTTPException(status_code=400, detail="Only .tex and .html files are accepted")
     _TEMPLATES_DIR.mkdir(exist_ok=True)
     new_id = uuid.uuid4().hex
-    dest = _TEMPLATES_DIR / f"{new_id}.tex"
+    dest = _TEMPLATES_DIR / f"{new_id}{suffix}"
     dest.write_bytes(contents)
     try:
         templates = _get_latex_templates(db)

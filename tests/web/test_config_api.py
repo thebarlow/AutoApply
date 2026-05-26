@@ -74,8 +74,8 @@ def test_get_templates_defaults(client):
     resp = client.get("/api/config/templates")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["resume_template_path"] == "generator/resume_template.tex"
-    assert data["cover_template_path"] == "generator/cover_template.tex"
+    assert data["resume_template_path"] == "generator/resume_template.html"
+    assert data["cover_template_path"] == "generator/cover_template.html"
     assert data["resume_prompt_template"] == ""
     assert data["cover_prompt_template"] == ""
     assert data["github"] == ""
@@ -85,8 +85,8 @@ def test_get_templates_defaults(client):
 
 def test_put_templates_persists(client):
     body = {
-        "resume_template_path": "/custom/resume.tex",
-        "cover_template_path": "/custom/cover.tex",
+        "resume_template_path": "/custom/resume.html",
+        "cover_template_path": "/custom/cover.html",
         "resume_prompt_template": "Write a resume for {profile} applying to {job}",
         "cover_prompt_template": "Write a cover letter for {profile} applying to {job}",
         "github": "github.com/matt",
@@ -97,7 +97,7 @@ def test_put_templates_persists(client):
     assert resp.status_code == 200
     resp2 = client.get("/api/config/templates")
     data = resp2.json()
-    assert data["resume_template_path"] == "/custom/resume.tex"
+    assert data["resume_template_path"] == "/custom/resume.html"
     assert data["github"] == "github.com/matt"
     assert data["resume_prompt_template"] == "Write a resume for {profile} applying to {job}"
 
@@ -265,7 +265,7 @@ def test_create_latex_template(client, tmp_path, monkeypatch):
     resp = client.post(
         "/api/config/latex-templates",
         data={"name": "resume.tex"},
-        files={"file": ("resume_template.tex", tex_bytes, "text/plain")},
+        files={"file": ("resume_template.html", tex_bytes, "text/plain")},
     )
     assert resp.status_code == 200
     data = resp.json()
