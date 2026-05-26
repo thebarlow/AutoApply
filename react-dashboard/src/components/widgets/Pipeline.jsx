@@ -83,7 +83,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
   )
 }
 
-const SORT_OPTIONS = ['Score', 'Date', 'Salary']
+const SORT_OPTIONS = ['Date', 'Score', 'Salary']
 
 function parseSalaryForSort(job) {
   if (job.ext_salary_min != null) return job.ext_salary_min
@@ -99,7 +99,8 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
   const [activeTab, setActiveTab] = useState('Inbox')
   const [searchInbox, setSearchInbox] = useState('')
   const [searchArchives, setSearchArchives] = useState('')
-  const [sortBy, setSortBy] = useState('Score')
+  const [sortBy, setSortBy] = useState('Date')
+  const [sortDir, setSortDir] = useState('desc')
 
   const tabJobs = useMemo(() => ({
     Inbox: jobs.filter((j) => INBOX_STATES.has(j.state)),
@@ -108,12 +109,13 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
 
   const sortedJobs = useMemo(() => {
     const list = [...(tabJobs[activeTab] || [])]
+    const dir = sortDir === 'desc' ? 1 : -1
     if (sortBy === 'Score') {
       return list.sort((a, b) => {
         if (a.final_score == null && b.final_score == null) return 0
         if (a.final_score == null) return 1
         if (b.final_score == null) return -1
-        return b.final_score - a.final_score
+        return dir * (b.final_score - a.final_score)
       })
     }
     if (sortBy === 'Date') {
@@ -123,7 +125,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         if (!da && !db_) return 0
         if (!da) return 1
         if (!db_) return -1
-        return da < db_ ? 1 : da > db_ ? -1 : 0
+        return dir * (da < db_ ? 1 : da > db_ ? -1 : 0)
       })
     }
     if (sortBy === 'Salary') {
@@ -133,11 +135,11 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         if (sa == null && sb == null) return 0
         if (sa == null) return 1
         if (sb == null) return -1
-        return sb - sa
+        return dir * (sb - sa)
       })
     }
     return list
-  }, [tabJobs, activeTab, sortBy])
+  }, [tabJobs, activeTab, sortBy, sortDir])
 
   const searchQuery = activeTab === 'Inbox' ? searchInbox : searchArchives
   const setSearchQuery = activeTab === 'Inbox' ? setSearchInbox : setSearchArchives
@@ -184,7 +186,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
       </div>
 
       {/* Sort */}
-      <div className="flex gap-3 px-4 pt-3 shrink-0">
+      <div className="flex items-center gap-3 px-4 pt-3 shrink-0">
         {SORT_OPTIONS.map((opt) => (
           <button
             key={opt}
@@ -198,6 +200,16 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
             {opt}
           </button>
         ))}
+        <button
+          onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+          className="ml-auto text-space-dim hover:text-space-text transition-colors"
+          title={sortDir === 'desc' ? 'Descending' : 'Ascending'}
+        >
+          {sortDir === 'desc'
+            ? <span style={{ fontSize: '10px', lineHeight: 1 }}>▼</span>
+            : <span style={{ fontSize: '10px', lineHeight: 1 }}>▲</span>
+          }
+        </button>
       </div>
 
       {/* Search */}
