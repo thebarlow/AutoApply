@@ -14,14 +14,13 @@ router = APIRouter()
 
 
 def _has_configured_llm_provider(db: Session) -> bool:
-    """Return True if at least one LLM provider has a usable API key."""
-    providers = _get_providers(db)
-    if not providers:
-        return False
-
+    """Return True if any named provider or profile has a usable API key."""
     env = _read_env()
-    for p in providers:
+    for p in _get_providers(db):
         if env.get(_env_key_name(p["id"])):
+            return True
+    for profile in db.query(User).all():
+        if env.get(f"LLM_KEY_PROFILE_{profile.id}"):
             return True
     return False
 
