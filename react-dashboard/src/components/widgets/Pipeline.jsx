@@ -80,11 +80,31 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
 
 export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect }) {
   const [activeTab, setActiveTab] = useState('Inbox')
+  const [searchInbox, setSearchInbox] = useState('')
+  const [searchArchives, setSearchArchives] = useState('')
 
   const tabJobs = useMemo(() => ({
     Inbox: jobs.filter((j) => INBOX_STATES.has(j.state)),
     Archives: jobs.filter((j) => ARCHIVE_STATES.has(j.state)),
   }), [jobs])
+
+  const searchQuery = activeTab === 'Inbox' ? searchInbox : searchArchives
+  const setSearchQuery = activeTab === 'Inbox' ? setSearchInbox : setSearchArchives
+
+  const visibleJobs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return tabJobs[activeTab]
+    return tabJobs[activeTab].filter((j) =>
+      (j.title || '').toLowerCase().includes(q) ||
+      (j.company || '').toLowerCase().includes(q)
+    )
+  }, [tabJobs, activeTab, searchQuery])
+
+  function handleTabChange(tab) {
+    setActiveTab(tab)
+    setSearchInbox('')
+    setSearchArchives('')
+  }
 
   return (
     <motion.div
@@ -99,7 +119,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         {TABS.map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
             className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors
               ${activeTab === tab
                 ? 'text-purple-400 border-b-2 border-purple-400 bg-white/5'
@@ -114,10 +134,21 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         ))}
       </div>
 
+      {/* Search */}
+      <div className="px-4 pt-3 shrink-0">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search jobs…"
+          className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-1.5 text-xs text-space-text placeholder-space-dim outline-none focus:border-purple-500/50 transition-colors"
+        />
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         <JobList
-          jobs={tabJobs[activeTab]}
+          jobs={visibleJobs}
           processingKeys={processingKeys}
           selectedJob={selectedJob}
           onJobSelect={onJobSelect}
