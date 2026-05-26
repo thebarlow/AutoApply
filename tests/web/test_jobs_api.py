@@ -554,3 +554,57 @@ def test_extract_description_llm_failure_returns_500(client, db_session, monkeyp
     resp = client.post("/api/jobs/job_extract_fail/description/extract")
     assert resp.status_code == 500
     assert "extraction failed" in resp.json()["detail"].lower()
+
+
+def test_do_extract_description_parses_salary(db_session, monkeypatch):
+    """_do_extract_description sets ext_salary_min and ext_salary_max from JSON."""
+    from web.routers.jobs import _do_extract_description
+    from unittest.mock import MagicMock
+
+    job = _make_job(db_session, "salparse", JobState.NEW)
+
+    mock_user = MagicMock()
+    mock_user.resolve_prompt.return_value = "extract this"
+    mock_user.prompt_extraction_model = "gpt-4"
+    monkeypatch.setattr("web.routers.jobs.User.load", lambda db: mock_user)
+    monkeypatch.setattr(
+        "web.routers.jobs.get_client_for_profile",
+        lambda user, model: (MagicMock(), "gpt-4"),
+    )
+    monkeypatch.setattr(
+        "web.routers.jobs._call_llm_for_extraction",
+        lambda client, model, prompt: '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[],"salary_min":80000,"salary_max":120000}',
+    )
+
+    _do_extract_description(job, db_session)
+
+    db_session.refresh(job)
+    assert job.ext_salary_min == 80000.0
+    assert job.ext_salary_max == 120000.0
+
+
+def test_do_extract_description_handles_null_salary(db_session, monkeypatch):
+    """_do_extract_description sets salary to None when absent from JSON."""
+    from web.routers.jobs import _do_extract_description
+    from unittest.mock import MagicMock
+
+    job = _make_job(db_session, "salnull", JobState.NEW)
+
+    mock_user = MagicMock()
+    mock_user.resolve_prompt.return_value = "extract this"
+    mock_user.prompt_extraction_model = "gpt-4"
+    monkeypatch.setattr("web.routers.jobs.User.load", lambda db: mock_user)
+    monkeypatch.setattr(
+        "web.routers.jobs.get_client_for_profile",
+        lambda user, model: (MagicMock(), "gpt-4"),
+    )
+    monkeypatch.setattr(
+        "web.routers.jobs._call_llm_for_extraction",
+        lambda client, model, prompt: '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[]}',
+    )
+
+    _do_extract_description(job, db_session)
+
+    db_session.refresh(job)
+    assert job.ext_salary_min is None
+    assert job.ext_salary_max is None

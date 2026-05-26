@@ -350,6 +350,10 @@ def _do_extract_description(job: Job, db: Session) -> None:
     job.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
     job.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
     job.ext_company_signals = ", ".join(data.get("company_signals") or [])
+    salary_min = data.get("salary_min")
+    salary_max = data.get("salary_max")
+    job.ext_salary_min = float(salary_min) if salary_min is not None else None
+    job.ext_salary_max = float(salary_max) if salary_max is not None else None
     _add_pending_review(job, "description")
     job.unread_indicator = "ok"
     job.last_result_error = None
