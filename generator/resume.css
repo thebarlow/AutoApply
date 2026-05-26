@@ -1,0 +1,48 @@
+@page {
+  size: letter;
+  margin: 0.65in 0.65in 0.65in 0.65in;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: "Helvetica", "Arial", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.35;
+  color: #111;
+}
+
+.resume h1 {
+  font-size: 18pt;
+  margin: 0 0 0.05in 0;
+}
+
+.resume h2 {
+  font-size: 11.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #333;
+  margin: 0.18in 0 0.06in 0;
+  padding-bottom: 2px;
+}
+
+.resume h3 {
+  font-size: 10.5pt;
+  margin: 0.08in 0 0.02in 0;
+}
+
+.resume p {
+  margin: 0.04in 0;
+}
+
+.resume ul {
+  margin: 0.02in 0 0.06in 0.22in;
+  padding: 0;
+}
+
+.resume li {
+  margin: 0.015in 0;
+}
+
+.resume strong { font-weight: 600; }
+.resume em { font-style: italic; color: #444; }

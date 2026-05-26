@@ -14,12 +14,12 @@ DEFAULT_LATEX_TEMPLATES = [
     {
         "id": "default-resume",
         "name": "Default Resume",
-        "path": str((_GENERATOR_DIR / "resume_template.tex").resolve()),
+        "path": str((_GENERATOR_DIR / "resume_template.html").resolve()),
     },
     {
         "id": "default-cover",
         "name": "Default Cover Letter",
-        "path": str((_GENERATOR_DIR / "cover_template.tex").resolve()),
+        "path": str((_GENERATOR_DIR / "cover_template.html").resolve()),
     },
 ]
 
