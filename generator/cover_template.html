@@ -52,6 +52,10 @@
     <p class="cover-date">{{ date }}</p>
     {% endif %}
 
+    {% if company %}
+    <p class="cover-greeting">To the hiring team at {{ company }},</p>
+    {% endif %}
+
     {{ content_html | safe }}
 
     <div class="cover-signoff">

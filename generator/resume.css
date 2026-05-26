@@ -115,13 +115,13 @@ html, body {
   margin-bottom: 0.07in;
 }
 
-.edu-row-top {
+.edu-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
 }
 
-.edu-degree {
+.edu-left {
   font-weight: 600;
   font-size: 10pt;
 }
@@ -129,9 +129,6 @@ html, body {
 .edu-graduated {
   font-size: 9pt;
   color: #444;
-}
-
-.edu-institution {
-  font-size: 9.5pt;
-  color: #333;
+  white-space: nowrap;
+  margin-left: 0.2in;
 }

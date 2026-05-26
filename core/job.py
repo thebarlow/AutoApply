@@ -683,6 +683,8 @@ class Job(Base):
             data["website"] = website
         if getattr(user, "education", None):
             data["education"] = [dataclasses.asdict(e) for e in user.education]
+        if self.company:
+            data["company"] = self.company
         return data
 
     def _build_frontmatter(self, user: Any, db: Session) -> str:

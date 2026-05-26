@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from datetime import date as _date
 from pathlib import Path
@@ -54,8 +55,14 @@ def render_pdf(
         subprocess.CalledProcessError: If pandoc exits non-zero.
         RuntimeError: If ``max_pages`` is exceeded.
     """
+    md_text = md_path.read_text(encoding="utf-8")
+    # Ensure bullet lists are preceded by a blank line so pandoc parses them
+    # as <ul> elements rather than inline text within a paragraph.
+    md_text = re.sub(r"(?<=\S)\n(- )", r"\n\n\1", md_text)
+
     fragment = subprocess.run(
-        ["pandoc", str(md_path), "-t", "html"],
+        ["pandoc", "-t", "html"],
+        input=md_text,
         check=True,
         capture_output=True,
         text=True,
@@ -72,11 +79,34 @@ def render_pdf(
     today = _date.today()
     date_str = f"{today.day} {today.strftime('%B')} {today.year}"
 
+    # When frontmatter education is present, strip the LLM-generated Education
+    # section from the pandoc fragment and split at Experience so the template
+    # can inject the structured education block in the correct position
+    # (Profile → Education → Experience → …).
+    content_pre = fragment
+    content_post = ""
+    if meta.get("education"):
+        # Remove the <h2>Education</h2> section from the pandoc output
+        fragment_no_edu = re.sub(
+            r"<h2[^>]*>\s*Education\s*</h2>.*?(?=<h2|\Z)",
+            "",
+            fragment,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        exp_match = re.search(r"(?=<h2[^>]*>\s*Experience\s*</h2>)", fragment_no_edu, re.IGNORECASE)
+        if exp_match:
+            content_pre = fragment_no_edu[: exp_match.start()]
+            content_post = fragment_no_edu[exp_match.start() :]
+        else:
+            content_pre = fragment_no_edu
+
     env = Environment(autoescape=False)
     env.filters["strip_url"] = _strip_url
     html = env.from_string(template_path.read_text(encoding="utf-8")).render(
         css=css,
         content_html=fragment,
+        content_pre=content_pre,
+        content_post=content_post,
         date=date_str,
         **meta,
     )

@@ -59,22 +59,23 @@
     </header>
     {% endif %}
 
+    {{ content_pre | safe }}
+
     {% if education %}
     <section class="injected-section">
       <h2>Education</h2>
       {% for edu in education %}
       <div class="edu-entry">
-        <div class="edu-row-top">
-          <span class="edu-degree"><em>{{ edu.degree }} {{ edu.field }}</em></span>
+        <div class="edu-row">
+          <span class="edu-left"><em>{{ edu.degree }} {{ edu.field }}</em> &nbsp;|&nbsp; {{ edu.institution }}</span>
           <span class="edu-graduated">{{ edu.graduated }}</span>
         </div>
-        <div class="edu-institution">{{ edu.institution }}</div>
       </div>
       {% endfor %}
     </section>
     {% endif %}
 
-    {{ content_html | safe }}
+    {{ content_post | safe }}
 
   </main>
 </body>

@@ -3,7 +3,7 @@ import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, p
 import { validateProvider } from '../../validation'
 import HelpIcon from '../shared/HelpIcon'
 
-// â”€â”€â”€ Shared â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Shared ────────────────────────────────────────────────────────────────────
 
 export const inputClass =
   'w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors'
@@ -32,7 +32,7 @@ function ChevronDown({ open }) {
   )
 }
 
-// â”€â”€â”€ AccordionSection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AccordionSection ──────────────────────────────────────────────────────────
 
 function AccordionSection({ id, title, editButton, children }) {
   const storageKey = id ? `profile-accordion:${id}` : null
@@ -74,7 +74,7 @@ function AccordionSection({ id, title, editButton, children }) {
   )
 }
 
-// â”€â”€â”€ ItemOverlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── ItemOverlay ───────────────────────────────────────────────────────────────
 
 function ItemOverlay({ title, onClose, onSave, saving, error, children }) {
   useEscape(true, onClose)
@@ -83,7 +83,7 @@ function ItemOverlay({ title, onClose, onSave, saving, error, children }) {
       <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-md max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
           <span className="text-sm font-semibold text-space-text">{title}</span>
-          <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">Ã—</button>
+          <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">{children}</div>
         <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
@@ -94,7 +94,7 @@ function ItemOverlay({ title, onClose, onSave, saving, error, children }) {
               disabled={saving}
               className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
             >
-              {saving ? 'Savingâ€¦' : 'Save'}
+              {saving ? 'Saving…' : 'Save'}
             </button>
             <button
               onClick={onClose}
@@ -130,7 +130,7 @@ function Field({ label, value }) {
   )
 }
 
-// â”€â”€â”€ Placeholder section components (filled in subsequent tasks) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Placeholder section components (filled in subsequent tasks) ───────────────
 
 function IdentitySection({ data, onSave }) {
   const [open, setOpen] = useState(false)
@@ -270,7 +270,7 @@ function SkillsSection({ data, onSave }) {
                   onClick={() => handleRemove(i)}
                   className="text-space-dim hover:text-red-400 text-xs leading-none transition-colors"
                 >
-                  Ã—
+                  ×
                 </button>
               </div>
             ))}
@@ -361,11 +361,11 @@ function ExperienceSection({ data, onSave }) {
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-space-text truncate">{item.title}</p>
-                <p className="text-xs text-space-dim">{item.company} Â· {item.start}â€“{item.end}</p>
+                <p className="text-xs text-space-dim">{item.company} · {item.start}–{item.end}</p>
               </div>
               <div className="flex gap-1 shrink-0">
                 <EditBtn onClick={() => openEdit(i)} />
-                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">âœ•</button>
+                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">✕</button>
               </div>
             </div>
           ))}
@@ -444,11 +444,11 @@ function EducationSection({ data, onSave }) {
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-space-text truncate">{item.degree} in {item.field}</p>
-                <p className="text-xs text-space-dim">{item.institution} Â· {item.graduated}{item.gpa ? ` Â· GPA ${item.gpa}` : ''}</p>
+                <p className="text-xs text-space-dim">{item.institution} · {item.graduated}{item.gpa ? ` · GPA ${item.gpa}` : ''}</p>
               </div>
               <div className="flex gap-1 shrink-0">
                 <EditBtn onClick={() => openEdit(i)} />
-                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">âœ•</button>
+                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">✕</button>
               </div>
             </div>
           ))}
@@ -546,7 +546,7 @@ function ProjectsSection({ data, onSave }) {
               </div>
               <div className="flex gap-1 shrink-0">
                 <EditBtn onClick={() => openEdit(i)} />
-                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">âœ•</button>
+                <button onClick={() => handleRemove(i)} className="px-2 py-0.5 rounded text-xs text-space-dim border border-space-border hover:text-red-400 transition-colors">✕</button>
               </div>
             </div>
           ))}
@@ -618,7 +618,7 @@ function JobPrefsSection({ data, onSave }) {
   }
 
   const salaryStr = data.target_salary_min != null && data.target_salary_max != null
-    ? `$${data.target_salary_min.toLocaleString()} â€“ $${data.target_salary_max.toLocaleString()}`
+    ? `$${data.target_salary_min.toLocaleString()} – $${data.target_salary_max.toLocaleString()}`
     : data.target_salary_min != null ? `From $${data.target_salary_min.toLocaleString()}` : null
 
   return (
@@ -673,7 +673,7 @@ function JobPrefsSection({ data, onSave }) {
     </>
   )
 }
-// â”€â”€â”€ Prompts constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Prompts constants ────────────────────────────────────────────────────────
 
 const PROMPT_HELP = {
   scoring: 'Scores how well a job matches your profile. Returns a numeric score and reasoning used to prioritize or filter jobs.',
@@ -714,8 +714,8 @@ function resolveTokenValue(token, data) {
     '{user.last_name}': data.last_name || '',
     '{user.hero}': data.hero || '',
     '{user.skills}': (data.skills || []).join(', '),
-    '{user.work_history}': (data.work_history || []).map(e => `${e.title} at ${e.company}`).join(' Â· '),
-    '{user.education}': (data.education || []).map(e => `${e.degree} ${e.field}, ${e.institution}`).join(' Â· '),
+    '{user.work_history}': (data.work_history || []).map(e => `${e.title} at ${e.company}`).join(' · '),
+    '{user.education}': (data.education || []).map(e => `${e.degree} ${e.field}, ${e.institution}`).join(' · '),
     '{user.projects}': (data.projects || []).map(e => e.name).join(', '),
     '{user.target_roles}': (data.target_roles || []).join(', '),
     '{user.target_salary_min}': data.target_salary_min != null ? `$${data.target_salary_min.toLocaleString()}` : '',
@@ -723,7 +723,7 @@ function resolveTokenValue(token, data) {
     '{profile}': (() => { try { return JSON.stringify(data) } catch { return '' } })(),
   }
   const v = raw[token] ?? ''
-  return v.length > 220 ? v.slice(0, 220) + 'â€¦' : v
+  return v.length > 220 ? v.slice(0, 220) + '…' : v
 }
 
 const PROMPT_TYPE_KEYS = ['scoring', 'resume', 'cover', 'extraction', 'resume_parse']
@@ -874,7 +874,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
 
   const renderChipTray = () => (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable<HelpIcon text="Use placeholders like {job_description}, {resume}, {company_name} â€” they're substituted with actual job/profile data at generation time." /></label>
+      <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable<HelpIcon text="Use placeholders like {job_description}, {resume}, {company_name} — they're substituted with actual job/profile data at generation time." /></label>
       <div className="flex flex-col gap-1.5">
         <p className="text-xs text-space-dim">User</p>
         <div className="flex flex-wrap gap-1.5">
@@ -916,7 +916,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   )
 
   const renderEditor = (extraTextareaClass = '') => {
-    if (loadingContent) return <p className="text-xs text-space-dim">Loadingâ€¦</p>
+    if (loadingContent) return <p className="text-xs text-space-dim">Loading…</p>
     if (contentError) return <p className="text-xs text-red-400">{contentError}</p>
     return (
       <textarea
@@ -940,7 +940,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
             <span className="text-sm font-semibold text-space-text">{label}</span>
-            <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">Ã—</button>
+            <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
@@ -953,13 +953,13 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
                   value={selectedFile}
                   onChange={(e) => { setSelectedFile(e.target.value); setFieldErrors(prev => { const n = { ...prev }; delete n.selectedFile; return n }) }}
                 >
-                  <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>â€” select a file â€”</option>
+                  <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
                   {promptFiles.map((f) => (
                     <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
                   ))}
                 </select>
                 <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                  {uploading ? 'â€¦' : 'Upload'}
+                  {uploading ? '…' : 'Upload'}
                   <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
                 </label>
               </div>
@@ -1013,7 +1013,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
                 disabled={saving || loadingContent || !!contentError}
                 className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
               >
-                {saving ? 'Savingâ€¦' : 'Save'}
+                {saving ? 'Saving…' : 'Save'}
               </button>
               <button
                 onClick={onClose}
@@ -1028,13 +1028,13 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
       {popOut && (
         <div className="fixed inset-0 z-[60] flex flex-col bg-[#0a0a14]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
-            <span className="text-sm font-semibold text-space-text">{label} â€” Full Editor</span>
+            <span className="text-sm font-semibold text-space-text">{label} — Full Editor</span>
             <button
               onClick={() => setPopOut(false)}
               className="text-space-dim hover:text-space-text text-lg leading-none"
               title="Close full editor"
             >
-              Ã—
+              ×
             </button>
           </div>
           <div className="flex-1 flex flex-col gap-3 p-4 min-h-0">
@@ -1186,7 +1186,7 @@ function LlmSection({ profile, onSave }) {
               value={providerType}
               onChange={e => setProviderType(e.target.value)}
             >
-              <option value="">â€” select â€”</option>
+              <option value="">— select —</option>
               {PROVIDER_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
@@ -1202,12 +1202,12 @@ function LlmSection({ profile, onSave }) {
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-space-dim">
-              API Key {(!profile.has_llm_key || keyEdited) && <span className="text-red-400">*</span>}<HelpIcon text="Your provider's secret API key. The app uses this to call the LLM on your behalf. Keep it private â€” never share it." docHref="/docs" />
+              API Key {(!profile.has_llm_key || keyEdited) && <span className="text-red-400">*</span>}<HelpIcon text="Your provider's secret API key. The app uses this to call the LLM on your behalf. Keep it private — never share it." docHref="/docs" />
             </label>
             <input
               type="password"
               className={inputClass}
-              value={!keyEdited && profile.has_llm_key ? 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : apiKey}
+              value={!keyEdited && profile.has_llm_key ? '••••••••' : apiKey}
               onFocus={() => { if (!keyEdited && profile.has_llm_key) { setKeyEdited(true); setApiKey('') } }}
               onChange={e => { setKeyEdited(true); setApiKey(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.api_key; return n }) }}
               placeholder={profile.has_llm_key ? '' : 'Enter API key'}
@@ -1223,7 +1223,7 @@ function LlmSection({ profile, onSave }) {
   )
 }
 
-// â”€â”€â”€ ProfileDetailView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── ProfileDetailView ─────────────────────────────────────────────────────────
 
 const PROFILE_DATA_DEFAULTS = {
   first_name: '', last_name: '', hero: '', email: '', phone: '',
@@ -1278,7 +1278,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
     }
   }
 
-  if (loading) return <p className="text-xs text-space-dim">Loadingâ€¦</p>
+  if (loading) return <p className="text-xs text-space-dim">Loading…</p>
   if (error) return <p className="text-xs text-red-400">{error}</p>
 
   const d = profile.data
@@ -1325,7 +1325,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
                 disabled={deleting}
                 className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
               >
-                {deleting ? 'Deletingâ€¦' : 'Delete'}
+                {deleting ? 'Deleting…' : 'Delete'}
               </button>
               <button
                 onClick={() => setConfirmDelete(false)}

@@ -43,10 +43,10 @@ html, body {
 }
 
 .cover-name {
-  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  font-family: "Georgia", "Times New Roman", serif;
   font-size: 18pt;
-  font-weight: 300;
-  letter-spacing: 0.08em;
+  font-weight: 400;
+  letter-spacing: 0.06em;
   color: #111;
   line-height: 1.1;
 }
@@ -104,6 +104,11 @@ html, body {
   margin: 0 0 0.3in 0;
 }
 
+.cover-greeting {
+  font-style: italic;
+  margin: 0 0 0.18in 0;
+}
+
 .cover-body p {
   margin: 0 0 0.16in 0;
   text-align: justify;
@@ -120,10 +125,10 @@ html, body {
 }
 
 .signoff-name {
-  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  font-family: "Georgia", "Times New Roman", serif;
   font-size: 10.5pt;
-  font-weight: 300;
-  letter-spacing: 0.06em;
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
 .signoff-name strong {
