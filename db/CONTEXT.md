@@ -19,3 +19,5 @@ conn.close()
 | Column | Table | Type | Added |
 |--------|-------|------|-------|
 | `extraction_json` (renamed from `extraction_md`) | `jobs` | TEXT | 2026-05-08 |
+| `ext_salary_min` | `jobs` | REAL | 2026-05-26 |
+| `ext_salary_max` | `jobs` | REAL | 2026-05-26 |
