@@ -83,32 +83,76 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
   )
 }
 
+const SORT_OPTIONS = ['Score', 'Date', 'Salary']
+
+function parseSalaryForSort(job) {
+  if (job.ext_salary_min != null) return job.ext_salary_min
+  if (!job.salary) return null
+  const nums = job.salary.replace(/,/g, '').match(/\d+(?:\.\d+)?[kK]?/g)
+  if (!nums || nums.length === 0) return null
+  const toNum = (s) => parseFloat(s) * (/[kK]$/i.test(s) ? 1000 : 1)
+  const values = nums.map(toNum).filter(n => n > 0)
+  return values.length > 0 ? Math.min(...values) : null
+}
+
 export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect }) {
   const [activeTab, setActiveTab] = useState('Inbox')
   const [searchInbox, setSearchInbox] = useState('')
   const [searchArchives, setSearchArchives] = useState('')
+  const [sortBy, setSortBy] = useState('Score')
 
   const tabJobs = useMemo(() => ({
     Inbox: jobs.filter((j) => INBOX_STATES.has(j.state)),
     Archives: jobs.filter((j) => ARCHIVE_STATES.has(j.state)),
   }), [jobs])
 
+  const sortedJobs = useMemo(() => {
+    const list = [...(tabJobs[activeTab] || [])]
+    if (sortBy === 'Score') {
+      return list.sort((a, b) => {
+        if (a.final_score == null && b.final_score == null) return 0
+        if (a.final_score == null) return 1
+        if (b.final_score == null) return -1
+        return b.final_score - a.final_score
+      })
+    }
+    if (sortBy === 'Date') {
+      return list.sort((a, b) => {
+        const da = a.applied_at || a.scraped_at || ''
+        const db_ = b.applied_at || b.scraped_at || ''
+        if (!da && !db_) return 0
+        if (!da) return 1
+        if (!db_) return -1
+        return da < db_ ? 1 : da > db_ ? -1 : 0
+      })
+    }
+    if (sortBy === 'Salary') {
+      return list.sort((a, b) => {
+        const sa = parseSalaryForSort(a)
+        const sb = parseSalaryForSort(b)
+        if (sa == null && sb == null) return 0
+        if (sa == null) return 1
+        if (sb == null) return -1
+        return sb - sa
+      })
+    }
+    return list
+  }, [tabJobs, activeTab, sortBy])
+
   const searchQuery = activeTab === 'Inbox' ? searchInbox : searchArchives
   const setSearchQuery = activeTab === 'Inbox' ? setSearchInbox : setSearchArchives
 
   const visibleJobs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return tabJobs[activeTab]
-    return tabJobs[activeTab].filter((j) =>
+    if (!q) return sortedJobs
+    return sortedJobs.filter((j) =>
       (j.title || '').toLowerCase().includes(q) ||
       (j.company || '').toLowerCase().includes(q)
     )
-  }, [tabJobs, activeTab, searchQuery])
+  }, [sortedJobs, searchQuery])
 
   function handleTabChange(tab) {
     setActiveTab(tab)
-    setSearchInbox('')
-    setSearchArchives('')
   }
 
   return (
@@ -139,8 +183,25 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         ))}
       </div>
 
+      {/* Sort */}
+      <div className="flex gap-3 px-4 pt-3 shrink-0">
+        {SORT_OPTIONS.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => setSortBy(opt)}
+            className={`text-xs font-medium pb-0.5 transition-colors
+              ${sortBy === opt
+                ? 'text-purple-400 border-b border-purple-400'
+                : 'text-space-dim hover:text-space-text'
+              }`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+
       {/* Search */}
-      <div className="px-4 pt-3 shrink-0">
+      <div className="px-4 pt-2 shrink-0">
         <input
           type="text"
           value={searchQuery}
