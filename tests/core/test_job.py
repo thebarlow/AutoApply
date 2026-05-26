@@ -414,3 +414,41 @@ def test_intake_spawns_background_thread_and_calls_extract(db_session):
         spawned_threads[0].join(timeout=5)
 
     assert called == ["r_intake"]
+
+
+def test_job_has_ext_salary_columns(db_session):
+    """ext_salary_min and ext_salary_max exist on the model."""
+    from core.job import Job, JobState
+    job = Job(
+        job_key="sal-test",
+        source="test",
+        url="https://example.com/sal",
+        state=JobState.NEW.value,
+        ext_salary_min=80000.0,
+        ext_salary_max=100000.0,
+    )
+    db_session.add(job)
+    db_session.commit()
+    fetched = db_session.query(Job).filter_by(job_key="sal-test").first()
+    assert fetched.ext_salary_min == 80000.0
+    assert fetched.ext_salary_max == 100000.0
+
+
+def test_serialize_includes_salary_and_applied_at(db_session):
+    """serialize() includes ext_salary_min, ext_salary_max, and applied_at."""
+    from core.job import Job, JobState
+    job = Job(
+        job_key="ser-sal-test",
+        source="test",
+        url="https://example.com/ser-sal",
+        state=JobState.NEW.value,
+        ext_salary_min=70000.0,
+        ext_salary_max=90000.0,
+        applied_at="2026-05-01T12:00:00+00:00",
+    )
+    db_session.add(job)
+    db_session.commit()
+    result = job.serialize()
+    assert result["ext_salary_min"] == 70000.0
+    assert result["ext_salary_max"] == 90000.0
+    assert result["applied_at"] == "2026-05-01T12:00:00+00:00"

@@ -111,6 +111,8 @@ class Job(Base):
     ext_tech_stack = Column(Text)
     ext_key_responsibilities = Column(Text)
     ext_company_signals = Column(Text)
+    ext_salary_min = Column(Float)
+    ext_salary_max = Column(Float)
 
     # ── Artifacts ──────────────────────────────────────────────────────────────
     resume_path = Column(String)
@@ -725,6 +727,9 @@ class Job(Base):
             "fit_score": self.fit_score,
             "final_score": self.final_score,
             "score_justification": justification,
+            "applied_at": self.applied_at or "",
+            "ext_salary_min": self.ext_salary_min,
+            "ext_salary_max": self.ext_salary_max,
             "resume_path": self.resume_path,
             "cover_path": self.cover_path,
             "resume_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_resume.md").exists(),
