@@ -60,6 +60,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
             title={job.title || '(no title)'}
             company={job.company || ''}
             state={job.state}
+            score={job.final_score ?? null}
             docs={{
               resume: !!(job.resume_path || job.resume_md_exists),
               coverLetter: !!(job.cover_path || job.cover_md_exists),
