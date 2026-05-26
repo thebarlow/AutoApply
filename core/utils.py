@@ -1,95 +1,74 @@
 from __future__ import annotations
 
-import re
 import subprocess
-import tempfile
 from pathlib import Path
-from typing import Optional
+
+from jinja2 import Template
+from playwright.sync_api import sync_playwright
+from pypdf import PdfReader
 
 
-def render_pdf(md_path: Path, pdf_path: Path, template_path: Path) -> None:
-    """Invoke pandoc/xelatex to render a PDF from a markdown file.
-
-    Args:
-        md_path: Path to the source markdown file.
-        pdf_path: Destination path for the rendered PDF.
-        template_path: Path to the LaTeX template file.
-
-    Raises:
-        subprocess.CalledProcessError: If pandoc exits with a non-zero code.
-    """
-    subprocess.run(
-        [
-            "pandoc", str(md_path),
-            "-o", str(pdf_path),
-            "--pdf-engine=xelatex",
-            f"--template={template_path}",
-        ],
-        check=True,
-    )
-
-
-def _get_page_count(pdf_path: Path) -> int:
-    """Return the number of pages in a PDF using pdfinfo."""
-    result = subprocess.run(
-        ["pdfinfo", str(pdf_path)], capture_output=True, text=True, check=True
-    )
-    for line in result.stdout.splitlines():
-        if line.startswith("Pages:"):
-            return int(line.split(":")[1].strip())
-    raise RuntimeError(f"Could not determine page count for {pdf_path.name}")
-
-
-def render_resume_pdf(
+def render_pdf(
     md_path: Path,
     pdf_path: Path,
-    job_key: str,
     template_path: Path,
+    max_pages: int | None = None,
 ) -> None:
-    """Render a resume PDF, shrinking font and margins to fit one page if needed.
+    """Render a Markdown file to PDF via pandoc → Jinja2 HTML → Chromium.
 
-    Tries up to three progressively tighter layouts before raising.
+    The template is a Jinja2 HTML file with two slots: ``{{ css }}`` (inlined
+    into a ``<style>`` block) and ``{{ content_html }}`` (the pandoc HTML
+    fragment). The paired CSS file is loaded from ``<template_stem>.css`` in
+    the same directory as the template.
 
     Args:
         md_path: Path to the source markdown file.
         pdf_path: Destination path for the rendered PDF.
-        job_key: Job identifier used in error messages.
-        template_path: Path to the LaTeX template file.
+        template_path: Path to the Jinja2 HTML template.
+        max_pages: If set, raise ``RuntimeError`` when the output exceeds this
+            page count.
 
     Raises:
-        RuntimeError: If the resume cannot fit on one page at minimum settings.
+        subprocess.CalledProcessError: If pandoc exits non-zero.
+        RuntimeError: If ``max_pages`` is exceeded.
     """
-    attempts = [
-        {"fontsize": "11pt", "top": "1.0in", "bottom": "1.0in"},
-        {"fontsize": "10pt", "top": "1.0in", "bottom": "1.0in"},
-        {"fontsize": "10pt", "top": "0.8in", "bottom": "0.8in"},
-    ]
-    template_text = template_path.read_text(encoding="utf-8")
-    for s in attempts:
-        modified = re.sub(
-            r"\\documentclass\[\d+pt\]",
-            f"\\\\documentclass[{s['fontsize']}]",
-            template_text,
-        )
-        modified = re.sub(
-            r"top=[\d.]+in, bottom=[\d.]+in",
-            f"top={s['top']}, bottom={s['bottom']}",
-            modified,
-        )
-        with tempfile.NamedTemporaryFile(
-            suffix=".tex", delete=False, mode="w", encoding="utf-8"
-        ) as f:
-            f.write(modified)
-            tmp = Path(f.name)
-        try:
-            render_pdf(md_path, pdf_path, tmp)
-            if _get_page_count(pdf_path) <= 1:
-                return
-        finally:
-            tmp.unlink(missing_ok=True)
-    raise RuntimeError(
-        f"Resume '{job_key}' exceeds 1 page at minimum settings (10pt, 0.8in margins)."
+    fragment = subprocess.run(
+        ["pandoc", str(md_path), "-t", "html"],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout
+
+    css_path = template_path.with_suffix(".css")
+    css = css_path.read_text(encoding="utf-8") if css_path.exists() else ""
+
+    html = Template(template_path.read_text(encoding="utf-8")).render(
+        css=css,
+        content_html=fragment,
     )
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.set_content(html, wait_until="load")
+            page.pdf(
+                path=str(pdf_path),
+                format="Letter",
+                print_background=True,
+            )
+        finally:
+            browser.close()
+
+    if max_pages is not None:
+        page_count = len(PdfReader(str(pdf_path)).pages)
+        if page_count > max_pages:
+            raise RuntimeError(
+                f"Rendered PDF '{pdf_path.name}' has {page_count} pages, "
+                f"exceeds max_pages={max_pages}. Trim the source markdown "
+                f"or regenerate."
+            )
 
 
 def strip_header_block(md: str) -> str:
