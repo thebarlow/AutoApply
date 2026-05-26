@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
 import Navbar from "./Navbar";
 
 function slugify(text) {
@@ -97,8 +98,8 @@ export default function Docs() {
     <div className="min-h-screen bg-[#0f0f1a] text-space-text">
       <Navbar />
       <div className="max-w-5xl mx-auto p-6">
-        <div className="flex gap-8">
-          <nav className="w-64 shrink-0">
+        <div className="flex gap-8 h-[calc(100vh-4rem)]">
+          <nav className="w-64 shrink-0 sticky top-6 self-start overflow-y-auto max-h-[calc(100vh-5rem)]">
             <ul className="space-y-3">
               {docs.map((d) => {
                 const h1s = contentMap[d.filename] ? extractH1s(contentMap[d.filename]) : [];
@@ -133,11 +134,11 @@ export default function Docs() {
             </ul>
           </nav>
 
-          <article className="prose prose-invert prose-headings:text-space-text prose-p:text-space-dim prose-li:text-space-dim prose-a:text-violet-400 hover:prose-a:text-violet-300 flex-1 min-w-0">
+          <article className="prose prose-invert prose-headings:text-space-text prose-p:text-space-dim prose-li:text-space-dim prose-a:text-violet-400 hover:prose-a:text-violet-300 flex-1 min-w-0 overflow-y-auto">
             {loading ? (
               <p className="text-space-dim text-sm">Loading…</p>
             ) : (
-              <ReactMarkdown components={headingComponents}>{content}</ReactMarkdown>
+              <ReactMarkdown components={headingComponents} rehypePlugins={[rehypeRaw]}>{content}</ReactMarkdown>
             )}
           </article>
         </div>
