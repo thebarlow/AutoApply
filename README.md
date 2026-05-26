@@ -8,7 +8,6 @@ Semi-automated job scraping, tailored resume generation, and application managem
 
 - **Python 3.10+**
 - **pandoc** — [pandoc.org/installing.html](https://pandoc.org/installing.html)
-- **xelatex** — part of [TeX Live](https://tug.org/texlive/) (Linux/macOS) or [MiKTeX](https://miktex.org/) (Windows). Required for PDF generation.
 - **Firefox or Chrome**
 
 ---
@@ -22,6 +21,8 @@ python setup.py
 ```
 
 This creates a virtual environment at `.venv/`, installs dependencies, copies `.env.example` to `.env`, and initialises the SQLite database.
+
+After `pip install`, run `playwright install chromium` once to download the headless browser used for PDF rendering.
 
 ---
 
@@ -85,7 +86,7 @@ python -m scraper --source remoteok
 | Sources | Which API scrapers are enabled (Remotive, RemoteOK) |
 | Search | Keyword whitelist/blacklist, max jobs per source |
 | LLM | API provider, model, and API key |
-| Templates | LaTeX template paths, resume/cover letter prompt templates, social links |
+| Templates | HTML template paths, resume/cover letter prompt templates, social links |
 | Scoring | Desirability/fit score weights, auto-reject/approve thresholds |
 | Profile | User profile used for tailored resume and cover letter generation |
 
