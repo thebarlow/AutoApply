@@ -17,17 +17,20 @@ generator/
 
 | File | Role |
 |---|---|
-| `resume_template.html` | Jinja2 template; receives rendered HTML fragment and inlines CSS |
-| `resume.css` | All layout, typography, and spacing for resumes |
-| `cover_template.html` | Jinja2 template for cover letters |
-| `cover.css` | All layout, typography, and spacing for cover letters |
+| `resume_template.html` | Jinja2 template; renders name/contact header (2×3 grid with SVG icons), injects Education from frontmatter, then LLM body |
+| `resume.css` | Layout and typography for resumes; serif section headers, ALL CAPS h2 |
+| `cover_template.html` | Jinja2 template; black bars top/bottom, 2-col gray header, date injection, auto sign-off |
+| `cover.css` | Layout and typography for cover letters |
 
 ## Pipeline
 
 `Job.generate_resume_pdf()` calls `core.utils.render_pdf`, which:
 
-1. Runs **pandoc** to convert the Markdown document (resume or cover letter) to an HTML fragment.
-2. Jinja2 wraps the fragment using the appropriate `*_template.html`, inlining the paired `.css` file into the `<head>`.
-3. **Playwright** (headless Chromium) renders the full HTML page to PDF.
+1. Runs **pandoc** to convert the Markdown document body to an HTML fragment (YAML frontmatter is stripped by pandoc).
+2. `_parse_frontmatter` extracts contact fields and structured education entries from the YAML block.
+3. Jinja2 (`Environment` with `strip_url` filter) renders the template with the fragment, frontmatter vars, and today's date.
+4. **Playwright** (headless Chromium) renders the full HTML page to PDF.
+
+The CSS file is resolved by stripping `_template` from the template stem (e.g. `resume_template.html` → `resume.css`).
 
 Resume rendering passes `max_pages=1` and raises `RuntimeError` if the output exceeds one page. There is no auto-shrink — the template and CSS must keep content within one page.

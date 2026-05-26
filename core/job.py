@@ -585,12 +585,14 @@ class Job(Base):
             RuntimeError: If the rendered resume exceeds one page.
         """
         from core.utils import render_pdf
+        from core.user import User
 
         md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
-        render_pdf(md_path, pdf_path, template_path, max_pages=1)
+        meta = self._frontmatter_data(User.load(db), db)
+        render_pdf(md_path, pdf_path, template_path, max_pages=1, meta=meta)
         self.resume_path = str(pdf_path)
         db.commit()
 
@@ -607,12 +609,14 @@ class Job(Base):
             FileNotFoundError: If the cover letter markdown file does not exist.
         """
         from core.utils import render_pdf
+        from core.user import User
 
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Cover markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_cover.pdf"
-        render_pdf(md_path, pdf_path, template_path)
+        meta = self._frontmatter_data(User.load(db), db)
+        render_pdf(md_path, pdf_path, template_path, meta=meta)
         self.cover_path = str(pdf_path)
         db.commit()
 
@@ -649,44 +653,46 @@ class Job(Base):
                 sections.append(f"## {heading}\n" + "\n".join(f"- {item}" for item in items))
         return "\n\n".join(sections)
 
-    def _build_frontmatter(self, user: Any, db: Session) -> str:
-        """Build YAML front matter for resume/cover letter markdown files.
-
-        Reads resume_github, resume_linkedin, resume_website from the Config table.
-
-        Args:
-            user: A User instance with contact info.
-            db: SQLAlchemy session.
-
-        Returns:
-            YAML front matter string ending with a blank line.
-        """
+    def _frontmatter_data(self, user: Any, db: Session) -> dict:
+        """Build the frontmatter dict for resume/cover letter templates."""
+        import dataclasses
         from db.database import Config
 
         def _cfg(key: str) -> str:
             row = db.query(Config).filter_by(key=key).first()
             return row.value if row else ""
 
-        full_name = user.full_name()
-        first = user.first_name or full_name.split(" ", 1)[0]
-        last = user.last_name or (full_name.split(" ", 1)[1] if " " in full_name else "")
+        first = user.first_name or ""
+        last = user.last_name or ""
+        data: dict = {
+            "name": f"{first} {last}".strip() or user.full_name(),
+            "firstname": first,
+            "lastname": last,
+            "email": user.email or "",
+            "phone": user.phone or "",
+            "location": user.location or "",
+        }
         github = _cfg("resume_github")
         linkedin = _cfg("resume_linkedin")
         website = _cfg("resume_website")
-
-        lines = [
-            "---",
-            f"name: {full_name}", f"firstname: {first}", f"lastname: {last}",
-            f"email: {user.email}", f"phone: {user.phone}", f"location: {user.location}",
-        ]
         if github:
-            lines.append(f"github: {github}")
+            data["github"] = github
         if linkedin:
-            lines.append(f"linkedin: {linkedin}")
+            data["linkedin"] = linkedin
         if website:
-            lines.append(f"website: {website}")
-        lines.extend(["---", ""])
-        return "\n".join(lines) + "\n"
+            data["website"] = website
+        if getattr(user, "education", None):
+            data["education"] = [dataclasses.asdict(e) for e in user.education]
+        return data
+
+    def _build_frontmatter(self, user: Any, db: Session) -> str:
+        """Serialize frontmatter data to a YAML front matter string."""
+        import yaml
+        return "---\n" + yaml.dump(
+            self._frontmatter_data(user, db),
+            allow_unicode=True,
+            default_flow_style=False,
+        ) + "---\n\n"
 
     def serialize(self) -> dict:
         """Return a JSON-serializable dict of all job fields for the API.

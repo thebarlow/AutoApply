@@ -1,11 +1,32 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import date as _date
 from pathlib import Path
+from typing import Any
 
-from jinja2 import Template
+import yaml
+from jinja2 import Environment
 from playwright.sync_api import sync_playwright
 from pypdf import PdfReader
+
+
+def _strip_url(url: str) -> str:
+    return url.replace("https://www.", "").replace("https://", "").replace("http://", "").rstrip("/")
+
+
+def _parse_frontmatter(md_path: Path) -> dict[str, Any]:
+    """Extract YAML front matter from a markdown file.
+
+    Returns an empty dict if no front matter block is present.
+    """
+    lines = md_path.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    for i, line in enumerate(lines[1:], 1):
+        if line.strip() == "---":
+            return yaml.safe_load("\n".join(lines[1:i])) or {}
+    return {}
 
 
 def render_pdf(
@@ -13,6 +34,7 @@ def render_pdf(
     pdf_path: Path,
     template_path: Path,
     max_pages: int | None = None,
+    meta: dict | None = None,
 ) -> None:
     """Render a Markdown file to PDF via pandoc → Jinja2 HTML → Chromium.
 
@@ -40,12 +62,23 @@ def render_pdf(
         encoding="utf-8",
     ).stdout
 
-    css_path = template_path.with_suffix(".css")
+    # CSS file is named after the doc type (e.g. resume.css for resume_template.html)
+    css_stem = template_path.stem.replace("_template", "")
+    css_path = template_path.parent / f"{css_stem}.css"
     css = css_path.read_text(encoding="utf-8") if css_path.exists() else ""
 
-    html = Template(template_path.read_text(encoding="utf-8")).render(
+    if meta is None:
+        meta = _parse_frontmatter(md_path)
+    today = _date.today()
+    date_str = f"{today.day} {today.strftime('%B')} {today.year}"
+
+    env = Environment(autoescape=False)
+    env.filters["strip_url"] = _strip_url
+    html = env.from_string(template_path.read_text(encoding="utf-8")).render(
         css=css,
         content_html=fragment,
+        date=date_str,
+        **meta,
     )
 
     with sync_playwright() as p:
