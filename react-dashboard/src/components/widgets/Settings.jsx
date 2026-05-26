@@ -563,6 +563,7 @@ function CreateProfile({ onBack, onCreated }) {
   const [apiKey, setApiKey] = useState('')
   const [savingStep1, setSavingStep1] = useState(false)
   const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   // Step 2
   const [file, setFile] = useState(null)
@@ -570,11 +571,17 @@ function CreateProfile({ onBack, onCreated }) {
   const [parseError, setParseError] = useState(null)
 
   const handleStep1 = async () => {
-    const trimmed = name.trim()
-    if (!trimmed) { setError('Name is required'); return }
-    if (!providerType) { setError('LLM provider is required'); return }
-    if (!model.trim()) { setError('Model is required'); return }
-    if (!apiKey.trim()) { setError('API key is required'); return }
+    const errs = {}
+    if (!name.trim()) errs.name = true
+    if (!providerType) errs.providerType = true
+    if (!model.trim()) errs.model = true
+    if (!apiKey.trim()) errs.apiKey = true
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs)
+      setError('Please fill in the required fields')
+      return
+    }
+    setFieldErrors({})
     setSavingStep1(true)
     setError(null)
     try {
@@ -616,45 +623,65 @@ function CreateProfile({ onBack, onCreated }) {
   const handleSkip = () => onCreated({ id: createdId, name })
 
   if (step === 1) {
+    const fe = (key) => fieldErrors[key] ? ' !border-red-500/50' : ''
+    const clearFe = (key) => setFieldErrors((prev) => { const n = { ...prev }; delete n[key]; return n })
+
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-xs text-space-dim">Step 1 of 2 — Profile shell</p>
+        <div>
+          <p className="text-xs text-space-dim mb-1">Step 1 of 2 — Profile shell</p>
+          <p className="text-sm text-space-dim">
+            A profile links your identity, work history, and LLM provider. The app uses it to score jobs and tailor your resume.{' '}
+            <a
+              href="/docs#setting-up-your-llm-provider"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-purple-400 hover:text-purple-300 transition-colors"
+            >
+              Getting Started guide →
+            </a>
+          </p>
+        </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-space-dim">Profile Name</label>
+          <label className="text-xs text-space-dim">Profile Name <span className="text-red-400">*</span></label>
           <input
-            className={inputClass}
+            className={inputClass + fe('name')}
             value={name}
-            onChange={(e) => { setName(e.target.value); setError(null) }}
+            onChange={(e) => { setName(e.target.value); setError(null); clearFe('name') }}
             placeholder="e.g. Software Engineer"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-space-dim">LLM Provider</label>
-          <select className={inputClass} value={providerType} onChange={(e) => setProviderType(e.target.value)}>
+          <label className="text-xs text-space-dim">LLM Provider <span className="text-red-400">*</span></label>
+          <select
+            className={inputClass + fe('providerType')}
+            value={providerType}
+            onChange={(e) => { setProviderType(e.target.value); clearFe('providerType') }}
+          >
             <option value="">— select —</option>
             {PROVIDER_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-space-dim">Model</label>
+          <label className="text-xs text-space-dim">Model <span className="text-red-400">*</span></label>
           <input
-            className={inputClass}
+            className={inputClass + fe('model')}
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => { setModel(e.target.value); clearFe('model') }}
             placeholder="e.g. gpt-4o-mini"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-space-dim">API Key</label>
+          <label className="text-xs text-space-dim">API Key <span className="text-red-400">*</span></label>
           <input
             type="password"
-            className={inputClass}
+            className={inputClass + fe('apiKey')}
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) => { setApiKey(e.target.value); clearFe('apiKey') }}
             placeholder="sk-…"
           />
         </div>
@@ -754,7 +781,9 @@ function ProfileCards({ onSelect, onCreateProfile }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         {profiles.length === 0 && (
-          <p className="text-xs text-space-dim">No profiles yet.</p>
+          <p className="text-sm text-space-dim text-center py-2">
+            A user profile is required to use the app — create one below!
+          </p>
         )}
         {profiles.map((profile) => (
           <div
@@ -792,7 +821,11 @@ function ProfileCards({ onSelect, onCreateProfile }) {
       </div>
       <button
         onClick={onCreateProfile}
-        className="w-full py-2 rounded-lg border border-space-border hover:border-purple-500/50 text-sm text-space-dim hover:text-space-text transition-colors"
+        className={`w-full py-2 rounded-lg border text-sm transition-colors
+          ${profiles.length === 0
+            ? 'shiny-border border-transparent bg-[#0a0a14] text-purple-300 hover:text-white'
+            : 'border-space-border hover:border-purple-500/50 text-space-dim hover:text-space-text'
+          }`}
       >
         + Create Profile
       </button>

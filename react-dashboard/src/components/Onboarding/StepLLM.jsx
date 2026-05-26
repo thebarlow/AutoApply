@@ -72,7 +72,7 @@ function mapError(raw) {
   if (lower.includes("model") && (lower.includes("not found") || lower.includes("does not exist"))) {
     return "Invalid model";
   }
-  return raw.length > 120 ? raw.slice(0, 117) + "â€¦" : raw;
+  return raw.length > 120 ? raw.slice(0, 117) + "…" : raw;
 }
 
 /** Simple combobox: text input + filtered dropdown. Allows free-text. */
@@ -195,17 +195,26 @@ export default function StepLLM({ onNext }) {
   return (
     <div>
       <h2 className="text-lg font-semibold mb-2">Set up your LLM provider</h2>
-      <p className="text-sm text-space-dim mb-5">
+      <p className="text-sm text-space-dim mb-2">
         The app uses an LLM to score jobs and tailor your resume. Pick a provider and paste your API key.
+      </p>
+      <p className="text-sm text-space-dim mb-5">
+        <a
+          href="/docs#setting-up-your-llm-provider"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-purple-400 hover:text-purple-300 transition-colors"
+        >
+          Getting Started: Setting up your LLM Provider →
+        </a>
       </p>
 
       {/* Provider */}
       <div className="flex flex-col gap-1 mb-3">
         <label className="text-xs text-space-dim flex items-center">
-          Provider
+          Provider <span className="text-red-400 ml-1">*</span>
           <HelpIcon
             text="Which LLM service to use. Anthropic and OpenAI are well-supported; pick Custom for any OpenAI-compatible endpoint."
-            docHref="/docs"
           />
         </label>
         <select
@@ -244,7 +253,6 @@ export default function StepLLM({ onNext }) {
           API Key <span className="text-red-400 ml-1">*</span>
           <HelpIcon
             text="Your provider's secret API key. The app uses this to call the LLM on your behalf."
-            docHref="/docs"
           />
         </label>
         <input
@@ -260,10 +268,9 @@ export default function StepLLM({ onNext }) {
       {/* Model */}
       <div className="flex flex-col gap-1 mb-5">
         <label className="text-xs text-space-dim flex items-center">
-          Model
+          Model <span className="text-red-400 ml-1">*</span>
           <HelpIcon
             text="The specific model to use. Smaller models are cheaper; larger ones produce better results."
-            docHref="/docs"
           />
         </label>
         {isCustom ? (
@@ -295,9 +302,9 @@ export default function StepLLM({ onNext }) {
         disabled={state !== "idle" || !apiKey.trim()}
         className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
       >
-        {state === "verifying" ? <><Spinner /> <span>Verifying API keyâ€¦</span></>
-         : state === "saving" ? <><Spinner /> <span>Savingâ€¦</span></>
-         : "Next â†’"}
+        {state === "verifying" ? <><Spinner /> <span>Verifying API key…</span></>
+         : state === "saving" ? <><Spinner /> <span>Saving…</span></>
+         : "Next →"}
       </button>
     </div>
   );
