@@ -29,18 +29,51 @@ function TrashIcon() {
   )
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score }) {
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, salaryMin, salaryMax, salaryRaw }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
 
   function ScorePill() {
     if (score == null) return null
     const pct = Math.round(score * 100)
-    let color = 'text-red-400'
-    if (pct >= 70) color = 'text-green-400'
-    else if (pct >= 40) color = 'text-yellow-400'
+    const color = pct >= 70 ? 'text-green-400' : pct >= 40 ? 'text-yellow-400' : 'text-red-400'
     return <span className={`text-xs font-semibold shrink-0 ${color}`}>{pct}%</span>
   }
+
+  function formatSalary() {
+    if (salaryMin != null) {
+      const fmt = (n) => n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${n}`
+      if (salaryMax != null && salaryMax !== salaryMin) return `${fmt(salaryMin)}–${fmt(salaryMax)}`
+      return fmt(salaryMin)
+    }
+    if (salaryRaw) {
+      const nums = salaryRaw.replace(/,/g, '').match(/\d+(?:\.\d+)?[kK]?/g)
+      if (nums && nums.length > 0) {
+        const toNum = (s) => parseFloat(s) * (/[kK]$/.test(s) ? 1000 : 1)
+        const values = nums.map(toNum).filter(n => n > 0)
+        if (values.length === 0) return salaryRaw
+        const min = Math.min(...values)
+        const max = Math.max(...values)
+        const fmt = (n) => n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${n}`
+        return min === max ? fmt(min) : `${fmt(min)}–${fmt(max)}`
+      }
+      if (salaryRaw.length <= 20) return salaryRaw
+    }
+    return null
+  }
+
+  function formatDate() {
+    const iso = appliedAt || scrapedAt
+    if (!iso) return null
+    const label = appliedAt ? 'Applied' : 'Added'
+    const d = new Date(iso)
+    const formatted = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+    return `${label} ${formatted}`
+  }
+
+  const salaryText = formatSalary()
+  const dateText = formatDate()
+  const hasMetadata = salaryText || dateText
 
   return (
     <motion.div
@@ -55,6 +88,12 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-space-text truncate">{title}</p>
         <p className="text-xs text-space-dim">{company}</p>
+        {hasMetadata && (
+          <div className="flex justify-between mt-0.5">
+            <span className="text-xs text-space-dim">{salaryText ?? ''}</span>
+            <span className="text-xs text-space-dim">{dateText ?? ''}</span>
+          </div>
+        )}
       </div>
 
       {(hasResume || hasCoverLetter) && (
