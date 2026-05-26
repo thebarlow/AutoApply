@@ -29,9 +29,18 @@ function TrashIcon() {
   )
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state }) {
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
+
+  function ScorePill() {
+    if (score == null) return null
+    const pct = Math.round(score * 100)
+    let color = 'text-red-400'
+    if (pct >= 70) color = 'text-green-400'
+    else if (pct >= 40) color = 'text-yellow-400'
+    return <span className={`text-xs font-semibold shrink-0 ${color}`}>{pct}%</span>
+  }
 
   return (
     <motion.div
@@ -60,6 +69,7 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
       )}
 
       <div className="flex items-center self-stretch gap-1.5">
+        <ScorePill />
         {state === 'deleted' && <TrashIcon />}
         {statusIcon}
       </div>
