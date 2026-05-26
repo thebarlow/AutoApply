@@ -20,13 +20,13 @@ def _parse_frontmatter(md_path: Path) -> dict[str, Any]:
 
     Returns an empty dict if no front matter block is present.
     """
-    text = md_path.read_text(encoding="utf-8")
-    if not text.startswith("---"):
+    lines = md_path.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "---":
         return {}
-    end = text.find("\n---", 3)
-    if end == -1:
-        return {}
-    return yaml.safe_load(text[3:end]) or {}
+    for i, line in enumerate(lines[1:], 1):
+        if line.strip() == "---":
+            return yaml.safe_load("\n".join(lines[1:i])) or {}
+    return {}
 
 
 def render_pdf(
