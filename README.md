@@ -13,6 +13,8 @@ cd auto_apply
 setup.bat
 ```
 
+`setup.bat` installs Python if needed, creates the virtual environment, and deletes itself on success. You can also just run `start.bat` — it will detect and run `setup.bat` automatically on first launch.
+
 
 ---
 
