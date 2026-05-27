@@ -39,18 +39,26 @@ export default function Navbar() {
   }, [costModalOpen]);
 
   const handlePower = async () => {
-    const data = await fetch("/api/llm-status").then((r) => r.json());
-    if (!data.in_flight || data.in_flight.length === 0) {
-      await fetch("/api/shutdown?mode=immediate", { method: "POST" });
-    } else {
-      setInFlight(data.in_flight);
-      setShutdownOpen(true);
+    try {
+      const data = await fetch("/api/llm-status").then((r) => r.json());
+      if (!data.in_flight || data.in_flight.length === 0) {
+        await fetch("/api/shutdown?mode=immediate", { method: "POST" });
+      } else {
+        setInFlight(data.in_flight);
+        setShutdownOpen(true);
+      }
+    } catch (e) {
+      console.error("Shutdown request failed:", e);
     }
   };
 
   const doShutdown = async (mode) => {
-    await fetch(`/api/shutdown?mode=${mode}`, { method: "POST" });
-    setShutdownOpen(false);
+    try {
+      await fetch(`/api/shutdown?mode=${mode}`, { method: "POST" });
+      setShutdownOpen(false);
+    } catch (e) {
+      console.error("Shutdown request failed:", e);
+    }
   };
 
   return (
@@ -104,7 +112,7 @@ export default function Navbar() {
           </button>
 
           {shutdownOpen && (
-            <div className="absolute right-0 top-9 bg-[#0f0f1a] border border-space-border rounded-lg shadow-xl w-68 p-3 z-50">
+            <div className="absolute right-0 top-9 bg-[#0f0f1a] border border-space-border rounded-lg shadow-xl w-72 p-3 z-50">
               <p className="text-xs text-space-dim mb-2">LLM calls in progress:</p>
               <ul className="flex flex-col gap-1 mb-3">
                 {inFlight.map((item, i) => (
