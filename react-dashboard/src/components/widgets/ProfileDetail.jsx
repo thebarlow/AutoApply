@@ -32,9 +32,37 @@ function ChevronDown({ open }) {
   )
 }
 
+// ─── isSectionEmpty ────────────────────────────────────────────────────────────
+
+function isSectionEmpty(section, d) {
+  switch (section) {
+    case "identity":
+      return (
+        !d.first_name && !d.last_name && !d.hero &&
+        !d.email && !d.phone && !d.location &&
+        !d.linkedin && !d.github && !d.website
+      );
+    case "skills":
+      return !d.skills || d.skills.length === 0;
+    case "experience":
+      return !d.work_history || d.work_history.length === 0;
+    case "education":
+      return !d.education || d.education.length === 0;
+    case "projects":
+      return !d.projects || d.projects.length === 0;
+    case "job-preferences": {
+      const roles = d.target_roles;
+      const hasRoles = Array.isArray(roles) ? roles.length > 0 : Boolean(roles);
+      return !hasRoles && d.target_salary_min == null && d.target_salary_max == null;
+    }
+    default:
+      return false;
+  }
+}
+
 // ─── AccordionSection ──────────────────────────────────────────────────────────
 
-function AccordionSection({ id, title, editButton, children }) {
+function AccordionSection({ id, title, editButton, empty, children }) {
   const storageKey = id ? `profile-accordion:${id}` : null
   const [open, setOpen] = useState(() => {
     if (!storageKey) return false
@@ -61,7 +89,14 @@ function AccordionSection({ id, title, editButton, children }) {
         className="flex items-center justify-between px-3 py-2.5 bg-white/[0.03] cursor-pointer select-none"
         onClick={toggle}
       >
-        <span className="text-xs font-semibold uppercase tracking-widest text-space-dim">{title}</span>
+        <span className="text-xs font-semibold uppercase tracking-widest text-space-dim flex items-center gap-2">
+          {title}
+          {empty && (
+            <span className="font-normal normal-case tracking-normal text-[10px] text-space-dim/50">
+              [empty]
+            </span>
+          )}
+        </span>
         <div className="flex items-center gap-2">
           {editButton && <span onClick={e => e.stopPropagation()}>{editButton}</span>}
           <span className="text-space-dim">
@@ -180,7 +215,7 @@ function IdentitySection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection id="identity" title="Identity" editButton={<EditBtn onClick={openModal} />}>
+      <AccordionSection id="identity" title="Identity" editButton={<EditBtn onClick={openModal} />} empty={isSectionEmpty("identity", data)}>
         <div className="flex flex-col gap-1.5">
           {fullName && <p className="text-sm font-medium text-space-text">{fullName}</p>}
           {data.hero && <p className="text-xs text-space-dim italic">{data.hero}</p>}
@@ -255,7 +290,7 @@ function SkillsSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection id="skills" title="Skills">
+      <AccordionSection id="skills" title="Skills" empty={isSectionEmpty("skills", data)}>
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-1.5">
             {skills.map((s, i) => (
@@ -355,7 +390,7 @@ function ExperienceSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection id="experience" title="Experience">
+      <AccordionSection id="experience" title="Experience" empty={isSectionEmpty("experience", data)}>
         <div className="flex flex-col gap-2">
           {items.map((item, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
@@ -438,7 +473,7 @@ function EducationSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection id="education" title="Education">
+      <AccordionSection id="education" title="Education" empty={isSectionEmpty("education", data)}>
         <div className="flex flex-col gap-2">
           {items.map((item, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
@@ -534,7 +569,7 @@ function ProjectsSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection id="projects" title="Projects">
+      <AccordionSection id="projects" title="Projects" empty={isSectionEmpty("projects", data)}>
         <div className="flex flex-col gap-2">
           {items.map((item, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5">
@@ -623,7 +658,7 @@ function JobPrefsSection({ data, onSave }) {
 
   return (
     <>
-      <AccordionSection id="job-preferences" title="Job Preferences" editButton={<EditBtn onClick={openModal} />}>
+      <AccordionSection id="job-preferences" title="Job Preferences" editButton={<EditBtn onClick={openModal} />} empty={isSectionEmpty("job-preferences", data)}>
         <div className="flex flex-col gap-1.5">
           {(data.target_roles || []).length > 0 && (
             <Field label="Target Roles" value={data.target_roles.join(', ')} />
@@ -1242,6 +1277,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
   useEscape(confirmDelete, () => setConfirmDelete(false))
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -1264,6 +1300,25 @@ export default function ProfileDetailView({ profileId, onDelete }) {
     if (apiKey) body.llm_api_key = apiKey
     await updateProfile(profileId, body)
     setProfile(p => ({ ...p, data: newData, llm_provider_type: providerType, llm_model: model, has_llm_key: apiKey ? true : p.has_llm_key }))
+  }
+
+  const handleExportMaster = async () => {
+    setExporting(true)
+    try {
+      const res = await fetch('/api/profile/export-master', { method: 'POST' })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'master_resume.pdf'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Export master failed:', e)
+    } finally {
+      setExporting(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -1301,6 +1356,13 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         />
         <LlmSection profile={profile} onSave={handleSaveLlm} />
 
+        <button
+          onClick={handleExportMaster}
+          disabled={exporting}
+          className="w-full py-2 rounded-lg border border-purple-500/30 text-sm text-purple-400 hover:bg-purple-500/10 transition-colors mt-2 disabled:opacity-50"
+        >
+          {exporting ? 'Generating…' : 'Export Master'}
+        </button>
         <button
           onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
           className="w-full py-2 rounded-lg border border-red-500/30 text-sm text-red-400 hover:bg-red-500/10 transition-colors mt-2"
