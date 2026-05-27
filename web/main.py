@@ -20,6 +20,7 @@ from web.routers import llm_status_router
 from web.routers import llm_test
 from web.routers import setup_status
 from web.routers import docs_router
+from web.routers import session_cost_router
 
 
 def _timed(label: str, fn):
@@ -83,6 +84,7 @@ app.include_router(llm_status_router.router)
 app.include_router(llm_test.router)
 app.include_router(setup_status.router)
 app.include_router(docs_router.router)
+app.include_router(session_cost_router.router)
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
