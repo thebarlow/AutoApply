@@ -1278,6 +1278,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -1304,6 +1305,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
 
   const handleExportMaster = async () => {
     setExporting(true)
+    setExportError(null)
     try {
       const res = await fetch('/api/profile/export-master', { method: 'POST' })
       if (!res.ok) throw new Error('Export failed')
@@ -1316,6 +1318,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
       URL.revokeObjectURL(url)
     } catch (e) {
       console.error('Export master failed:', e)
+      setExportError('Export failed. Please try again.')
     } finally {
       setExporting(false)
     }
@@ -1363,6 +1366,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         >
           {exporting ? 'Generating…' : 'Export Master'}
         </button>
+        {exportError && <p className="text-xs text-red-400 mt-1">{exportError}</p>}
         <button
           onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
           className="w-full py-2 rounded-lg border border-red-500/30 text-sm text-red-400 hover:bg-red-500/10 transition-colors mt-2"
