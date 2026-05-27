@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import signal
 import sys
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -19,17 +20,31 @@ def _make_icon(_app: QApplication) -> QIcon:
 
 
 def _make_heartbeat(app: QApplication) -> QTimer:
-    """Exit the tray app when the FastAPI server is unreachable for 2 consecutive checks."""
+    """Exit the tray app when the FastAPI server is unreachable for 2 consecutive checks.
+
+    Network checks run in a background thread so the Qt event loop is never blocked.
+    """
     _misses: list[int] = [0]
 
     def _check() -> None:
-        try:
-            urllib.request.urlopen("http://localhost:8080/api/session-cost", timeout=1)
-            _misses[0] = 0
-        except Exception:
-            _misses[0] += 1
-            if _misses[0] >= 2:
-                app.quit()
+        def _worker() -> None:
+            try:
+                urllib.request.urlopen(
+                    "http://localhost:8080/api/session-cost", timeout=1
+                )
+                QTimer.singleShot(0, lambda: _reset())
+            except Exception:
+                QTimer.singleShot(0, lambda: _miss())
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _reset() -> None:
+        _misses[0] = 0
+
+    def _miss() -> None:
+        _misses[0] += 1
+        if _misses[0] >= 2:
+            app.quit()
 
     t = QTimer()
     t.timeout.connect(_check)
