@@ -107,6 +107,7 @@ def _mock_client(content: str):
     client = MagicMock()
     client.chat.completions.create.return_value.choices[0].message.content = content
     client.chat.completions.create.return_value.choices[0].finish_reason = "stop"
+    client.chat.completions.create.return_value.usage = None
     return client
 
 
