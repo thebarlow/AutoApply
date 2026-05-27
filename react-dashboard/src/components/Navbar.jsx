@@ -6,15 +6,23 @@ export default function Navbar() {
   const [costOpen, setCostOpen] = useState(false);
   const [shutdownOpen, setShutdownOpen] = useState(false);
   const [inFlight, setInFlight] = useState([]);
+  const [serverDown, setServerDown] = useState(false);
   const shutdownRef = useRef(null);
   const costRef = useRef(null);
+  const missesRef = useRef(0);
 
   useEffect(() => {
     const poll = () =>
       fetch("/api/session-cost")
         .then((r) => r.json())
-        .then((d) => setSessionCost(d.total))
-        .catch(() => {});
+        .then((d) => {
+          missesRef.current = 0;
+          setSessionCost(d.total);
+        })
+        .catch(() => {
+          missesRef.current += 1;
+          if (missesRef.current >= 2) setServerDown(true);
+        });
     poll();
     const id = setInterval(poll, 5000);
     return () => clearInterval(id);
@@ -50,6 +58,7 @@ export default function Navbar() {
       const data = await fetch("/api/llm-status").then((r) => r.json());
       if (!data.in_flight || data.in_flight.length === 0) {
         await fetch("/api/shutdown?mode=immediate", { method: "POST" });
+        setServerDown(true);
       } else {
         setInFlight(data.in_flight);
         setShutdownOpen(true);
@@ -63,6 +72,7 @@ export default function Navbar() {
     try {
       await fetch(`/api/shutdown?mode=${mode}`, { method: "POST" });
       setShutdownOpen(false);
+      setServerDown(true);
     } catch (e) {
       console.error("Shutdown request failed:", e);
     }
@@ -172,6 +182,24 @@ export default function Navbar() {
           )}
         </div>
       </div>
+
+      {serverDown && (
+        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/90">
+          <svg
+            className="w-12 h-12 text-red-500 mb-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          >
+            <path d="M12 2v8" />
+            <path d="M6.3 5.3a9 9 0 1 0 11.4 0" />
+          </svg>
+          <p className="text-white text-xl font-semibold mb-1">Server offline</p>
+          <p className="text-space-dim text-sm">Close this window or restart via start.bat</p>
+        </div>
+      )}
     </nav>
   );
 }

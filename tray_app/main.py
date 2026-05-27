@@ -23,6 +23,7 @@ def _make_heartbeat(app: QApplication) -> QTimer:
     """Exit the tray app when the FastAPI server is unreachable for 2 consecutive checks.
 
     Network checks run in a background thread so the Qt event loop is never blocked.
+    QApplication.quit() is thread-safe (posts an event to the main loop).
     """
     _misses: list[int] = [0]
 
@@ -32,19 +33,13 @@ def _make_heartbeat(app: QApplication) -> QTimer:
                 urllib.request.urlopen(
                     "http://localhost:8080/api/session-cost", timeout=1
                 )
-                QTimer.singleShot(0, lambda: _reset())
+                _misses[0] = 0
             except Exception:
-                QTimer.singleShot(0, lambda: _miss())
+                _misses[0] += 1
+                if _misses[0] >= 2:
+                    app.quit()
 
         threading.Thread(target=_worker, daemon=True).start()
-
-    def _reset() -> None:
-        _misses[0] = 0
-
-    def _miss() -> None:
-        _misses[0] += 1
-        if _misses[0] >= 2:
-            app.quit()
 
     t = QTimer()
     t.timeout.connect(_check)
