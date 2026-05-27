@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import signal
 import sys
+import urllib.request
 from pathlib import Path
 
 from PyQt6.QtCore import QTimer
@@ -15,6 +16,24 @@ from tray_app.ws_client import WsClient
 def _make_icon(_app: QApplication) -> QIcon:
     icon_path = Path(__file__).parent.parent / "assets" / "icon.png"
     return QIcon(str(icon_path))
+
+
+def _make_heartbeat(app: QApplication) -> QTimer:
+    """Exit the tray app when the FastAPI server is unreachable for 2 consecutive checks."""
+    _misses: list[int] = [0]
+
+    def _check() -> None:
+        try:
+            urllib.request.urlopen("http://localhost:8080/api/session-cost", timeout=1)
+            _misses[0] = 0
+        except Exception:
+            _misses[0] += 1
+            if _misses[0] >= 2:
+                app.quit()
+
+    t = QTimer()
+    t.timeout.connect(_check)
+    return t
 
 
 def main():
@@ -44,6 +63,11 @@ def main():
     timer.timeout.connect(lambda: None)
 
     ws.start()
+
+    heartbeat = _make_heartbeat(app)
+    # Delay 5 seconds to allow server startup before monitoring begins
+    QTimer.singleShot(5000, lambda: heartbeat.start(2000))
+
     sys.exit(app.exec())
 
 
