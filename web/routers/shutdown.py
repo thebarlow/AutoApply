@@ -4,7 +4,7 @@ import os
 import threading
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from web import llm_status
 
@@ -32,6 +32,8 @@ def _wait_and_exit() -> None:
 
 @router.post("/shutdown")
 def shutdown(mode: str = "immediate") -> dict:
+    if mode not in ("immediate", "wait"):
+        raise HTTPException(status_code=422, detail=f"Unknown mode: {mode!r}")
     if mode == "wait":
         _wait_and_exit()
         return {"ok": True, "mode": "wait"}

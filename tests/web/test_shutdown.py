@@ -43,3 +43,8 @@ def test_shutdown_wait_returns_ok(client):
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
     assert resp.json()["mode"] == "wait"
+
+
+def test_shutdown_unknown_mode_returns_422(client):
+    resp = client.post("/api/shutdown?mode=bogus")
+    assert resp.status_code == 422
