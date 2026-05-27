@@ -28,8 +28,8 @@ def _venv_python(venv: Path) -> Path:
     return venv / "bin" / "python"
 
 
-def _run(*args: str) -> None:
-    result = subprocess.run(args)
+def _run(*args: str, cwd: Path | None = None) -> None:
+    result = subprocess.run(args, cwd=cwd)
     if result.returncode != 0:
         print(f"\n[setup] Command failed: {' '.join(args)}", file=sys.stderr)
         sys.exit(result.returncode)
@@ -72,16 +72,30 @@ def main() -> None:
         print("[setup] Created .env from .env.example")
         print("[setup] NOTE: Add your LLM API key via the Config tab after starting the server.")
 
+    print("[setup] Installing Playwright browsers...")
+    _run(python, "-m", "playwright", "install", "chromium")
+
     print("[setup] Initialising database...")
     _run(python, "-m", "db.init_db")
+
+    dashboard = ROOT / "react-dashboard"
+    npm = shutil.which("npm")
+    if npm is None:
+        print("\n[setup] WARNING: npm not found — skipping React dashboard build.")
+        print("  Install Node.js from https://nodejs.org and re-run setup.py to build the UI.")
+    else:
+        print("[setup] Installing React dependencies...")
+        _run(npm, "install", cwd=dashboard)
+        print("[setup] Building React dashboard...")
+        _run(npm, "run", "build", cwd=dashboard)
 
     activate = (
         r".venv\Scripts\activate" if sys.platform == "win32" else "source .venv/bin/activate"
     )
     print("\n[setup] Done. Next steps:")
     print(f"  {activate}")
-    print("  uvicorn web.main:app --reload")
-    print("  Open http://127.0.0.1:8000/")
+    print("  start.bat  (Windows) — or: uvicorn web.main:app --host 0.0.0.0 --port 8080")
+    print("  Open http://localhost:8080/")
 
 
 if __name__ == "__main__":
