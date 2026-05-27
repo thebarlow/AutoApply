@@ -162,11 +162,16 @@ def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> st
     Raises:
         RuntimeError: If the LLM returns an empty response.
     """
+    from core import session_cost
+
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
     choice = response.choices[0]
     content = choice.message.content
     if not content:
