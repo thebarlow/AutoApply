@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import threading
 import time
 
@@ -12,6 +14,16 @@ router = APIRouter(prefix="/api")
 
 
 def _exit_process() -> None:
+    if sys.platform == "win32":
+        # Kill the parent (uvicorn reloader) and its entire process tree.
+        # This prevents the --reload watcher from restarting the worker.
+        ppid = os.getppid()
+        subprocess.Popen(
+            ["taskkill", "/F", "/T", "/PID", str(ppid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(0.2)  # let taskkill propagate before self-exit
     os._exit(0)
 
 

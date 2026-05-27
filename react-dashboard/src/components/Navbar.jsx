@@ -3,10 +3,11 @@ import { Link } from "react-router-dom";
 
 export default function Navbar() {
   const [sessionCost, setSessionCost] = useState(0);
-  const [costModalOpen, setCostModalOpen] = useState(false);
+  const [costOpen, setCostOpen] = useState(false);
   const [shutdownOpen, setShutdownOpen] = useState(false);
   const [inFlight, setInFlight] = useState([]);
   const shutdownRef = useRef(null);
+  const costRef = useRef(null);
 
   useEffect(() => {
     const poll = () =>
@@ -30,13 +31,19 @@ export default function Navbar() {
   }, [shutdownOpen]);
 
   useEffect(() => {
-    if (!costModalOpen) return;
+    if (!costOpen) return;
     const handler = (e) => {
-      if (e.key === "Escape") setCostModalOpen(false);
+      if (costRef.current && !costRef.current.contains(e.target))
+        setCostOpen(false);
+      if (e.key === "Escape") setCostOpen(false);
     };
+    document.addEventListener("mousedown", handler);
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [costModalOpen]);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      window.removeEventListener("keydown", handler);
+    };
+  }, [costOpen]);
 
   const handlePower = async () => {
     try {
@@ -72,12 +79,33 @@ export default function Navbar() {
 
       <div className="flex items-center gap-4">
         {/* Session Cost */}
-        <button
-          onClick={() => setCostModalOpen(true)}
-          className="text-sm font-medium text-purple-400 hover:text-purple-300 transition-colors bg-transparent border-0 p-0 cursor-pointer"
-        >
-          Session Cost: ${sessionCost.toFixed(2)}
-        </button>
+        <div className="relative" ref={costRef}>
+          <button
+            onClick={() => setCostOpen((v) => !v)}
+            className="text-sm font-medium text-purple-400 hover:text-purple-300 transition-colors bg-transparent border-0 p-0 cursor-pointer"
+          >
+            Session Cost: ${sessionCost.toFixed(2)}
+          </button>
+
+          {costOpen && (
+            <div className="absolute right-0 top-full mt-1 bg-[#0f0f1a] border border-space-border rounded-xl p-4 shadow-2xl min-w-[200px] z-50">
+              <div className="flex items-center gap-1 mb-2">
+                <p className="text-sm font-semibold text-space-text">Session Cost</p>
+                <div className="relative group ml-auto">
+                  <span className="text-[10px] text-space-dim border border-space-border rounded-full w-4 h-4 flex items-center justify-center cursor-default select-none">
+                    ?
+                  </span>
+                  <div className="absolute right-0 top-5 w-44 bg-[#1a1a2e] border border-space-border rounded-md px-2 py-1.5 text-[10px] text-space-dim shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                    Accumulated LLM cost this session. Resets on server restart.
+                  </div>
+                </div>
+              </div>
+              <p className="text-2xl font-mono text-purple-400">
+                ${sessionCost.toFixed(8)}
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Help link */}
         <a
@@ -144,31 +172,6 @@ export default function Navbar() {
           )}
         </div>
       </div>
-
-      {/* Session Cost modal */}
-      {costModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onClick={() => setCostModalOpen(false)}
-        >
-          <div
-            className="bg-[#0f0f1a] border border-space-border rounded-xl p-6 shadow-2xl min-w-[240px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-sm font-semibold text-space-text mb-2">Session Cost</p>
-            <p className="text-2xl font-mono text-purple-400">
-              ${sessionCost.toFixed(8)}
-            </p>
-            <p className="text-xs text-space-dim mt-2">Resets on server restart</p>
-            <button
-              className="mt-4 w-full py-1.5 text-xs text-space-dim border border-space-border rounded hover:text-space-text transition-colors"
-              onClick={() => setCostModalOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </nav>
   );
 }

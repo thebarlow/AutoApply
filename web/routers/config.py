@@ -944,6 +944,9 @@ _MASTER_TEMPLATE = Path(__file__).parent.parent.parent / "generator" / "master_t
 def _build_master_resume_md(user: Any) -> str:
     lines: list[str] = []
 
+    if user.hero:
+        lines += ["## Profile", user.hero, ""]
+
     if user.skills:
         lines += ["## Skills", ", ".join(user.skills), ""]
 
@@ -975,19 +978,6 @@ def _build_master_resume_md(user: Any) -> str:
             url_str = f"  \n{proj.url}" if proj.url else ""
             lines.append(f"**{proj.name}** — {proj.description}{tech_str}{url_str}")
             lines.append("")
-
-    roles = user.target_roles
-    has_roles = (isinstance(roles, list) and len(roles) > 0) or bool(roles)
-    if has_roles or user.target_salary_min or user.target_salary_max:
-        lines.append("## Target Roles")
-        if has_roles:
-            roles_str = ", ".join(roles) if isinstance(roles, list) else str(roles)
-            lines.append(f"Seeking: {roles_str}")
-        if user.target_salary_min or user.target_salary_max:
-            sal_min = f"${int(user.target_salary_min):,}" if user.target_salary_min else "?"
-            sal_max = f"${int(user.target_salary_max):,}" if user.target_salary_max else "?"
-            lines.append(f"Salary Range: {sal_min} – {sal_max}")
-        lines.append("")
 
     return "\n".join(lines)
 
