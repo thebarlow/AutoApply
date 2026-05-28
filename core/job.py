@@ -117,6 +117,8 @@ class Job(Base):
     # ── Artifacts ──────────────────────────────────────────────────────────────
     resume_path = Column(String)
     cover_path = Column(String)
+    resume_generated_at = Column(String)
+    cover_generated_at = Column(String)
     applied_at = Column(String)
     sheets_row_id = Column(String)
     unread_indicator = Column(String)   # null | "ok" | "error"
@@ -608,6 +610,7 @@ class Job(Base):
         meta = self._frontmatter_data(User.load(db), db)
         render_pdf(md_path, pdf_path, template_path, max_pages=1, meta=meta)
         self.resume_path = str(pdf_path)
+        self.resume_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
 
     def generate_cover_pdf(self, template_path: Path, db: Session) -> None:
@@ -632,6 +635,7 @@ class Job(Base):
         meta = self._frontmatter_data(User.load(db), db)
         render_pdf(md_path, pdf_path, template_path, meta=meta)
         self.cover_path = str(pdf_path)
+        self.cover_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
 
     # ── Private helpers ────────────────────────────────────────────────────────
@@ -744,6 +748,8 @@ class Job(Base):
             "ext_salary_max": self.ext_salary_max,
             "resume_path": self.resume_path,
             "cover_path": self.cover_path,
+            "resume_generated_at": self.resume_generated_at or "",
+            "cover_generated_at": self.cover_generated_at or "",
             "resume_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_resume.md").exists(),
             "cover_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_cover.md").exists(),
             "extraction_json_exists": (has_extraction := bool(self.ext_required_skills or self.ext_seniority)),

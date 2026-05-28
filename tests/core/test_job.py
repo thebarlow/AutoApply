@@ -452,3 +452,41 @@ def test_serialize_includes_salary_and_applied_at(db_session):
     assert result["ext_salary_min"] == 70000.0
     assert result["ext_salary_max"] == 90000.0
     assert result["applied_at"] == "2026-05-01T12:00:00+00:00"
+
+
+def test_resume_generated_at_set_on_generate_pdf(db_session, tmp_path):
+    from core.job import Job
+    from datetime import datetime, timezone
+    job = Job(
+        job_key="test-rga-1",
+        source="test",
+        url="https://example.com/1",
+        state="new",
+    )
+    db_session.add(job)
+    db_session.commit()
+    job.resume_path = str(tmp_path / "test.pdf")
+    job.resume_generated_at = datetime.now(timezone.utc).isoformat()
+    db_session.commit()
+    db_session.refresh(job)
+    assert job.resume_generated_at is not None
+    assert "T" in job.resume_generated_at
+
+
+def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):
+    from core.job import Job
+    from datetime import datetime, timezone
+    job = Job(
+        job_key="test-cga-1",
+        source="test",
+        url="https://example.com/2",
+        state="new",
+    )
+    db_session.add(job)
+    db_session.commit()
+    job.cover_path = str(tmp_path / "test.pdf")
+    job.cover_generated_at = datetime.now(timezone.utc).isoformat()
+    db_session.commit()
+    db_session.refresh(job)
+    assert job.cover_generated_at is not None
+    assert "T" in job.cover_generated_at
