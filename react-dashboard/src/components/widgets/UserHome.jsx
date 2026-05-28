@@ -90,7 +90,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
 
   const pieData = stats
     ? Object.entries(STATE_LABELS)
-        .map(([key, label]) => ({ name: label, value: stats.by_state[key] ?? 0 }))
+        .map(([key, label]) => ({ key, name: label, value: stats.by_state[key] ?? 0 }))
         .filter((d) => d.value > 0)
     : []
 
@@ -122,7 +122,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
         <>
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-space-dim mb-2">Activity</p>
-            {statsLoading && <p className="text-xs text-space-dim">Loading…</p>}
+            {statsLoading && !stats && <p className="text-xs text-space-dim">Loading…</p>}
             {!statsLoading && stats && stats.bars.length === 0 && (
               <p className="text-xs text-space-dim">No activity yet.</p>
             )}
@@ -146,7 +146,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-space-dim mb-2">Pipeline</p>
-            {statsLoading && <p className="text-xs text-space-dim">Loading…</p>}
+            {statsLoading && !stats && <p className="text-xs text-space-dim">Loading…</p>}
             {!statsLoading && stats && pieData.length === 0 && (
               <p className="text-xs text-space-dim">No jobs yet.</p>
             )}
@@ -163,10 +163,9 @@ export default function UserHome({ onSelect, onCreateProfile }) {
                       dataKey="value"
                       strokeWidth={0}
                     >
-                      {pieData.map((entry) => {
-                        const stateKey = Object.keys(STATE_LABELS).find((k) => STATE_LABELS[k] === entry.name)
-                        return <Cell key={entry.name} fill={STATE_COLORS[stateKey] ?? '#555'} />
-                      })}
+                      {pieData.map((entry) => (
+                        <Cell key={entry.name} fill={STATE_COLORS[entry.key] ?? '#555'} />
+                      ))}
                     </Pie>
                     <Tooltip
                       contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
@@ -174,16 +173,13 @@ export default function UserHome({ onSelect, onCreateProfile }) {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex flex-col gap-1">
-                  {pieData.map((entry) => {
-                    const stateKey = Object.keys(STATE_LABELS).find((k) => STATE_LABELS[k] === entry.name)
-                    return (
-                      <div key={entry.name} className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STATE_COLORS[stateKey] ?? '#555' }} />
-                        <span className="text-xs text-space-dim">{entry.name}</span>
-                        <span className="text-xs font-medium text-space-text ml-auto pl-2">{entry.value}</span>
-                      </div>
-                    )
-                  })}
+                  {pieData.map((entry) => (
+                    <div key={entry.name} className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STATE_COLORS[entry.key] ?? '#555' }} />
+                      <span className="text-xs text-space-dim">{entry.name}</span>
+                      <span className="text-xs font-medium text-space-text ml-auto pl-2">{entry.value}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
