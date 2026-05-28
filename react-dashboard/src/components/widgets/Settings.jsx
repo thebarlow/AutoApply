@@ -18,6 +18,20 @@ function BackArrow() {
   )
 }
 
+function useEscape(active, handler) {
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        handler()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [active, handler])
+}
+
 // ─── Shared ───────────────────────────────────────────────────────────────────
 
 const inputClass =
@@ -127,22 +141,26 @@ function _splitJustification(j) {
 }
 
 function EditFieldsModal({ job, onClose }) {
-  const [title, setTitle] = useState(job.title || '')
-  const [description, setDescription] = useState(job.description || '')
-  const [company, setCompany] = useState(job.company || '')
-  const [location, setLocation] = useState(job.location || '')
-  const [salary, setSalary] = useState(job.salary || '')
-  const [url, setUrl] = useState(job.url || '')
+  const [fields, setFields] = useState({
+    title: job.title || '',
+    description: job.description || '',
+    company: job.company || '',
+    location: job.location || '',
+    salary: job.salary || '',
+    url: job.url || '',
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [popOut, setPopOut] = useState(false)
+
+  useEscape(popOut, () => setPopOut(false))
+  useEscape(!popOut, onClose)
 
   const handleSave = async () => {
     setSaving(true)
     setError(null)
     try {
-      await updateJobFields(job.job_key, {
-        title, description, company, location, salary, url,
-      })
+      await updateJobFields(job.job_key, fields)
       onClose()
     } catch (e) {
       setError(e?.message || 'Save failed')
@@ -156,27 +174,65 @@ function EditFieldsModal({ job, onClose }) {
         <p className="text-sm font-semibold text-space-text">Edit job</p>
 
         <label className="text-xs text-space-dim">Title</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
+        <input
+          value={fields.title}
+          onChange={(e) => setFields(f => ({ ...f, title: e.target.value }))}
+          className={inputClass}
+        />
 
-        <label className="text-xs text-space-dim">Description</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={6} className={inputClass} />
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-space-dim">Description</label>
+          <button
+            type="button"
+            onClick={() => setPopOut(true)}
+            title="Expand description"
+            className="text-space-dim hover:text-space-text transition-colors p-0.5"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M1 6V1h5M10 1h5v5M15 10v5h-5M6 15H1v-5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <textarea
+          value={fields.description}
+          onChange={(e) => setFields(f => ({ ...f, description: e.target.value }))}
+          rows={6}
+          className={inputClass}
+        />
 
         <label className="text-xs text-space-dim">Company</label>
-        <input value={company} onChange={(e) => setCompany(e.target.value)} className={inputClass} />
+        <input
+          value={fields.company}
+          onChange={(e) => setFields(f => ({ ...f, company: e.target.value }))}
+          className={inputClass}
+        />
 
         <label className="text-xs text-space-dim">Location</label>
-        <input value={location} onChange={(e) => setLocation(e.target.value)} className={inputClass} />
+        <input
+          value={fields.location}
+          onChange={(e) => setFields(f => ({ ...f, location: e.target.value }))}
+          className={inputClass}
+        />
 
         <label className="text-xs text-space-dim">Salary</label>
-        <input value={salary} onChange={(e) => setSalary(e.target.value)} className={inputClass} />
+        <input
+          value={fields.salary}
+          onChange={(e) => setFields(f => ({ ...f, salary: e.target.value }))}
+          className={inputClass}
+        />
 
         <label className="text-xs text-space-dim">URL</label>
-        <input value={url} onChange={(e) => setUrl(e.target.value)} className={inputClass} />
+        <input
+          value={fields.url}
+          onChange={(e) => setFields(f => ({ ...f, url: e.target.value }))}
+          className={inputClass}
+        />
 
         {error && <p className="text-xs text-red-400">{error}</p>}
 
         <div className="flex gap-2 mt-2">
           <button
+            type="button"
             onClick={handleSave}
             disabled={saving}
             className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold"
@@ -184,6 +240,7 @@ function EditFieldsModal({ job, onClose }) {
             {saving ? 'Saving…' : 'Save'}
           </button>
           <button
+            type="button"
             onClick={onClose}
             disabled={saving}
             className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text"
@@ -192,6 +249,30 @@ function EditFieldsModal({ job, onClose }) {
           </button>
         </div>
       </div>
+
+      {popOut && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-[#0a0a14]">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+            <span className="text-sm font-semibold text-space-text">Description</span>
+            <button
+              type="button"
+              onClick={() => setPopOut(false)}
+              className="text-space-dim hover:text-white transition-colors"
+              aria-label="Collapse description"
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                <path d="M6 1v5H1M15 6h-5V1M1 10h5v5M10 15v-5h5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <textarea
+            className="flex-1 w-full bg-transparent text-space-text p-6 resize-none focus:outline-none font-mono text-sm"
+            value={fields.description}
+            onChange={(e) => setFields(f => ({ ...f, description: e.target.value }))}
+            autoFocus
+          />
+        </div>
+      )}
     </div>
   )
 }
