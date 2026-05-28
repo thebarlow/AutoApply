@@ -82,9 +82,10 @@ export default function Navbar() {
     <nav className="sticky top-0 z-50 w-full backdrop-blur-md bg-space-bg/80 border-b border-space-border px-6 py-3 flex items-center justify-between">
       <Link
         to="/"
-        className="text-lg font-bold tracking-tight text-white hover:text-purple-300 transition-colors"
+        className="flex items-center gap-2 text-lg font-bold tracking-tight text-white hover:text-purple-300 transition-colors"
       >
-        Auto Apply
+        <img src="/static/images/favicon-32x32.png" alt="" className="w-6 h-6" />
+        <span>Auto Apply</span>
       </Link>
 
       <div className="flex items-center gap-4">
