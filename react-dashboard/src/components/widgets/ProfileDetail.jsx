@@ -786,6 +786,10 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [saveAsOpen, setSaveAsOpen] = useState(false)
+  const [saveAsName, setSaveAsName] = useState('')
+  const [saveAsError, setSaveAsError] = useState(null)
+  const [saveAsSubmitting, setSaveAsSubmitting] = useState(false)
   const [popOut, setPopOut] = useState(false)
   const textareaRef = useRef(null)
   const originalContent = useRef('')
@@ -902,6 +906,50 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
       setSaveError('Save failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const suggestSaveAsName = () => {
+    const base = selectedFile
+      ? selectedFile.split(/[\\/]/).pop().replace(/\.md$/i, '')
+      : typeKey
+    const isDefault = isDefaultPrompt(selectedFile)
+    return isDefault ? `${base}_custom.md` : `${base}_copy.md`
+  }
+
+  const openSaveAs = () => {
+    setSaveAsName(suggestSaveAsName())
+    setSaveAsError(null)
+    setSaveAsOpen(true)
+  }
+
+  const handleSaveAsConfirm = async () => {
+    const filename = saveAsName.trim()
+    if (!filename) { setSaveAsError('Filename is required'); return }
+    const name = filename.endsWith('.md') ? filename : filename + '.md'
+    setSaveAsSubmitting(true)
+    setSaveAsError(null)
+    try {
+      const result = await createPromptFile(name, content)
+      const updated = await listPrompts()
+      setPromptFiles(updated.prompts || [])
+      setSelectedFile(result.path)
+      originalContent.current = content
+      setSaveAsOpen(false)
+      const newData = {
+        ...profileData,
+        [`prompt_${typeKey}`]: result.path,
+        [`prompt_${typeKey}_model`]: modelOverride,
+      }
+      await updateProfile(profileId, { name: profileName || '', data: newData })
+      onSaved(typeKey, result.path, modelOverride)
+      window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
+      onClose()
+    } catch (e) {
+      const msg = e?.message || ''
+      setSaveAsError(msg.includes('409') ? 'A file with that name already exists' : 'Save failed')
+    } finally {
+      setSaveAsSubmitting(false)
     }
   }
 
@@ -1042,21 +1090,57 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
           {/* Footer */}
           <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
             {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-            <div className="flex gap-2">
-              <button
-                onClick={handleSave}
-                disabled={saving || loadingContent || !!contentError}
-                className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
+            {saveAsOpen ? (
+              <div className="flex flex-col gap-2">
+                {saveAsError && <p className="text-xs text-red-400">{saveAsError}</p>}
+                <div className="flex gap-2 items-center">
+                  <input
+                    autoFocus
+                    className={inputClass + ' flex-1 text-xs'}
+                    value={saveAsName}
+                    onChange={(e) => { setSaveAsName(e.target.value); setSaveAsError(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAsConfirm(); if (e.key === 'Escape') setSaveAsOpen(false) }}
+                    placeholder="filename.md"
+                  />
+                  <button
+                    onClick={handleSaveAsConfirm}
+                    disabled={saveAsSubmitting}
+                    className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold transition-colors shrink-0"
+                  >
+                    {saveAsSubmitting ? '…' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={() => setSaveAsOpen(false)}
+                    className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text transition-colors shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={openSaveAs}
+                  disabled={saving || loadingContent || !!contentError}
+                  className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text disabled:opacity-50 transition-colors shrink-0"
+                >
+                  Save As
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || loadingContent || !!contentError}
+                  className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
