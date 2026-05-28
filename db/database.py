@@ -152,6 +152,15 @@ def _migrate_generated_at_columns() -> None:
         conn.commit()
 
 
+def _migrate_flagged_column() -> None:
+    """Add flagged column to jobs table if it does not exist."""
+    with engine.connect() as conn:
+        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
+        if "flagged" not in existing:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN flagged BOOLEAN NOT NULL DEFAULT 0"))
+        conn.commit()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -163,6 +172,7 @@ def init_db() -> None:
     _migrate_unread_indicator_columns()
     _migrate_pending_review_actions()
     _migrate_generated_at_columns()
+    _migrate_flagged_column()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates
     db = SessionLocal()
     try:
