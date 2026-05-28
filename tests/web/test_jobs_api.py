@@ -608,3 +608,39 @@ def test_do_extract_description_handles_null_salary(db_session, monkeypatch):
     db_session.refresh(job)
     assert job.ext_salary_min is None
     assert job.ext_salary_max is None
+
+
+# --- PATCH /api/jobs/{job_key}/fields ---
+
+def test_patch_job_fields_updates_provided_fields(client, db_session):
+    _make_job(db_session, "job_x")
+    res = client.patch(
+        "/api/jobs/job_x/fields",
+        json={
+            "title": "Senior Engineer",
+            "company": "NewCo",
+            "salary": "$150k",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["title"] == "Senior Engineer"
+    assert body["company"] == "NewCo"
+    assert body["salary"] == "$150k"
+    # Unprovided fields preserved
+    assert body["location"] == "Remote"
+
+
+def test_patch_job_fields_404_when_missing(client):
+    res = client.patch("/api/jobs/nope/fields", json={"title": "x"})
+    assert res.status_code == 404
+
+
+def test_patch_job_fields_ignores_unknown_keys(client, db_session):
+    _make_job(db_session, "job_y")
+    res = client.patch(
+        "/api/jobs/job_y/fields",
+        json={"title": "T", "bogus": "x"},
+    )
+    assert res.status_code == 200
+    assert res.json()["title"] == "T"

@@ -129,6 +129,29 @@ def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_
     return job.serialize()
 
 
+class JobFieldsUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    company: str | None = None
+    location: str | None = None
+    salary: str | None = None
+    url: str | None = None
+
+
+@router.patch("/{job_key}/fields")
+def update_job_fields(job_key: str, body: JobFieldsUpdate, db: Session = Depends(get_db)):
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    data = body.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(job, key, value)
+    db.commit()
+    db.refresh(job)
+    _emit(job)
+    return job.serialize()
+
+
 def _load_score_config(db: Session) -> dict:
     """Load scoring weights from the config table."""
     result = {}
