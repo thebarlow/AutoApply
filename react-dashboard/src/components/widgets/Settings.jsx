@@ -654,17 +654,28 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             </select>
           </div>
         </div>
-        <button
-          onClick={() => {
-            if (job.url) window.open(job.url, '_blank')
-            fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
-              .then(res => { if (!res.ok) console.error(`Apply failed: ${res.status}`) })
-              .catch(err => console.error('Apply request failed:', err))
-          }}
-          className="shrink-0 px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#198754] text-white hover:opacity-90"
-        >
-          {hasResume ? 'Apply' : 'View Post'}
-        </button>
+        <div className="flex flex-col gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              if (job.url) window.open(job.url, '_blank')
+              fetch(`/api/jobs/${job.job_key}/apply`, { method: 'POST' })
+                .then(res => { if (!res.ok) console.error(`Apply failed: ${res.status}`) })
+                .catch(err => console.error('Apply request failed:', err))
+            }}
+            className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#198754] text-white hover:opacity-90"
+          >
+            {hasResume ? 'Apply' : 'View Post'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowEditFields(true)}
+            title="Edit job fields"
+            className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text"
+          >
+            Edit
+          </button>
+        </div>
       </div>
 
       <hr className="border-space-border" />
@@ -691,16 +702,9 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
           )
         })}
         <button
-          onClick={() => setShowEditFields(true)}
-          title="Edit job fields"
-          className="ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text"
-        >
-          Edit
-        </button>
-        <button
           onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
           title="Delete job"
-          className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-red-500/30 text-red-400 hover:bg-red-500/10"
+          className="ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors border border-red-500/30 text-red-400 hover:bg-red-500/10"
         >
           Delete
         </button>
