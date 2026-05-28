@@ -115,6 +115,8 @@ export const markJobActionSeen = (jobKey, action) =>
 
 export const getLlmStatus = () => _fetch('/api/llm-status')
 
+export const getStats = (window) => _fetch(`/api/stats?window=${window}`)
+
 export const getSetupStatus = () => _fetch('/api/setup-status')
 
 export const testLlmConnection = (body) =>
