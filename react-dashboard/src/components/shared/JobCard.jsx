@@ -86,7 +86,10 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
         }`}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-space-text truncate">{title}</p>
+        <div className="flex items-center gap-1.5">
+          {flagged && <FlagIconFilled />}
+          <p className="text-sm font-medium text-space-text truncate">{title}</p>
+        </div>
         <p className="text-xs text-space-dim">{company}</p>
         {hasMetadata && (
           <div className="flex justify-between mt-0.5">
@@ -108,7 +111,6 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
       )}
 
       <div className="flex items-center self-stretch gap-1.5">
-        {flagged && <FlagIconFilled />}
         <ScorePill />
         {state === 'deleted' && <TrashIcon />}
         {statusIcon}
