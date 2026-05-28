@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, putDocumentMarkdown } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 import UserHome from './UserHome'
 import { WarningIcon } from '../shared/JobCard'
@@ -126,6 +126,76 @@ function _splitJustification(j) {
   }
 }
 
+function EditFieldsModal({ job, onClose }) {
+  const [title, setTitle] = useState(job.title || '')
+  const [description, setDescription] = useState(job.description || '')
+  const [company, setCompany] = useState(job.company || '')
+  const [location, setLocation] = useState(job.location || '')
+  const [salary, setSalary] = useState(job.salary || '')
+  const [url, setUrl] = useState(job.url || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await updateJobFields(job.job_key, {
+        title, description, company, location, salary, url,
+      })
+      onClose()
+    } catch (e) {
+      setError(e?.message || 'Save failed')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-md p-5 flex flex-col gap-3 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <p className="text-sm font-semibold text-space-text">Edit job</p>
+
+        <label className="text-xs text-space-dim">Title</label>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
+
+        <label className="text-xs text-space-dim">Description</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={6} className={inputClass} />
+
+        <label className="text-xs text-space-dim">Company</label>
+        <input value={company} onChange={(e) => setCompany(e.target.value)} className={inputClass} />
+
+        <label className="text-xs text-space-dim">Location</label>
+        <input value={location} onChange={(e) => setLocation(e.target.value)} className={inputClass} />
+
+        <label className="text-xs text-space-dim">Salary</label>
+        <input value={salary} onChange={(e) => setSalary(e.target.value)} className={inputClass} />
+
+        <label className="text-xs text-space-dim">URL</label>
+        <input value={url} onChange={(e) => setUrl(e.target.value)} className={inputClass} />
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ScoreView({ job }) {
   const score = job.final_score
   if (score == null) {
@@ -188,6 +258,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
   const [stateChanging, setStateChanging] = useState(false)
+  const [showEditFields, setShowEditFields] = useState(false)
 
   useEffect(() => {
     if (!confirmDelete) return
@@ -271,6 +342,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setDeleting(false)
     setDeleteError(null)
     setStateChanging(false)
+    setShowEditFields(false)
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
@@ -407,9 +479,16 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
           )
         })}
         <button
+          onClick={() => setShowEditFields(true)}
+          title="Edit job fields"
+          className="ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text"
+        >
+          Edit
+        </button>
+        <button
           onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
           title="Delete job"
-          className="ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors border border-red-500/30 text-red-400 hover:bg-red-500/10"
+          className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-red-500/30 text-red-400 hover:bg-red-500/10"
         >
           Delete
         </button>
@@ -544,6 +623,9 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             />
           )}
         </div>
+      )}
+      {showEditFields && (
+        <EditFieldsModal job={job} onClose={() => setShowEditFields(false)} />
       )}
     </div>
   )
