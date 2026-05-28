@@ -947,8 +947,14 @@ def _build_master_resume_md(user: Any) -> str:
     if user.hero:
         lines += ["## Profile", user.hero, ""]
 
-    if user.skills:
-        lines += ["## Skills", ", ".join(user.skills), ""]
+    if user.education:
+        lines.append("## Education")
+        for edu in user.education:
+            gpa_str = f" — GPA: {edu.gpa}" if edu.gpa else ""
+            lines.append(
+                f"**{edu.degree} {edu.field}** | {edu.institution} | {edu.graduated}{gpa_str}"
+            )
+            lines.append("")
 
     if user.work_history:
         lines.append("## Experience")
@@ -957,15 +963,6 @@ def _build_master_resume_md(user: Any) -> str:
             lines.append(f"**{entry.title}** | {entry.company} | {entry.start} – {end}")
             if entry.summary:
                 lines += ["", entry.summary]
-            lines.append("")
-
-    if user.education:
-        lines.append("## Education")
-        for edu in user.education:
-            gpa_str = f" — GPA: {edu.gpa}" if edu.gpa else ""
-            lines.append(
-                f"**{edu.degree} {edu.field}** | {edu.institution} | {edu.graduated}{gpa_str}"
-            )
             lines.append("")
 
     if user.projects:
@@ -978,6 +975,9 @@ def _build_master_resume_md(user: Any) -> str:
             url_str = f"  \n{proj.url}" if proj.url else ""
             lines.append(f"**{proj.name}** — {proj.description}{tech_str}{url_str}")
             lines.append("")
+
+    if user.skills:
+        lines += ["## Skills", ", ".join(user.skills), ""]
 
     return "\n".join(lines)
 

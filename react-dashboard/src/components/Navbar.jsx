@@ -120,8 +120,6 @@ export default function Navbar() {
         {/* Help link */}
         <a
           href="/docs"
-          target="_blank"
-          rel="noopener noreferrer"
           className="text-sm text-space-dim hover:text-purple-400 transition-colors"
           aria-label="Help"
         >
