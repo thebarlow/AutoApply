@@ -1,5 +1,6 @@
 import threading
 import pytest
+from datetime import datetime, timezone
 import core.session_cost as sc
 
 
@@ -38,3 +39,13 @@ def test_thread_safety():
     for t in threads:
         t.join()
     assert abs(sc.get_total() - 100.0) < 1e-6
+
+
+def test_get_session_start_returns_datetime():
+    start = sc.get_session_start()
+    assert isinstance(start, datetime)
+    assert start.tzinfo is not None
+
+
+def test_get_session_start_is_stable():
+    assert sc.get_session_start() is sc.get_session_start()
