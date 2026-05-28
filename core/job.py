@@ -316,6 +316,10 @@ class Job(Base):
             )
         except Exception as e:
             raise RuntimeError(f"LLM API error: {e}") from e
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            from core import session_cost
+            session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
         choice = response.choices[0]
         raw = choice.message.content
         finish = getattr(choice, "finish_reason", None)
@@ -404,6 +408,10 @@ class Job(Base):
             max_tokens=2048,
             messages=[{"role": "user", "content": actual_prompt}],
         )
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            from core import session_cost
+            session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
         choice = response.choices[0]
         raw = choice.message.content
         if not raw:

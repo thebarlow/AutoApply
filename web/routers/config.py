@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,7 @@ from db.database import get_db
 from db.database import Config, FieldHelp
 from core.user import User, PromptNotConfiguredError
 from core.job import Job
+from core.utils import render_pdf
 
 router = APIRouter()
 
@@ -931,3 +934,84 @@ def get_user_profile_fields(db: Session = Depends(get_db)) -> dict:
         "description": "Full resume content loaded from md_path (or reconstructed from profile fields if md_path is not set)",
     })
     return {"fields": fields}
+
+
+# ---- Export Master Resume ----
+
+_MASTER_TEMPLATE = Path(__file__).parent.parent.parent / "generator" / "master_template.html"
+
+
+def _build_master_resume_md(user: Any) -> str:
+    lines: list[str] = []
+
+    if user.hero:
+        lines += ["## Profile", user.hero, ""]
+
+    if user.education:
+        lines.append("## Education")
+        for edu in user.education:
+            gpa_str = f" — GPA: {edu.gpa}" if edu.gpa else ""
+            lines.append(
+                f"**{edu.degree} {edu.field}** | {edu.institution} | {edu.graduated}{gpa_str}"
+            )
+            lines.append("")
+
+    if user.work_history:
+        lines.append("## Experience")
+        for entry in user.work_history:
+            end = entry.end or "Present"
+            lines.append(f"**{entry.title}** | {entry.company} | {entry.start} – {end}")
+            if entry.summary:
+                lines += ["", entry.summary]
+            lines.append("")
+
+    if user.projects:
+        lines.append("## Projects")
+        for proj in user.projects:
+            tech_str = (
+                f"  \n*Technologies: {', '.join(proj.technologies)}*"
+                if proj.technologies else ""
+            )
+            url_str = f"  \n{proj.url}" if proj.url else ""
+            lines.append(f"**{proj.name}** — {proj.description}{tech_str}{url_str}")
+            lines.append("")
+
+    if user.skills:
+        lines += ["## Skills", ", ".join(user.skills), ""]
+
+    return "\n".join(lines)
+
+
+@router.post("/api/profile/export-master")
+def export_master_resume(db: Session = Depends(get_db)) -> Response:
+    try:
+        user = User.load(db)
+    except RuntimeError:
+        raise HTTPException(status_code=404, detail="No profile found")
+
+    md_content = _build_master_resume_md(user)
+    tmpdir = Path(tempfile.mkdtemp())
+    try:
+        md_path = tmpdir / "master.md"
+        pdf_path = tmpdir / "master_resume.pdf"
+        md_path.write_text(md_content, encoding="utf-8")
+
+        meta = {
+            "name": f"{user.first_name} {user.last_name}".strip(),
+            "email": user.email,
+            "phone": user.phone,
+            "location": user.location,
+            "linkedin": user.linkedin,
+            "github": user.github,
+            "website": user.website,
+        }
+        render_pdf(md_path, pdf_path, _MASTER_TEMPLATE, meta=meta)
+        pdf_bytes = pdf_path.read_bytes()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=master_resume.pdf"},
+    )
