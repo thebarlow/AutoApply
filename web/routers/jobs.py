@@ -357,7 +357,10 @@ async def _put_document_markdown(
         raise HTTPException(status_code=404, detail="Job not found")
 
     raw = await request.body()
-    content = raw.decode("utf-8")
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Request body must be valid UTF-8 text")
 
     suffix = "_resume.md" if doc_type == "resume" else "_cover.md"
     md_path = _GENERATOR_OUTPUTS / f"{job_key}{suffix}"
