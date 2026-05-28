@@ -40,7 +40,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState(null)
 
-  useEffect(() => {
+  const fetchProfiles = () => {
     getProfiles()
       .then(({ profiles, active_id }) => {
         const active = profiles.find((p) => p.id === active_id) ?? null
@@ -48,6 +48,10 @@ export default function UserHome({ onSelect, onCreateProfile }) {
       })
       .catch(() => setActiveProfile(null))
       .finally(() => setProfilesLoaded(true))
+  }
+
+  useEffect(() => {
+    fetchProfiles()
   }, [])
 
   useEffect(() => {
@@ -65,7 +69,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
   }
 
   if (!activeProfile) {
-    return <ProfileCards onSelect={onSelect} onCreateProfile={onCreateProfile} />
+    return <ProfileCards onSelect={onSelect} onCreateProfile={onCreateProfile} onActiveChanged={fetchProfiles} />
   }
 
   if (showSwitchUser) {
@@ -80,7 +84,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
           </svg>
           Back
         </button>
-        <ProfileCards onSelect={onSelect} onCreateProfile={onCreateProfile} />
+        <ProfileCards onSelect={onSelect} onCreateProfile={onCreateProfile} onActiveChanged={fetchProfiles} />
       </div>
     )
   }

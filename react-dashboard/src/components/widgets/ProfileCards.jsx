@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getProfiles, setActiveProfile } from '../../api'
 
-export default function ProfileCards({ onSelect, onCreateProfile }) {
+export default function ProfileCards({ onSelect, onCreateProfile, onActiveChanged = () => {} }) {
   const [profiles, setProfiles] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -24,6 +24,7 @@ export default function ProfileCards({ onSelect, onCreateProfile }) {
       await setActiveProfile(id)
       setActiveId(id)
       window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
+      onActiveChanged()
     } finally {
       setSettingActive(null)
     }
