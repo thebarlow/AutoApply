@@ -277,7 +277,7 @@ function EditFieldsModal({ job, onClose }) {
   )
 }
 
-function DocumentEditOverlay({ job, docType, onClose }) {
+function DocumentEditOverlay({ job, docType, onClose, onSaved }) {
   const [original, setOriginal] = useState(null)
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
@@ -292,7 +292,7 @@ function DocumentEditOverlay({ job, docType, onClose }) {
     const controller = new AbortController()
     setLoading(true)
     setError(null)
-    fetch(`/api/jobs/${job.job_key}/${docType}/markdown`, { signal: controller.signal })
+    fetch(`/api/jobs/${job.job_key}/${docType}/markdown`, { signal: controller.signal, cache: 'no-store' })
       .then((r) => {
         if (!r.ok && r.status !== 404) throw new Error(`Load failed (${r.status})`)
         return r.status === 404 ? '' : r.text()
@@ -330,6 +330,7 @@ function DocumentEditOverlay({ job, docType, onClose }) {
       await putDocumentMarkdown(job.job_key, docType, text)
       setOriginal(text)
       setPdfNonce((n) => n + 1)
+      onSaved?.()
     } catch (e) {
       setError(e?.message || 'Save failed')
     } finally {
@@ -856,6 +857,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
           job={job}
           docType={editDoc}
           onClose={() => setEditDoc(null)}
+          onSaved={() => setArtifactNonce((cur) => ({ ...cur, [editDoc]: cur[editDoc] + 1 }))}
         />
       )}
     </div>
