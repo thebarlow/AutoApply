@@ -124,6 +124,7 @@ class Job(Base):
     unread_indicator = Column(String)   # null | "ok" | "error"
     last_result_error = Column(Text)
     pending_review_actions = Column(Text)  # JSON list of action names awaiting review
+    flagged = Column(Boolean, default=False, nullable=False)
 
     @classmethod
     def from_scraped(cls, scraped: Any) -> "Job":
@@ -773,4 +774,5 @@ class Job(Base):
             "unread_indicator": self.unread_indicator,
             "last_result_error": self.last_result_error,
             "pending_review_actions": json.loads(self.pending_review_actions or "[]"),
+            "flagged": bool(self.flagged),
         }
