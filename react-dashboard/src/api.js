@@ -168,3 +168,36 @@ export async function ensureProfileWithProvider(name, llm) {
 
   return { id: profile.id, name: profile.name || name }
 }
+
+export const uploadJob = (fields) => {
+  const uuid = crypto.randomUUID()
+  const body = {
+    source: 'manual',
+    job_key: `manual_${uuid}`,
+    title: fields.title,
+    description: fields.description,
+    company: fields.company || '',
+    location: fields.location || '',
+    salary: fields.salary || '',
+    url: fields.url?.trim() || `manual://${uuid}`,
+  }
+  return _fetch('/api/scraper/stage-job', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export const updateJobFields = (jobKey, fields) =>
+  _fetch(`/api/jobs/${jobKey}/fields`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+
+export const putDocumentMarkdown = (jobKey, docType, markdown) =>
+  _fetch(`/api/jobs/${jobKey}/${docType}/markdown`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/plain' },
+    body: markdown,
+  })
