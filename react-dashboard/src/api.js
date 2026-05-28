@@ -201,3 +201,10 @@ export const putDocumentMarkdown = (jobKey, docType, markdown) =>
     headers: { 'Content-Type': 'text/plain' },
     body: markdown,
   })
+
+export const flagJob = (jobKey, flagged) =>
+  _fetch(`/api/jobs/${jobKey}/flag`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flagged }),
+  })

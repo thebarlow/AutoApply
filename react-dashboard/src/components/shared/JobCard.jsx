@@ -29,7 +29,7 @@ function TrashIcon() {
   )
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, salaryMin, salaryMax, salaryRaw }) {
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, salaryMin, salaryMax, salaryRaw, flagged = false }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
 
@@ -108,6 +108,7 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
       )}
 
       <div className="flex items-center self-stretch gap-1.5">
+        {flagged && <FlagIconFilled />}
         <ScorePill />
         {state === 'deleted' && <TrashIcon />}
         {statusIcon}
@@ -131,6 +132,15 @@ function WarningIcon() {
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0">
       <path d="M9 1.5 L17 16 L1 16 Z" stroke="#EF4444" strokeWidth="1.2" strokeLinejoin="round" fill="none"/>
       <text x="9" y="13.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#EF4444">!</text>
+    </svg>
+  )
+}
+
+function FlagIconFilled() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+      <line x1="4" y1="22" x2="4" y2="15"/>
     </svg>
   )
 }

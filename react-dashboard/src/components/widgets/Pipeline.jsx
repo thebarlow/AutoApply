@@ -67,6 +67,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
             salaryMin={job.ext_salary_min ?? null}
             salaryMax={job.ext_salary_max ?? null}
             salaryRaw={job.salary || null}
+            flagged={job.flagged ?? false}
             docs={{
               resume: !!(job.resume_path || job.resume_md_exists),
               coverLetter: !!(job.cover_path || job.cover_md_exists),
