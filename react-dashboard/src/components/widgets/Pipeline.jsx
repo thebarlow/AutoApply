@@ -85,7 +85,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
   )
 }
 
-const SORT_OPTIONS = ['Date', 'Score', 'Salary']
+const SORT_OPTIONS = ['Date', 'Score', 'Salary', 'Flagged']
 
 function parseSalaryForSort(job) {
   if (job.ext_salary_min != null) return job.ext_salary_min
@@ -249,6 +249,9 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         if (sb == null) return -1
         return dir * (sb - sa)
       })
+    }
+    if (sortBy === 'Flagged') {
+      return list.sort((a, b) => dir * ((b.flagged ? 1 : 0) - (a.flagged ? 1 : 0)))
     }
     return list
   }, [tabJobs, activeTab, sortBy, sortDir])
