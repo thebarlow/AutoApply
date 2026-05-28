@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, putDocumentMarkdown } from '../../api'
@@ -225,21 +225,22 @@ function DocumentEditOverlay({ job, docType, onClose }) {
     return () => controller.abort()
   }, [job.job_key, docType])
 
-  const attemptClose = () => {
+  const attemptClose = useCallback(() => {
     if (dirty) setConfirmDiscard(true)
     else onClose()
-  }
+  }, [dirty, onClose])
 
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.stopPropagation()
+        e.preventDefault()
         attemptClose()
       }
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
-  }, [dirty])
+  }, [attemptClose])
 
   const handleSave = async () => {
     setSaving(true)
