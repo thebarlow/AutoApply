@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import JobCard, { ProcessingIcon, EyeIcon, WarningIcon } from '../shared/JobCard'
+import { uploadJob } from '../../api'
 
 const TABS = ['Inbox', 'Archives']
 
@@ -95,12 +96,117 @@ function parseSalaryForSort(job) {
   return values.length > 0 ? Math.min(...values) : null
 }
 
+function UploadModal({ onClose, onSubmit }) {
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [company, setCompany] = useState('')
+  const [location, setLocation] = useState('')
+  const [salary, setSalary] = useState('')
+  const [url, setUrl] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  const canSubmit = title.trim() && description.trim() && !submitting
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description: description.trim(),
+        company: company.trim(),
+        location: location.trim(),
+        salary: salary.trim(),
+        url: url.trim(),
+      })
+      onClose()
+    } catch (e) {
+      setError(e?.message || 'Upload failed')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-md p-5 flex flex-col gap-3 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <p className="text-sm font-semibold text-space-text">Upload a job</p>
+
+        <label className="text-xs text-space-dim">Title <span className="text-red-400">*</span></label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text focus:outline-none focus:border-purple-500"
+        />
+
+        <label className="text-xs text-space-dim">Description <span className="text-red-400">*</span></label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={6}
+          className="w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text focus:outline-none focus:border-purple-500"
+        />
+
+        <label className="text-xs text-space-dim">Company</label>
+        <input
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+          className="w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text focus:outline-none focus:border-purple-500"
+        />
+
+        <label className="text-xs text-space-dim">Location</label>
+        <input
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          className="w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text focus:outline-none focus:border-purple-500"
+        />
+
+        <label className="text-xs text-space-dim">Salary</label>
+        <input
+          value={salary}
+          onChange={(e) => setSalary(e.target.value)}
+          className="w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text focus:outline-none focus:border-purple-500"
+        />
+
+        <label className="text-xs text-space-dim">Job URL</label>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://…"
+          className="w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text focus:outline-none focus:border-purple-500"
+        />
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold"
+          >
+            {submitting ? 'Uploading…' : 'Upload'}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect }) {
   const [activeTab, setActiveTab] = useState('Inbox')
   const [searchInbox, setSearchInbox] = useState('')
   const [searchArchives, setSearchArchives] = useState('')
   const [sortBy, setSortBy] = useState('Date')
   const [sortDir, setSortDir] = useState('desc')
+  const [showUpload, setShowUpload] = useState(false)
 
   const tabJobs = useMemo(() => ({
     Inbox: jobs.filter((j) => INBOX_STATES.has(j.state)),
@@ -185,7 +291,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         ))}
       </div>
 
-      {/* Sort */}
+      {/* Sort + Upload */}
       <div className="flex items-center gap-3 px-4 pt-3 shrink-0">
         {SORT_OPTIONS.map((opt) => (
           <button
@@ -210,6 +316,14 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
             : <span style={{ fontSize: '10px', lineHeight: 1 }}>▲</span>
           }
         </button>
+        {activeTab === 'Inbox' && (
+          <button
+            onClick={() => setShowUpload(true)}
+            className="text-xs font-medium text-purple-400 hover:text-purple-300 border border-purple-500/40 rounded px-2 py-0.5"
+          >
+            + Upload
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -234,6 +348,12 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
           activeTab={activeTab}
         />
       </div>
+      {showUpload && (
+        <UploadModal
+          onClose={() => setShowUpload(false)}
+          onSubmit={async (fields) => { await uploadJob(fields) }}
+        />
+      )}
     </motion.div>
   )
 }
