@@ -365,6 +365,7 @@ async def _put_document_markdown(
     suffix = "_resume.md" if doc_type == "resume" else "_cover.md"
     md_path = _GENERATOR_OUTPUTS / f"{job_key}{suffix}"
     md_path.parent.mkdir(parents=True, exist_ok=True)
+    old_content = md_path.read_text(encoding="utf-8") if md_path.exists() else None
     md_path.write_text(content, encoding="utf-8")
 
     try:
@@ -373,6 +374,10 @@ async def _put_document_markdown(
         else:
             job.generate_cover_pdf(_COVER_TEMPLATE, db)
     except Exception as exc:
+        if old_content is not None:
+            md_path.write_text(old_content, encoding="utf-8")
+        else:
+            md_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
 
     db.commit()
