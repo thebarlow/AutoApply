@@ -196,6 +196,134 @@ function EditFieldsModal({ job, onClose }) {
   )
 }
 
+function DocumentEditOverlay({ job, docType, onClose }) {
+  const [original, setOriginal] = useState(null)
+  const [text, setText] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [pdfNonce, setPdfNonce] = useState(0)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+
+  const dirty = original !== null && text !== original
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true)
+    setError(null)
+    fetch(`/api/jobs/${job.job_key}/${docType}/markdown`, { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok && r.status !== 404) throw new Error(`Load failed (${r.status})`)
+        return r.status === 404 ? '' : r.text()
+      })
+      .then((t) => { setOriginal(t); setText(t); setLoading(false) })
+      .catch((e) => {
+        if (e.name === 'AbortError') return
+        setError(e.message || 'Load failed')
+        setLoading(false)
+      })
+    return () => controller.abort()
+  }, [job.job_key, docType])
+
+  const attemptClose = () => {
+    if (dirty) setConfirmDiscard(true)
+    else onClose()
+  }
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        attemptClose()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [dirty])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await putDocumentMarkdown(job.job_key, docType, text)
+      setOriginal(text)
+      setPdfNonce((n) => n + 1)
+    } catch (e) {
+      setError(e?.message || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const docLabel = docType === 'resume' ? 'Resume' : 'Cover Letter'
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-[#0f0f1a] flex flex-col">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-space-border shrink-0">
+        <p className="text-sm font-semibold text-space-text">Editing {docLabel} — {job.title || job.job_key}</p>
+        {dirty && <span className="text-xs text-yellow-400">● unsaved</span>}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || loading || !dirty}
+            className="px-3 py-1 rounded text-xs font-semibold bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            onClick={attemptClose}
+            className="px-3 py-1 rounded text-xs font-semibold border border-space-border text-space-dim hover:text-space-text"
+            aria-label="Close editor"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="px-4 py-2 text-xs text-red-400">{error}</p>}
+
+      <div className="flex-1 grid grid-cols-2 gap-2 p-2 overflow-hidden">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={loading}
+          spellCheck={false}
+          className="w-full h-full bg-black/30 border border-space-border rounded p-3 text-xs font-mono text-space-text resize-none focus:outline-none focus:border-purple-500"
+          placeholder={loading ? 'Loading…' : ''}
+        />
+        <iframe
+          src={`/api/jobs/${job.job_key}/${docType}?v=${pdfNonce}`}
+          title={`${docLabel} PDF preview`}
+          className="w-full h-full rounded border border-space-border bg-white"
+        />
+      </div>
+
+      {confirmDiscard && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70">
+          <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-sm p-5 flex flex-col gap-4 shadow-2xl">
+            <p className="text-sm font-semibold text-space-text">You have unsaved changes</p>
+            <p className="text-xs text-space-dim">Discard them?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setConfirmDiscard(false); onClose() }}
+                className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold"
+              >
+                Discard
+              </button>
+              <button
+                onClick={() => setConfirmDiscard(false)}
+                className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text"
+              >
+                Keep Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ScoreView({ job }) {
   const score = job.final_score
   if (score == null) {
@@ -259,6 +387,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   const [deleteError, setDeleteError] = useState(null)
   const [stateChanging, setStateChanging] = useState(false)
   const [showEditFields, setShowEditFields] = useState(false)
+  const [editDoc, setEditDoc] = useState(null) // null | 'resume' | 'cover'
 
   useEffect(() => {
     if (!confirmDelete) return
@@ -343,6 +472,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setDeleteError(null)
     setStateChanging(false)
     setShowEditFields(false)
+    setEditDoc(null)
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
@@ -593,6 +723,14 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               onChange={setArtifactView}
             />
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => setEditDoc(contentTab)}
+                disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
+                title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Edit markdown and re-render PDF' : 'Generate before editing'}
+                className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Edit
+              </button>
               <HelpIcon text="Generates a tailored resume and cover letter for this job, rendered to PDF. Uses more credits than scoring." />
               <GatedButton
                 action="generate"
@@ -626,6 +764,13 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       )}
       {showEditFields && (
         <EditFieldsModal job={job} onClose={() => setShowEditFields(false)} />
+      )}
+      {editDoc && (
+        <DocumentEditOverlay
+          job={job}
+          docType={editDoc}
+          onClose={() => setEditDoc(null)}
+        />
       )}
     </div>
   )
