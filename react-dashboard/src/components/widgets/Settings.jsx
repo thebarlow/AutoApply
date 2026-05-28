@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, putDocumentMarkdown } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, putDocumentMarkdown, flagJob } from '../../api'
 import ProfileDetailView from './ProfileDetail'
 import UserHome from './UserHome'
 import { WarningIcon } from '../shared/JobCard'
@@ -15,6 +15,28 @@ function BackArrow() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 12L6 8l4-4" />
     </svg>
+  )
+}
+
+function FlagButton({ flagged, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title={flagged ? 'Remove flag' : 'Flag this job'}
+      className="shrink-0 text-space-dim hover:text-red-400 transition-colors"
+    >
+      {flagged ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+          <line x1="4" y1="22" x2="4" y2="15"/>
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+          <line x1="4" y1="22" x2="4" y2="15"/>
+        </svg>
+      )}
+    </button>
   )
 }
 
@@ -469,6 +491,19 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
   const [stateChanging, setStateChanging] = useState(false)
+  const [flagging, setFlagging] = useState(false)
+
+  const handleFlag = async () => {
+    if (!job || flagging) return
+    setFlagging(true)
+    try {
+      await flagJob(job.job_key, !job.flagged)
+    } catch { /* SSE will sync; ignore */ }
+    finally {
+      setFlagging(false)
+    }
+  }
+
   const [showEditFields, setShowEditFields] = useState(false)
   const [editDoc, setEditDoc] = useState(null) // null | 'resume' | 'cover'
 
@@ -556,6 +591,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setStateChanging(false)
     setShowEditFields(false)
     setEditDoc(null)
+    setFlagging(false)
   }, [job?.job_key])
 
   // Reset artifactView when switching between resume/cover tabs
@@ -636,7 +672,10 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       {/* Info */}
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-space-text leading-tight">{job.title || '(no title)'}</h2>
+          <div className="flex items-start gap-2">
+            <h2 className="text-base font-semibold text-space-text leading-tight flex-1">{job.title || '(no title)'}</h2>
+            <FlagButton flagged={!!job.flagged} onClick={handleFlag} />
+          </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
             {job.company && <span className="text-xs text-space-dim">{job.company}</span>}
             {job.location && <span className="text-xs text-space-dim">{job.location}</span>}
