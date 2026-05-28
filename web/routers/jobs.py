@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from core.job import Job, JobState
 from core.user import User, PromptNotConfiguredError
@@ -146,7 +147,11 @@ def update_job_fields(job_key: str, body: JobFieldsUpdate, db: Session = Depends
     data = body.model_dump(exclude_unset=True)
     for key, value in data.items():
         setattr(job, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A job with that URL already exists")
     db.refresh(job)
     _emit(job)
     return job.serialize()
