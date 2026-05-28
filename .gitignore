@@ -1,3 +1,6 @@
+# Developer mode flag (skips first-time setup check)
+.dev
+
 # Environment
 .env
 .env.*
