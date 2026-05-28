@@ -16,13 +16,18 @@ _VALID_WINDOWS = {"session", "today", "week", "all_time"}
 _ALL_STATES = ["new", "pending_review", "ready", "applied", "contact", "rejected"]
 
 
-def _date_label(iso: str) -> str:
-    """Return 'Mon D' label from ISO datetime string."""
+def _date_label(date_str: str) -> str:
+    """Convert YYYY-MM-DD to 'Mon D' display label."""
     try:
-        dt = datetime.fromisoformat(iso)
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
         return dt.strftime("%b %#d")
     except (ValueError, TypeError):
-        return iso[:10]
+        return date_str
+
+
+def _iso_to_date(iso: str) -> str:
+    """Extract YYYY-MM-DD from an ISO datetime string."""
+    return iso[:10] if iso else ""
 
 
 @router.get("/stats")
@@ -49,14 +54,13 @@ def get_stats(
     cutoff_iso = cutoff.isoformat() if cutoff else None
 
     # Scraped: bucket by scraped_at date
-    scraped_q = db.query(Job)
+    scraped_q = db.query(Job).filter(Job.scraped_at.isnot(None))
     if cutoff_iso:
         scraped_q = scraped_q.filter(Job.scraped_at >= cutoff_iso)
 
     scraped_by_date: dict[str, int] = defaultdict(int)
     for job in scraped_q.all():
-        if job.scraped_at:
-            scraped_by_date[_date_label(job.scraped_at)] += 1
+        scraped_by_date[_iso_to_date(job.scraped_at)] += 1
 
     # Resumes: bucket by resume_generated_at
     resume_q = db.query(Job).filter(Job.resume_generated_at.isnot(None))
@@ -65,7 +69,7 @@ def get_stats(
 
     resumes_by_date: dict[str, int] = defaultdict(int)
     for job in resume_q.all():
-        resumes_by_date[_date_label(job.resume_generated_at)] += 1
+        resumes_by_date[_iso_to_date(job.resume_generated_at)] += 1
 
     # Covers: bucket by cover_generated_at
     cover_q = db.query(Job).filter(Job.cover_generated_at.isnot(None))
@@ -74,20 +78,20 @@ def get_stats(
 
     covers_by_date: dict[str, int] = defaultdict(int)
     for job in cover_q.all():
-        covers_by_date[_date_label(job.cover_generated_at)] += 1
+        covers_by_date[_iso_to_date(job.cover_generated_at)] += 1
 
-    # Merge and sort labels
-    all_labels = sorted(
+    # Merge date keys (YYYY-MM-DD) and sort chronologically
+    all_dates = sorted(
         set(scraped_by_date) | set(resumes_by_date) | set(covers_by_date)
     )
     bars = [
         {
-            "label": lbl,
-            "scraped": scraped_by_date.get(lbl, 0),
-            "resumes": resumes_by_date.get(lbl, 0),
-            "covers": covers_by_date.get(lbl, 0),
+            "label": _date_label(d),
+            "scraped": scraped_by_date.get(d, 0),
+            "resumes": resumes_by_date.get(d, 0),
+            "covers": covers_by_date.get(d, 0),
         }
-        for lbl in all_labels
+        for d in all_dates
     ]
 
     # by_state: pipeline snapshot, not window-filtered
