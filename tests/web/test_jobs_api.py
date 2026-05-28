@@ -706,3 +706,34 @@ def test_put_resume_markdown_handler_is_sync():
     import web.routers.jobs as jobs_mod
     assert not asyncio.iscoroutinefunction(jobs_mod.put_resume_markdown)
     assert not asyncio.iscoroutinefunction(jobs_mod.put_cover_markdown)
+
+
+# --- PATCH /api/jobs/{job_key}/flag ---
+
+def test_flag_job(client, db_session):
+    _make_job(db_session, "job_flag")
+    resp = client.patch("/api/jobs/job_flag/flag", json={"flagged": True})
+    assert resp.status_code == 200
+    assert resp.json()["flagged"] is True
+
+
+def test_unflag_job(client, db_session):
+    job = _make_job(db_session, "job_unflag")
+    job.flagged = True
+    db_session.commit()
+    resp = client.patch("/api/jobs/job_unflag/flag", json={"flagged": False})
+    assert resp.status_code == 200
+    assert resp.json()["flagged"] is False
+
+
+def test_flag_job_not_found(client):
+    resp = client.patch("/api/jobs/nonexistent/flag", json={"flagged": True})
+    assert resp.status_code == 404
+
+
+def test_get_jobs_includes_flagged_field(client, db_session):
+    _make_job(db_session, "job_f")
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    assert "flagged" in resp.json()[0]
+    assert resp.json()[0]["flagged"] is False

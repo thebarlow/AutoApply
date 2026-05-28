@@ -157,6 +157,22 @@ def update_job_fields(job_key: str, body: JobFieldsUpdate, db: Session = Depends
     return job.serialize()
 
 
+class FlagUpdate(BaseModel):
+    flagged: bool
+
+
+@router.patch("/{job_key}/flag")
+def update_job_flag(job_key: str, body: FlagUpdate, db: Session = Depends(get_db)):
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job.flagged = body.flagged
+    db.commit()
+    db.refresh(job)
+    _emit(job)
+    return job.serialize()
+
+
 def _load_score_config(db: Session) -> dict:
     """Load scoring weights from the config table."""
     result = {}
