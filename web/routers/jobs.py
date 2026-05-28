@@ -4,7 +4,7 @@ import json as _json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -344,6 +344,48 @@ def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Cover letter markdown not found")
     return path.read_text(encoding="utf-8")
+
+
+async def _put_document_markdown(
+    job_key: str,
+    doc_type: str,  # "resume" or "cover"
+    request: Request,
+    db: Session,
+):
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    raw = await request.body()
+    content = raw.decode("utf-8")
+
+    suffix = "_resume.md" if doc_type == "resume" else "_cover.md"
+    md_path = _GENERATOR_OUTPUTS / f"{job_key}{suffix}"
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(content, encoding="utf-8")
+
+    try:
+        if doc_type == "resume":
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
+        else:
+            job.generate_cover_pdf(_COVER_TEMPLATE, db)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
+
+    db.commit()
+    db.refresh(job)
+    _emit(job)
+    return job.serialize()
+
+
+@router.put("/{job_key}/resume/markdown")
+async def put_resume_markdown(job_key: str, request: Request, db: Session = Depends(get_db)):
+    return await _put_document_markdown(job_key, "resume", request, db)
+
+
+@router.put("/{job_key}/cover/markdown")
+async def put_cover_markdown(job_key: str, request: Request, db: Session = Depends(get_db)):
+    return await _put_document_markdown(job_key, "cover", request, db)
 
 
 def _do_extract_description(job: Job, db: Session) -> None:
