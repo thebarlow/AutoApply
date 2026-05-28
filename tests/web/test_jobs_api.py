@@ -654,7 +654,7 @@ def test_put_resume_markdown_writes_file_and_rerenders(client, db_session, monke
     import web.routers.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "_GENERATOR_OUTPUTS", tmp_path)
     called = {}
-    def fake_resume_pdf(self, template, db):
+    def fake_resume_pdf(self, template, db, max_pages=1):
         called["resume"] = True
         self.resume_generated_at = "2026-05-28T00:00:00+00:00"
     monkeypatch.setattr(Job, "generate_resume_pdf", fake_resume_pdf)
@@ -698,3 +698,11 @@ def test_put_resume_markdown_404_when_missing(client):
         headers={"Content-Type": "text/plain"},
     )
     assert res.status_code == 404
+
+
+def test_put_resume_markdown_handler_is_sync():
+    """PUT handler must be a plain function, not a coroutine — sync_playwright requires no event loop."""
+    import asyncio
+    import web.routers.jobs as jobs_mod
+    assert not asyncio.iscoroutinefunction(jobs_mod.put_resume_markdown)
+    assert not asyncio.iscoroutinefunction(jobs_mod.put_cover_markdown)

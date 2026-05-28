@@ -393,6 +393,7 @@ class Job(Base):
             db: SQLAlchemy session.
 
         Raises:
+            FileNotFoundError: If description prompt is not configured.
             PromptNotConfiguredError: If extraction prompt is not configured.
             RuntimeError: If the LLM fails or returns invalid JSON.
         """
@@ -587,7 +588,7 @@ class Job(Base):
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
         md_path.write_text(frontmatter + content, encoding="utf-8")
 
-    def generate_resume_pdf(self, template_path: Path, db: Session) -> None:
+    def generate_resume_pdf(self, template_path: Path, db: Session, max_pages: int | None = 1) -> None:
         """Render resume PDF from existing markdown and update resume_path.
 
         Requires generator/outputs/{job_key}_resume.md to exist.
@@ -595,10 +596,13 @@ class Job(Base):
         Args:
             template_path: Path to the Jinja2 HTML template file.
             db: SQLAlchemy session.
+            max_pages: Maximum number of pages allowed. ``None`` disables the limit.
+                Defaults to 1 (enforced for LLM-generated resumes; pass ``None``
+                when saving user edits to allow multi-page documents).
 
         Raises:
             FileNotFoundError: If the resume markdown file does not exist.
-            RuntimeError: If the rendered resume exceeds one page.
+            RuntimeError: If `max_pages` is set and the rendered resume exceeds that limit.
         """
         from core.utils import render_pdf
         from core.user import User
@@ -608,7 +612,7 @@ class Job(Base):
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
         meta = self._frontmatter_data(User.load(db), db)
-        render_pdf(md_path, pdf_path, template_path, max_pages=1, meta=meta)
+        render_pdf(md_path, pdf_path, template_path, max_pages=max_pages, meta=meta)
         self.resume_path = str(pdf_path)
         self.resume_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()

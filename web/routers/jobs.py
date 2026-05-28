@@ -346,21 +346,24 @@ def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
     return path.read_text(encoding="utf-8")
 
 
-async def _put_document_markdown(
+async def _read_body_text(request: Request) -> str:
+    """Read request body as UTF-8 text; bridges async body-reading into sync route handlers."""
+    raw = await request.body()
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Request body must be valid UTF-8 text")
+
+
+def _put_document_markdown_sync(
     job_key: str,
     doc_type: str,  # "resume" or "cover"
-    request: Request,
+    content: str,
     db: Session,
 ):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-
-    raw = await request.body()
-    try:
-        content = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Request body must be valid UTF-8 text")
 
     suffix = "_resume.md" if doc_type == "resume" else "_cover.md"
     md_path = _GENERATOR_OUTPUTS / f"{job_key}{suffix}"
@@ -370,7 +373,7 @@ async def _put_document_markdown(
 
     try:
         if doc_type == "resume":
-            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=None)
         else:
             job.generate_cover_pdf(_COVER_TEMPLATE, db)
     except Exception as exc:
@@ -387,13 +390,21 @@ async def _put_document_markdown(
 
 
 @router.put("/{job_key}/resume/markdown")
-async def put_resume_markdown(job_key: str, request: Request, db: Session = Depends(get_db)):
-    return await _put_document_markdown(job_key, "resume", request, db)
+def put_resume_markdown(
+    job_key: str,
+    content: str = Depends(_read_body_text),
+    db: Session = Depends(get_db),
+):
+    return _put_document_markdown_sync(job_key, "resume", content, db)
 
 
 @router.put("/{job_key}/cover/markdown")
-async def put_cover_markdown(job_key: str, request: Request, db: Session = Depends(get_db)):
-    return await _put_document_markdown(job_key, "cover", request, db)
+def put_cover_markdown(
+    job_key: str,
+    content: str = Depends(_read_body_text),
+    db: Session = Depends(get_db),
+):
+    return _put_document_markdown_sync(job_key, "cover", content, db)
 
 
 def _do_extract_description(job: Job, db: Session) -> None:
