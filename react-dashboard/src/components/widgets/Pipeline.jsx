@@ -113,7 +113,7 @@ function UploadModal({ onClose, onSubmit }) {
     setSubmitting(true)
     setError(null)
     try {
-      await onSubmit({
+      const result = await onSubmit({
         title: title.trim(),
         description: description.trim(),
         company: company.trim(),
@@ -121,6 +121,11 @@ function UploadModal({ onClose, onSubmit }) {
         salary: salary.trim(),
         url: url.trim(),
       })
+      if (result?.status === 'duplicate') {
+        setError('This job already exists (duplicate URL)')
+        setSubmitting(false)
+        return
+      }
       onClose()
     } catch (e) {
       setError(e?.message || 'Upload failed')
@@ -351,7 +356,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onSubmit={async (fields) => { await uploadJob(fields) }}
+          onSubmit={async (fields) => uploadJob(fields)}
         />
       )}
     </motion.div>
