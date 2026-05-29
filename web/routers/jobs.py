@@ -100,6 +100,25 @@ def _emit(job: Job) -> None:
     _sse_send("job", job.serialize())
 
 
+def _maybe_start_refinement(job_key: str, doc_type: str, db: Session) -> None:
+    """Spawn a background refinement thread if the user profile has it enabled."""
+    import threading
+    try:
+        user = User.load(db)
+    except RuntimeError:
+        return
+    enabled = getattr(user, f"{doc_type}_refine_enabled", True)
+    max_turns = int(getattr(user, f"{doc_type}_refine_max_turns", 1))
+    if not enabled or max_turns == 0:
+        return
+    if doc_type == "resume":
+        from web.intake_pipeline import run_resume_refinement
+        threading.Thread(target=run_resume_refinement, args=(job_key,), daemon=True).start()
+    else:
+        from web.intake_pipeline import run_cover_refinement
+        threading.Thread(target=run_cover_refinement, args=(job_key,), daemon=True).start()
+
+
 @router.get("")
 def get_jobs(db: Session = Depends(get_db)):
     jobs = db.query(Job).order_by(Job.final_score.desc()).all()
@@ -281,6 +300,8 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
         llm_status.finish(job_key, "resume")
     db.refresh(job)
     _emit(job)
+    # Spawn background refinement loop if enabled
+    _maybe_start_refinement(job_key, "resume", db)
     return job.serialize()
 
 
@@ -311,6 +332,8 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
         llm_status.finish(job_key, "cover")
     db.refresh(job)
     _emit(job)
+    # Spawn background refinement loop if enabled
+    _maybe_start_refinement(job_key, "cover", db)
     return job.serialize()
 
 
