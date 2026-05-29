@@ -23,6 +23,10 @@ _PROMPT_LABELS: dict[str, str] = {
     "cover": "Cover Letter Generation",
     "extraction": "Description Processing",
     "resume_parse": "Resume Parsing",
+    "resume_eval": "Resume Evaluator",
+    "resume_refine": "Resume Rewriter",
+    "cover_eval": "Cover Letter Evaluator",
+    "cover_refine": "Cover Letter Rewriter",
 }
 
 
@@ -122,6 +126,19 @@ class User(Base):
                 migrated = True
             setattr(self, field, val)
             setattr(self, model_field, raw.get(model_field, ""))
+        # Refinement config — resume
+        self.resume_refine_enabled = bool(raw.get("resume_refine_enabled", True))
+        self.resume_refine_max_turns = int(raw.get("resume_refine_max_turns", 1))
+        self.resume_refine_pass_score = float(raw.get("resume_refine_pass_score", 0.80))
+        for rkey in ("resume_eval", "resume_refine", "cover_eval", "cover_refine"):
+            field = f"prompt_{rkey}"
+            model_field = f"prompt_{rkey}_model"
+            setattr(self, field, raw.get(field, ""))
+            setattr(self, model_field, raw.get(model_field, ""))
+        # Refinement config — cover
+        self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
+        self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 1))
+        self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
         return migrated
 
     def _to_dict(self) -> dict:
@@ -151,6 +168,15 @@ class User(Base):
         for type_key in _PROMPT_TYPES:
             d[f"prompt_{type_key}"] = getattr(self, f"prompt_{type_key}", "")
             d[f"prompt_{type_key}_model"] = getattr(self, f"prompt_{type_key}_model", "")
+        d["resume_refine_enabled"] = self.resume_refine_enabled
+        d["resume_refine_max_turns"] = self.resume_refine_max_turns
+        d["resume_refine_pass_score"] = self.resume_refine_pass_score
+        d["cover_refine_enabled"] = self.cover_refine_enabled
+        d["cover_refine_max_turns"] = self.cover_refine_max_turns
+        d["cover_refine_pass_score"] = self.cover_refine_pass_score
+        for rkey in ("resume_eval", "resume_refine", "cover_eval", "cover_refine"):
+            d[f"prompt_{rkey}"] = getattr(self, f"prompt_{rkey}", "")
+            d[f"prompt_{rkey}_model"] = getattr(self, f"prompt_{rkey}_model", "")
         return d
 
     @classmethod
