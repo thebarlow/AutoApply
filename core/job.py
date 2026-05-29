@@ -440,7 +440,7 @@ class Job(Base):
         prompt = eval_prompt.replace("{current_resume}", body)
         prompt = _apply_template(prompt, {"job": self, "user": user})
 
-        raw = call_llm(prompt, client, model, max_tokens=2048)
+        raw = call_llm(prompt, client, model, max_tokens=512)
 
         cleaned = raw.strip()
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)

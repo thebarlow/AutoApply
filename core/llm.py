@@ -175,6 +175,9 @@ def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> st
     choice = response.choices[0]
     content = choice.message.content
     if not content:
+        if choice.finish_reason == "length":
+            # Input context likely too long; return empty and let callers handle it.
+            return ""
         raise RuntimeError(
             f"LLM returned empty response (finish_reason={choice.finish_reason!r})"
         )
