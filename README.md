@@ -1,5 +1,6 @@
 # auto_apply
 
+![logo](./assets/icon.png)
 Semi-automated job scraping, tailored resume generation, and application management.
 
 ---
