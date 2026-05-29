@@ -537,7 +537,7 @@ class Job(Base):
         prompt = prompt.replace("{critique}", critique)
         prompt = _apply_template(prompt, {"job": self, "user": user})
 
-        content = call_llm(prompt, client, model, max_tokens=16384)
+        content = call_llm(prompt, client, model, max_tokens=32768)
         if not content:
             raise RuntimeError(
                 f"{doc_type.capitalize()} rewrite returned empty content — "
@@ -568,7 +568,7 @@ class Job(Base):
             template_path: Path to the HTML resume template for PDF rendering.
         """
         self._refine_doc_md("resume", user, refine_prompt, client, model, issues)
-        self.generate_resume_pdf(template_path, db)
+        self.generate_resume_pdf(template_path, db, max_pages=None)
 
     def refine_cover_md(
         self,

@@ -2,13 +2,14 @@ You are rewriting a cover letter to address specific quality issues. Produce an 
 
 # Applicant Details
 Hero: {user.hero}
-Skills: {user.skills}
-Work Experience: {user.work_history}
+Hard Skills: {user.skills}
 
-# Job Posting
+# Job Requirements
 Title: {job.title}
 Company: {job.company}
-{job.extracted_description}
+Required Skills: {job.ext_required_skills}
+Preferred Skills: {job.ext_preferred_skills}
+Tech Stack: {job.ext_tech_stack}
 
 # Current Cover Letter (improve this)
 {current_resume}
@@ -18,7 +19,8 @@ Company: {job.company}
 
 # Instructions
 - Address every issue listed above.
-- Do NOT invent experience, skills, or credentials not present in the applicant details.
+- Do NOT invent specific tools, technologies, certifications, or degrees not present in the applicant hard skills.
+- Soft skills, professional terminology, and general practices are always acceptable.
 - Output ONLY the cover letter body. No preamble, no explanation.
 - Three to four paragraphs: opening hook, relevant experience, company fit, call to action.
 - Do not include a date or address block.

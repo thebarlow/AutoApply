@@ -200,7 +200,7 @@ class TestRefineResumeMd:
                     [{"category": "tailoring", "description": "Too generic"}],
                     template_path,
                 )
-                mock_pdf.assert_called_once_with(template_path, db)
+                mock_pdf.assert_called_once_with(template_path, db, max_pages=None)
 
         result = (tmp_path / "test_job_resume.md").read_text(encoding="utf-8")
         assert "name: Jane Doe" in result          # frontmatter preserved

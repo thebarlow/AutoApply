@@ -2,14 +2,15 @@ You are rewriting a resume to address specific quality issues. Produce an improv
 
 # Applicant Details
 Hero: {user.hero}
-Skills: {user.skills}
-Work Experience: {user.work_history}
-Projects: {user.projects}
+Hard Skills: {user.skills}
 
-# Job Posting
+# Job Requirements
 Title: {job.title}
 Company: {job.company}
-{job.extracted_description}
+Required Skills: {job.ext_required_skills}
+Preferred Skills: {job.ext_preferred_skills}
+Tech Stack: {job.ext_tech_stack}
+Key Responsibilities: {job.ext_key_responsibilities}
 
 # Current Resume (improve this)
 {current_resume}
@@ -19,7 +20,8 @@ Company: {job.company}
 
 # Instructions
 - Address every issue listed above.
-- Do NOT invent experience, skills, or credentials not present in the applicant details.
+- Do NOT invent specific tools, technologies, certifications, or degrees not present in the applicant hard skills.
+- Soft skills, professional terminology, and general practices (e.g. "observability", "leadership") are always acceptable.
 - Output ONLY the resume Markdown body. No preamble, no explanation.
 - Do NOT include a name or contact block.
 - Start directly with the first section header (e.g. ## Profile).
