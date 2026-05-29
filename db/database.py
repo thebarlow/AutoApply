@@ -161,6 +161,24 @@ def _migrate_flagged_column() -> None:
         conn.commit()
 
 
+def _migrate_resume_eval_columns() -> None:
+    """Add resume/cover eval columns for the refinement loop."""
+    new_cols = [
+        ("resume_eval_score", "REAL"),
+        ("resume_eval_turns", "INTEGER"),
+        ("resume_eval_log", "TEXT"),
+        ("cover_eval_score", "REAL"),
+        ("cover_eval_turns", "INTEGER"),
+        ("cover_eval_log", "TEXT"),
+    ]
+    with engine.connect() as conn:
+        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
+        for col, typ in new_cols:
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {typ}"))
+        conn.commit()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -173,6 +191,7 @@ def init_db() -> None:
     _migrate_pending_review_actions()
     _migrate_generated_at_columns()
     _migrate_flagged_column()
+    _migrate_resume_eval_columns()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates
     db = SessionLocal()
     try:
