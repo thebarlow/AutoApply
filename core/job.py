@@ -56,6 +56,21 @@ def _apply_template(template: str, sources: dict[str, Any]) -> str:
     return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
 
 
+def _strip_yaml_frontmatter(text: str) -> tuple[str, str]:
+    """Split a markdown file with YAML front matter into (frontmatter, body).
+
+    Returns ("", text) if no front matter is found.
+    """
+    if not text.startswith("---"):
+        return ("", text)
+    end = text.find("\n---", 3)
+    if end == -1:
+        return ("", text)
+    fm_end = end + 4  # past \n---
+    if fm_end < len(text) and text[fm_end] == "\n":
+        fm_end += 1
+    return (text[:fm_end], text[fm_end:])
+
 
 class JobState(str, Enum):
     """Valid states for a job in the pipeline."""
@@ -78,6 +93,18 @@ class Job(Base):
 
     __tablename__ = "jobs"
     __allow_unmapped__ = True
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Job":
+        """Ensure SQLAlchemy instance state is initialized when using __new__ directly.
+
+        SQLAlchemy normally sets up _sa_instance_state in __init__. When tests
+        (or other code) call Job.__new__(Job) without __init__, attribute access
+        fails. This override calls __init__ to bootstrap the ORM state.
+        """
+        instance = object.__new__(cls)
+        if not hasattr(instance, "_sa_instance_state"):
+            cls.__init__(instance)
+        return instance
 
     # ── Scrape data ────────────────────────────────────────────────────────────
     id = Column(Integer, primary_key=True)
@@ -363,6 +390,95 @@ class Job(Base):
             "fit": parsed["fit_justification"],
         })
         db.commit()
+
+    # ── Refinement — evaluation ────────────────────────────────────────────────
+
+    def _evaluate_doc_md(
+        self,
+        doc_type: str,
+        eval_prompt: str,
+        user: Any,
+        client: Any,
+        model: str,
+    ) -> dict:
+        """Evaluate a generated document (resume or cover letter) for quality.
+
+        Args:
+            doc_type: "resume" or "cover".
+            eval_prompt: Rendered evaluation prompt template.
+            user: Hydrated User instance.
+            client: OpenAI-compatible client.
+            model: Model identifier string.
+
+        Returns:
+            {"score": float, "issues": list[dict]}
+
+        Raises:
+            FileNotFoundError: If the document markdown file does not exist.
+            RuntimeError: If the LLM returns unparseable or malformed JSON.
+        """
+        from core.llm import call_llm
+
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_{doc_type}.md"
+        if not md_path.exists():
+            raise FileNotFoundError(
+                f"{doc_type.capitalize()} markdown not found: {md_path}"
+            )
+
+        _, body = _strip_yaml_frontmatter(md_path.read_text(encoding="utf-8"))
+
+        prompt = eval_prompt.replace("{current_resume}", body)
+        prompt = _apply_template(prompt, {"job": self, "user": user})
+
+        raw = call_llm(prompt, client, model, max_tokens=2048)
+
+        cleaned = raw.strip()
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        first = cleaned.find("{")
+        last = cleaned.rfind("}")
+        if first != -1 and last > first:
+            cleaned = cleaned[first : last + 1]
+
+        try:
+            parsed = json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError) as exc:
+            preview = (raw or "")[:200].replace("\n", " ")
+            raise RuntimeError(
+                f"Eval LLM returned invalid JSON: {exc}. Preview: {preview!r}"
+            ) from exc
+
+        if "score" not in parsed or "issues" not in parsed:
+            raise RuntimeError(
+                f"Eval response missing required keys; got {sorted(parsed.keys())}"
+            )
+
+        score = max(0.0, min(1.0, float(parsed["score"])))
+        issues = parsed.get("issues", [])
+        if not isinstance(issues, list):
+            issues = []
+
+        return {"score": score, "issues": issues}
+
+    def evaluate_resume_md(
+        self,
+        eval_prompt: str,
+        user: Any,
+        client: Any,
+        model: str,
+    ) -> dict:
+        """Evaluate the generated resume markdown. Returns {"score", "issues"}."""
+        return self._evaluate_doc_md("resume", eval_prompt, user, client, model)
+
+    def evaluate_cover_md(
+        self,
+        eval_prompt: str,
+        user: Any,
+        client: Any,
+        model: str,
+    ) -> dict:
+        """Evaluate the generated cover letter markdown. Returns {"score", "issues"}."""
+        return self._evaluate_doc_md("cover", eval_prompt, user, client, model)
 
     # ── Description extraction ─────────────────────────────────────────────────
 
