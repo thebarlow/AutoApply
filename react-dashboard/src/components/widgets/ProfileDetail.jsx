@@ -1563,7 +1563,9 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
 }
 
 function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) {
-  const [openModal, setOpenModal] = useState(null) // typeKey or null
+  const [openModal, setOpenModal] = useState(null)           // typeKey string | null
+  const [openRefinement, setOpenRefinement] = useState(null) // 'resume' | 'cover' | null
+  const [togglingRefine, setTogglingRefine] = useState(null) // 'resume' | 'cover' | null
 
   const handleSaved = (typeKey, filePath, modelOverride) => {
     onSave({
@@ -1572,39 +1574,111 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
     })
   }
 
+  const handleRefinementSaved = (docType, newData) => {
+    onSave(newData)
+  }
+
+  const handleToggleRefinement = async (e, docType) => {
+    e.stopPropagation()
+    if (togglingRefine) return
+    setTogglingRefine(docType)
+    const field = `${docType}_refine_enabled`
+    const current = data[field] !== false // default true
+    try {
+      await onSave({ [field]: !current })
+    } finally {
+      setTogglingRefine(null)
+    }
+  }
+
+  const basename = (path) => path?.split(/[\\/]/).pop() ?? ''
+  const truncate = (s, n = 22) => s && s.length > n ? s.slice(0, n) + '…' : s
+
   return (
     <>
       <AccordionSection id="prompts" title="Prompts">
         <div className="flex flex-col gap-2">
+
+          {/* ── Standard generation prompt cards ── */}
           {PROMPT_TYPE_KEYS.map((typeKey) => {
             const filePath = data[`prompt_${typeKey}`] || ''
             const model = data[`prompt_${typeKey}_model`] || ''
             const configured = filePath && filePath.endsWith('.md')
-            const basename = filePath ? filePath.split(/[\\/]/).pop() : null
+            const bn = filePath ? basename(filePath) : null
+
+            // After resume, inject resume-refinement card; after cover, inject cover-refinement card
+            const refinementDocType = typeKey === 'resume' ? 'resume' : typeKey === 'cover' ? 'cover' : null
+
             return (
-              <button
-                key={typeKey}
-                onClick={() => setOpenModal(typeKey)}
-                className="flex items-start justify-between gap-3 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5 hover:border-purple-500/30 transition-colors text-left w-full"
-              >
-                <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="text-xs font-semibold text-space-text flex items-center gap-1">
-                    {PROMPT_TYPE_LABELS[typeKey]}
-                    <span onClick={e => e.stopPropagation()}>
-                      <HelpIcon text={PROMPT_HELP[typeKey] || 'A prompt template used by the LLM.'} />
+              <div key={typeKey} className="flex flex-col gap-1.5">
+                {/* Generation card */}
+                <button
+                  onClick={() => setOpenModal(typeKey)}
+                  className="flex items-start justify-between gap-3 rounded-lg px-3 py-2.5 bg-white/[0.03] border border-white/5 hover:border-purple-500/30 transition-colors text-left w-full"
+                >
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-xs font-semibold text-space-text flex items-center gap-1">
+                      {PROMPT_TYPE_LABELS[typeKey]}
+                      <span onClick={e => e.stopPropagation()}>
+                        <HelpIcon text={PROMPT_HELP[typeKey] || 'A prompt template used by the LLM.'} />
+                      </span>
                     </span>
+                    {bn
+                      ? <span className="text-xs text-space-dim truncate">{bn}</span>
+                      : <span className="text-xs text-red-400/80">Not configured</span>
+                    }
+                    {model
+                      ? <span className="text-xs text-purple-400/70 truncate">{truncate(model)}</span>
+                      : defaultModel && <span className="text-xs text-space-dim/50 truncate">{truncate(defaultModel)} (default)</span>
+                    }
+                  </div>
+                  <span className={`shrink-0 text-xs font-medium mt-0.5 ${configured ? 'text-green-400' : 'text-space-dim/40'}`}>
+                    {configured ? 'Custom' : 'Default'}
                   </span>
-                  {basename
-                    ? <span className="text-xs text-space-dim truncate">{basename}</span>
-                    : <span className="text-xs text-red-400/80">Not configured</span>
-                  }
-                  {model && <span className="text-xs text-purple-400/70 truncate">{model}</span>}
-                  {!model && defaultModel && <span className="text-xs text-space-dim/50 truncate">{defaultModel} (default)</span>}
-                </div>
-                <span className={`shrink-0 text-xs font-medium mt-0.5 ${configured ? 'text-green-400' : 'text-space-dim/40'}`}>
-                  {configured ? 'Custom' : 'Default'}
-                </span>
-              </button>
+                </button>
+
+                {/* Refinement card — shown only after resume and cover */}
+                {refinementDocType && (() => {
+                  const evalPath = data[`prompt_${refinementDocType}_eval`] || ''
+                  const refinePath = data[`prompt_${refinementDocType}_refine`] || ''
+                  const evalModel = data[`prompt_${refinementDocType}_eval_model`] || ''
+                  const refineModel = data[`prompt_${refinementDocType}_refine_model`] || ''
+                  const enabled = data[`${refinementDocType}_refine_enabled`] !== false
+                  const isToggling = togglingRefine === refinementDocType
+                  return (
+                    <button
+                      onClick={() => setOpenRefinement(refinementDocType)}
+                      className="flex items-start justify-between gap-3 rounded-lg px-3 py-2.5 bg-white/[0.02] border border-white/5 hover:border-emerald-500/20 transition-colors text-left w-full ml-3"
+                    >
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <span className="text-xs font-semibold text-space-text/80">
+                          {refinementDocType === 'resume' ? 'Resume Refinement' : 'Cover Letter Refinement'}
+                        </span>
+                        <span className="text-xs text-space-dim/70 truncate">
+                          Eval: {evalPath ? truncate(basename(evalPath)) : <span className="text-space-dim/40">default</span>}
+                          {evalModel ? <span className="text-purple-400/50"> · {truncate(evalModel, 16)}</span> : null}
+                        </span>
+                        <span className="text-xs text-space-dim/70 truncate">
+                          Rewrite: {refinePath ? truncate(basename(refinePath)) : <span className="text-space-dim/40">default</span>}
+                          {refineModel ? <span className="text-purple-400/50"> · {truncate(refineModel, 16)}</span> : null}
+                        </span>
+                      </div>
+                      <button
+                        onClick={e => handleToggleRefinement(e, refinementDocType)}
+                        disabled={isToggling}
+                        title={enabled ? 'Disable refinement' : 'Enable refinement'}
+                        className={`shrink-0 text-xs font-medium mt-0.5 px-2 py-0.5 rounded border transition-colors disabled:opacity-50
+                          ${enabled
+                            ? 'text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10'
+                            : 'text-space-dim/40 border-space-border hover:text-space-dim hover:border-space-border/60'
+                          }`}
+                      >
+                        {enabled ? '✓ On' : '✗ Off'}
+                      </button>
+                    </button>
+                  )
+                })()}
+              </div>
             )
           })}
         </div>
@@ -1619,6 +1693,18 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
           defaultModel={defaultModel}
           onClose={() => setOpenModal(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {openRefinement && (
+        <RefinementPromptModal
+          docType={openRefinement}
+          profileId={profileId}
+          profileName={profileName}
+          profileData={data}
+          defaultModel={defaultModel}
+          onClose={() => setOpenRefinement(null)}
+          onSaved={(newData) => handleRefinementSaved(openRefinement, newData)}
         />
       )}
     </>
