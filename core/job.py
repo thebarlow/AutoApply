@@ -155,6 +155,14 @@ class Job(Base):
     pending_review_actions = Column(Text)  # JSON list of action names awaiting review
     flagged = Column(Boolean, default=False, nullable=False)
 
+    # ── Refinement — evaluation tracking ────────────────────────────────────────
+    resume_eval_score = Column(Float)
+    resume_eval_turns = Column(Integer)
+    resume_eval_log = Column(Text)  # JSON list of evaluation turns
+    cover_eval_score = Column(Float)
+    cover_eval_turns = Column(Integer)
+    cover_eval_log = Column(Text)  # JSON list of evaluation turns
+
     @classmethod
     def from_scraped(cls, scraped: Any) -> "Job":
         """Construct a Job instance from a ScrapedJob object.
@@ -992,4 +1000,18 @@ class Job(Base):
             "last_result_error": self.last_result_error,
             "pending_review_actions": json.loads(self.pending_review_actions or "[]"),
             "flagged": bool(self.flagged),
+            "resume_eval_score": self.resume_eval_score,
+            "resume_eval_turns": self.resume_eval_turns,
+            "resume_eval_log": (
+                json.loads(self.resume_eval_log)
+                if isinstance(self.resume_eval_log, str) and self.resume_eval_log
+                else []
+            ),
+            "cover_eval_score": self.cover_eval_score,
+            "cover_eval_turns": self.cover_eval_turns,
+            "cover_eval_log": (
+                json.loads(self.cover_eval_log)
+                if isinstance(self.cover_eval_log, str) and self.cover_eval_log
+                else []
+            ),
         }
