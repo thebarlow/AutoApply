@@ -482,6 +482,105 @@ class Job(Base):
         """Evaluate the generated cover letter markdown. Returns {"score", "issues"}."""
         return self._evaluate_doc_md("cover", eval_prompt, user, client, model)
 
+    # ── Refinement — rewriting ─────────────────────────────────────────────────
+
+    def _refine_doc_md(
+        self,
+        doc_type: str,
+        user: Any,
+        refine_prompt: str,
+        client: Any,
+        model: str,
+        issues: list,
+    ) -> None:
+        """Rewrite a generated document to address evaluation issues.
+
+        Overwrites the existing markdown file in generator/outputs/ in place.
+        Preserves the YAML front matter block from the original file.
+        Caller is responsible for calling generate_resume_pdf / generate_cover_pdf
+        and committing eval fields to the DB.
+
+        Args:
+            doc_type: "resume" or "cover".
+            user: Hydrated User instance.
+            refine_prompt: Rewriter prompt template.
+            client: OpenAI-compatible client.
+            model: Model identifier string.
+            issues: List of issue dicts from the evaluator.
+
+        Raises:
+            FileNotFoundError: If the document markdown file does not exist.
+        """
+        from core.llm import call_llm
+        from core.utils import strip_header_block
+
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_{doc_type}.md"
+        if not md_path.exists():
+            raise FileNotFoundError(
+                f"{doc_type.capitalize()} markdown not found: {md_path}"
+            )
+
+        frontmatter, body = _strip_yaml_frontmatter(
+            md_path.read_text(encoding="utf-8")
+        )
+
+        critique = json.dumps(issues)
+        prompt = refine_prompt.replace("{current_resume}", body)
+        prompt = prompt.replace("{critique}", critique)
+        prompt = _apply_template(prompt, {"job": self, "user": user})
+
+        content = call_llm(prompt, client, model, max_tokens=16384)
+        content = strip_header_block(content)
+        md_path.write_text(frontmatter + content, encoding="utf-8")
+
+    def refine_resume_md(
+        self,
+        user: Any,
+        refine_prompt: str,
+        client: Any,
+        model: str,
+        db: Any,
+        issues: list,
+        template_path: Any,
+    ) -> None:
+        """Rewrite resume markdown and regenerate the PDF.
+
+        Args:
+            user: Hydrated User instance.
+            refine_prompt: Rewriter prompt template.
+            client: OpenAI-compatible client.
+            model: Model identifier string.
+            db: SQLAlchemy session (passed to generate_resume_pdf).
+            issues: List of issue dicts from evaluate_resume_md.
+            template_path: Path to the HTML resume template for PDF rendering.
+        """
+        self._refine_doc_md("resume", user, refine_prompt, client, model, issues)
+        self.generate_resume_pdf(template_path, db)
+
+    def refine_cover_md(
+        self,
+        user: Any,
+        refine_prompt: str,
+        client: Any,
+        model: str,
+        db: Any,
+        issues: list,
+        template_path: Any,
+    ) -> None:
+        """Rewrite cover letter markdown and regenerate the PDF.
+
+        Args:
+            user: Hydrated User instance.
+            refine_prompt: Rewriter prompt template.
+            client: OpenAI-compatible client.
+            model: Model identifier string.
+            db: SQLAlchemy session (passed to generate_cover_pdf).
+            issues: List of issue dicts from evaluate_cover_md.
+            template_path: Path to the HTML cover letter template for PDF rendering.
+        """
+        self._refine_doc_md("cover", user, refine_prompt, client, model, issues)
+        self.generate_cover_pdf(template_path, db)
+
     # ── Description extraction ─────────────────────────────────────────────────
 
     def build_description_prompt(self, template: str) -> str:

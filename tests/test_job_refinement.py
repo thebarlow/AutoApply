@@ -174,3 +174,74 @@ class TestEvaluateResumeMd:
         with patch("core.job._OUTPUTS_DIR", tmp_path):
             with pytest.raises(RuntimeError, match="missing required keys"):
                 job.evaluate_resume_md("Eval", user, client, "gpt-4o")
+
+
+# ─── refine_resume_md ─────────────────────────────────────────────────────────
+
+class TestRefineResumeMd:
+    def test_overwrites_file_preserving_frontmatter(self, tmp_path):
+        job = _make_job()
+        user = _make_user()
+        original_fm = "---\nname: Jane Doe\nemail: jane@example.com\n---\n\n"
+        (tmp_path / "test_job_resume.md").write_text(
+            original_fm + "## Profile\nOld content.", encoding="utf-8"
+        )
+        client = _make_llm_client(
+            "## Profile\nImproved content.\n\n## Experience\nBetter bullets."
+        )
+        db = MagicMock()
+        template_path = MagicMock(spec=Path)
+
+        with patch("core.job._OUTPUTS_DIR", tmp_path):
+            with patch.object(job, "generate_resume_pdf") as mock_pdf:
+                job.refine_resume_md(
+                    user, "Rewrite: {current_resume}\nIssues: {critique}",
+                    client, "gpt-4o", db,
+                    [{"category": "tailoring", "description": "Too generic"}],
+                    template_path,
+                )
+                mock_pdf.assert_called_once_with(template_path, db)
+
+        result = (tmp_path / "test_job_resume.md").read_text(encoding="utf-8")
+        assert "name: Jane Doe" in result          # frontmatter preserved
+        assert "Improved content." in result        # new content
+        assert "Old content." not in result         # old content replaced
+
+    def test_injects_critique_as_json(self, tmp_path):
+        job = _make_job()
+        user = _make_user()
+        (tmp_path / "test_job_resume.md").write_text(
+            "---\nname: Jane\n---\n\n## Profile\nContent.", encoding="utf-8"
+        )
+        captured = {}
+        def fake_create(**kwargs):
+            captured["prompt"] = kwargs["messages"][0]["content"]
+            choice = MagicMock()
+            choice.message.content = "## Profile\nResult."
+            choice.finish_reason = "stop"
+            r = MagicMock()
+            r.choices = [choice]
+            r.usage = None
+            return r
+        client = MagicMock()
+        client.chat.completions.create.side_effect = fake_create
+        issues = [{"category": "structure", "description": "Bullet too long"}]
+
+        with patch("core.job._OUTPUTS_DIR", tmp_path):
+            with patch.object(job, "generate_resume_pdf"):
+                job.refine_resume_md(
+                    user, "Resume: {current_resume} Critique: {critique}",
+                    client, "gpt-4o", MagicMock(), issues, MagicMock(spec=Path),
+                )
+
+        assert json.dumps(issues) in captured["prompt"]
+
+    def test_raises_file_not_found(self, tmp_path):
+        job = _make_job()
+        user = _make_user()
+        with patch("core.job._OUTPUTS_DIR", tmp_path):
+            with pytest.raises(FileNotFoundError):
+                job.refine_resume_md(
+                    user, "Rewrite", MagicMock(), "gpt-4o",
+                    MagicMock(), [], MagicMock(spec=Path),
+                )
