@@ -870,6 +870,28 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             </div>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
+
+          {/* Eval score chip */}
+          {(() => {
+            const evalScore = contentTab === 'resume' ? job.resume_eval_score : job.cover_eval_score
+            const evalTurns = contentTab === 'resume' ? job.resume_eval_turns : job.cover_eval_turns
+            if (evalScore == null) return null
+            const hue = Math.round(evalScore * 120)
+            return (
+              <div className="flex items-center gap-2">
+                <span
+                  style={{ color: `hsl(${hue}, 75%, 55%)` }}
+                  className="text-sm font-bold tabular-nums"
+                >
+                  {(evalScore * 10).toFixed(1)}/10
+                </span>
+                <span className="text-xs text-space-dim">
+                  ({evalTurns} turn{evalTurns !== 1 ? 's' : ''})
+                </span>
+              </div>
+            )
+          })()}
+
           {artifactView === 'markdown' && (
             <MarkdownView
               url={contentTab === 'resume'
@@ -886,6 +908,48 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               title={contentTab === 'resume' ? 'Resume PDF' : 'Cover Letter PDF'}
             />
           )}
+
+          {/* Refinement history */}
+          {(() => {
+            const evalLog = contentTab === 'resume' ? (job.resume_eval_log || []) : (job.cover_eval_log || [])
+            if (!evalLog.length) return null
+            return (
+              <div className="flex flex-col gap-3 mt-1">
+                <hr className="border-space-border" />
+                <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Refinement History</p>
+                {evalLog.map((entry, idx) => {
+                  const hue = Math.round(entry.score * 120)
+                  return (
+                    <div key={idx} className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-space-dim">Turn {entry.turn}</span>
+                        <span style={{ color: `hsl(${hue}, 75%, 55%)` }} className="text-xs font-bold tabular-nums">
+                          {(entry.score * 10).toFixed(1)}/10
+                        </span>
+                        {entry.passed
+                          ? <span className="text-xs text-emerald-400">✓ passed</span>
+                          : idx === evalLog.length - 1
+                            ? <span className="text-xs text-space-dim/50">limit reached</span>
+                            : null
+                        }
+                      </div>
+                      {entry.issues && entry.issues.length > 0 && (
+                        <ul className="text-xs text-space-text space-y-0.5">
+                          {entry.issues.map((issue, i) => (
+                            <li key={i} className="flex gap-1.5">
+                              <span className="text-space-dim/70 shrink-0">[{issue.category}]</span>
+                              <span>{issue.description}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {idx < evalLog.length - 1 && <hr className="border-space-border" />}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
       )}
       {showEditFields && (
