@@ -61,7 +61,7 @@ def _strip_yaml_frontmatter(text: str) -> tuple[str, str]:
 
     Returns ("", text) if no front matter is found.
     """
-    if not text.startswith("---"):
+    if not text.startswith("---") or (len(text) > 3 and text[3] not in ("\n", "\r")):
         return ("", text)
     end = text.find("\n---", 3)
     if end == -1:
@@ -99,11 +99,13 @@ class Job(Base):
 
         SQLAlchemy normally sets up _sa_instance_state in __init__. When tests
         (or other code) call Job.__new__(Job) without __init__, attribute access
-        fails. This override calls __init__ to bootstrap the ORM state.
+        fails. This override bootstraps ORM state without calling __init__ (which
+        would cause a double-init on every normal Job() construction).
         """
         instance = object.__new__(cls)
         if not hasattr(instance, "_sa_instance_state"):
-            cls.__init__(instance)
+            from sqlalchemy.orm import instrumentation
+            instrumentation.manager_of_class(cls).setup_instance(instance)
         return instance
 
     # ── Scrape data ────────────────────────────────────────────────────────────
