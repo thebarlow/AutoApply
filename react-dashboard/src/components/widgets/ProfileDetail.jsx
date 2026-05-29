@@ -1169,6 +1169,399 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   )
 }
 
+const REFINEMENT_EVAL_CHIPS = [
+  { label: 'current doc', token: '{current_resume}' },
+]
+const REFINEMENT_REFINE_CHIPS = [
+  { label: 'current doc', token: '{current_resume}' },
+  { label: 'critique', token: '{critique}' },
+]
+
+function RefinementPromptModal({ docType, profileId, profileName, profileData, defaultModel, onClose, onSaved }) {
+  const label = docType === 'resume' ? 'Resume Refinement' : 'Cover Letter Refinement'
+
+  const [activeTab, setActiveTab] = useState('evaluator')
+  const [maxTurns, setMaxTurns] = useState(profileData[`${docType}_refine_max_turns`] ?? 1)
+  const [passScore, setPassScore] = useState(profileData[`${docType}_refine_pass_score`] ?? 0.80)
+
+  // Evaluator tab state
+  const [evalFile, setEvalFile] = useState(profileData[`prompt_${docType}_eval`] || '')
+  const [evalModel, setEvalModel] = useState(profileData[`prompt_${docType}_eval_model`] || '')
+  const [evalContent, setEvalContent] = useState('')
+  const [evalLoading, setEvalLoading] = useState(false)
+  const [evalContentError, setEvalContentError] = useState(null)
+  const evalOriginal = useRef('')
+  const evalTextareaRef = useRef(null)
+
+  // Rewriter tab state
+  const [refineFile, setRefineFile] = useState(profileData[`prompt_${docType}_refine`] || '')
+  const [refineModel, setRefineModel] = useState(profileData[`prompt_${docType}_refine_model`] || '')
+  const [refineContent, setRefineContent] = useState('')
+  const [refineLoading, setRefineLoading] = useState(false)
+  const [refineContentError, setRefineContentError] = useState(null)
+  const refineOriginal = useRef('')
+  const refineTextareaRef = useRef(null)
+
+  // Shared state
+  const [promptFiles, setPromptFiles] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [popOut, setPopOut] = useState(false)
+  const [saveAsOpen, setSaveAsOpen] = useState(false)
+  const [saveAsName, setSaveAsName] = useState('')
+  const [saveAsError, setSaveAsError] = useState(null)
+  const [saveAsSubmitting, setSaveAsSubmitting] = useState(false)
+
+  const isEval = activeTab === 'evaluator'
+  const currentFile = isEval ? evalFile : refineFile
+  const setCurrentFile = isEval ? setEvalFile : setRefineFile
+  const currentModel = isEval ? evalModel : refineModel
+  const setCurrentModel = isEval ? setEvalModel : setRefineModel
+  const currentContent = isEval ? evalContent : refineContent
+  const setCurrentContent = isEval ? setEvalContent : setRefineContent
+  const currentLoading = isEval ? evalLoading : refineLoading
+  const currentContentError = isEval ? evalContentError : refineContentError
+  const currentOriginal = isEval ? evalOriginal : refineOriginal
+  const currentTextareaRef = isEval ? evalTextareaRef : refineTextareaRef
+  const currentTypeKey = isEval ? `${docType}_eval` : `${docType}_refine`
+  const extraChips = isEval ? REFINEMENT_EVAL_CHIPS : REFINEMENT_REFINE_CHIPS
+
+  useEscape(!popOut, onClose)
+  useEscape(popOut, () => setPopOut(false))
+
+  useEffect(() => {
+    listPrompts().then(r => setPromptFiles(r.prompts || []))
+  }, [])
+
+  // Load default content if file is unset
+  useEffect(() => {
+    if (!evalFile) {
+      setEvalLoading(true)
+      getDefaultPrompt(`${docType}_eval`)
+        .then(({ path, content }) => { setEvalFile(path); setEvalContent(content); evalOriginal.current = content })
+        .catch(() => {})
+        .finally(() => setEvalLoading(false))
+    }
+    if (!refineFile) {
+      setRefineLoading(true)
+      getDefaultPrompt(`${docType}_refine`)
+        .then(({ path, content }) => { setRefineFile(path); setRefineContent(content); refineOriginal.current = content })
+        .catch(() => {})
+        .finally(() => setRefineLoading(false))
+    }
+  }, [])
+
+  // Load content when file selection changes
+  useEffect(() => {
+    if (!evalFile) { setEvalContent(''); return }
+    setEvalLoading(true); setEvalContentError(null)
+    getPromptFile(evalFile)
+      .then(t => { setEvalContent(t); evalOriginal.current = t })
+      .catch(() => setEvalContentError('Could not load file'))
+      .finally(() => setEvalLoading(false))
+  }, [evalFile])
+
+  useEffect(() => {
+    if (!refineFile) { setRefineContent(''); return }
+    setRefineLoading(true); setRefineContentError(null)
+    getPromptFile(refineFile)
+      .then(t => { setRefineContent(t); refineOriginal.current = t })
+      .catch(() => setRefineContentError('Could not load file'))
+      .finally(() => setRefineLoading(false))
+  }, [refineFile])
+
+  const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
+  const basename = (path) => path?.split(/[\\/]/).pop() ?? ''
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    const token = e.dataTransfer.getData('text/plain')
+    if (!token || !currentTextareaRef.current) return
+    const ta = currentTextareaRef.current
+    const offset = ta.selectionStart ?? 0
+    const before = currentContent.slice(0, offset)
+    const after = currentContent.slice(offset)
+    setCurrentContent(before + token + after)
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(offset + token.length, offset + token.length)
+    })
+  }, [currentContent, currentTextareaRef, setCurrentContent])
+
+  const handleDragOver = (e) => e.preventDefault()
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await uploadPromptFile(file)
+      const updated = await listPrompts()
+      setPromptFiles(updated.prompts || [])
+      setCurrentFile(result.path)
+    } catch { setSaveError('Upload failed') }
+    finally { setUploading(false); e.target.value = '' }
+  }
+
+  const _resolveFile = async (file, content, original, setFile) => {
+    if (!file) return file
+    if (isDefaultPrompt(file) && content !== original.current) {
+      const baseName = basename(file).replace(/\.md$/i, '')
+      const filename = `${baseName}_${Date.now()}.md`
+      const result = await createPromptFile(filename, content)
+      setFile(result.path)
+      original.current = content
+      return result.path
+    } else if (!isDefaultPrompt(file) && content !== original.current) {
+      await putPromptFile(file, content)
+      original.current = content
+    }
+    return file
+  }
+
+  const handleSave = async () => {
+    setSaving(true); setSaveError(null)
+    try {
+      const resolvedEval = await _resolveFile(evalFile, evalContent, evalOriginal, setEvalFile)
+      const resolvedRefine = await _resolveFile(refineFile, refineContent, refineOriginal, setRefineFile)
+      const newData = {
+        ...profileData,
+        [`prompt_${docType}_eval`]: resolvedEval,
+        [`prompt_${docType}_eval_model`]: evalModel,
+        [`prompt_${docType}_refine`]: resolvedRefine,
+        [`prompt_${docType}_refine_model`]: refineModel,
+        [`${docType}_refine_max_turns`]: Number(maxTurns),
+        [`${docType}_refine_pass_score`]: Number(passScore),
+      }
+      await updateProfile(profileId, { name: profileName || '', data: newData })
+      onSaved(newData)
+      window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
+      onClose()
+    } catch { setSaveError('Save failed') }
+    finally { setSaving(false) }
+  }
+
+  const openSaveAs = () => {
+    const base = currentFile ? basename(currentFile).replace(/\.md$/i, '') : currentTypeKey
+    setSaveAsName(isDefaultPrompt(currentFile ?? '') ? `${base}_custom.md` : `${base}_copy.md`)
+    setSaveAsError(null); setSaveAsOpen(true)
+  }
+
+  const handleSaveAsConfirm = async () => {
+    const filename = saveAsName.trim()
+    if (!filename) { setSaveAsError('Filename is required'); return }
+    const name = filename.endsWith('.md') ? filename : filename + '.md'
+    setSaveAsSubmitting(true); setSaveAsError(null)
+    try {
+      const result = await createPromptFile(name, currentContent)
+      const updated = await listPrompts()
+      setPromptFiles(updated.prompts || [])
+      setCurrentFile(result.path)
+      currentOriginal.current = currentContent
+      setSaveAsOpen(false)
+    } catch (e) {
+      const msg = e?.message || ''
+      setSaveAsError(msg.includes('409') ? 'A file with that name already exists' : 'Save failed')
+    } finally { setSaveAsSubmitting(false) }
+  }
+
+  const renderEditor = (extraClass = '') => {
+    if (currentLoading) return <p className="text-xs text-space-dim">Loading…</p>
+    if (currentContentError) return <p className="text-xs text-red-400">{currentContentError}</p>
+    return (
+      <textarea
+        ref={currentTextareaRef}
+        rows={12}
+        className={inputClass + ' resize-y font-mono text-xs ' + extraClass}
+        value={currentContent}
+        onChange={e => setCurrentContent(e.target.value)}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        placeholder={currentFile ? '' : 'Select a file above to edit'}
+        disabled={!currentFile}
+      />
+    )
+  }
+
+  const renderChipTray = () => (
+    <div className="flex flex-col gap-2">
+      <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Insert Variable</label>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs text-space-dim">User</p>
+        <div className="flex flex-wrap gap-1.5">
+          {USER_CHIPS.map(({ label: l, token }) => (
+            <div key={token} draggable onDragStart={e => e.dataTransfer.setData('text/plain', token)}
+              className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab select-none">
+              {l}
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-space-dim mt-1">Job</p>
+        <div className="flex flex-wrap gap-1.5">
+          {JOB_CHIPS.map(({ label: l, token }) => (
+            <div key={token} draggable onDragStart={e => e.dataTransfer.setData('text/plain', token)}
+              className="px-2 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/10 text-xs text-blue-300 cursor-grab select-none">
+              {l}
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-space-dim mt-1">Refinement</p>
+        <div className="flex flex-wrap gap-1.5">
+          {extraChips.map(({ label: l, token }) => (
+            <div key={token} draggable onDragStart={e => e.dataTransfer.setData('text/plain', token)}
+              className="px-2 py-0.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-xs text-emerald-300 cursor-grab select-none">
+              {l}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderTabContent = () => (
+    <div className="flex flex-col gap-4">
+      {/* File selector */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File</label>
+        <div className="flex gap-2">
+          <select className={inputClass + ' flex-1'} value={currentFile}
+            onChange={e => setCurrentFile(e.target.value)}>
+            <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
+            {promptFiles.map(f => (
+              <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
+            ))}
+          </select>
+          <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            {uploading ? '…' : 'Upload'}
+            <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
+          </label>
+        </div>
+      </div>
+      {/* Model */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model</label>
+        <input className={inputClass} value={currentModel} onChange={e => setCurrentModel(e.target.value)}
+          placeholder={defaultModel || 'e.g. gpt-4o-mini (leave blank for profile default)'} />
+      </div>
+      {/* Chip tray + editor (hidden when popped out) */}
+      {!popOut && renderChipTray()}
+      {!popOut && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt Text</label>
+            <button type="button" onClick={() => setPopOut(true)} className="text-space-dim hover:text-space-text p-1 rounded hover:bg-white/5 transition-colors">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 2h4v4" /><path d="M14 2L8.5 7.5" /><path d="M6 14H2v-4" /><path d="M2 14l5.5-5.5" />
+              </svg>
+            </button>
+          </div>
+          {renderEditor()}
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
+            <span className="text-sm font-semibold text-space-text">{label}</span>
+            <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
+          </div>
+
+          {/* Config row */}
+          <div className="flex items-center gap-4 px-4 py-2 border-b border-space-border shrink-0">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-space-dim whitespace-nowrap">Max Turns</label>
+              <input type="number" min="1" max="10" className="w-16 bg-white/5 border border-space-border rounded px-2 py-1 text-xs text-space-text focus:outline-none focus:border-purple-500"
+                value={maxTurns} onChange={e => setMaxTurns(Math.max(1, Math.min(10, Number(e.target.value))))} />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-space-dim whitespace-nowrap">Pass Score</label>
+              <input type="number" min="0" max="1" step="0.05" className="w-20 bg-white/5 border border-space-border rounded px-2 py-1 text-xs text-space-text focus:outline-none focus:border-purple-500"
+                value={passScore} onChange={e => setPassScore(Math.max(0, Math.min(1, Number(e.target.value))))} />
+              <span className="text-xs text-space-dim">(0–1)</span>
+            </div>
+          </div>
+
+          {/* Tab bar */}
+          <div className="flex border-b border-space-border shrink-0">
+            {[['evaluator', 'Evaluator'], ['rewriter', 'Rewriter']].map(([key, lbl]) => (
+              <button key={key} onClick={() => { setActiveTab(key); setPopOut(false) }}
+                className={`flex-1 py-2 text-xs font-semibold uppercase tracking-widest transition-colors ${activeTab === key ? 'text-purple-400 border-b-2 border-purple-400 bg-white/5' : 'text-space-dim hover:text-space-text'}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {renderTabContent()}
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
+            {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+            {saveAsOpen ? (
+              <div className="flex flex-col gap-2">
+                {saveAsError && <p className="text-xs text-red-400">{saveAsError}</p>}
+                <div className="flex gap-2 items-center">
+                  <input autoFocus className={inputClass + ' flex-1 text-xs'} value={saveAsName}
+                    onChange={e => { setSaveAsName(e.target.value); setSaveAsError(null) }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveAsConfirm(); if (e.key === 'Escape') setSaveAsOpen(false) }}
+                    placeholder="filename.md" />
+                  <button onClick={handleSaveAsConfirm} disabled={saveAsSubmitting}
+                    className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold shrink-0">
+                    {saveAsSubmitting ? '…' : 'Confirm'}
+                  </button>
+                  <button onClick={() => setSaveAsOpen(false)}
+                    className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text shrink-0">✕</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={openSaveAs} disabled={saving || currentLoading || !!currentContentError}
+                  className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text disabled:opacity-50 shrink-0">
+                  Save As
+                </button>
+                <button onClick={handleSave} disabled={saving || currentLoading || !!currentContentError}
+                  className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button onClick={onClose} className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors">
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Pop-out full editor */}
+      {popOut && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-[#0a0a14]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
+            <span className="text-sm font-semibold text-space-text">
+              {label} — {activeTab === 'evaluator' ? 'Evaluator' : 'Rewriter'} — Full Editor
+            </span>
+            <button onClick={() => setPopOut(false)} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
+          </div>
+          <div className="flex-1 flex flex-col gap-3 p-4 min-h-0">
+            {renderChipTray()}
+            <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt Text</label>
+              {renderEditor('flex-1 min-h-0')}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) {
   const [openModal, setOpenModal] = useState(null) // typeKey or null
 
