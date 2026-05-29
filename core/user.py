@@ -128,7 +128,7 @@ class User(Base):
             setattr(self, model_field, raw.get(model_field, ""))
         # Refinement config — resume
         self.resume_refine_enabled = bool(raw.get("resume_refine_enabled", True))
-        self.resume_refine_max_turns = int(raw.get("resume_refine_max_turns", 1))
+        self.resume_refine_max_turns = int(raw.get("resume_refine_max_turns", 3))
         self.resume_refine_pass_score = float(raw.get("resume_refine_pass_score", 0.80))
         for rkey in ("resume_eval", "resume_refine", "cover_eval", "cover_refine"):
             field = f"prompt_{rkey}"
@@ -137,7 +137,7 @@ class User(Base):
             setattr(self, model_field, raw.get(model_field, ""))
         # Refinement config — cover
         self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
-        self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 1))
+        self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 3))
         self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
         return migrated
 

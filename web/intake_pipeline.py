@@ -85,16 +85,20 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
     """Background refinement loop for a generated document (resume or cover).
 
     Alternates between LLM evaluation and LLM rewriting until the document
-    scores above pass_score or the turn limit is reached.
+    scores above pass_score or the turn limit is reached.  Per-turn snapshots
+    are written to generator/outputs/ as {job_key}_{doc_type}_turn_{n}.md and
+    deleted when the user dismisses the review action via /seen/{action}.
 
     Args:
         job_key: Unique job identifier.
         doc_type: "resume" or "cover".
     """
     import json as _json
+    import shutil
     from pathlib import Path
 
     _GEN_DIR = Path(__file__).parent.parent / "generator"
+    _OUTPUTS = _GEN_DIR / "outputs"
     _TEMPLATES = {
         "resume": _GEN_DIR / "resume_template.html",
         "cover": _GEN_DIR / "cover_template.html",
@@ -105,6 +109,46 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
     log_field = f"{doc_type}_eval_log"
     eval_key = f"{doc_type}_eval"
     refine_key = f"{doc_type}_refine"
+    main_md = _OUTPUTS / f"{job_key}_{doc_type}.md"
+
+    def _save_turn_snapshot(n: int) -> None:
+        """Copy the current main doc to a numbered turn snapshot."""
+        dest = _OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.md"
+        try:
+            shutil.copy2(main_md, dest)
+        except Exception as e:
+            print(f"[refinement:{doc_type}] {job_key}: failed to snapshot turn {n}: {e}", flush=True)
+
+    def _restore_best(eval_log: list) -> None:
+        """Restore the highest-scoring turn snapshot as the live document and regen PDF."""
+        if not eval_log:
+            return
+        best = max(eval_log, key=lambda e: e["score"])
+        best_n = best["turn"]
+        snap = _OUTPUTS / f"{job_key}_{doc_type}_turn_{best_n}.md"
+        if not snap.exists() or not main_md.exists():
+            return
+        # Only restore if the best turn isn't already the current doc
+        if snap.read_bytes() == main_md.read_bytes():
+            return
+        shutil.copy2(snap, main_md)
+        print(f"[refinement:{doc_type}] {job_key}: restored turn {best_n} (best score={best['score']:.2f})", flush=True)
+        # Regen PDF from restored markdown
+        db2 = SessionLocal()
+        try:
+            job2 = Job.get(job_key, db2)
+            if job2:
+                regen_fn = getattr(job2, f"generate_{doc_type}_pdf")
+                regen_fn(template_path, db2)
+                setattr(job2, score_field, best["score"])
+                db2.commit()
+                db2.refresh(job2)
+                _emit(job2)
+        except Exception as e:
+            print(f"[refinement:{doc_type}] {job_key}: PDF regen after restore failed: {e}", flush=True)
+            db2.rollback()
+        finally:
+            db2.close()
 
     db = SessionLocal()
     try:
@@ -114,7 +158,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
         user = User.load(db)
 
         enabled = getattr(user, f"{doc_type}_refine_enabled", True)
-        max_turns = int(getattr(user, f"{doc_type}_refine_max_turns", 1))
+        max_turns = int(getattr(user, f"{doc_type}_refine_max_turns", 3))
         pass_score = float(getattr(user, f"{doc_type}_refine_pass_score", 0.80))
 
         if not enabled or max_turns == 0:
@@ -145,6 +189,9 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
         eval_log = []
         result = None
 
+        # Turn 0 = the initially generated document
+        _save_turn_snapshot(0)
+
         for turn in range(1, max_turns + 1):
             # Step A: Evaluate
             llm_status.start(job_key, f"{doc_type}_eval")
@@ -159,6 +206,8 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
                     "issues": result["issues"],
                     "passed": passed,
                 })
+                # Snapshot the doc that was just evaluated as turn N
+                _save_turn_snapshot(turn)
                 setattr(job, score_field, result["score"])
                 setattr(job, turns_field, turn)
                 setattr(job, log_field, _json.dumps(eval_log))
@@ -179,6 +228,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
                 db.commit()
                 _emit(job)
                 print(f"[refinement:{doc_type}] {job_key}: eval failed — {exc}", flush=True)
+                _restore_best(eval_log)
                 return
             finally:
                 llm_status.finish(job_key, f"{doc_type}_eval")
@@ -187,6 +237,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
                 return
 
             if turn >= max_turns:
+                _restore_best(eval_log)
                 return
 
             # Step B: Rewrite
@@ -210,6 +261,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
                 db.commit()
                 _emit(job)
                 print(f"[refinement:{doc_type}] {job_key}: rewrite failed — {exc}", flush=True)
+                _restore_best(eval_log)
                 return
             finally:
                 llm_status.finish(job_key, f"{doc_type}_refine")

@@ -149,6 +149,44 @@ function SubToggle({ options, value, onChange }) {
   )
 }
 
+function TurnEntry({ entry, hue, turnUrl, isLast, showDivider }) {
+  const [viewOpen, setViewOpen] = useState(false)
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-semibold text-space-dim">Turn {entry.turn}</span>
+        <span style={{ color: `hsl(${hue}, 75%, 55%)` }} className="text-xs font-bold tabular-nums">
+          {(entry.score * 10).toFixed(1)}/10
+        </span>
+        {entry.passed
+          ? <span className="text-xs text-emerald-400">✓ passed</span>
+          : isLast
+            ? <span className="text-xs text-space-dim/50">limit reached</span>
+            : null
+        }
+        <button
+          onClick={() => setViewOpen(v => !v)}
+          className="ml-auto text-xs text-space-dim hover:text-space-text border border-space-border px-2 py-0.5 rounded transition-colors"
+        >
+          {viewOpen ? 'Hide' : 'View'}
+        </button>
+      </div>
+      {entry.issues && entry.issues.length > 0 && (
+        <ul className="text-xs text-space-text space-y-0.5">
+          {entry.issues.map((issue, i) => (
+            <li key={i} className="flex gap-1.5">
+              <span className="text-space-dim/70 shrink-0">[{issue.category}]</span>
+              <span>{issue.description}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {viewOpen && <MarkdownView url={turnUrl} />}
+      {showDivider && <hr className="border-space-border" />}
+    </div>
+  )
+}
+
 const ACTION_PROMPT_KEY = { description: 'extraction', resume: 'resume', cover: 'cover', score: 'scoring' }
 const ACTION_PROMPT_LABEL = { extraction: 'Description Processing', resume: 'Resume Generation', cover: 'Cover Letter Generation', scoring: 'Scoring' }
 
@@ -919,32 +957,16 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
                 <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Refinement History</p>
                 {evalLog.map((entry, idx) => {
                   const hue = Math.round(entry.score * 120)
+                  const turnUrl = `/api/jobs/${job.job_key}/${contentTab}/turn/${entry.turn}/markdown`
                   return (
-                    <div key={idx} className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-semibold text-space-dim">Turn {entry.turn}</span>
-                        <span style={{ color: `hsl(${hue}, 75%, 55%)` }} className="text-xs font-bold tabular-nums">
-                          {(entry.score * 10).toFixed(1)}/10
-                        </span>
-                        {entry.passed
-                          ? <span className="text-xs text-emerald-400">✓ passed</span>
-                          : idx === evalLog.length - 1
-                            ? <span className="text-xs text-space-dim/50">limit reached</span>
-                            : null
-                        }
-                      </div>
-                      {entry.issues && entry.issues.length > 0 && (
-                        <ul className="text-xs text-space-text space-y-0.5">
-                          {entry.issues.map((issue, i) => (
-                            <li key={i} className="flex gap-1.5">
-                              <span className="text-space-dim/70 shrink-0">[{issue.category}]</span>
-                              <span>{issue.description}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {idx < evalLog.length - 1 && <hr className="border-space-border" />}
-                    </div>
+                    <TurnEntry
+                      key={idx}
+                      entry={entry}
+                      hue={hue}
+                      turnUrl={turnUrl}
+                      isLast={idx === evalLog.length - 1}
+                      showDivider={idx < evalLog.length - 1}
+                    />
                   )
                 })}
               </div>

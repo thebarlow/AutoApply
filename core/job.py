@@ -538,6 +538,11 @@ class Job(Base):
         prompt = _apply_template(prompt, {"job": self, "user": user})
 
         content = call_llm(prompt, client, model, max_tokens=16384)
+        if not content:
+            raise RuntimeError(
+                f"{doc_type.capitalize()} rewrite returned empty content — "
+                "input may be too long for the model's context window"
+            )
         content = strip_header_block(content)
         md_path.write_text(frontmatter + content, encoding="utf-8")
 

@@ -385,6 +385,19 @@ def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
     return path.read_text(encoding="utf-8")
 
 
+@router.get("/{job_key}/{doc_type}/turn/{n}/markdown", response_class=PlainTextResponse)
+def serve_doc_turn_markdown(job_key: str, doc_type: str, n: int, db: Session = Depends(get_db)):
+    if doc_type not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Turn {n} snapshot not found")
+    return path.read_text(encoding="utf-8")
+
+
 async def _read_body_text(request: Request) -> str:
     """Read request body as UTF-8 text; bridges async body-reading into sync route handlers."""
     raw = await request.body()
@@ -543,6 +556,13 @@ def mark_job_action_seen(job_key: str, action: str, db: Session = Depends(get_db
     db.commit()
     db.refresh(job)
     _emit(job)
+    # Delete per-turn refinement snapshots for the dismissed action
+    if action in ("resume", "cover"):
+        for snap in _GENERATOR_OUTPUTS.glob(f"{job_key}_{action}_turn_*.md"):
+            try:
+                snap.unlink()
+            except OSError:
+                pass
     return job.serialize()
 
 
