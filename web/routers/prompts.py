@@ -21,7 +21,10 @@ def _prompt_meta(p: Path) -> dict:
 
 _DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
 
-_VALID_DEFAULT_KEYS = {"scoring", "resume", "cover", "extraction", "resume_parse"}
+_VALID_DEFAULT_KEYS = {
+    "scoring", "resume", "cover", "extraction", "resume_parse",
+    "resume_eval", "resume_refine", "cover_eval", "cover_refine",
+}
 
 
 @router.get("/defaults/{type_key}")
