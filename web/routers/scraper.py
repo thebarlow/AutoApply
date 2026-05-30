@@ -31,6 +31,10 @@ def _get_enabled_source_ids(db: Session) -> list[str]:
     return [s.strip() for s in row.value.split(",") if s.strip() in _SOURCES]
 
 
+def _broadcast(event: str, data: Any) -> None:
+    _sse_send(event, data)
+
+
 def _run_in_background(source_ids: list[str]) -> None:
     db = SessionLocal()
     try:
@@ -39,7 +43,7 @@ def _run_in_background(source_ids: list[str]) -> None:
         for job in new_jobs:
             job.intake()
             try:
-                _sse_send("job", job.serialize())
+                _broadcast("job", job.serialize())
             except Exception as exc:
                 print(f"[scraper] broadcast failed for {job.job_key}: {exc}", flush=True)
             run_pipeline(job.job_key)
