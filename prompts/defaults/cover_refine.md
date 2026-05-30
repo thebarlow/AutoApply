@@ -8,8 +8,6 @@ Hard Skills: {user.skills}
 Title: {job.title}
 Company: {job.company}
 Required Skills: {job.ext_required_skills}
-Preferred Skills: {job.ext_preferred_skills}
-Tech Stack: {job.ext_tech_stack}
 
 # Current Cover Letter (improve this)
 {current_resume}
@@ -20,7 +18,7 @@ Tech Stack: {job.ext_tech_stack}
 # Instructions
 - Address every issue listed above.
 - Do NOT invent specific tools, technologies, certifications, or degrees not present in the applicant hard skills.
-- Soft skills, professional terminology, and general practices are always acceptable.
+- Soft skills, professional terminology, educational credentials, and general practices are always acceptable.
 - Output ONLY the cover letter body. No preamble, no explanation.
 - Three to four paragraphs: opening hook, relevant experience, company fit, call to action.
 - Do not include a date or address block.

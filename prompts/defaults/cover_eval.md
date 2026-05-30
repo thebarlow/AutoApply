@@ -19,7 +19,7 @@ Rules:
 - score: 0.0 (poor) to 1.0 (excellent). Be calibrated — 0.8 means genuinely strong.
 - issues: concrete, actionable, max 15 words each. Empty array if none.
 - personalization: generic content not tailored to the company or role.
-- hallucination: ONLY flag specific hard technical tools, technologies, certifications, or degrees NOT in the candidate skills list. Do NOT flag soft skills, professional terminology, or general practices.
+- hallucination: ONLY flag specific hard technical tools, technologies, or software NOT in the candidate hard skills. Never flag: soft skills, professional terminology, general practices, or educational degrees/credentials (degrees come from education, not the skills list).
 - tone: mismatch between letter tone and company signals.
 - call_to_action: missing or weak closing statement.
 - Maximum 6 issues total.
