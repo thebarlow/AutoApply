@@ -437,7 +437,7 @@ class Job(Base):
 
         _, body = _strip_yaml_frontmatter(md_path.read_text(encoding="utf-8"))
 
-        prompt = eval_prompt.replace("{current_resume}", body)
+        prompt = eval_prompt.replace("{current_document}", body)
         prompt = _apply_template(prompt, {"job": self, "user": user})
 
         raw = call_llm(prompt, client, model, max_tokens=8192)
@@ -533,7 +533,7 @@ class Job(Base):
         )
 
         critique = json.dumps(issues)
-        prompt = refine_prompt.replace("{current_resume}", body)
+        prompt = refine_prompt.replace("{current_document}", body)
         prompt = prompt.replace("{critique}", critique)
         prompt = _apply_template(prompt, {"job": self, "user": user})
 

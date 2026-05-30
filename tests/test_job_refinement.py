@@ -96,7 +96,7 @@ class TestEvaluateResumeMd:
             "issues": [{"category": "keyword_coverage", "description": "Missing Docker"}],
         }))
         with patch("core.job._OUTPUTS_DIR", tmp_path):
-            result = job.evaluate_resume_md("Evaluate: {current_resume}", user, client, "gpt-4o")
+            result = job.evaluate_resume_md("Evaluate: {current_document}", user, client, "gpt-4o")
         assert result["score"] == 0.75
         assert result["issues"][0]["category"] == "keyword_coverage"
 
@@ -142,7 +142,7 @@ class TestEvaluateResumeMd:
         client = MagicMock()
         client.chat.completions.create.side_effect = fake_create
         with patch("core.job._OUTPUTS_DIR", tmp_path):
-            job.evaluate_resume_md("{current_resume}", user, client, "gpt-4o")
+            job.evaluate_resume_md("{current_document}", user, client, "gpt-4o")
         assert "Actual body." in captured["prompt"]
         assert "name: Jane" not in captured["prompt"]
 
@@ -195,7 +195,7 @@ class TestRefineResumeMd:
         with patch("core.job._OUTPUTS_DIR", tmp_path):
             with patch.object(job, "generate_resume_pdf") as mock_pdf:
                 job.refine_resume_md(
-                    user, "Rewrite: {current_resume}\nIssues: {critique}",
+                    user, "Rewrite: {current_document}\nIssues: {critique}",
                     client, "gpt-4o", db,
                     [{"category": "tailoring", "description": "Too generic"}],
                     template_path,
@@ -230,7 +230,7 @@ class TestRefineResumeMd:
         with patch("core.job._OUTPUTS_DIR", tmp_path):
             with patch.object(job, "generate_resume_pdf"):
                 job.refine_resume_md(
-                    user, "Resume: {current_resume} Critique: {critique}",
+                    user, "Resume: {current_document} Critique: {critique}",
                     client, "gpt-4o", MagicMock(), issues, MagicMock(spec=Path),
                 )
 

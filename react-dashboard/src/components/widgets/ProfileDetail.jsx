@@ -1170,10 +1170,10 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
 }
 
 const REFINEMENT_EVAL_CHIPS = [
-  { label: 'current doc', token: '{current_resume}' },
+  { label: 'current doc', token: '{current_document}' },
 ]
 const REFINEMENT_REFINE_CHIPS = [
-  { label: 'current doc', token: '{current_resume}' },
+  { label: 'current doc', token: '{current_document}' },
   { label: 'critique', token: '{critique}' },
 ]
 

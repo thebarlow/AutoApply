@@ -11,7 +11,7 @@ Hard Skills: {user.skills}
 Degrees: {user.education_degrees}
 
 # Cover Letter Under Review
-{current_resume}
+{current_document}
 
 # Output schema
 {"score": 0.0, "issues": [{"category": "personalization|hallucination|tone|call_to_action", "description": "..."}]}

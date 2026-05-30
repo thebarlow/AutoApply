@@ -11,7 +11,7 @@ Hard Skills: {user.skills}
 Degrees: {user.education_degrees}
 
 # Resume Under Review
-{current_resume}
+{current_document}
 
 # Output schema
 {"score": 0.0, "issues": [{"category": "keyword_coverage|hallucination|structure|tailoring", "description": "..."}]}

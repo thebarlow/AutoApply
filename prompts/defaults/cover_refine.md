@@ -10,7 +10,7 @@ Company: {job.company}
 Required Skills: {job.ext_required_skills}
 
 # Current Cover Letter (improve this)
-{current_resume}
+{current_document}
 
 # Issues to Fix
 {critique}

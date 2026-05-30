@@ -13,7 +13,7 @@ Tech Stack: {job.ext_tech_stack}
 Key Responsibilities: {job.ext_key_responsibilities}
 
 # Current Resume (improve this)
-{current_resume}
+{current_document}
 
 # Issues to Fix
 {critique}
