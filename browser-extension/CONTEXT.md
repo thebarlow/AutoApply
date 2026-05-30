@@ -7,12 +7,13 @@ Collects job postings from LinkedIn and Indeed via a browser extension, then sta
 ```
 browser-extension/
 ├── manifest.json               # MV3 (Firefox-compatible: background.scripts)
+├── icons/                      # Extension icons (16, 32, 48, 128 px PNG)
 ├── background/
 │   └── service_worker.js       # Dedup (chrome.storage.local) + POST to FastAPI
 ├── content/
-│   ├── injector.js             # MutationObserver, button injection, orchestration
-│   ├── linkedin.js             # LinkedIn search + saved jobs selectors
-│   └── indeed.js               # Indeed search + saved jobs selectors
+│   ├── injector.js             # MutationObserver, button injection, orchestration; also handles /jobs/view/ single-job page
+│   ├── linkedin.js             # LinkedIn search, saved jobs, and direct view-page selectors
+│   └── indeed.js               # Indeed search (www.indeed.com) + saved jobs (myjobs.indeed.com) selectors
 └── popup/
     ├── popup.html
     └── popup.js                # FastAPI base URL config + clear dedup history
@@ -21,6 +22,7 @@ browser-extension/
 ## How It Works
 
 1. Extension injects a "Scrape" button on each job card (LinkedIn search, Indeed search, Indeed saved jobs)
+   - On LinkedIn `/jobs/view/` pages, a fixed-position Scrape button is injected instead (no card list)
 2. On click: programmatically clicks the card to load the detail pane, waits for description to appear, extracts job data
 3. POSTs to `POST /api/scraper/stage-job` → `save_jobs()` → SQLite DB (`state=scraped`)
 4. Dedup: `chrome.storage.local` (extension-side by job_key) + `save_jobs()` (server-side by URL)

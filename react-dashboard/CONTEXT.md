@@ -8,6 +8,9 @@ Two-panel layout split 3:2 in a 5-column grid:
 - **Right (col-span-2)** — `Settings.jsx`: profile editor, task monitor, document preview
 - **Wrapper** — `Dashboard.jsx`: framer-motion animated grid container, height = `100vh - 53px`
 - **Header** — `Navbar.jsx`: branding, credits display, help button
+- **Onboarding** — `Onboarding/Wizard.jsx`: first-run wizard shown when prerequisites are unmet; steps: LLM config (`StepLLM.jsx`) then resume upload/parse (`StepResume.jsx`)
+- **Docs viewer** — `Docs.jsx`: full-page markdown docs viewer with sidebar nav; replaces dashboard when docs route active
+- **User home** — `widgets/UserHome.jsx`: stats dashboard (bar/pie charts via recharts) + profile card grid; shown as right-panel home tab
 
 ---
 
@@ -22,13 +25,25 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Tab job-state filters | `src/components/widgets/Pipeline.jsx` — `TABS` config |
 | Job detail preview (Description / Resume / Cover sub-tabs) | `src/components/widgets/Settings.jsx` — Preview tab section |
 | Process / Generate / Regenerate / Apply buttons | `src/components/widgets/Settings.jsx` — Preview tab |
+| Action buttons gating / prerequisite enforcement | `src/components/shared/GatedButton.jsx` |
 | User profile list, active profile selector, Create Profile modal | `src/components/widgets/Settings.jsx` — User tab |
+| Profile card grid (select / set active profile) | `src/components/widgets/ProfileCards.jsx` |
+| Stats dashboard (charts, job-state counts, time windows) | `src/components/widgets/UserHome.jsx` |
 | Tasks / processing jobs monitor | `src/components/widgets/Settings.jsx` — Tasks tab |
 | Profile editor sections (Identity, Skills, Experience, Education, Projects, Preferences) | `src/components/widgets/ProfileDetail.jsx` |
 | Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
-| API calls (jobs, profiles, providers, generate, apply) | `src/api.js` |
+| First-run onboarding wizard (LLM + resume steps) | `src/components/Onboarding/Wizard.jsx` |
+| Onboarding LLM configuration step | `src/components/Onboarding/StepLLM.jsx` |
+| Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
+| Docs viewer (markdown rendering, sidebar nav) | `src/components/Docs.jsx` |
+| Inline docs markdown content | `src/docs-content/` |
+| Prerequisite check hook (llmReady, resumeReady) | `src/hooks/usePrerequisites.js` |
+| Form validation helpers (provider, prompt) | `src/validation.js` |
+| Help icon tooltip component | `src/components/shared/HelpIcon.jsx` |
+| Loading spinner component | `src/components/shared/Spinner.jsx` |
+| API calls (jobs, profiles, providers, generate, apply, setup status) | `src/api.js` |
 | Global state (jobs list, selected job, processing keys, active tab) | `src/App.jsx` |
 | SSE real-time job update subscription | `src/App.jsx` — `useEffect` with EventSource |
 | Global CSS, background noise texture, dark theme base | `src/index.css` |
@@ -48,6 +63,25 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Preview tab has three sub-tabs driven by local `previewTab` state
 - `CreateProfile` inline modal lives here, not in ProfileDetail
 - AnimatePresence handles slide transitions between User list and ProfileDetail
+
+### ProfileCards.jsx
+- Card grid for selecting and activating profiles
+- Extracted from Settings.jsx; used inside UserHome and Settings User tab
+
+### UserHome.jsx
+- Stats dashboard shown in right panel home tab
+- Recharts bar + pie charts; time-window selector (Session / Today / Week / All Time)
+- Embeds `ProfileCards` for quick profile switching
+
+### Onboarding/Wizard.jsx
+- Multi-step first-run wizard; shown when `usePrerequisites` reports unmet prerequisites
+- Step 1: `StepLLM` — provider type, model, API key
+- Step 2: `StepResume` — paste or upload resume for parsing
+- Skip exits early but still creates the profile if LLM was configured
+
+### shared/GatedButton.jsx
+- Wraps action buttons; disables + shows tooltip when prerequisites unmet
+- Uses `usePrerequisites`; rule map keyed by action name (`score`, `generate`, `parse_resume`)
 
 ### ProfileDetail.jsx
 - `AccordionSection` — collapsible section wrapper, reused for all 8 sections

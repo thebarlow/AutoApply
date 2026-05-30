@@ -10,16 +10,22 @@ Automated job application pipeline with three stages:
 
 ## Routing Rules
 
-| Task | Location | When to go there |
-|---|---|---|
-| Browser extension (LinkedIn, Indeed) | `browser-extension/` | Modifying extension behavior, selectors, or staging logic |
-| API scrapers (Remotive, RemoteOK), scraper config, runner | `scraper/` | Modifying automated API-based job collection |
-| React dashboard UI, job table, overlay, action buttons | `react-dashboard/src/` | Modifying frontend behavior or layout |
-| REST API endpoints (score, generate, delete, state) | `web/routers/` | Modifying API behavior or adding new endpoints |
-| Resume/cover letter generation, Claude prompts, PDF rendering, LaTeX templates | `generator/` | Modifying generation pipeline or PDF layout |
-| Job scoring logic, Claude prompts for scoring | `core/scorer.py` | Modifying scoring behavior or weights |
-| Job state machine, shared types | `core/types.py` | Adding/changing job states or shared dataclasses |
+Read the target directory's `CONTEXT.md` before making changes there.
 
+| Task | Location | Notes |
+|---|---|---|
+| Browser extension (LinkedIn, Indeed scraping) | `browser-extension/` | Has `CONTEXT.md` with selector docs and known issues |
+| API scrapers (Remotive, RemoteOK) — dormant | `scraper/` | Has `CONTEXT.md`; `POST /api/scraper/run` is registered but not called from the React UI (only via raw HTTP, requires `scraper_sources` config) |
+| React dashboard UI, components, layout | `react-dashboard/src/` | Has `CONTEXT.md` with per-file routing table |
+| REST API endpoints (all routes) | `web/routers/` | Has `CONTEXT.md` (at `web/`); score/generate logic delegated to `core/job.py`; `routers/scraper.py` has `stage-job` (manual/extension intake, used by UI) and `run` (API scrapers, dormant) |
+| Job entity methods (score, generate_resume_md/pdf, generate_cover_md/pdf) | `core/job.py` | Read `core/CONTEXT.md` first |
+| Shared types, enums, dataclasses | `core/job.py`, `core/user.py` | Read `core/CONTEXT.md` first |
+| LLM client construction, model resolution | `core/llm.py` | Read `core/CONTEXT.md` first |
+| LaTeX resume/cover letter templates | `generator/` | Has `CONTEXT.md`; outputs go to `generator/outputs/` |
+| LLM prompt templates (scoring, resume, cover, extraction, resume_parse) | `prompts/` | Has `CONTEXT.md`; active defaults in `prompts/defaults/` |
+| Database models, session setup, migrations | `db/` | Has `CONTEXT.md`; SQLite via SQLAlchemy, run `init_db.py` for idempotent column migrations |
+| System tray app (PyQt6) — floating job-card panel, WS client, PDF drag handles | `tray_app/` | Has `CONTEXT.md`; entry point is `tray_app/main.py` |
+| Project user docs, developer notes, Excalidraw diagrams | `Obsidian/Auto Apply/` | Has `CONTEXT.md`; served via `web/routers/docs_router.py`; includes untracked `_templates/` |
 
 ## Running the App
 

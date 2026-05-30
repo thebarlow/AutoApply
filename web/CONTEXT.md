@@ -1,56 +1,82 @@
-# Web Context
+# web/ Context
 
-FastAPI backend + Alpine.js v3 frontend. Single-page dashboard at `/`.
+FastAPI backend. Serves the REST API on port 8080. The frontend (React) is a separate Vite app in `react-dashboard/` — this module does **not** serve HTML.
 
 ## Architecture
 
 ```
 web/
-├── main.py              # FastAPI app; mounts static files; includes routers
-├── routers/
-│   ├── jobs.py          # All job endpoints (see API below)
-│   └── scraper.py       # POST /api/scraper/stage-job (called by browser extension + API scrapers)
-└── static/
-    ├── index.html       # Alpine.js dashboard; all UI state in dashboard() component
-    └── style.css        # Table, overlay, badges, dropdowns
+├── main.py                  # FastAPI app; includes all routers
+├── sse.py                   # Server-Sent Events helpers (job update broadcasts)
+├── llm_status.py            # In-memory tracker for active LLM jobs (keyed by job_key+action)
+├── intake_pipeline.py       # Post-ingest pipeline (score + generate) run per new job
+├── static/images/           # Favicon and apple-touch-icon (served by FastAPI)
+└── routers/
+    ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
+    ├── scraper.py           # POST /api/scraper/stage-job (browser ext) + POST /api/scraper/run (API scrapers)
+    ├── config.py            # GET/PUT config key-value pairs
+    ├── prompts.py           # GET/PUT per-profile prompt overrides
+    ├── llm_test.py          # POST /api/llm/test (verify LLM connectivity)
+    ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
+    ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
+    ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
+    ├── stats.py             # GET /api/stats (pipeline activity by time window)
+    ├── shutdown.py          # POST /api/shutdown (graceful or immediate server exit)
+    ├── tray.py              # Tray app integration endpoints
+    ├── events.py            # SSE endpoint (/api/events)
+    └── docs_router.py       # Serves Obsidian markdown docs as JSON
 ```
 
-## Running
+## Routing Rules
 
-```
-uvicorn web.main:app --reload
-```
+| Task | File |
+|---|---|
+| Job CRUD, scoring, resume/cover generation | `routers/jobs.py` |
+| Ingesting a job from the browser extension or triggering API scrapers | `routers/scraper.py` |
+| Pipeline activity stats by time window | `routers/stats.py` |
+| Session LLM cost tracking | `routers/session_cost_router.py` |
+| Server shutdown (immediate or wait for LLM) | `routers/shutdown.py` |
+| LLM provider/model/key config | `routers/config.py` |
+| Prompt template get/set per profile | `routers/prompts.py` |
+| LLM connectivity test | `routers/llm_test.py` |
+| Active LLM task status (for UI polling) | `routers/llm_status_router.py` |
+| Onboarding/setup state | `routers/setup_status.py` |
+| Tray app job card data | `routers/tray.py` |
+| Real-time job update stream | `routers/events.py` |
+| Documentation content for Docs page | `routers/docs_router.py` |
 
-## API
+## Key Design Notes
+
+- **Score/generate are in `core/job.py`** — `routers/jobs.py` resolves the LLM client, prompt content, and template paths, then delegates to `job.score()`, `job.generate_resume_md/pdf()`, `job.generate_cover_md/pdf()`.
+- **Generation is synchronous** — resume/cover generation blocks the request 30–60s while Claude + pandoc run. Acceptable for single-user local use.
+- **SSE for real-time updates** — `sse.py` broadcasts job state changes; `App.jsx` subscribes via `EventSource`.
+- **`llm_status.py`** tracks in-progress LLM calls (start/finish) so the UI can show spinners without polling.
+
+## API Surface
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/jobs` | All jobs, ordered by final_score desc |
-| `PATCH` | `/api/jobs/{job_key}/state` | Transition to `applied` (only valid value) |
+| `GET` | `/api/jobs` | All jobs ordered by `final_score` desc |
 | `DELETE` | `/api/jobs/{job_key}` | Hard delete |
-| `POST` | `/api/jobs/{job_key}/score` | Run scorer; updates score fields, state unchanged |
-| `POST` | `/api/jobs/{job_key}/generate/resume` | Generate resume PDF; updates resume_path |
-| `POST` | `/api/jobs/{job_key}/generate/cover` | Generate cover letter PDF; updates cover_path |
+| `PATCH` | `/api/jobs/{job_key}/state` | State transition |
+| `POST` | `/api/jobs/{job_key}/score` | Score job via LLM |
+| `POST` | `/api/jobs/{job_key}/generate/resume` | Generate resume MD + PDF |
+| `POST` | `/api/jobs/{job_key}/generate/cover` | Generate cover letter MD + PDF |
 | `GET` | `/api/jobs/{job_key}/resume` | Serve resume PDF |
 | `GET` | `/api/jobs/{job_key}/cover` | Serve cover letter PDF |
-| `POST` | `/api/scraper/stage-job` | Ingest a job from browser extension or scraper |
+| `POST` | `/api/scraper/stage-job` | Ingest job from browser extension or scraper |
+| `POST` | `/api/scraper/run` | Trigger background run of enabled API scrapers |
+| `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
+| `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
+| `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
+| `GET/PUT` | `/api/config/{key}` | Config key-value store |
+| `GET/PUT` | `/api/prompts/...` | Prompt templates per profile |
+| `POST` | `/api/llm/test` | Test LLM connectivity |
+| `GET` | `/api/llm/status` | Active LLM task status |
+| `GET` | `/api/setup/status` | Onboarding completeness check |
+| `GET` | `/api/events` | SSE stream for job updates |
 
 ## Known Issues
 
-- Generation endpoints are synchronous — resume/cover generation blocks the request for 30–60 seconds while Claude and pandoc run. Acceptable for a single-user local tool.
-- Salary sort is lexicographic when salary contains non-numeric characters (e.g., "$120k–$150k"). Values without parseable numbers sort as 0.
-- Alpine.js loaded from CDN — requires internet access.
-
-## Web Router Limitations
-
-### resume_md_exists / cover_md_exists in _serialize()
-`_serialize()` in `jobs.py` calls `Path.exists()` twice per job to derive `resume_md_exists` and `cover_md_exists`. These filesystem checks run on every call to `GET /api/jobs`, meaning a list of N jobs triggers 2N stat calls. At the current scale (<100 jobs, local filesystem) this is negligible (<5ms). If the job count grows or the API is called frequently, move these checks out of `_serialize` into a per-job endpoint and have the frontend fetch job details on modal open.
-
-## Future Work
-
-- Config page (`/config`) for editing scoring weights, thresholds, and user profile
-- Polling or WebSocket feedback during long-running generation requests
-- Filter by status in addition to sorting
-- Grouping rows by job title
-- Clustering by location
-- Browser extension auto-marks job as applied on form submission (see browser-extension/CONTEXT.md)
+- `_serialize()` in `jobs.py` calls `Path.exists()` twice per job (resume_md_exists, cover_md_exists) on every `GET /api/jobs`. At current scale (<100 jobs) this is negligible. If job count grows, move to a per-job detail endpoint.
+- Salary sort is lexicographic for non-numeric salary strings (e.g. "$120k–$150k"). Values without parseable numbers sort as 0.

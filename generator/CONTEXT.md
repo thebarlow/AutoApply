@@ -10,6 +10,8 @@ generator/
 ├── resume.css             # Layout and typography for resume PDFs
 ├── cover_template.html    # Jinja2 shell — same role for cover letters
 ├── cover.css              # Layout and typography for cover letter PDFs
+├── master_template.html   # Jinja2template for the user's master resume (multi-page, no LLM body injection)
+├── master.css             # Layout and typography for the master resume PDF
 └── outputs/               # Generated PDFs and intermediate files (gitignored)
 ```
 
@@ -21,6 +23,8 @@ generator/
 | `resume.css` | Layout and typography for resumes; serif section headers, ALL CAPS h2 |
 | `cover_template.html` | Jinja2 template; black bars top/bottom, 2-col gray header, date injection, auto sign-off |
 | `cover.css` | Layout and typography for cover letters |
+| `master_template.html` | Jinja2 template for master resume; same header structure, no page limit; used by `web/routers/config.py` |
+| `master.css` | Layout and typography for the master resume; letter size with tighter margins |
 
 ## Pipeline
 

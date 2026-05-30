@@ -1,11 +1,15 @@
-This is a structured repository of documentation, and developer notes for enabling smart context retrieval for CLAUDE and savvy users. 
+This is a structured repository of documentation and developer notes for enabling smart context retrieval for CLAUDE and savvy users.
 
 ### Routing
 
-| Folder | Contents | Entry Point|
-|Docs/ | User served documentation for using the application | CONTEXT.md|
-|Notes/| Structured Notes for the developer to reference| CONTEXT.md|
-|Excalidraw/|Storage of all Excalidraw diagrams referenced within the vault| None|
+| Folder / File | Contents | Entry Point |
+|---|---|---|
+| `Docs/` | User-facing docs served via the dashboard (Getting Started, Help Page, For Developers, Making a Good Master Resume) | `Docs/Getting Started.md` |
+| `Notes/` | Developer reference notes (Architecture, dev server, FastAPI, React) | `Notes/Architecture.md` |
+| `Excalidraw/` | Storage of all Excalidraw diagrams referenced within the vault | None |
+| `_templates/` | Obsidian note templates (untracked; not served) | None |
+| `Misc Notes.md` | Scratchpad for ad-hoc developer notes | None |
+| `Overview.canvas` | Obsidian canvas overview of the vault | None |
 
 
 ### Interacting with the files
