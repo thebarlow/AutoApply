@@ -56,6 +56,22 @@ def _apply_template(template: str, sources: dict[str, Any]) -> str:
     return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
 
 
+def _matching_skills(user_skills: list, job: Any) -> list:
+    """Return the subset of user_skills that appear in the job's requirement text.
+
+    Falls back to the full list if fewer than 3 skills match, so the evaluator
+    always has enough context to work with.
+    """
+    job_text = " ".join(filter(None, [
+        getattr(job, "ext_required_skills", "") or "",
+        getattr(job, "ext_preferred_skills", "") or "",
+        getattr(job, "ext_tech_stack", "") or "",
+        getattr(job, "title", "") or "",
+    ])).lower()
+    matched = [s for s in (user_skills or []) if s.lower() in job_text]
+    return matched if len(matched) >= 3 else (user_skills or [])
+
+
 def _strip_yaml_frontmatter(text: str) -> tuple[str, str]:
     """Split a markdown file with YAML front matter into (frontmatter, body).
 
@@ -437,7 +453,9 @@ class Job(Base):
 
         _, body = _strip_yaml_frontmatter(md_path.read_text(encoding="utf-8"))
 
+        matched = _matching_skills(user.skills, self)
         prompt = eval_prompt.replace("{current_resume}", body)
+        prompt = prompt.replace("{user.skills}", ", ".join(matched))
         prompt = _apply_template(prompt, {"job": self, "user": user})
 
         raw = call_llm(prompt, client, model, max_tokens=8192)
@@ -532,9 +550,11 @@ class Job(Base):
             md_path.read_text(encoding="utf-8")
         )
 
+        matched = _matching_skills(user.skills, self)
         critique = json.dumps(issues)
         prompt = refine_prompt.replace("{current_resume}", body)
         prompt = prompt.replace("{critique}", critique)
+        prompt = prompt.replace("{user.skills}", ", ".join(matched))
         prompt = _apply_template(prompt, {"job": self, "user": user})
 
         content = call_llm(prompt, client, model, max_tokens=32768)

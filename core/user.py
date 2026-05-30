@@ -373,6 +373,15 @@ class User(Base):
             return self.name.strip()
         return f"{self.first_name} {self.last_name}".strip()
 
+    @property
+    def education_degrees(self) -> str:
+        """Formatted degree list for hallucination-detection context in eval prompts."""
+        if not self.education:
+            return "none listed"
+        return ", ".join(
+            f"{e.degree} {e.field}" for e in self.education
+        )
+
     def render_for_prompt(self) -> str:
         """Format the user profile as a human-readable string for LLM prompt injection.
 
