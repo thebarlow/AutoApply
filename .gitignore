@@ -60,3 +60,9 @@ profiles/
 react-dashboard/dist/
 
 node_modules/
+
+# Obsidian
+Obsidian/.obsidian/
+
+# Test artifacts
+test_new_user.db
