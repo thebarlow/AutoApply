@@ -20,11 +20,13 @@ Description:
 - Start directly with the first section header (e.g. ## Profile).
 - Do not use `---` horizontal rules between sections.
 - Do not invent experience, skills, or credentials not present in the applicant details.
+- Role-claiming test: borrowing the job's vocabulary is fine, but never phrase anything such that a hiring manager could conclude the candidate held a title, level, or ownership — or produced an outcome — they did not. If a phrasing implies a role/result not supported by the applicant details, rewrite it to describe only what they actually did.
 - Target a single page at standard margins and 10–11pt body text.
 
 ## Profile
 - Max 500 characters total.
-- Lead with the role title or specialization that matches the job posting.
+- Before writing, identify the *nature, scale, and stakes* of this candidate's actual work that map to this role (e.g. "owns a production data platform serving X", "ships ML into live workflows"). Lead the Profile with that framing — the candidate's identity for THIS role — not with a list of technologies.
+- Only after the framing is set, weave in the role title/specialization and the keywords the job emphasizes. Keywords support the frame; they do not replace it.
 
 ## Experience
 - Include all listed work history entries, most recent first.
