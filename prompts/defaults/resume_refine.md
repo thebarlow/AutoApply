@@ -20,6 +20,7 @@ Key Responsibilities: {job.ext_key_responsibilities}
 
 # Instructions
 - Address every issue listed above.
+- Emphasize the applicant's hard skills that match or are transferable/adjacent to the job's requirements (treat synonyms and alternate spellings as matches, e.g. NLP = Natural Language Processing). Surface transferable skills honestly — do not claim a tool the applicant lacks.
 - Do NOT invent specific tools, technologies, certifications, or degrees not present in the applicant hard skills.
 - Soft skills, professional terminology, and general practices (e.g. "observability", "leadership") are always acceptable.
 - Output ONLY the resume Markdown body. No preamble, no explanation.
