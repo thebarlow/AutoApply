@@ -12,6 +12,13 @@ from playwright.sync_api import sync_playwright
 from pypdf import PdfReader
 
 
+# Auto-shrink bounds for fitting a PDF within ``max_pages``. The floor caps how
+# small text may get (0.8 ≈ 8pt effective for a 10pt base) before we give up and
+# raise rather than emit an unreadable document.
+_PDF_SCALE_FLOOR = 0.8
+_PDF_SCALE_STEP = 0.025
+
+
 def _strip_url(url: str) -> str:
     return url.replace("https://www.", "").replace("https://", "").replace("http://", "").rstrip("/")
 
@@ -48,12 +55,14 @@ def render_pdf(
         md_path: Path to the source markdown file.
         pdf_path: Destination path for the rendered PDF.
         template_path: Path to the Jinja2 HTML template.
-        max_pages: If set, raise ``RuntimeError`` when the output exceeds this
-            page count.
+        max_pages: If set, shrink the print scale (down to ``_PDF_SCALE_FLOOR``)
+            until the output fits within this page count; raise ``RuntimeError``
+            only if it still overflows at the minimum scale. ``None`` disables
+            both the limit and auto-shrink.
 
     Raises:
         subprocess.CalledProcessError: If pandoc exits non-zero.
-        RuntimeError: If ``max_pages`` is exceeded.
+        RuntimeError: If ``max_pages`` cannot be met even at the minimum scale.
     """
     md_text = md_path.read_text(encoding="utf-8")
     # Ensure bullet lists are preceded by a blank line so pandoc parses them
@@ -116,22 +125,32 @@ def render_pdf(
         try:
             page = browser.new_page()
             page.set_content(html, wait_until="load")
-            page.pdf(
-                path=str(pdf_path),
-                format="Letter",
-                print_background=True,
-            )
+            # Render at full scale first; if the output exceeds max_pages, shrink
+            # the print scale step-by-step until it fits. Chromium ignores CSS
+            # `zoom` and visual `transform` in its print path, but page.pdf(scale=)
+            # genuinely re-lays-out the content, so it reduces the page count.
+            scale = 1.0
+            while True:
+                page.pdf(
+                    path=str(pdf_path),
+                    format="Letter",
+                    print_background=True,
+                    scale=round(scale, 3),
+                )
+                if max_pages is None:
+                    break
+                page_count = len(PdfReader(str(pdf_path)).pages)
+                if page_count <= max_pages:
+                    break
+                if scale <= _PDF_SCALE_FLOOR + 1e-9:
+                    raise RuntimeError(
+                        f"Rendered PDF '{pdf_path.name}' still has {page_count} "
+                        f"pages at minimum scale {_PDF_SCALE_FLOOR}, exceeds "
+                        f"max_pages={max_pages}. Trim the source markdown or regenerate."
+                    )
+                scale = max(_PDF_SCALE_FLOOR, scale - _PDF_SCALE_STEP)
         finally:
             browser.close()
-
-    if max_pages is not None:
-        page_count = len(PdfReader(str(pdf_path)).pages)
-        if page_count > max_pages:
-            raise RuntimeError(
-                f"Rendered PDF '{pdf_path.name}' has {page_count} pages, "
-                f"exceeds max_pages={max_pages}. Trim the source markdown "
-                f"or regenerate."
-            )
 
 
 def strip_header_block(md: str) -> str:

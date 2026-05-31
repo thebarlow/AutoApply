@@ -425,7 +425,7 @@ def _put_document_markdown_sync(
 
     try:
         if doc_type == "resume":
-            job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=None)
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=1)
         else:
             job.generate_cover_pdf(_COVER_TEMPLATE, db)
     except Exception as exc:

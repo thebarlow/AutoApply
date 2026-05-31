@@ -568,7 +568,7 @@ class Job(Base):
             template_path: Path to the HTML resume template for PDF rendering.
         """
         self._refine_doc_md("resume", user, refine_prompt, client, model, issues)
-        self.generate_resume_pdf(template_path, db, max_pages=None)
+        self.generate_resume_pdf(template_path, db, max_pages=1)
 
     def refine_cover_md(
         self,

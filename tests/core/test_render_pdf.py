@@ -50,6 +50,27 @@ def test_render_pdf_handles_special_characters(tmp_path: Path):
     assert "Acme Corp" in text
 
 
+def test_render_pdf_max_pages_autoshrinks_borderline(tmp_path: Path):
+    # 26 short paragraphs render as 2 pages at full scale but fit on 1 when the
+    # print scale is shrunk — auto-shrink should fit it rather than raising.
+    border_md = "## Section\n\n" + "".join(
+        f"- Bullet line number {i} here.\n" for i in range(26)
+    )
+    md = tmp_path / "border.md"
+    md.write_text(border_md, encoding="utf-8")
+    tpl = tmp_path / "tpl.html"
+    tpl.write_text(MINIMAL_TEMPLATE, encoding="utf-8")
+    css = tmp_path / "tpl.css"
+    css.write_text(
+        "@page { size: letter; margin: 0.75in; } "
+        "body { font-family: sans-serif; font-size: 11pt; line-height: 1.4; }",
+        encoding="utf-8",
+    )
+    out = tmp_path / "out.pdf"
+    render_pdf(md, out, tpl, max_pages=1)
+    assert len(PdfReader(str(out)).pages) == 1
+
+
 def test_render_pdf_max_pages_raises_on_overflow(tmp_path: Path):
     big_md = "## Section\n\n" + ("This is a long paragraph. " * 200 + "\n\n") * 30
     md = tmp_path / "big.md"

@@ -37,4 +37,4 @@ generator/
 
 The CSS file is resolved by stripping `_template` from the template stem (e.g. `resume_template.html` → `resume.css`).
 
-Resume rendering passes `max_pages=1` and raises `RuntimeError` if the output exceeds one page. There is no auto-shrink — the template and CSS must keep content within one page.
+Resume rendering passes `max_pages=1`. If content overflows one page, `render_pdf` auto-shrinks the Playwright print scale in steps (down to a `_PDF_SCALE_FLOOR` of 0.8) until it fits, raising `RuntimeError` only if it still overflows at the floor. Note: Chromium ignores CSS `zoom` and visual `transform` in its print path — only `page.pdf(scale=)` actually reduces the page count. The CSS should still keep typical content near one page so the shrink factor stays mild (readable text).

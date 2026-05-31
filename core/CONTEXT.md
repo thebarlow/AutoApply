@@ -62,5 +62,5 @@ See project memory note: the project uses the **OpenAI SDK** with multi-provider
 
 - `Job` methods that call the LLM receive an already-constructed client + model string — they do not read config themselves.
 - All DB writes inside `Job` methods use the session passed in; callers are responsible for commit/rollback.
-- `refine_resume_md` passes `max_pages=None` to `generate_resume_pdf` — no page limit during refinement turns.
+- `refine_resume_md` passes `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). The manual-edit path (`web/routers/jobs.py` `_put_document_markdown_sync`) also passes `max_pages=1`.
 - `_refine_doc_md` uses `max_tokens=32768` to avoid truncation on rewrites.
