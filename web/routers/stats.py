@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from core.job import Job
-from core.skill_analytics import aggregate_skill_frequency
+from core.skill_analytics import aggregate_skill_frequency, job_has_skill
 from core.session_cost import get_session_start
 from db.database import get_db
 
@@ -133,3 +133,29 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
         )
     ]
     return aggregate_skill_frequency(extracted)
+
+
+@router.get("/skill-frequency/jobs")
+def get_jobs_for_skill(
+    skill: str = Query(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Job keys for all jobs whose extraction data lists the given skill.
+
+    ``skill`` is the canonical display name shown in the chart (e.g. "Python").
+    Matching is normalized, so raw tokens like "py" or "k8s" match.
+    """
+    jobs = (
+        db.query(Job)
+        .filter(
+            or_(
+                Job.ext_required_skills.isnot(None),
+                Job.ext_preferred_skills.isnot(None),
+                Job.ext_tech_stack.isnot(None),
+                Job.ext_seniority.isnot(None),
+            )
+        )
+        .all()
+    )
+    keys = [j.job_key for j in jobs if job_has_skill(j, skill)]
+    return {"job_keys": keys}

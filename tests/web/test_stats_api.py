@@ -141,7 +141,7 @@ def _make_extracted_job(db, key, required="", preferred="", tech_stack="",
     return job
 
 
-def test_skill_frequency_returns_three_lists_and_total(client, db_session):
+def test_skill_frequency_returns_combined_skills_and_tech_stack(client, db_session):
     _make_extracted_job(db_session, "e1", required="Python, React",
                         preferred="Docker", tech_stack="AWS")
     _make_extracted_job(db_session, "e2", required="Python", seniority="Senior")
@@ -150,15 +150,16 @@ def test_skill_frequency_returns_three_lists_and_total(client, db_session):
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200
     data = r.json()
-    assert set(data) == {"required", "preferred", "tech_stack", "total_jobs"}
+    assert set(data) == {"skills", "tech_stack", "total_jobs"}
     assert data["total_jobs"] == 2
-    required = {row["skill"]: row["count"] for row in data["required"]}
-    assert required["Python"] == 2
-    assert required["React"] == 1
+    skills = {row["skill"]: row for row in data["skills"]}
+    assert skills["Python"] == {"skill": "Python", "required": 2, "preferred": 0}
+    assert skills["Docker"] == {"skill": "Docker", "required": 0, "preferred": 1}
+    tech = {row["skill"]: row["count"] for row in data["tech_stack"]}
+    assert tech == {"AWS": 1}
 
 
 def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
-    # Job with no extraction data must not count toward total_jobs.
     _make_extracted_job(db_session, "x1", required="Python")
     _make_job(db_session, "x2", datetime.now(timezone.utc).isoformat())
     db_session.commit()
@@ -166,30 +167,37 @@ def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
     r = client.get("/api/skill-frequency")
     data = r.json()
     assert data["total_jobs"] == 1
-    # Only x1's "Python" should appear; the non-extracted job contributes nothing.
-    skills = {row["skill"] for row in data["required"]}
-    assert skills == {"Python"}
+    assert {row["skill"] for row in data["skills"]} == {"Python"}
 
 
 def test_skill_frequency_empty_db(client):
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200
-    data = r.json()
-    assert data == {
-        "required": [],
-        "preferred": [],
-        "tech_stack": [],
-        "total_jobs": 0,
-    }
+    assert r.json() == {"skills": [], "tech_stack": [], "total_jobs": 0}
 
 
-def test_skill_frequency_counts_preferred_only_jobs(client, db_session):
-    # A job extracted with only preferred skills (no required, no seniority)
-    # must still count toward total_jobs and its skills must appear.
-    _make_extracted_job(db_session, "p1", preferred="Docker")
+def test_skill_frequency_jobs_returns_matching_keys(client, db_session):
+    _make_extracted_job(db_session, "j1", required="Python, React")
+    _make_extracted_job(db_session, "j2", tech_stack="Python")
+    _make_extracted_job(db_session, "j3", required="Go")
     db_session.commit()
 
-    r = client.get("/api/skill-frequency")
-    data = r.json()
-    assert data["total_jobs"] == 1
-    assert {row["skill"] for row in data["preferred"]} == {"Docker"}
+    r = client.get("/api/skill-frequency/jobs?skill=Python")
+    assert r.status_code == 200
+    assert set(r.json()["job_keys"]) == {"j1", "j2"}
+
+
+def test_skill_frequency_jobs_matches_via_normalization(client, db_session):
+    _make_extracted_job(db_session, "k1", tech_stack="k8s")
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency/jobs?skill=Kubernetes")
+    assert r.json()["job_keys"] == ["k1"]
+
+
+def test_skill_frequency_jobs_no_match_returns_empty(client, db_session):
+    _make_extracted_job(db_session, "n1", required="Python")
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency/jobs?skill=Rust")
+    assert r.json()["job_keys"] == []
