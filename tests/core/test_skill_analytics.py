@@ -40,3 +40,72 @@ class TestNormalizeSkill:
     def test_mixed_case_skills_canonicalized(self):
         assert normalize_skill("graphql") == "GraphQL"
         assert normalize_skill("ios") == "iOS"
+
+
+class _FakeJob:
+    """Minimal stand-in exposing the extraction attributes used by aggregation."""
+
+    def __init__(self, required="", preferred="", tech_stack="", seniority=""):
+        self.ext_required_skills = required
+        self.ext_preferred_skills = preferred
+        self.ext_tech_stack = tech_stack
+        self.ext_seniority = seniority
+
+
+class TestAggregateSkillFrequency:
+    def test_empty_input_returns_zeroed_structure(self):
+        result = aggregate_skill_frequency([])
+        assert result == {
+            "required": [],
+            "preferred": [],
+            "tech_stack": [],
+            "total_jobs": 0,
+        }
+
+    def test_distinct_job_counting_dedupes_within_job(self):
+        # "Python, python" in one job counts that job once for Python.
+        jobs = [_FakeJob(required="Python, python")]
+        result = aggregate_skill_frequency(jobs)
+        assert result["required"] == [{"skill": "Python", "count": 1}]
+        assert result["total_jobs"] == 1
+
+    def test_counts_distinct_jobs_per_skill(self):
+        jobs = [
+            _FakeJob(required="Python, React"),
+            _FakeJob(required="Python"),
+            _FakeJob(required="React, Go"),
+        ]
+        result = aggregate_skill_frequency(jobs)
+        counts = {row["skill"]: row["count"] for row in result["required"]}
+        assert counts == {"Python": 2, "React": 2, "Go": 1}
+        assert result["total_jobs"] == 3
+
+    def test_fields_counted_separately(self):
+        jobs = [_FakeJob(required="Python", preferred="React", tech_stack="Go")]
+        result = aggregate_skill_frequency(jobs)
+        assert result["required"] == [{"skill": "Python", "count": 1}]
+        assert result["preferred"] == [{"skill": "React", "count": 1}]
+        assert result["tech_stack"] == [{"skill": "Go", "count": 1}]
+
+    def test_sorted_descending_by_count(self):
+        jobs = [
+            _FakeJob(required="Python"),
+            _FakeJob(required="Python, React"),
+            _FakeJob(required="Python, React, Go"),
+        ]
+        result = aggregate_skill_frequency(jobs)
+        counts = [row["count"] for row in result["required"]]
+        assert counts == sorted(counts, reverse=True)
+        assert result["required"][0] == {"skill": "Python", "count": 3}
+
+    def test_total_jobs_counts_all_extracted_jobs(self):
+        # A job with only seniority (no skills) still counts toward total_jobs.
+        jobs = [_FakeJob(seniority="Senior"), _FakeJob(required="Python")]
+        result = aggregate_skill_frequency(jobs)
+        assert result["total_jobs"] == 2
+        assert result["required"] == [{"skill": "Python", "count": 1}]
+
+    def test_junk_tokens_excluded(self):
+        jobs = [_FakeJob(required="Python, , 3.x, ...")]
+        result = aggregate_skill_frequency(jobs)
+        assert result["required"] == [{"skill": "Python", "count": 1}]
