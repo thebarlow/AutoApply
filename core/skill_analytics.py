@@ -113,6 +113,25 @@ def _normalized_skills(raw: str | None) -> set[str]:
     return skills
 
 
+def job_has_skill(job: object, canonical_skill: str) -> bool:
+    """True if the normalized skill appears in any extraction field of the job.
+
+    Args:
+        job: A job object with ``ext_required_skills``, ``ext_preferred_skills``,
+            and ``ext_tech_stack`` string attributes.
+        canonical_skill: The canonical display name to match (e.g. "Python"),
+            as produced by ``normalize_skill``.
+
+    Returns:
+        True if the skill is listed in required, preferred, or tech-stack fields.
+    """
+    return canonical_skill in (
+        _normalized_skills(getattr(job, "ext_required_skills", None))
+        | _normalized_skills(getattr(job, "ext_preferred_skills", None))
+        | _normalized_skills(getattr(job, "ext_tech_stack", None))
+    )
+
+
 def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
     """Count distinct postings mentioning each skill.
 

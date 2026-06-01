@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.skill_analytics import normalize_skill, aggregate_skill_frequency
+from core.skill_analytics import normalize_skill, aggregate_skill_frequency, job_has_skill
 
 
 class TestNormalizeSkill:
@@ -109,3 +109,30 @@ class TestAggregateSkillFrequency:
         jobs = [_FakeJob(required="Python, , 3.x, ...")]
         result = aggregate_skill_frequency(jobs)
         assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 0}]
+
+
+class TestJobHasSkill:
+    def test_matches_required_field(self):
+        job = _FakeJob(required="Python, React")
+        assert job_has_skill(job, "Python") is True
+
+    def test_matches_preferred_field(self):
+        job = _FakeJob(preferred="Docker")
+        assert job_has_skill(job, "Docker") is True
+
+    def test_matches_tech_stack_field(self):
+        job = _FakeJob(tech_stack="AWS")
+        assert job_has_skill(job, "AWS") is True
+
+    def test_matches_via_normalization_alias(self):
+        # Raw "k8s" in the job must match canonical "Kubernetes".
+        job = _FakeJob(tech_stack="k8s")
+        assert job_has_skill(job, "Kubernetes") is True
+
+    def test_no_match_returns_false(self):
+        job = _FakeJob(required="Python")
+        assert job_has_skill(job, "Go") is False
+
+    def test_empty_fields_return_false(self):
+        job = _FakeJob()
+        assert job_has_skill(job, "Python") is False
