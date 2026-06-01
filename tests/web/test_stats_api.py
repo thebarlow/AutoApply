@@ -192,7 +192,7 @@ def test_skill_frequency_jobs_matches_via_normalization(client, db_session):
     db_session.commit()
 
     r = client.get("/api/skill-frequency/jobs?skill=Kubernetes")
-    assert r.json()["job_keys"] == ["k1"]
+    assert set(r.json()["job_keys"]) == {"k1"}
 
 
 def test_skill_frequency_jobs_no_match_returns_empty(client, db_session):

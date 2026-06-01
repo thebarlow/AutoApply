@@ -137,7 +137,7 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/skill-frequency/jobs")
 def get_jobs_for_skill(
-    skill: str = Query(...),
+    skill: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
 ) -> dict:
     """Job keys for all jobs whose extraction data lists the given skill.
@@ -152,6 +152,8 @@ def get_jobs_for_skill(
                 Job.ext_required_skills.isnot(None),
                 Job.ext_preferred_skills.isnot(None),
                 Job.ext_tech_stack.isnot(None),
+                # Mirrors the extracted-job filter in get_skill_frequency; a
+                # seniority-only job simply won't match job_has_skill below.
                 Job.ext_seniority.isnot(None),
             )
         )
