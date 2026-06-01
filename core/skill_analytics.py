@@ -227,6 +227,8 @@ def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
         tech = _normalized_skills(getattr(job, "ext_tech_stack", None))
         all_skills = req | pref | tech
         for skill in all_skills:
+            # Mutually exclusive by the elif chain: each skill is counted once
+            # per job at its strongest tier, so high+med+low == distinct jobs.
             if skill in req:
                 high[skill] += 1
             elif skill in pref:

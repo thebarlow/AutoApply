@@ -132,6 +132,12 @@ class TestAggregateSkillFrequency:
         cats = {c["category"]: c["count"] for c in result["categories"]}
         assert cats == {"Frontend": 1, "Cloud": 1}
 
+    def test_dedupes_within_field(self):
+        result = aggregate_skill_frequency([_FakeJob(required="Python, python")])
+        assert result["skills"] == [
+            {"skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
+        ]
+
     def test_unknown_skill_categorized_as_other(self):
         result = aggregate_skill_frequency([_FakeJob(required="Wizardry")])
         cats = {c["category"]: c["count"] for c in result["categories"]}
