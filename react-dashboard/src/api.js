@@ -119,6 +119,9 @@ export const getStats = (timeWindow) => _fetch(`/api/stats?window=${timeWindow}`
 
 export const getSkillFrequency = () => _fetch('/api/skill-frequency')
 
+export const getJobsForSkill = (skill) =>
+  _fetch('/api/skill-frequency/jobs?' + new URLSearchParams({ skill }))
+
 export const getSetupStatus = () => _fetch('/api/setup-status')
 
 export const testLlmConnection = (body) =>
