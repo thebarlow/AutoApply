@@ -68,7 +68,8 @@ web/
 | `POST` | `/api/scraper/stage-job` | Ingest job from browser extension or scraper |
 | `POST` | `/api/scraper/run` | Trigger background run of enabled API scrapers |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
-| `GET` | `/api/skill-frequency` | Distinct-job skill counts per field (required/preferred/tech_stack) across all extracted jobs; no window |
+| `GET` | `/api/skill-frequency` | Combined required+preferred skill counts (`skills`) plus `tech_stack`, distinct jobs, across all extracted jobs; no window |
+| `GET` | `/api/skill-frequency/jobs` | Job keys whose extraction data lists a given `skill` (normalized, any field) |
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
 | `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
 | `GET/PUT` | `/api/config/{key}` | Config key-value store |
