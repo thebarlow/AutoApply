@@ -159,7 +159,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   const handleSkillBarClick = (data) => {
     // Recharts Bar onClick passes the datum; row fields may be top-level or under .payload.
     const skill = data?.skill ?? data?.payload?.skill
-    if (!skill || !onSkillFilter) return
+    if (!skill || !onSkillFilter || skill === activeSkill) return
     getJobsForSkill(skill)
       .then(({ job_keys }) => onSkillFilter({ skill, jobKeys: job_keys }))
       .catch(() => setSkillError('Could not load jobs for skill'))
