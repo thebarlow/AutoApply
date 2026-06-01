@@ -7,7 +7,6 @@ postings mention each skill, separated by extraction field.
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from typing import Iterable
 
 # Curated alias map: lowercased raw token -> canonical display name.
@@ -32,6 +31,10 @@ _ALIASES: dict[str, str] = {
     "go": "Go",
     "c#": "C#",
     "csharp": "C#",
+    # Mixed-case tokens that word.capitalize() would mangle.
+    "grpc": "gRPC",
+    "ios": "iOS",
+    "graphql": "GraphQL",
 }
 
 # Trailing version tokens like "3.11", "v2", "17", "3.x".

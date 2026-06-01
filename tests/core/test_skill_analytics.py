@@ -32,3 +32,11 @@ class TestNormalizeSkill:
     def test_unknown_skill_passes_through_titlecased(self):
         # Multi-word unknown skill keeps each word capitalized.
         assert normalize_skill("machine learning") == "Machine Learning"
+
+    def test_all_caps_acronym_preserved(self):
+        assert normalize_skill("AWS") == "AWS"
+        assert normalize_skill("GCP") == "GCP"
+
+    def test_mixed_case_skills_canonicalized(self):
+        assert normalize_skill("graphql") == "GraphQL"
+        assert normalize_skill("ios") == "iOS"
