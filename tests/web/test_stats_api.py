@@ -141,7 +141,7 @@ def _make_extracted_job(db, key, required="", preferred="", tech_stack="",
     return job
 
 
-def test_skill_frequency_returns_combined_skills_and_tech_stack(client, db_session):
+def test_skill_frequency_returns_unified_shape(client, db_session):
     _make_extracted_job(db_session, "e1", required="Python, React",
                         preferred="Docker", tech_stack="AWS")
     _make_extracted_job(db_session, "e2", required="Python", seniority="Senior")
@@ -150,13 +150,17 @@ def test_skill_frequency_returns_combined_skills_and_tech_stack(client, db_sessi
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200
     data = r.json()
-    assert set(data) == {"skills", "tech_stack", "total_jobs"}
+    assert set(data) == {"skills", "categories", "total_jobs"}
     assert data["total_jobs"] == 2
     skills = {row["skill"]: row for row in data["skills"]}
-    assert skills["Python"] == {"skill": "Python", "required": 2, "preferred": 0}
-    assert skills["Docker"] == {"skill": "Docker", "required": 0, "preferred": 1}
-    tech = {row["skill"]: row["count"] for row in data["tech_stack"]}
-    assert tech == {"AWS": 1}
+    assert skills["Python"] == {"skill": "Python", "high": 2, "med": 0, "low": 0, "category": "Languages"}
+    assert skills["Docker"] == {"skill": "Docker", "high": 0, "med": 1, "low": 0, "category": "DevOps"}
+    assert skills["AWS"] == {"skill": "AWS", "high": 0, "med": 0, "low": 1, "category": "Cloud"}
+    cats = {c["category"]: c["count"] for c in data["categories"]}
+    assert cats["Languages"] == 2
+    assert cats["Frontend"] == 1
+    assert cats["DevOps"] == 1
+    assert cats["Cloud"] == 1
 
 
 def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
@@ -173,7 +177,7 @@ def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
 def test_skill_frequency_empty_db(client):
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200
-    assert r.json() == {"skills": [], "tech_stack": [], "total_jobs": 0}
+    assert r.json() == {"skills": [], "categories": [], "total_jobs": 0}
 
 
 def test_skill_frequency_jobs_returns_matching_keys(client, db_session):
