@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { getProfiles, getStats } from '../../api'
+import { getProfiles, getStats, getSkillFrequency } from '../../api'
 import ProfileCards from './ProfileCards'
 
 const WINDOWS = [
@@ -31,6 +31,12 @@ const STATE_COLORS = {
   rejected: '#ef4444',
 }
 
+const SKILL_FIELDS = [
+  { key: 'required', label: 'Required' },
+  { key: 'preferred', label: 'Preferred' },
+  { key: 'tech_stack', label: 'Tech Stack' },
+]
+
 export default function UserHome({ onSelect, onCreateProfile }) {
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
@@ -39,6 +45,9 @@ export default function UserHome({ onSelect, onCreateProfile }) {
   const [stats, setStats] = useState(null)
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState(null)
+  const [skillFreq, setSkillFreq] = useState(null)
+  const [skillField, setSkillField] = useState('required')
+  const [skillError, setSkillError] = useState(null)
 
   const fetchProfiles = () => {
     getProfiles()
@@ -63,6 +72,14 @@ export default function UserHome({ onSelect, onCreateProfile }) {
       .catch(() => setStatsError('Could not load stats'))
       .finally(() => setStatsLoading(false))
   }, [win, activeProfile])
+
+  useEffect(() => {
+    if (!activeProfile) return
+    setSkillError(null)
+    getSkillFrequency()
+      .then(setSkillFreq)
+      .catch(() => setSkillError('Could not load skill data'))
+  }, [activeProfile])
 
   if (!profilesLoaded) {
     return <p className="text-xs text-space-dim">Loading…</p>
@@ -97,6 +114,15 @@ export default function UserHome({ onSelect, onCreateProfile }) {
         .map(([key, label]) => ({ key, name: label, value: stats.by_state[key] ?? 0 }))
         .filter((d) => d.value > 0)
     : []
+
+  const skillRows = skillFreq ? (skillFreq[skillField] ?? []) : []
+  const skillBars = skillRows.slice(0, 12).map((row) => ({
+    skill: row.skill,
+    count: row.count,
+    pct: skillFreq.total_jobs
+      ? Math.round((row.count / skillFreq.total_jobs) * 100)
+      : 0,
+  }))
 
   return (
     <div className="flex flex-col gap-5">
@@ -186,6 +212,49 @@ export default function UserHome({ onSelect, onCreateProfile }) {
                   ))}
                 </div>
               </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-space-dim mb-2">In-Demand Skills</p>
+            <div className="flex gap-1.5 mb-2">
+              {SKILL_FIELDS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setSkillField(key)}
+                  className={`px-3 py-1 rounded text-xs font-semibold transition-colors
+                    ${skillField === key ? 'bg-purple-600 text-white' : 'text-space-dim hover:text-space-text border border-space-border'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {skillError && <p className="text-xs text-space-dim/60">{skillError}</p>}
+            {!skillError && skillFreq && skillBars.length === 0 && (
+              <p className="text-xs text-space-dim">No skill data yet.</p>
+            )}
+            {!skillError && skillFreq && skillBars.length > 0 && (
+              <ResponsiveContainer width="100%" height={Math.max(160, skillBars.length * 22)}>
+                <BarChart
+                  layout="vertical"
+                  data={skillBars}
+                  margin={{ top: 4, right: 12, bottom: 0, left: 8 }}
+                >
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: '#8888aa' }} />
+                  <YAxis
+                    type="category"
+                    dataKey="skill"
+                    width={90}
+                    tick={{ fontSize: 10, fill: '#8888aa' }}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
+                    labelStyle={{ color: '#c8c8e8' }}
+                    formatter={(value, _name, item) => [`${value} (${item.payload.pct}% of postings)`, 'Jobs']}
+                  />
+                  <Bar dataKey="count" fill="#7c3aed" radius={[0, 3, 3, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </div>
         </>
