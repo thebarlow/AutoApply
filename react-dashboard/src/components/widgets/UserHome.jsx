@@ -309,7 +309,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                         onClick={(_data, index) => handleSliceClick(pieSlices[index])}
                       >
                         {pieSlices.map((s) => (
-                          <Cell key={s.skill} fill={s.color} cursor={s.isOther ? 'default' : 'pointer'} />
+                          <Cell key={s.isOther ? '__other__' : s.skill} fill={s.color} cursor={s.isOther ? 'default' : 'pointer'} />
                         ))}
                       </Pie>
                       <Tooltip
@@ -320,7 +320,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                   <div className="flex flex-col gap-1">
                     {pieSlices.map((s) => (
                       <button
-                        key={s.skill}
+                        key={s.isOther ? '__other__' : s.skill}
                         onClick={() => handleSliceClick(s)}
                         disabled={s.isOther}
                         className={`flex items-center gap-1.5 text-left ${s.isOther ? 'cursor-default' : 'hover:opacity-80'} transition-opacity`}
@@ -340,7 +340,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                     margin={{ top: 4, right: 12, bottom: 0, left: 8 }}
                   >
                     <defs>
-                      <filter id="skill-bar-raise" x="-20%" y="-20%" width="140%" height="140%">
+                      <filter id="skill-bar-raise" x="-50%" y="-50%" width="200%" height="200%">
                         <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={ACTIVE_OUTLINE} floodOpacity="0.9" />
                       </filter>
                     </defs>
