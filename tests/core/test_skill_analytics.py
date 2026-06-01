@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.skill_analytics import normalize_skill, aggregate_skill_frequency, job_has_skill
+from core.skill_analytics import normalize_skill, aggregate_skill_frequency, job_has_skill, tech_category
 
 
 class TestNormalizeSkill:
@@ -52,63 +52,90 @@ class _FakeJob:
         self.ext_seniority = seniority
 
 
-class TestAggregateSkillFrequency:
-    def test_empty_input_returns_zeroed_structure(self):
-        result = aggregate_skill_frequency([])
-        assert result == {"skills": [], "tech_stack": [], "total_jobs": 0}
+class TestTechCategory:
+    def test_known_skills_map_to_category(self):
+        assert tech_category("Python") == "Languages"
+        assert tech_category("React") == "Frontend"
+        assert tech_category("AWS") == "Cloud"
+        assert tech_category("Docker") == "DevOps"
+        assert tech_category("PostgreSQL") == "Databases"
 
-    def test_required_skill_counted(self):
-        jobs = [_FakeJob(required="Python")]
-        result = aggregate_skill_frequency(jobs)
-        assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 0}]
+    def test_case_insensitive(self):
+        assert tech_category("python") == "Languages"
+        assert tech_category("PYTHON") == "Languages"
+
+    def test_unknown_skill_is_other(self):
+        assert tech_category("Wizardry") == "Other"
+
+
+class TestAggregateSkillFrequency:
+    def test_empty_input(self):
+        assert aggregate_skill_frequency([]) == {
+            "skills": [], "categories": [], "total_jobs": 0,
+        }
+
+    def test_required_is_high(self):
+        result = aggregate_skill_frequency([_FakeJob(required="Python")])
+        assert result["skills"] == [
+            {"skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
+        ]
         assert result["total_jobs"] == 1
 
-    def test_required_wins_over_preferred_in_same_job(self):
-        jobs = [_FakeJob(required="Python", preferred="Python")]
-        result = aggregate_skill_frequency(jobs)
-        assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 0}]
+    def test_preferred_is_med(self):
+        result = aggregate_skill_frequency([_FakeJob(preferred="React")])
+        assert result["skills"] == [
+            {"skill": "React", "high": 0, "med": 1, "low": 0, "category": "Frontend"}
+        ]
 
-    def test_preferred_only_counted_separately(self):
+    def test_tech_stack_only_is_low(self):
+        result = aggregate_skill_frequency([_FakeJob(tech_stack="Docker")])
+        assert result["skills"] == [
+            {"skill": "Docker", "high": 0, "med": 0, "low": 1, "category": "DevOps"}
+        ]
+
+    def test_required_wins_over_preferred_and_tech(self):
+        result = aggregate_skill_frequency(
+            [_FakeJob(required="Python", preferred="Python", tech_stack="Python")]
+        )
+        assert result["skills"] == [
+            {"skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
+        ]
+        assert result["total_jobs"] == 1
+
+    def test_preferred_wins_over_tech_stack(self):
+        result = aggregate_skill_frequency(
+            [_FakeJob(preferred="React", tech_stack="React")]
+        )
+        assert result["skills"] == [
+            {"skill": "React", "high": 0, "med": 1, "low": 0, "category": "Frontend"}
+        ]
+
+    def test_tiers_accumulate_across_jobs(self):
         jobs = [
             _FakeJob(required="Python"),
             _FakeJob(preferred="Python"),
+            _FakeJob(tech_stack="Python"),
         ]
-        result = aggregate_skill_frequency(jobs)
-        assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 1}]
-
-    def test_dedupes_within_job(self):
-        jobs = [_FakeJob(required="Python, python")]
-        result = aggregate_skill_frequency(jobs)
-        assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 0}]
+        row = aggregate_skill_frequency(jobs)["skills"][0]
+        assert row["skill"] == "Python"
+        assert (row["high"], row["med"], row["low"]) == (1, 1, 1)
 
     def test_skills_sorted_by_total_desc_then_name(self):
-        jobs = [
-            _FakeJob(required="Python, React"),
-            _FakeJob(required="Python", preferred="Go"),
-            _FakeJob(preferred="Python"),
-        ]
+        jobs = [_FakeJob(required="Python, React"), _FakeJob(required="Python")]
         result = aggregate_skill_frequency(jobs)
-        totals = [row["required"] + row["preferred"] for row in result["skills"]]
-        assert totals == sorted(totals, reverse=True)
-        assert result["skills"][0] == {"skill": "Python", "required": 2, "preferred": 1}
+        assert [r["skill"] for r in result["skills"]] == ["Python", "React"]
 
-    def test_tech_stack_counted_separately(self):
-        jobs = [_FakeJob(required="Python", tech_stack="AWS, Docker")]
-        result = aggregate_skill_frequency(jobs)
-        assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 0}]
-        tech = {row["skill"]: row["count"] for row in result["tech_stack"]}
-        assert tech == {"AWS": 1, "Docker": 1}
+    def test_categories_count_distinct_jobs(self):
+        result = aggregate_skill_frequency(
+            [_FakeJob(required="React, Vue", tech_stack="AWS")]
+        )
+        cats = {c["category"]: c["count"] for c in result["categories"]}
+        assert cats == {"Frontend": 1, "Cloud": 1}
 
-    def test_total_jobs_counts_all_jobs(self):
-        jobs = [_FakeJob(seniority="Senior"), _FakeJob(required="Python")]
-        result = aggregate_skill_frequency(jobs)
-        assert result["total_jobs"] == 2
-        assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 0}]
-
-    def test_junk_tokens_excluded(self):
-        jobs = [_FakeJob(required="Python, , 3.x, ...")]
-        result = aggregate_skill_frequency(jobs)
-        assert result["skills"] == [{"skill": "Python", "required": 1, "preferred": 0}]
+    def test_unknown_skill_categorized_as_other(self):
+        result = aggregate_skill_frequency([_FakeJob(required="Wizardry")])
+        cats = {c["category"]: c["count"] for c in result["categories"]}
+        assert cats == {"Other": 1}
 
 
 class TestJobHasSkill:

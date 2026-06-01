@@ -43,6 +43,68 @@ _VERSION_TAIL = re.compile(r"\s+v?\d+(\.\d+|\.x)*$", re.IGNORECASE)
 # Surrounding punctuation/whitespace to strip from each end.
 _EDGE_PUNCT = re.compile(r"^[\s.,;:/|()\[\]-]+|[\s.,;:/|()\[\]-]+$")
 
+# Curated tech/skill -> category map. Keys are lowercased canonical names
+# (as produced by normalize_skill, then .lower()). Unmapped -> "Other".
+_TECH_CATEGORIES: dict[str, str] = {
+    # Languages
+    "python": "Languages", "java": "Languages", "javascript": "Languages",
+    "typescript": "Languages", "c#": "Languages", "c++": "Languages", "c": "Languages",
+    "go": "Languages", "rust": "Languages", "ruby": "Languages", "php": "Languages",
+    "swift": "Languages", "kotlin": "Languages", "scala": "Languages", "r": "Languages",
+    "perl": "Languages", "objective-c": "Languages", "dart": "Languages",
+    "elixir": "Languages", "haskell": "Languages", "lua": "Languages", "bash": "Languages",
+    # Frontend
+    "react": "Frontend", "angular": "Frontend", "vue": "Frontend", "svelte": "Frontend",
+    "next.js": "Frontend", "nuxt": "Frontend", "redux": "Frontend", "tailwind": "Frontend",
+    "css": "Frontend", "html": "Frontend", "sass": "Frontend", "less": "Frontend",
+    "webpack": "Frontend", "vite": "Frontend", "jquery": "Frontend", "ember": "Frontend",
+    "bootstrap": "Frontend", "storybook": "Frontend",
+    # Backend
+    "node.js": "Backend", "express": "Backend", "django": "Backend", "flask": "Backend",
+    "fastapi": "Backend", "spring": "Backend", "spring boot": "Backend", "rails": "Backend",
+    "ruby on rails": "Backend", "laravel": "Backend", ".net": "Backend",
+    "asp.net": "Backend", "nestjs": "Backend", "graphql": "Backend", "rest": "Backend",
+    "grpc": "Backend", "symfony": "Backend", "phoenix": "Backend",
+    # Cloud
+    "aws": "Cloud", "azure": "Cloud", "gcp": "Cloud", "google cloud": "Cloud",
+    "heroku": "Cloud", "digitalocean": "Cloud", "cloudflare": "Cloud", "lambda": "Cloud",
+    "s3": "Cloud", "ec2": "Cloud", "cloudformation": "Cloud", "serverless": "Cloud",
+    # DevOps
+    "docker": "DevOps", "kubernetes": "DevOps", "terraform": "DevOps", "ansible": "DevOps",
+    "jenkins": "DevOps", "github actions": "DevOps", "gitlab ci": "DevOps",
+    "circleci": "DevOps", "ci/cd": "DevOps", "helm": "DevOps", "prometheus": "DevOps",
+    "grafana": "DevOps", "nginx": "DevOps", "puppet": "DevOps", "chef": "DevOps",
+    "datadog": "DevOps", "splunk": "DevOps",
+    # Databases
+    "postgresql": "Databases", "mysql": "Databases", "mongodb": "Databases",
+    "redis": "Databases", "sqlite": "Databases", "elasticsearch": "Databases",
+    "cassandra": "Databases", "dynamodb": "Databases", "oracle": "Databases",
+    "sql server": "Databases", "mariadb": "Databases", "neo4j": "Databases",
+    "sql": "Databases", "snowflake": "Databases", "bigquery": "Databases",
+    # Data/ML
+    "pandas": "Data/ML", "numpy": "Data/ML", "tensorflow": "Data/ML", "pytorch": "Data/ML",
+    "scikit-learn": "Data/ML", "spark": "Data/ML", "hadoop": "Data/ML", "kafka": "Data/ML",
+    "airflow": "Data/ML", "tableau": "Data/ML", "power bi": "Data/ML",
+    "machine learning": "Data/ML", "deep learning": "Data/ML", "nlp": "Data/ML",
+    "keras": "Data/ML", "spacy": "Data/ML", "opencv": "Data/ML", "dbt": "Data/ML",
+    "databricks": "Data/ML",
+    # Mobile
+    "android": "Mobile", "ios": "Mobile", "react native": "Mobile", "flutter": "Mobile",
+    "swiftui": "Mobile", "xamarin": "Mobile", "ionic": "Mobile",
+}
+
+
+def tech_category(skill: str) -> str:
+    """Return the curated category for a canonical skill name, or 'Other'.
+
+    Args:
+        skill: A canonical skill display name (as produced by normalize_skill).
+
+    Returns:
+        The category label, or "Other" if the skill is not in the curated map.
+    """
+    return _TECH_CATEGORIES.get(skill.lower(), "Other")
+
 
 def normalize_skill(raw: str) -> str | None:
     """Normalize a raw skill token to a canonical display name.
@@ -88,18 +150,20 @@ def normalize_skill(raw: str) -> str | None:
 
 class SkillRow(TypedDict):
     skill: str
+    high: int
+    med: int
+    low: int
+    category: str
+
+
+class CategoryRow(TypedDict):
+    category: str
     count: int
 
 
-class CombinedSkillRow(TypedDict):
-    skill: str
-    required: int
-    preferred: int
-
-
 class SkillFrequencyResult(TypedDict):
-    skills: list[CombinedSkillRow]
-    tech_stack: list[SkillRow]
+    skills: list[SkillRow]
+    categories: list[CategoryRow]
     total_jobs: int
 
 
@@ -133,28 +197,27 @@ def job_has_skill(job: object, canonical_skill: str) -> bool:
 
 
 def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
-    """Count distinct postings mentioning each skill.
+    """Aggregate skills into one importance-tiered space, plus category counts.
 
-    ``skills`` combines required and preferred into one row per skill, where
-    ``required`` counts jobs listing the skill in ``ext_required_skills`` and
-    ``preferred`` counts jobs listing it in ``ext_preferred_skills`` but NOT in
-    required ("required wins"), so ``required + preferred`` is the distinct-job
-    total. ``tech_stack`` counts distinct jobs per skill in ``ext_tech_stack``.
-    ``total_jobs`` is the count of all jobs passed in (caller filters to
-    extracted jobs) and is the denominator for "% of postings".
+    For each job, a skill's tier is the strongest field it appears in:
+    High (``ext_required_skills``) > Med (``ext_preferred_skills``) >
+    Low (``ext_tech_stack`` only). A skill counts once per job at its strongest
+    tier, so ``high + med + low`` for a skill is the number of distinct jobs
+    mentioning it in any field. ``categories`` counts distinct jobs per
+    category (via ``tech_category``). ``total_jobs`` is all jobs passed in.
 
     Args:
         jobs: Iterable of job objects with ``ext_required_skills``,
             ``ext_preferred_skills``, and ``ext_tech_stack`` string attributes.
 
     Returns:
-        ``SkillFrequencyResult`` with ``skills`` (sorted by required+preferred
-        descending, then skill name ascending), ``tech_stack`` (sorted by count
-        descending, then name ascending), and ``total_jobs``.
+        ``SkillFrequencyResult`` with ``skills`` (sorted by total desc, then
+        name asc), ``categories`` (count desc, then name asc), and ``total_jobs``.
     """
-    required_counts: dict[str, int] = defaultdict(int)
-    preferred_counts: dict[str, int] = defaultdict(int)
-    tech_counts: dict[str, int] = defaultdict(int)
+    high: dict[str, int] = defaultdict(int)
+    med: dict[str, int] = defaultdict(int)
+    low: dict[str, int] = defaultdict(int)
+    category_counts: dict[str, int] = defaultdict(int)
     total_jobs = 0
 
     for job in jobs:
@@ -162,23 +225,34 @@ def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
         req = _normalized_skills(getattr(job, "ext_required_skills", None))
         pref = _normalized_skills(getattr(job, "ext_preferred_skills", None))
         tech = _normalized_skills(getattr(job, "ext_tech_stack", None))
-        for skill in req:
-            required_counts[skill] += 1
-        for skill in pref - req:  # required wins: skip skills already required
-            preferred_counts[skill] += 1
-        for skill in tech:
-            tech_counts[skill] += 1
+        all_skills = req | pref | tech
+        for skill in all_skills:
+            if skill in req:
+                high[skill] += 1
+            elif skill in pref:
+                med[skill] += 1
+            else:
+                low[skill] += 1
+        for category in {tech_category(s) for s in all_skills}:
+            category_counts[category] += 1
 
     skills = [
-        {"skill": skill, "required": required_counts.get(skill, 0),
-         "preferred": preferred_counts.get(skill, 0)}
+        {
+            "skill": skill,
+            "high": high.get(skill, 0),
+            "med": med.get(skill, 0),
+            "low": low.get(skill, 0),
+            "category": tech_category(skill),
+        }
         for skill in sorted(
-            set(required_counts) | set(preferred_counts),
-            key=lambda s: (-(required_counts.get(s, 0) + preferred_counts.get(s, 0)), s),
+            set(high) | set(med) | set(low),
+            key=lambda s: (-(high.get(s, 0) + med.get(s, 0) + low.get(s, 0)), s),
         )
     ]
-    tech_stack = [
-        {"skill": skill, "count": count}
-        for skill, count in sorted(tech_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    categories = [
+        {"category": category, "count": count}
+        for category, count in sorted(
+            category_counts.items(), key=lambda kv: (-kv[1], kv[0])
+        )
     ]
-    return {"skills": skills, "tech_stack": tech_stack, "total_jobs": total_jobs}
+    return {"skills": skills, "categories": categories, "total_jobs": total_jobs}
