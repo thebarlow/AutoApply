@@ -121,6 +121,8 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter }) {
   const totalJobs = skillFreq?.total_jobs ?? 0
   const isTechStack = skillField === 'tech_stack'
   const rawRows = skillFreq ? (isTechStack ? skillFreq.tech_stack : skillFreq.skills) : []
+  // API returns skills/tech_stack pre-sorted by frequency desc, so slicing the
+  // first 12 yields the top skills without a client-side sort.
   const skillBars = rawRows.slice(0, 12).map((row) => {
     const total = isTechStack ? row.count : row.required + row.preferred
     return {
@@ -267,7 +269,10 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter }) {
                   <Tooltip
                     contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
                     labelStyle={{ color: '#c8c8e8' }}
-                    formatter={(value, name) => [value, name]}
+                    formatter={(value, name, item) => [
+                      `${value} (${item.payload.pct}% of postings)`,
+                      name,
+                    ]}
                   />
                   {isTechStack ? (
                     <Bar
