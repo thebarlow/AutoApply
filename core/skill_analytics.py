@@ -91,19 +91,16 @@ class SkillRow(TypedDict):
     count: int
 
 
+class CombinedSkillRow(TypedDict):
+    skill: str
+    required: int
+    preferred: int
+
+
 class SkillFrequencyResult(TypedDict):
-    required: list[SkillRow]
-    preferred: list[SkillRow]
+    skills: list[CombinedSkillRow]
     tech_stack: list[SkillRow]
     total_jobs: int
-
-
-# Maps the output key to the Job attribute holding that field's raw string.
-_FIELDS: tuple[tuple[str, str], ...] = (
-    ("required", "ext_required_skills"),
-    ("preferred", "ext_preferred_skills"),
-    ("tech_stack", "ext_tech_stack"),
-)
 
 
 def _normalized_skills(raw: str | None) -> set[str]:
@@ -117,44 +114,52 @@ def _normalized_skills(raw: str | None) -> set[str]:
 
 
 def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
-    """Count distinct postings mentioning each skill, per extraction field.
+    """Count distinct postings mentioning each skill.
 
-    Each posting contributes at most one to a skill's count per field (deduped
-    within the job). ``total_jobs`` is the count of all jobs passed in (the
-    caller is responsible for filtering to extracted jobs) and serves as the
-    denominator for "% of postings".
+    ``skills`` combines required and preferred into one row per skill, where
+    ``required`` counts jobs listing the skill in ``ext_required_skills`` and
+    ``preferred`` counts jobs listing it in ``ext_preferred_skills`` but NOT in
+    required ("required wins"), so ``required + preferred`` is the distinct-job
+    total. ``tech_stack`` counts distinct jobs per skill in ``ext_tech_stack``.
+    ``total_jobs`` is the count of all jobs passed in (caller filters to
+    extracted jobs) and is the denominator for "% of postings".
 
     Args:
         jobs: Iterable of job objects with ``ext_required_skills``,
             ``ext_preferred_skills``, and ``ext_tech_stack`` string attributes.
 
     Returns:
-        Dict with keys ``required``, ``preferred``, ``tech_stack`` (each a list
-        of ``{"skill": str, "count": int}`` sorted by count descending, then
-        by skill name ascending for ties), and ``total_jobs`` (int).
+        ``SkillFrequencyResult`` with ``skills`` (sorted by required+preferred
+        descending, then skill name ascending), ``tech_stack`` (sorted by count
+        descending, then name ascending), and ``total_jobs``.
     """
-    counters: dict[str, dict[str, int]] = {
-        key: defaultdict(int) for key, _ in _FIELDS
-    }
+    required_counts: dict[str, int] = defaultdict(int)
+    preferred_counts: dict[str, int] = defaultdict(int)
+    tech_counts: dict[str, int] = defaultdict(int)
     total_jobs = 0
 
     for job in jobs:
         total_jobs += 1
-        for key, attr in _FIELDS:
-            for skill in _normalized_skills(getattr(job, attr, None)):
-                counters[key][skill] += 1
+        req = _normalized_skills(getattr(job, "ext_required_skills", None))
+        pref = _normalized_skills(getattr(job, "ext_preferred_skills", None))
+        tech = _normalized_skills(getattr(job, "ext_tech_stack", None))
+        for skill in req:
+            required_counts[skill] += 1
+        for skill in pref - req:  # required wins: skip skills already required
+            preferred_counts[skill] += 1
+        for skill in tech:
+            tech_counts[skill] += 1
 
-    def _sorted(counter: dict[str, int]) -> list[dict]:
-        return [
-            {"skill": skill, "count": count}
-            for skill, count in sorted(
-                counter.items(), key=lambda kv: (-kv[1], kv[0])
-            )
-        ]
-
-    return {
-        "required": _sorted(counters["required"]),
-        "preferred": _sorted(counters["preferred"]),
-        "tech_stack": _sorted(counters["tech_stack"]),
-        "total_jobs": total_jobs,
-    }
+    skills = [
+        {"skill": skill, "required": required_counts.get(skill, 0),
+         "preferred": preferred_counts.get(skill, 0)}
+        for skill in sorted(
+            set(required_counts) | set(preferred_counts),
+            key=lambda s: (-(required_counts.get(s, 0) + preferred_counts.get(s, 0)), s),
+        )
+    ]
+    tech_stack = [
+        {"skill": skill, "count": count}
+        for skill, count in sorted(tech_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    ]
+    return {"skills": skills, "tech_stack": tech_stack, "total_jobs": total_jobs}
