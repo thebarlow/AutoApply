@@ -76,6 +76,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
   useEffect(() => {
     if (!activeProfile) return
     setSkillError(null)
+    setSkillFreq(null)
     getSkillFrequency()
       .then(setSkillFreq)
       .catch(() => setSkillError('Could not load skill data'))
