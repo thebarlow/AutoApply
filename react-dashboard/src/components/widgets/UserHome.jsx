@@ -39,7 +39,7 @@ const SKILL_FIELDS = [
 const REQUIRED_COLOR = '#7c3aed'
 const PREFERRED_COLOR = '#3b82f6'
 
-export default function UserHome({ onSelect, onCreateProfile, onSkillFilter }) {
+export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, activeSkill }) {
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [showSwitchUser, setShowSwitchUser] = useState(false)

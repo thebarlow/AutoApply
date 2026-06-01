@@ -1284,7 +1284,7 @@ function CreateProfile({ onBack, onCreated }) {
 
 const TABS = ['User', 'Preview']
 
-export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {}, jobActionsInFlight = new Set(), onJobDeleted, onSkillFilter }) {
+export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {}, jobActionsInFlight = new Set(), onJobDeleted, onSkillFilter, activeSkill }) {
   const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
   const [detailProfileId, setDetailProfileId] = useState(null)
 
@@ -1357,6 +1357,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
                 onSelect={(id) => { setDetailProfileId(id); setView('profileDetail') }}
                 onCreateProfile={() => setView('createProfile')}
                 onSkillFilter={onSkillFilter}
+                activeSkill={activeSkill}
               />
             )}
 

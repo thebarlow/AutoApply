@@ -178,6 +178,7 @@ export default function App() {
                 jobActionsInFlight={selectedJob ? (processingActions[selectedJob.job_key] || new Set()) : new Set()}
                 onJobDeleted={handleJobDeleted}
                 onSkillFilter={({ skill, jobKeys }) => setSkillFilter({ skill, jobKeys: new Set(jobKeys) })}
+                activeSkill={skillFilter?.skill ?? null}
               />
             </div>
           </Dashboard>
