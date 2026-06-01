@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { getProfiles, getStats, getSkillFrequency } from '../../api'
+import { getProfiles, getStats, getSkillFrequency, getJobsForSkill } from '../../api'
 import ProfileCards from './ProfileCards'
 
 const WINDOWS = [
@@ -32,12 +32,14 @@ const STATE_COLORS = {
 }
 
 const SKILL_FIELDS = [
-  { key: 'required', label: 'Required' },
-  { key: 'preferred', label: 'Preferred' },
+  { key: 'skills', label: 'Required / Preferred' },
   { key: 'tech_stack', label: 'Tech Stack' },
 ]
 
-export default function UserHome({ onSelect, onCreateProfile }) {
+const REQUIRED_COLOR = '#7c3aed'
+const PREFERRED_COLOR = '#3b82f6'
+
+export default function UserHome({ onSelect, onCreateProfile, onSkillFilter }) {
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [showSwitchUser, setShowSwitchUser] = useState(false)
@@ -46,7 +48,7 @@ export default function UserHome({ onSelect, onCreateProfile }) {
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState(null)
   const [skillFreq, setSkillFreq] = useState(null)
-  const [skillField, setSkillField] = useState('required')
+  const [skillField, setSkillField] = useState('skills')
   const [skillError, setSkillError] = useState(null)
 
   const fetchProfiles = () => {
@@ -116,14 +118,28 @@ export default function UserHome({ onSelect, onCreateProfile }) {
         .filter((d) => d.value > 0)
     : []
 
-  const skillRows = skillFreq ? (skillFreq[skillField] ?? []) : []
-  const skillBars = skillRows.slice(0, 12).map((row) => ({
-    skill: row.skill,
-    count: row.count,
-    pct: skillFreq.total_jobs
-      ? Math.round((row.count / skillFreq.total_jobs) * 100)
-      : 0,
-  }))
+  const totalJobs = skillFreq?.total_jobs ?? 0
+  const isTechStack = skillField === 'tech_stack'
+  const rawRows = skillFreq ? (isTechStack ? skillFreq.tech_stack : skillFreq.skills) : []
+  const skillBars = rawRows.slice(0, 12).map((row) => {
+    const total = isTechStack ? row.count : row.required + row.preferred
+    return {
+      skill: row.skill,
+      required: isTechStack ? 0 : row.required,
+      preferred: isTechStack ? 0 : row.preferred,
+      count: isTechStack ? row.count : 0,
+      total,
+      pct: totalJobs ? Math.round((total / totalJobs) * 100) : 0,
+    }
+  })
+
+  const handleSkillBarClick = (payload) => {
+    const skill = payload?.skill
+    if (!skill || !onSkillFilter) return
+    getJobsForSkill(skill)
+      .then(({ job_keys }) => onSkillFilter({ skill, jobKeys: job_keys }))
+      .catch(() => setSkillError('Could not load jobs for skill'))
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -251,9 +267,39 @@ export default function UserHome({ onSelect, onCreateProfile }) {
                   <Tooltip
                     contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
                     labelStyle={{ color: '#c8c8e8' }}
-                    formatter={(value, _name, item) => [`${value} (${item.payload.pct}% of postings)`, 'Jobs']}
+                    formatter={(value, name) => [value, name]}
                   />
-                  <Bar dataKey="count" fill="#7c3aed" radius={[0, 3, 3, 0]} />
+                  {isTechStack ? (
+                    <Bar
+                      dataKey="count"
+                      name="Jobs"
+                      fill={REQUIRED_COLOR}
+                      radius={[0, 3, 3, 0]}
+                      cursor="pointer"
+                      onClick={handleSkillBarClick}
+                    />
+                  ) : (
+                    <>
+                      <Legend wrapperStyle={{ fontSize: 11, color: '#8888aa' }} />
+                      <Bar
+                        dataKey="required"
+                        name="Required"
+                        stackId="skill"
+                        fill={REQUIRED_COLOR}
+                        cursor="pointer"
+                        onClick={handleSkillBarClick}
+                      />
+                      <Bar
+                        dataKey="preferred"
+                        name="Preferred"
+                        stackId="skill"
+                        fill={PREFERRED_COLOR}
+                        radius={[0, 3, 3, 0]}
+                        cursor="pointer"
+                        onClick={handleSkillBarClick}
+                      />
+                    </>
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             )}
