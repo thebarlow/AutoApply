@@ -10,7 +10,8 @@ core/
 ├── user.py         # User entity; profile load/save, prompt resolution, degree/skills helpers
 ├── llm.py          # LLM client construction and model resolution
 ├── utils.py        # Misc helpers (sanitization, path utilities, PDF rendering)
-└── session_cost.py # Thread-safe accumulator for per-session LLM spend (from usage.cost)
+├── session_cost.py # Thread-safe accumulator for per-session LLM spend (from usage.cost)
+└── skill_analytics.py # Skill token normalization + frequency aggregation across jobs (no LLM)
 ```
 
 **Note:** `core/scorer.py` and `core/profile_parser.py` were deleted — stale `.pyc` files remain in `__pycache__/` and can be ignored. Scoring logic moved into `job.py`.
@@ -40,6 +41,8 @@ core/
 | LLM client from user profile config | `llm.py` → `get_client_for_profile()` |
 | Single-turn LLM call helper | `llm.py` → `call_llm()` |
 | Session LLM cost tracking | `session_cost.py` |
+| Normalizing a raw skill token to canonical form | `skill_analytics.py` → `normalize_skill()` |
+| Counting skill frequency across jobs (per extraction field) | `skill_analytics.py` → `aggregate_skill_frequency()` |
 | Shared utilities | `utils.py` |
 
 ## LLM Integration

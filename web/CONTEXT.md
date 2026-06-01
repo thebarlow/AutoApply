@@ -20,7 +20,7 @@ web/
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
-    ├── stats.py             # GET /api/stats (pipeline activity by time window)
+    ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency
     ├── shutdown.py          # POST /api/shutdown (graceful or immediate server exit)
     ├── tray.py              # Tray app integration endpoints
     ├── events.py            # SSE endpoint (/api/events)
@@ -34,6 +34,7 @@ web/
 | Job CRUD, scoring, resume/cover generation | `routers/jobs.py` |
 | Ingesting a job from the browser extension or triggering API scrapers | `routers/scraper.py` |
 | Pipeline activity stats by time window | `routers/stats.py` |
+| Skill frequency across extracted jobs | `routers/stats.py` (delegates to `core/skill_analytics.py`) |
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Server shutdown (immediate or wait for LLM) | `routers/shutdown.py` |
 | LLM provider/model/key config | `routers/config.py` |
@@ -67,6 +68,7 @@ web/
 | `POST` | `/api/scraper/stage-job` | Ingest job from browser extension or scraper |
 | `POST` | `/api/scraper/run` | Trigger background run of enabled API scrapers |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
+| `GET` | `/api/skill-frequency` | Distinct-job skill counts per field (required/preferred/tech_stack) across all extracted jobs; no window |
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
 | `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
 | `GET/PUT` | `/api/config/{key}` | Config key-value store |
