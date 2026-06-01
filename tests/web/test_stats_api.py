@@ -122,3 +122,59 @@ def test_stats_empty_db_returns_empty_bars(client):
     assert r.status_code == 200
     data = r.json()
     assert data["bars"] == []
+
+
+def _make_extracted_job(db, key, required="", preferred="", tech_stack="",
+                        seniority=""):
+    job = Job(
+        job_key=key,
+        source="test",
+        url=f"https://example.com/{key}",
+        state="new",
+        ext_required_skills=required,
+        ext_preferred_skills=preferred,
+        ext_tech_stack=tech_stack,
+        ext_seniority=seniority,
+    )
+    db.add(job)
+    db.flush()
+    return job
+
+
+def test_skill_frequency_returns_three_lists_and_total(client, db_session):
+    _make_extracted_job(db_session, "e1", required="Python, React",
+                        preferred="Docker", tech_stack="AWS")
+    _make_extracted_job(db_session, "e2", required="Python", seniority="Senior")
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency")
+    assert r.status_code == 200
+    data = r.json()
+    assert set(data) == {"required", "preferred", "tech_stack", "total_jobs"}
+    assert data["total_jobs"] == 2
+    required = {row["skill"]: row["count"] for row in data["required"]}
+    assert required["Python"] == 2
+    assert required["React"] == 1
+
+
+def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
+    # Job with no extraction data must not count toward total_jobs.
+    _make_extracted_job(db_session, "x1", required="Python")
+    _make_job(db_session, "x2", datetime.now(timezone.utc).isoformat())
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency")
+    data = r.json()
+    assert data["total_jobs"] == 1
+
+
+def test_skill_frequency_empty_db(client):
+    r = client.get("/api/skill-frequency")
+    assert r.status_code == 200
+    data = r.json()
+    assert data == {
+        "required": [],
+        "preferred": [],
+        "tech_stack": [],
+        "total_jobs": 0,
+    }

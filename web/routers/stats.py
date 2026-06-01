@@ -4,9 +4,11 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from core.job import Job
+from core.skill_analytics import aggregate_skill_frequency
 from core.session_cost import get_session_start
 from db.database import get_db
 
@@ -98,3 +100,27 @@ def get_stats(
     by_state = {s: db.query(Job).filter(Job.state == s).count() for s in _ALL_STATES}
 
     return {"bars": bars, "by_state": by_state}
+
+
+@router.get("/skill-frequency")
+def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
+    """Skill frequency across all jobs that have extraction data.
+
+    Not window-filtered. A job counts as extracted when it has required
+    skills or a seniority value (mirrors Job.to_dict's extraction check).
+    """
+    jobs = (
+        db.query(Job)
+        .filter(
+            or_(
+                Job.ext_required_skills.isnot(None),
+                Job.ext_seniority.isnot(None),
+            )
+        )
+        .all()
+    )
+    # Treat empty strings as "no extraction" too (DB may store "" not NULL).
+    extracted = [
+        j for j in jobs if (j.ext_required_skills or "") or (j.ext_seniority or "")
+    ]
+    return aggregate_skill_frequency(extracted)
