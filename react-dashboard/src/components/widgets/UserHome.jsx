@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, Sector,
 } from 'recharts'
 import { getProfiles, getStats, getSkillFrequency, getJobsForSkill } from '../../api'
 import ProfileCards from './ProfileCards'
@@ -38,6 +38,27 @@ const SKILL_FIELDS = [
 
 const REQUIRED_COLOR = '#7c3aed'
 const PREFERRED_COLOR = '#3b82f6'
+const TECH_COLORS = ['#7c3aed', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+const OTHER_COLOR = '#555'
+const ACTIVE_OUTLINE = '#e9d5ff'
+
+// Renders the selected pie slice enlarged + outlined (the "raised / pulled-out" effect).
+function renderRaisedSlice(props) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
+  return (
+    <Sector
+      cx={cx}
+      cy={cy}
+      innerRadius={innerRadius}
+      outerRadius={outerRadius + 6}
+      startAngle={startAngle}
+      endAngle={endAngle}
+      fill={fill}
+      stroke={ACTIVE_OUTLINE}
+      strokeWidth={2}
+    />
+  )
+}
 
 export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, activeSkill }) {
   const [activeProfile, setActiveProfile] = useState(null)
@@ -142,6 +163,23 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
     getJobsForSkill(skill)
       .then(({ job_keys }) => onSkillFilter({ skill, jobKeys: job_keys }))
       .catch(() => setSkillError('Could not load jobs for skill'))
+  }
+
+  // Tech Stack pie: top 8 skills + an aggregated, non-clickable "Other" slice.
+  const techList = skillFreq?.tech_stack ?? []
+  const otherCount = techList.slice(8).reduce((sum, r) => sum + r.count, 0)
+  const pieSlices = [
+    ...techList.slice(0, 8).map((r, i) => ({
+      skill: r.skill, value: r.count, color: TECH_COLORS[i % TECH_COLORS.length], isOther: false,
+    })),
+    ...(otherCount > 0 ? [{ skill: 'Other', value: otherCount, color: OTHER_COLOR, isOther: true }] : []),
+  ]
+  const activeSliceIndex = pieSlices.findIndex((s) => !s.isOther && s.skill === activeSkill)
+  const hasSkillData = isTechStack ? pieSlices.length > 0 : skillBars.length > 0
+
+  const handleSliceClick = (slice) => {
+    if (!slice || slice.isOther) return
+    handleSkillBarClick({ skill: slice.skill })
   }
 
   return (
@@ -250,64 +288,104 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
               ))}
             </div>
             {skillError && <p className="text-xs text-space-dim/60">{skillError}</p>}
-            {!skillError && skillFreq && skillBars.length === 0 && (
+            {!skillError && skillFreq && !hasSkillData && (
               <p className="text-xs text-space-dim">No skill data yet.</p>
             )}
-            {!skillError && skillFreq && skillBars.length > 0 && (
-              <ResponsiveContainer width="100%" height={Math.max(160, skillBars.length * 22)}>
-                <BarChart
-                  layout="vertical"
-                  data={skillBars}
-                  margin={{ top: 4, right: 12, bottom: 0, left: 8 }}
-                >
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: '#8888aa' }} />
-                  <YAxis
-                    type="category"
-                    dataKey="skill"
-                    width={90}
-                    tick={{ fontSize: 10, fill: '#8888aa' }}
-                  />
-                  <Tooltip
-                    contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
-                    labelStyle={{ color: '#c8c8e8' }}
-                    formatter={(value, name, item) => [
-                      `${value} (${item.payload.pct}% of postings)`,
-                      name,
-                    ]}
-                  />
-                  {isTechStack ? (
-                    <Bar
-                      dataKey="count"
-                      name="Jobs"
-                      fill={REQUIRED_COLOR}
-                      radius={[0, 3, 3, 0]}
-                      cursor="pointer"
-                      onClick={handleSkillBarClick}
+            {!skillError && skillFreq && hasSkillData && (
+              isTechStack ? (
+                <div className="flex items-center gap-3">
+                  <ResponsiveContainer width={120} height={120}>
+                    <PieChart>
+                      <Pie
+                        data={pieSlices}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={30}
+                        outerRadius={50}
+                        dataKey="value"
+                        strokeWidth={0}
+                        activeIndex={activeSliceIndex >= 0 ? activeSliceIndex : undefined}
+                        activeShape={renderRaisedSlice}
+                        onClick={(_data, index) => handleSliceClick(pieSlices[index])}
+                      >
+                        {pieSlices.map((s) => (
+                          <Cell key={s.skill} fill={s.color} cursor={s.isOther ? 'default' : 'pointer'} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-col gap-1">
+                    {pieSlices.map((s) => (
+                      <button
+                        key={s.skill}
+                        onClick={() => handleSliceClick(s)}
+                        disabled={s.isOther}
+                        className={`flex items-center gap-1.5 text-left ${s.isOther ? 'cursor-default' : 'hover:opacity-80'} transition-opacity`}
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+                        <span className={`text-xs ${s.skill === activeSkill ? 'text-purple-300 font-semibold' : 'text-space-dim'}`}>{s.skill}</span>
+                        <span className="text-xs font-medium text-space-text ml-auto pl-2">{s.value}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={Math.max(160, skillBars.length * 22)}>
+                  <BarChart
+                    layout="vertical"
+                    data={skillBars}
+                    margin={{ top: 4, right: 12, bottom: 0, left: 8 }}
+                  >
+                    <defs>
+                      <filter id="skill-bar-raise" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={ACTIVE_OUTLINE} floodOpacity="0.9" />
+                      </filter>
+                    </defs>
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: '#8888aa' }} />
+                    <YAxis
+                      type="category"
+                      dataKey="skill"
+                      width={90}
+                      tick={{ fontSize: 10, fill: '#8888aa' }}
                     />
-                  ) : (
-                    <>
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#8888aa' }} />
-                      <Bar
-                        dataKey="required"
-                        name="Required"
-                        stackId="skill"
-                        fill={REQUIRED_COLOR}
-                        cursor="pointer"
-                        onClick={handleSkillBarClick}
-                      />
-                      <Bar
-                        dataKey="preferred"
-                        name="Preferred"
-                        stackId="skill"
-                        fill={PREFERRED_COLOR}
-                        radius={[0, 3, 3, 0]}
-                        cursor="pointer"
-                        onClick={handleSkillBarClick}
-                      />
-                    </>
-                  )}
-                </BarChart>
-              </ResponsiveContainer>
+                    <Tooltip
+                      cursor={false}
+                      contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
+                      labelStyle={{ color: '#c8c8e8' }}
+                      formatter={(value, name, item) => [
+                        `${value} (${item.payload.pct}% of postings)`,
+                        name,
+                      ]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, color: '#8888aa' }} />
+                    <Bar dataKey="required" name="Required" stackId="skill" cursor="pointer" onClick={handleSkillBarClick}>
+                      {skillBars.map((row) => (
+                        <Cell
+                          key={row.skill}
+                          fill={REQUIRED_COLOR}
+                          stroke={row.skill === activeSkill ? ACTIVE_OUTLINE : 'none'}
+                          strokeWidth={row.skill === activeSkill ? 2 : 0}
+                          filter={row.skill === activeSkill ? 'url(#skill-bar-raise)' : undefined}
+                        />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="preferred" name="Preferred" stackId="skill" radius={[0, 3, 3, 0]} cursor="pointer" onClick={handleSkillBarClick}>
+                      {skillBars.map((row) => (
+                        <Cell
+                          key={row.skill}
+                          fill={PREFERRED_COLOR}
+                          stroke={row.skill === activeSkill ? ACTIVE_OUTLINE : 'none'}
+                          strokeWidth={row.skill === activeSkill ? 2 : 0}
+                          filter={row.skill === activeSkill ? 'url(#skill-bar-raise)' : undefined}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )
             )}
           </div>
         </>
