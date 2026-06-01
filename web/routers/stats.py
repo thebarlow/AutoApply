@@ -106,14 +106,16 @@ def get_stats(
 def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
     """Skill frequency across all jobs that have extraction data.
 
-    Not window-filtered. A job counts as extracted when it has required
-    skills or a seniority value (mirrors Job.to_dict's extraction check).
+    Not window-filtered. A job counts as extracted when it has any extraction
+    field populated.
     """
     jobs = (
         db.query(Job)
         .filter(
             or_(
                 Job.ext_required_skills.isnot(None),
+                Job.ext_preferred_skills.isnot(None),
+                Job.ext_tech_stack.isnot(None),
                 Job.ext_seniority.isnot(None),
             )
         )
@@ -121,6 +123,13 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
     )
     # Treat empty strings as "no extraction" too (DB may store "" not NULL).
     extracted = [
-        j for j in jobs if (j.ext_required_skills or "") or (j.ext_seniority or "")
+        j
+        for j in jobs
+        if (
+            j.ext_required_skills
+            or j.ext_preferred_skills
+            or j.ext_tech_stack
+            or j.ext_seniority
+        )
     ]
     return aggregate_skill_frequency(extracted)

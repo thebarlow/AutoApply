@@ -181,3 +181,15 @@ def test_skill_frequency_empty_db(client):
         "tech_stack": [],
         "total_jobs": 0,
     }
+
+
+def test_skill_frequency_counts_preferred_only_jobs(client, db_session):
+    # A job extracted with only preferred skills (no required, no seniority)
+    # must still count toward total_jobs and its skills must appear.
+    _make_extracted_job(db_session, "p1", preferred="Docker")
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency")
+    data = r.json()
+    assert data["total_jobs"] == 1
+    assert {row["skill"] for row in data["preferred"]} == {"Docker"}
