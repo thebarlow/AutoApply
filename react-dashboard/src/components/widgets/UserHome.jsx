@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, Sector,
+  PieChart, Pie, Cell, Sector, LabelList,
 } from 'recharts'
 import { getProfiles, getStats, getSkillFrequency, getJobsForSkill } from '../../api'
 import ProfileCards from './ProfileCards'
@@ -32,12 +32,11 @@ const STATE_COLORS = {
 }
 
 const SKILL_FIELDS = [
-  { key: 'skills', label: 'Required / Preferred' },
-  { key: 'tech_stack', label: 'Tech Stack' },
+  { key: 'skills', label: 'By Skill' },
+  { key: 'categories', label: 'Categories' },
 ]
 
-const REQUIRED_COLOR = '#7c3aed'
-const PREFERRED_COLOR = '#3b82f6'
+const TIER_COLORS = { high: '#7c3aed', med: '#3b82f6', low: '#06b6d4' }
 const TECH_COLORS = ['#7c3aed', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 const OTHER_COLOR = '#555'
 const ACTIVE_OUTLINE = '#e9d5ff'
@@ -60,6 +59,61 @@ function renderRaisedSlice(props) {
   )
 }
 
+// Donut + legend for a set of slices. `labelKey` names each slice ('category' or 'skill').
+// Slices: { [labelKey]: string, value: number, color: string }.
+function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, onHover }) {
+  return (
+    <div className="flex items-center gap-3">
+      <ResponsiveContainer width={120} height={120}>
+        <PieChart>
+          <Pie
+            data={slices}
+            cx="50%"
+            cy="50%"
+            innerRadius={30}
+            outerRadius={50}
+            dataKey="value"
+            strokeWidth={0}
+            activeIndex={emphasisIndex}
+            activeShape={renderRaisedSlice}
+            onMouseEnter={(_d, i) => onHover(i)}
+            onMouseLeave={() => onHover(null)}
+            onClick={(_d, i) => onSliceClick(slices[i])}
+          >
+            {slices.map((s) => (
+              <Cell key={s[labelKey]} fill={s.color} cursor="pointer" />
+            ))}
+          </Pie>
+          <Tooltip
+            content={({ active, payload }) =>
+              active && payload && payload.length ? (
+                <div className="bg-[#0f0f1a] border border-[#2a2a4a] rounded px-2 py-0.5 text-[11px] text-space-text inline-block">
+                  {payload[0].payload[labelKey]} — {payload[0].payload.value}
+                </div>
+              ) : null
+            }
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="flex flex-col gap-1">
+        {slices.map((s, i) => (
+          <button
+            key={s[labelKey]}
+            onClick={() => onSliceClick(s)}
+            onMouseEnter={() => onHover(i)}
+            onMouseLeave={() => onHover(null)}
+            className="flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity"
+          >
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+            <span className={`text-xs ${s[labelKey] === activeName ? 'text-purple-300 font-semibold' : 'text-space-dim'}`}>{s[labelKey]}</span>
+            <span className="text-xs font-medium text-space-text ml-auto pl-2">{s.value}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, activeSkill }) {
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
@@ -71,6 +125,9 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   const [skillFreq, setSkillFreq] = useState(null)
   const [skillField, setSkillField] = useState('skills')
   const [skillError, setSkillError] = useState(null)
+  const [hoveredSkill, setHoveredSkill] = useState(null)
+  const [hoveredIndex, setHoveredIndex] = useState(null)
+  const [drillCategory, setDrillCategory] = useState(null)
 
   const fetchProfiles = () => {
     getProfiles()
@@ -139,47 +196,70 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
         .filter((d) => d.value > 0)
     : []
 
-  const totalJobs = skillFreq?.total_jobs ?? 0
-  const isTechStack = skillField === 'tech_stack'
-  const rawRows = skillFreq ? (isTechStack ? skillFreq.tech_stack : skillFreq.skills) : []
-  // API returns skills/tech_stack pre-sorted by frequency desc, so slicing the
-  // first 12 yields the top skills without a client-side sort.
-  const skillBars = rawRows.slice(0, 12).map((row) => {
-    const total = isTechStack ? row.count : row.required + row.preferred
-    return {
-      skill: row.skill,
-      required: isTechStack ? 0 : row.required,
-      preferred: isTechStack ? 0 : row.preferred,
-      count: isTechStack ? row.count : 0,
-      total,
-      pct: totalJobs ? Math.round((total / totalJobs) * 100) : 0,
-    }
-  })
+  const isCategories = skillField === 'categories'
 
-  const handleSkillBarClick = (data) => {
-    // Recharts Bar onClick passes the datum; row fields may be top-level or under .payload.
-    const skill = data?.skill ?? data?.payload?.skill
-    if (!skill || !onSkillFilter || skill === activeSkill) return
-    getJobsForSkill(skill)
-      .then(({ job_keys }) => onSkillFilter({ skill, jobKeys: job_keys }))
+  // Unified skills: each row {skill, high, med, low, category}. Pre-sorted by total desc.
+  const skills = skillFreq?.skills ?? []
+  const skillBars = skills.slice(0, 12).map((row) => ({
+    skill: row.skill,
+    high: row.high,
+    med: row.med,
+    low: row.low,
+    total: row.high + row.med + row.low,
+  }))
+  const emphasizedSkill = hoveredSkill ?? activeSkill
+
+  // Category pie + per-skill drill pie.
+  const categories = skillFreq?.categories ?? []
+  const categorySlices = categories.map((r, i) => ({
+    category: r.category,
+    value: r.count,
+    color: r.category === 'Other' ? OTHER_COLOR : TECH_COLORS[i % TECH_COLORS.length],
+  }))
+  const drillSlices = drillCategory
+    ? skills
+        .filter((s) => s.category === drillCategory)
+        .slice(0, 10)
+        .map((s, i) => ({
+          skill: s.skill,
+          value: s.high + s.med + s.low,
+          color: TECH_COLORS[i % TECH_COLORS.length],
+        }))
+    : []
+
+  const categoryEmphasisIndex = hoveredIndex ?? undefined
+  const drillActiveIndex = drillSlices.findIndex((s) => s.skill === activeSkill)
+  const drillEmphasisIndex = hoveredIndex ?? (drillActiveIndex >= 0 ? drillActiveIndex : undefined)
+
+  const hasSkillData = isCategories
+    ? (drillCategory ? drillSlices.length > 0 : categorySlices.length > 0)
+    : skillBars.length > 0
+
+  const handleSkillClick = (skillName) => {
+    if (!skillName || !onSkillFilter || skillName === activeSkill) return
+    getJobsForSkill(skillName)
+      .then(({ job_keys }) => onSkillFilter({ skill: skillName, jobKeys: job_keys }))
       .catch(() => setSkillError('Could not load jobs for skill'))
   }
 
-  // Tech Stack pie: top 8 skills + an aggregated, non-clickable "Other" slice.
-  const techList = skillFreq?.tech_stack ?? []
-  const otherCount = techList.slice(8).reduce((sum, r) => sum + r.count, 0)
-  const pieSlices = [
-    ...techList.slice(0, 8).map((r, i) => ({
-      skill: r.skill, value: r.count, color: TECH_COLORS[i % TECH_COLORS.length], isOther: false,
-    })),
-    ...(otherCount > 0 ? [{ skill: 'Other', value: otherCount, color: OTHER_COLOR, isOther: true }] : []),
-  ]
-  const activeSliceIndex = pieSlices.findIndex((s) => !s.isOther && s.skill === activeSkill)
-  const hasSkillData = isTechStack ? pieSlices.length > 0 : skillBars.length > 0
-
-  const handleSliceClick = (slice) => {
-    if (!slice || slice.isOther) return
-    handleSkillBarClick({ skill: slice.skill })
+  // Bar labels: shown only for the emphasized (hovered or active) skill.
+  const renderSegmentLabel = ({ x, y, width, height, value, index }) => {
+    const row = skillBars[index]
+    if (!row || row.skill !== emphasizedSkill || !value) return null
+    return (
+      <text x={x + width / 2} y={y + height / 2} fill={ACTIVE_OUTLINE} fontSize={10} textAnchor="middle" dominantBaseline="central">
+        {value}
+      </text>
+    )
+  }
+  const renderTotalLabel = ({ x, y, width, height, index }) => {
+    const row = skillBars[index]
+    if (!row || row.skill !== emphasizedSkill) return null
+    return (
+      <text x={x + width + 6} y={y + height / 2} fill="#c8c8e8" fontSize={10} textAnchor="start" dominantBaseline="central">
+        {row.total}
+      </text>
+    )
   }
 
   return (
@@ -279,7 +359,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
               {SKILL_FIELDS.map(({ key, label }) => (
                 <button
                   key={key}
-                  onClick={() => setSkillField(key)}
+                  onClick={() => { setSkillField(key); setDrillCategory(null); setHoveredIndex(null) }}
                   className={`px-3 py-1 rounded text-xs font-semibold transition-colors
                     ${skillField === key ? 'bg-purple-600 text-white' : 'text-space-dim hover:text-space-text border border-space-border'}`}
                 >
@@ -292,52 +372,43 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
               <p className="text-xs text-space-dim">No skill data yet.</p>
             )}
             {!skillError && skillFreq && hasSkillData && (
-              isTechStack ? (
-                <div className="flex items-center gap-3">
-                  <ResponsiveContainer width={120} height={120}>
-                    <PieChart>
-                      <Pie
-                        data={pieSlices}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={30}
-                        outerRadius={50}
-                        dataKey="value"
-                        strokeWidth={0}
-                        activeIndex={activeSliceIndex >= 0 ? activeSliceIndex : undefined}
-                        activeShape={renderRaisedSlice}
-                        onClick={(_data, index) => handleSliceClick(pieSlices[index])}
-                      >
-                        {pieSlices.map((s) => (
-                          <Cell key={s.isOther ? '__other__' : s.skill} fill={s.color} cursor={s.isOther ? 'default' : 'pointer'} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex flex-col gap-1">
-                    {pieSlices.map((s) => (
-                      <button
-                        key={s.isOther ? '__other__' : s.skill}
-                        onClick={() => handleSliceClick(s)}
-                        disabled={s.isOther}
-                        className={`flex items-center gap-1.5 text-left ${s.isOther ? 'cursor-default' : 'hover:opacity-80'} transition-opacity`}
-                      >
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
-                        <span className={`text-xs ${s.skill === activeSkill ? 'text-purple-300 font-semibold' : 'text-space-dim'}`}>{s.skill}</span>
-                        <span className="text-xs font-medium text-space-text ml-auto pl-2">{s.value}</span>
-                      </button>
-                    ))}
+              isCategories ? (
+                drillCategory ? (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => { setDrillCategory(null); setHoveredIndex(null) }}
+                      className="flex items-center gap-1.5 text-xs text-space-dim hover:text-purple-400 transition-colors self-start"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 12L6 8l4-4" />
+                      </svg>
+                      {drillCategory}
+                    </button>
+                    <SkillPie
+                      slices={drillSlices}
+                      labelKey="skill"
+                      emphasisIndex={drillEmphasisIndex}
+                      activeName={activeSkill}
+                      onSliceClick={(s) => handleSkillClick(s.skill)}
+                      onHover={setHoveredIndex}
+                    />
                   </div>
-                </div>
+                ) : (
+                  <SkillPie
+                    slices={categorySlices}
+                    labelKey="category"
+                    emphasisIndex={categoryEmphasisIndex}
+                    activeName={null}
+                    onSliceClick={(s) => { setDrillCategory(s.category); setHoveredIndex(null) }}
+                    onHover={setHoveredIndex}
+                  />
+                )
               ) : (
                 <ResponsiveContainer width="100%" height={Math.max(160, skillBars.length * 22)}>
                   <BarChart
                     layout="vertical"
                     data={skillBars}
-                    margin={{ top: 4, right: 12, bottom: 0, left: 8 }}
+                    margin={{ top: 4, right: 28, bottom: 0, left: 8 }}
                   >
                     <defs>
                       <filter id="skill-bar-raise" x="-50%" y="-50%" width="200%" height="200%">
@@ -345,43 +416,69 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                       </filter>
                     </defs>
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: '#8888aa' }} />
-                    <YAxis
-                      type="category"
-                      dataKey="skill"
-                      width={90}
-                      tick={{ fontSize: 10, fill: '#8888aa' }}
-                    />
+                    <YAxis type="category" dataKey="skill" width={90} tick={{ fontSize: 10, fill: '#8888aa' }} />
                     <Tooltip
                       cursor={false}
-                      contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
-                      labelStyle={{ color: '#c8c8e8' }}
-                      formatter={(value, name, item) => [
-                        `${value} (${item.payload.pct}% of postings)`,
-                        name,
-                      ]}
+                      content={({ active, payload }) =>
+                        active && payload && payload.length ? (
+                          <div className="bg-[#0f0f1a] border border-[#2a2a4a] rounded px-2 py-0.5 text-[11px] text-space-text inline-block">
+                            {payload[0].payload.skill}
+                          </div>
+                        ) : null
+                      }
                     />
                     <Legend wrapperStyle={{ fontSize: 11, color: '#8888aa' }} />
-                    <Bar dataKey="required" name="Required" stackId="skill" cursor="pointer" onClick={handleSkillBarClick}>
+                    <Bar
+                      dataKey="high" name="High" stackId="skill" cursor="pointer"
+                      onMouseEnter={(_d, i) => setHoveredSkill(skillBars[i].skill)}
+                      onMouseLeave={() => setHoveredSkill(null)}
+                      onClick={(d) => handleSkillClick(d?.skill ?? d?.payload?.skill)}
+                    >
                       {skillBars.map((row) => (
                         <Cell
                           key={row.skill}
-                          fill={REQUIRED_COLOR}
+                          fill={TIER_COLORS.high}
                           stroke={row.skill === activeSkill ? ACTIVE_OUTLINE : 'none'}
                           strokeWidth={row.skill === activeSkill ? 2 : 0}
                           filter={row.skill === activeSkill ? 'url(#skill-bar-raise)' : undefined}
                         />
                       ))}
+                      <LabelList dataKey="high" content={renderSegmentLabel} />
                     </Bar>
-                    <Bar dataKey="preferred" name="Preferred" stackId="skill" radius={[0, 3, 3, 0]} cursor="pointer" onClick={handleSkillBarClick}>
+                    <Bar
+                      dataKey="med" name="Med" stackId="skill" cursor="pointer"
+                      onMouseEnter={(_d, i) => setHoveredSkill(skillBars[i].skill)}
+                      onMouseLeave={() => setHoveredSkill(null)}
+                      onClick={(d) => handleSkillClick(d?.skill ?? d?.payload?.skill)}
+                    >
                       {skillBars.map((row) => (
                         <Cell
                           key={row.skill}
-                          fill={PREFERRED_COLOR}
+                          fill={TIER_COLORS.med}
                           stroke={row.skill === activeSkill ? ACTIVE_OUTLINE : 'none'}
                           strokeWidth={row.skill === activeSkill ? 2 : 0}
                           filter={row.skill === activeSkill ? 'url(#skill-bar-raise)' : undefined}
                         />
                       ))}
+                      <LabelList dataKey="med" content={renderSegmentLabel} />
+                    </Bar>
+                    <Bar
+                      dataKey="low" name="Low" stackId="skill" radius={[0, 3, 3, 0]} cursor="pointer"
+                      onMouseEnter={(_d, i) => setHoveredSkill(skillBars[i].skill)}
+                      onMouseLeave={() => setHoveredSkill(null)}
+                      onClick={(d) => handleSkillClick(d?.skill ?? d?.payload?.skill)}
+                    >
+                      {skillBars.map((row) => (
+                        <Cell
+                          key={row.skill}
+                          fill={TIER_COLORS.low}
+                          stroke={row.skill === activeSkill ? ACTIVE_OUTLINE : 'none'}
+                          strokeWidth={row.skill === activeSkill ? 2 : 0}
+                          filter={row.skill === activeSkill ? 'url(#skill-bar-raise)' : undefined}
+                        />
+                      ))}
+                      <LabelList dataKey="low" content={renderSegmentLabel} />
+                      <LabelList dataKey="total" content={renderTotalLabel} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
