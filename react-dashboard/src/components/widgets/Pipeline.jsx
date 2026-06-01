@@ -206,7 +206,7 @@ function UploadModal({ onClose, onSubmit }) {
   )
 }
 
-export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect }) {
+export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect, skillFilter = null, onClearSkillFilter }) {
   const [activeTab, setActiveTab] = useState('Inbox')
   const [searchInbox, setSearchInbox] = useState('')
   const [searchArchives, setSearchArchives] = useState('')
@@ -260,13 +260,17 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
   const setSearchQuery = activeTab === 'Inbox' ? setSearchInbox : setSearchArchives
 
   const visibleJobs = useMemo(() => {
+    let list = sortedJobs
+    if (skillFilter) {
+      list = list.filter((j) => skillFilter.jobKeys.has(j.job_key))
+    }
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return sortedJobs
-    return sortedJobs.filter((j) =>
+    if (!q) return list
+    return list.filter((j) =>
       (j.title || '').toLowerCase().includes(q) ||
       (j.company || '').toLowerCase().includes(q)
     )
-  }, [sortedJobs, searchQuery])
+  }, [sortedJobs, searchQuery, skillFilter])
 
   function handleTabChange(tab) {
     setActiveTab(tab)
@@ -345,6 +349,20 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
           className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-1.5 text-xs text-space-text placeholder-space-dim outline-none focus:border-purple-500/50 transition-colors"
         />
       </div>
+
+      {/* Active skill filter chip */}
+      {skillFilter && (
+        <div className="px-4 pt-2 shrink-0">
+          <button
+            onClick={onClearSkillFilter}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-purple-300 bg-purple-500/15 border border-purple-500/40 rounded-full px-2.5 py-0.5 hover:bg-purple-500/25 transition-colors"
+            title="Clear skill filter"
+          >
+            <span>Skill: {skillFilter.skill}</span>
+            <span className="text-purple-400">✕</span>
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
