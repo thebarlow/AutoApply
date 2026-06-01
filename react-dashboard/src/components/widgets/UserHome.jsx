@@ -78,7 +78,7 @@ function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, o
             activeShape={renderRaisedSlice}
             onMouseEnter={(_d, i) => onHover(i)}
             onMouseLeave={() => onHover(null)}
-            onClick={(_d, i) => onSliceClick(slices[i])}
+            onClick={(_d, i) => { onHover(null); onSliceClick(slices[i]) }}
           >
             {slices.map((s) => (
               <Cell key={s[labelKey]} fill={s.color} cursor="pointer" />
@@ -99,7 +99,7 @@ function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, o
         {slices.map((s, i) => (
           <button
             key={s[labelKey]}
-            onClick={() => onSliceClick(s)}
+            onClick={() => { onHover(null); onSliceClick(s) }}
             onMouseEnter={() => onHover(i)}
             onMouseLeave={() => onHover(null)}
             className="flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity"
@@ -478,6 +478,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                         />
                       ))}
                       <LabelList dataKey="low" content={renderSegmentLabel} />
+                      {/* total sits on the low (rightmost) segment so it renders just past the bar end */}
                       <LabelList dataKey="total" content={renderTotalLabel} />
                     </Bar>
                   </BarChart>
