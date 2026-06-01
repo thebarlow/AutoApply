@@ -12,6 +12,7 @@ import { usePrerequisites } from './hooks/usePrerequisites'
 export default function App() {
   const [jobs, setJobs] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
+  const [skillFilter, setSkillFilter] = useState(null) // { skill: string, jobKeys: Set<string> } | null
   const [processingKeys, setProcessingKeys] = useState(new Set())
   const [processingActions, setProcessingActions] = useState({}) // { job_key: Set<action> }
   const [settingsTab, setSettingsTab] = useState('User')
@@ -122,6 +123,7 @@ export default function App() {
       if (e.key === 'Escape') {
         setSelectedJob(null)
         setSettingsTab('User')
+        setSkillFilter(null)
       }
     }
     document.addEventListener('keydown', onKey)
@@ -163,6 +165,8 @@ export default function App() {
                 processingKeys={processingKeys}
                 selectedJob={selectedJob}
                 onJobSelect={handleJobSelect}
+                skillFilter={skillFilter}
+                onClearSkillFilter={() => setSkillFilter(null)}
               />
             </div>
             <div className="col-span-2 overflow-hidden h-full">
@@ -173,6 +177,7 @@ export default function App() {
                 promptStatus={promptStatus}
                 jobActionsInFlight={selectedJob ? (processingActions[selectedJob.job_key] || new Set()) : new Set()}
                 onJobDeleted={handleJobDeleted}
+                onSkillFilter={({ skill, jobKeys }) => setSkillFilter({ skill, jobKeys: new Set(jobKeys) })}
               />
             </div>
           </Dashboard>
