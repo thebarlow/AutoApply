@@ -39,6 +39,17 @@ const SKILL_FIELDS = [
 const TIER_COLORS = { high: '#7c3aed', med: '#3b82f6', low: '#06b6d4' }
 const TECH_COLORS = ['#7c3aed', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 const OTHER_COLOR = '#555'
+const CATEGORY_COLORS = {
+  Languages: '#7c3aed',
+  Frontend: '#3b82f6',
+  Backend: '#06b6d4',
+  Cloud: '#10b981',
+  DevOps: '#f59e0b',
+  Databases: '#ef4444',
+  'Data/ML': '#8b5cf6',
+  Mobile: '#ec4899',
+  Other: OTHER_COLOR,
+}
 const ACTIVE_OUTLINE = '#e9d5ff'
 
 // Renders the selected pie slice enlarged + outlined (the "raised / pulled-out" effect).
@@ -211,10 +222,10 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
 
   // Category pie + per-skill drill pie.
   const categories = skillFreq?.categories ?? []
-  const categorySlices = categories.map((r, i) => ({
+  const categorySlices = categories.map((r) => ({
     category: r.category,
     value: r.count,
-    color: r.category === 'Other' ? OTHER_COLOR : TECH_COLORS[i % TECH_COLORS.length],
+    color: CATEGORY_COLORS[r.category] ?? OTHER_COLOR,
   }))
   const drillSlices = drillCategory
     ? skills
