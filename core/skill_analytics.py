@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import Iterable
+from typing import Iterable, TypedDict
 
 # Curated alias map: lowercased raw token -> canonical display name.
 _ALIASES: dict[str, str] = {
@@ -86,6 +86,18 @@ def normalize_skill(raw: str) -> str | None:
     return " ".join(words)
 
 
+class SkillRow(TypedDict):
+    skill: str
+    count: int
+
+
+class SkillFrequencyResult(TypedDict):
+    required: list[SkillRow]
+    preferred: list[SkillRow]
+    tech_stack: list[SkillRow]
+    total_jobs: int
+
+
 # Maps the output key to the Job attribute holding that field's raw string.
 _FIELDS: tuple[tuple[str, str], ...] = (
     ("required", "ext_required_skills"),
@@ -104,7 +116,7 @@ def _normalized_skills(raw: str | None) -> set[str]:
     return skills
 
 
-def aggregate_skill_frequency(jobs: Iterable[object]) -> dict:
+def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
     """Count distinct postings mentioning each skill, per extraction field.
 
     Each posting contributes at most one to a skill's count per field (deduped
@@ -118,8 +130,8 @@ def aggregate_skill_frequency(jobs: Iterable[object]) -> dict:
 
     Returns:
         Dict with keys ``required``, ``preferred``, ``tech_stack`` (each a list
-        of ``{"skill": str, "count": int}`` sorted by count desc then name asc),
-        and ``total_jobs`` (int).
+        of ``{"skill": str, "count": int}`` sorted by count descending, then
+        by skill name ascending for ties), and ``total_jobs`` (int).
     """
     counters: dict[str, dict[str, int]] = {
         key: defaultdict(int) for key, _ in _FIELDS
