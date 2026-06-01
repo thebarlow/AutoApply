@@ -42,7 +42,9 @@ core/
 | Single-turn LLM call helper | `llm.py` → `call_llm()` |
 | Session LLM cost tracking | `session_cost.py` |
 | Normalizing a raw skill token to canonical form | `skill_analytics.py` → `normalize_skill()` |
-| Counting skill frequency across jobs (per extraction field) | `skill_analytics.py` → `aggregate_skill_frequency()` |
+| Aggregating skills into importance tiers (High/Med/Low) + categories | `skill_analytics.py` → `aggregate_skill_frequency()` |
+| Mapping a skill to its tech category | `skill_analytics.py` → `tech_category()` |
+| Testing if a job lists a skill (any extraction field) | `skill_analytics.py` → `job_has_skill()` |
 | Shared utilities | `utils.py` |
 
 ## LLM Integration
