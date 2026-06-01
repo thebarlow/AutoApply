@@ -166,6 +166,9 @@ def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
     r = client.get("/api/skill-frequency")
     data = r.json()
     assert data["total_jobs"] == 1
+    # Only x1's "Python" should appear; the non-extracted job contributes nothing.
+    skills = {row["skill"] for row in data["required"]}
+    assert skills == {"Python"}
 
 
 def test_skill_frequency_empty_db(client):
