@@ -13,6 +13,15 @@ import core.user  # noqa: F401
 from web.main import app
 
 
+@pytest.fixture(autouse=True)
+def _clear_skill_cache():
+    # The skill-frequency endpoint caches by extracted-job count; reset it so
+    # one test's data can't be served to another with the same count.
+    from web.routers import stats
+    stats._SKILL_CACHE.update(sig=None, ts=0.0, result=None)
+    yield
+
+
 @pytest.fixture
 def db_session():
     import core.job  # noqa: F401
@@ -150,7 +159,7 @@ def test_skill_frequency_returns_unified_shape(client, db_session):
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200
     data = r.json()
-    assert set(data) == {"skills", "categories", "total_jobs"}
+    assert set(data) == {"skills", "categories", "total_jobs", "profile_skills"}
     assert data["total_jobs"] == 2
     skills = {row["skill"]: row for row in data["skills"]}
     assert skills["Python"] == {"skill": "Python", "high": 2, "med": 0, "low": 0, "category": "Languages"}
@@ -177,7 +186,7 @@ def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
 def test_skill_frequency_empty_db(client):
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200
-    assert r.json() == {"skills": [], "categories": [], "total_jobs": 0}
+    assert r.json() == {"skills": [], "categories": [], "total_jobs": 0, "profile_skills": []}
 
 
 def test_skill_frequency_jobs_returns_matching_keys(client, db_session):

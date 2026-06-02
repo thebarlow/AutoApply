@@ -13,27 +13,9 @@ const WINDOWS = [
   { key: 'all_time', label: 'All Time' },
 ]
 
-const STATE_LABELS = {
-  new: 'New',
-  pending_review: 'Pending Review',
-  ready: 'Ready',
-  applied: 'Applied',
-  contact: 'In Contact',
-  rejected: 'Rejected',
-}
-
-const STATE_COLORS = {
-  new: '#7c3aed',
-  pending_review: '#f59e0b',
-  ready: '#3b82f6',
-  applied: '#10b981',
-  contact: '#06b6d4',
-  rejected: '#ef4444',
-}
-
 const SKILL_FIELDS = [
-  { key: 'skills', label: 'By Skill' },
   { key: 'categories', label: 'Categories' },
+  { key: 'skills', label: 'By Skill' },
 ]
 
 const TIER_COLORS = { high: '#7c3aed', med: '#3b82f6', low: '#06b6d4' }
@@ -72,7 +54,23 @@ function renderRaisedSlice(props) {
 
 // Donut + legend for a set of slices. `labelKey` names each slice ('category' or 'skill').
 // Slices: { [labelKey]: string, value: number, color: string }.
-function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, onHover }) {
+// Small inline status icon: green check (profile covers the skill) or red x (it doesn't).
+function SkillBadge({ status }) {
+  if (status === 'have') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-label="In your profile">
+        <path d="M3 8.5l3.5 3.5L13 4" />
+      </svg>
+    )
+  }
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-label="Not in your profile">
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  )
+}
+
+function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, onHover, badgeFor }) {
   return (
     <div className="flex items-center gap-3">
       <ResponsiveContainer width={120} height={120}>
@@ -116,6 +114,7 @@ function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, o
             className="flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity"
           >
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+            {badgeFor && <SkillBadge status={badgeFor(s)} />}
             <span className={`text-xs ${s[labelKey] === activeName ? 'text-purple-300 font-semibold' : 'text-space-dim'}`}>{s[labelKey]}</span>
             <span className="text-xs font-medium text-space-text ml-auto pl-2">{s.value}</span>
           </button>
@@ -134,7 +133,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState(null)
   const [skillFreq, setSkillFreq] = useState(null)
-  const [skillField, setSkillField] = useState('skills')
+  const [skillField, setSkillField] = useState('categories')
   const [skillError, setSkillError] = useState(null)
   const [hoveredSkill, setHoveredSkill] = useState(null)
   const [hoveredIndex, setHoveredIndex] = useState(null)
@@ -201,12 +200,6 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   const fullName = [activeProfile.first_name, activeProfile.last_name].filter(Boolean).join(' ')
   const displayName = fullName || activeProfile.name || 'there'
 
-  const pieData = stats
-    ? Object.entries(STATE_LABELS)
-        .map(([key, label]) => ({ key, name: label, value: stats.by_state[key] ?? 0 }))
-        .filter((d) => d.value > 0)
-    : []
-
   const isCategories = skillField === 'categories'
 
   // Unified skills: each row {skill, high, med, low, category}. Pre-sorted by total desc.
@@ -219,6 +212,10 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
     total: row.high + row.med + row.low,
   }))
   const emphasizedSkill = hoveredSkill ?? activeSkill
+
+  // Skills the active profile already covers (canonical names from the API).
+  const profileSkills = new Set(skillFreq?.profile_skills ?? [])
+  const skillStatus = (s) => (profileSkills.has(s.skill) ? 'have' : 'missing')
 
   // Category pie + per-skill drill pie.
   const categories = skillFreq?.categories ?? []
@@ -324,47 +321,6 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-space-dim mb-2">Pipeline</p>
-            {statsLoading && !stats && <p className="text-xs text-space-dim">Loading…</p>}
-            {!statsLoading && stats && pieData.length === 0 && (
-              <p className="text-xs text-space-dim">No jobs yet.</p>
-            )}
-            {!statsLoading && stats && pieData.length > 0 && (
-              <div className="flex items-center gap-3">
-                <ResponsiveContainer width={120} height={120}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={30}
-                      outerRadius={55}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      {pieData.map((entry) => (
-                        <Cell key={entry.name} fill={STATE_COLORS[entry.key] ?? '#555'} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-col gap-1">
-                  {pieData.map((entry) => (
-                    <div key={entry.name} className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STATE_COLORS[entry.key] ?? '#555' }} />
-                      <span className="text-xs text-space-dim">{entry.name}</span>
-                      <span className="text-xs font-medium text-space-text ml-auto pl-2">{entry.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-space-dim mb-2">In-Demand Skills</p>
             <div className="flex gap-1.5 mb-2">
               {SKILL_FIELDS.map(({ key, label }) => (
@@ -402,6 +358,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                       activeName={activeSkill}
                       onSliceClick={(s) => handleSkillClick(s.skill)}
                       onHover={setHoveredIndex}
+                      badgeFor={skillStatus}
                     />
                   </div>
                 ) : (
@@ -438,7 +395,14 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                         ) : null
                       }
                     />
-                    <Legend wrapperStyle={{ fontSize: 11, color: '#8888aa' }} />
+                    <Legend
+                      wrapperStyle={{ fontSize: 11, color: '#8888aa' }}
+                      payload={[
+                        { value: 'High', type: 'square', id: 'high', color: TIER_COLORS.high },
+                        { value: 'Med', type: 'square', id: 'med', color: TIER_COLORS.med },
+                        { value: 'Low', type: 'square', id: 'low', color: TIER_COLORS.low },
+                      ]}
+                    />
                     <Bar
                       dataKey="high" name="High" stackId="skill" cursor="pointer"
                       onMouseEnter={(_d, i) => setHoveredSkill(skillBars[i].skill)}

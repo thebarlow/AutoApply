@@ -68,7 +68,7 @@ web/
 | `POST` | `/api/scraper/stage-job` | Ingest job from browser extension or scraper |
 | `POST` | `/api/scraper/run` | Trigger background run of enabled API scrapers |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
-| `GET` | `/api/skill-frequency` | Combined required+preferred skill counts (`skills`) plus `tech_stack`, distinct jobs, across all extracted jobs; no window |
+| `GET` | `/api/skill-frequency` | Combined required+preferred skill counts (`skills`) plus `tech_stack`, distinct jobs, across all extracted jobs; no window. Also returns `profile_skills` (active user's skills, normalized) so the UI can flag covered skills. The job aggregation is cached in-process keyed by extracted-job count with a 60s TTL — a re-extraction that doesn't change the count can be up to 60s stale; tests reset `stats._SKILL_CACHE` via an autouse fixture. |
 | `GET` | `/api/skill-frequency/jobs` | Job keys whose extraction data lists a given `skill` (normalized, any field) |
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
 | `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |

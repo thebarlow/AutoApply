@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
@@ -8,11 +9,19 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from core.job import Job
-from core.skill_analytics import aggregate_skill_frequency, job_has_skill
+from core.skill_analytics import aggregate_skill_frequency, job_has_skill, normalize_skill
 from core.session_cost import get_session_start
+from core.user import User
 from db.database import get_db
 
 router = APIRouter(prefix="/api")
+
+# Skill-frequency aggregation scans every extracted job and crunches it in
+# Python, which is slow to redo on every dashboard mount. Cache the result and
+# reuse it while the extracted-job count is unchanged, with a short TTL so
+# re-extractions (which don't change the count) still refresh within a minute.
+_SKILL_CACHE: dict = {"sig": None, "ts": 0.0, "result": None}
+_SKILL_CACHE_TTL = 60.0
 
 _VALID_WINDOWS = {"session", "today", "week", "all_time"}
 _ALL_STATES = ["new", "pending_review", "ready", "applied", "contact", "rejected"]
@@ -107,32 +116,57 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
     """Skill frequency across all jobs that have extraction data.
 
     Not window-filtered. A job counts as extracted when it has any extraction
-    field populated.
+    field populated. Includes ``profile_skills``: the active user's skills,
+    normalized to canonical names, so the UI can flag which in-demand skills the
+    profile already covers.
     """
-    jobs = (
-        db.query(Job)
-        .filter(
-            or_(
-                Job.ext_required_skills.isnot(None),
-                Job.ext_preferred_skills.isnot(None),
-                Job.ext_tech_stack.isnot(None),
-                Job.ext_seniority.isnot(None),
-            )
-        )
-        .all()
+    extracted_filter = or_(
+        Job.ext_required_skills.isnot(None),
+        Job.ext_preferred_skills.isnot(None),
+        Job.ext_tech_stack.isnot(None),
+        Job.ext_seniority.isnot(None),
     )
-    # Treat empty strings as "no extraction" too (DB may store "" not NULL).
-    extracted = [
-        j
-        for j in jobs
-        if (
-            j.ext_required_skills
-            or j.ext_preferred_skills
-            or j.ext_tech_stack
-            or j.ext_seniority
-        )
-    ]
-    return aggregate_skill_frequency(extracted)
+
+    sig = db.query(Job).filter(extracted_filter).count()
+    now = time.monotonic()
+    cached = _SKILL_CACHE["result"]
+    if (
+        cached is not None
+        and _SKILL_CACHE["sig"] == sig
+        and now - _SKILL_CACHE["ts"] < _SKILL_CACHE_TTL
+    ):
+        agg = cached
+    else:
+        jobs = db.query(Job).filter(extracted_filter).all()
+        # Treat empty strings as "no extraction" too (DB may store "" not NULL).
+        extracted = [
+            j
+            for j in jobs
+            if (
+                j.ext_required_skills
+                or j.ext_preferred_skills
+                or j.ext_tech_stack
+                or j.ext_seniority
+            )
+        ]
+        agg = aggregate_skill_frequency(extracted)
+        _SKILL_CACHE.update(sig=sig, ts=now, result=agg)
+
+    # Profile skills are cheap to compute and profile-specific, so resolve them
+    # fresh (outside the job-aggregation cache).
+    profile_skills: list[str] = []
+    try:
+        user = User.load(db)
+        seen: set[str] = set()
+        for raw in getattr(user, "skills", []) or []:
+            canonical = normalize_skill(raw)
+            if canonical and canonical not in seen:
+                seen.add(canonical)
+                profile_skills.append(canonical)
+    except Exception:
+        profile_skills = []
+
+    return {**agg, "profile_skills": profile_skills}
 
 
 @router.get("/skill-frequency/jobs")
