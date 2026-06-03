@@ -15,8 +15,6 @@ import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp regist
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPTS_DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
 
-_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_parse")
-
 _PROMPT_LABELS: dict[str, str] = {
     "scoring": "Scoring",
     "resume": "Resume Generation",
@@ -113,7 +111,7 @@ class User(Base):
         self.llm_model = raw.get("llm_model", "")
 
         # Initialize model attrs for all 9 prompt types (populated from DB rows in load()).
-        from db.seed import PROMPT_TYPE_KEYS
+        from db.seed import PROMPT_TYPE_KEYS  # deferred: db.seed imports core.user
         for type_key in PROMPT_TYPE_KEYS:
             setattr(self, f"prompt_{type_key}_model", "")
         # Refinement config — resume
@@ -194,7 +192,7 @@ class User(Base):
         if row is None:
             raise RuntimeError("No user profile found. Add one via /config.")
 
-        migrated = row._hydrate()
+        migrated = row._hydrate()  # always False post prompts-to-DB; branch kept for future migration hooks
         from db.database import Prompt
         for r in db.query(Prompt).filter_by(profile_id=row.id).all():
             setattr(row, f"prompt_{r.type_key}_model", r.model or "")
@@ -466,18 +464,18 @@ class User(Base):
         if sess is not None:
             row = sess.query(Prompt).filter_by(profile_id=self.id, type_key=type_key).first()
             now = datetime.now(timezone.utc).isoformat()
-            if row is None:
-                sess.add(Prompt(
-                    profile_id=self.id, type_key=type_key,
-                    content=default_content, model="", updated_at=now,
-                ))
-            else:
-                row.content = default_content
-                row.updated_at = now
             try:
-                sess.commit()
+                with sess.begin_nested():
+                    if row is None:
+                        sess.add(Prompt(
+                            profile_id=self.id, type_key=type_key,
+                            content=default_content, model="", updated_at=now,
+                        ))
+                    else:
+                        row.content = default_content
+                        row.updated_at = now
             except Exception:
-                sess.rollback()
+                pass  # repair is best-effort; outer transaction is untouched
         try:
             from web.sse import send
             send("prompt_reset", {
