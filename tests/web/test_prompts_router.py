@@ -115,12 +115,32 @@ def test_old_list_endpoint_not_json_api(client):
     # The old GET /api/prompts list endpoint is removed.
     # The SPA catch-all may return 200 with HTML, but it must NOT return
     # the old {"prompts": [...]} JSON shape.
+    # A 200 here means the frontend catch-all route returned the SPA shell HTML, not a JSON API response.
     resp = client.get("/api/prompts")
     if resp.status_code == 200:
         ct = resp.headers.get("content-type", "")
         assert "application/json" not in ct, "Old list endpoint is still returning JSON"
     else:
         assert resp.status_code == 404
+
+
+# ---- Unknown profile ----
+
+def test_unknown_profile_404(client):
+    assert client.get("/api/prompts/999/scoring").status_code == 404
+    assert client.put("/api/prompts/999/scoring", json={"content": "x " * 20, "model": ""}).status_code == 404
+
+
+# ---- Reset clears model ----
+
+def test_reset_clears_model(client):
+    # PUT with a non-empty model override
+    client.put("/api/prompts/1/scoring", json={"content": "overridden " * 10, "model": "m"})
+    # Reset should restore default and clear the model
+    client.post("/api/prompts/1/scoring/reset")
+    data = client.get("/api/prompts/1/scoring").json()
+    assert data["model"] == ""
+    assert data["is_default"] is True
 
 
 # ---- Defaults endpoint ----

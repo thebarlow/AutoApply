@@ -16,21 +16,25 @@ _VALID_KEYS = set(PROMPT_TYPE_KEYS)
 
 
 def _require_type(type_key: str) -> None:
+    """Raise 404 if type_key is not a recognised prompt type."""
     if type_key not in _VALID_KEYS:
         raise HTTPException(status_code=404, detail="Unknown prompt type")
 
 
 def _require_profile(profile_id: int, db: Session) -> None:
+    """Raise 404 if no User row exists for the given profile_id."""
     if not db.query(User).filter_by(id=profile_id).first():
         raise HTTPException(status_code=404, detail="Profile not found")
 
 
 def _default_content(type_key: str, db: Session) -> str:
+    """Return the default prompt content for type_key, or "" if none exists."""
     d = db.query(PromptDefault).filter_by(type_key=type_key).first()
     return d.content if d else ""
 
 
 def _slot(profile_id: int, type_key: str, db: Session) -> dict:
+    """Return {content, model, is_default} for a slot, falling back to the default when no row exists."""
     row = db.query(Prompt).filter_by(profile_id=profile_id, type_key=type_key).first()
     default = _default_content(type_key, db)
     content = row.content if row is not None else default
@@ -94,6 +98,7 @@ def reset_prompt(profile_id: int, type_key: str, db: Session = Depends(get_db)) 
         db.add(Prompt(profile_id=profile_id, type_key=type_key, content=default, model="", updated_at=now))
     else:
         row.content = default
+        row.model = ""
         row.updated_at = now
     db.commit()
     return _slot(profile_id, type_key, db)
