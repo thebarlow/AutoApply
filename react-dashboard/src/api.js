@@ -67,36 +67,20 @@ export const setActiveProfile = (id) =>
 export const getActivePromptStatus = () =>
   _fetch('/api/config/profiles/active/prompt-status')
 
-export const listPrompts = () => _fetch('/api/prompts')
-
 export const getDefaultPrompt = (typeKey) => _fetch(`/api/prompts/defaults/${typeKey}`)
 
-export const getPromptFile = (path) =>
-  fetch('/api/prompts/file?' + new URLSearchParams({ path }))
-    .then((r) => {
-      if (!r.ok) throw new Error(`GET prompt file → ${r.status}`)
-      return r.text()
-    })
+export const getPrompt = (profileId, typeKey) =>
+  _fetch(`/api/prompts/${profileId}/${typeKey}`)
 
-export const putPromptFile = (path, content) =>
-  _fetch('/api/prompts/file?' + new URLSearchParams({ path }), {
+export const putPrompt = (profileId, typeKey, { content, model }) =>
+  _fetch(`/api/prompts/${profileId}/${typeKey}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, model }),
   })
 
-export const createPromptFile = (filename, content) =>
-  _fetch('/api/prompts/file', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, content }),
-  })
-
-export const uploadPromptFile = (file) => {
-  const form = new FormData()
-  form.append('file', file)
-  return _fetch('/api/prompts/upload', { method: 'POST', body: form })
-}
+export const resetPrompt = (profileId, typeKey) =>
+  _fetch(`/api/prompts/${profileId}/${typeKey}/reset`, { method: 'POST' })
 
 export const uploadProfileResume = (file) => {
   const form = new FormData()

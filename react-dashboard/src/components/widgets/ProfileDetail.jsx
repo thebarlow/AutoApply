@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
-import { getProfile, updateProfile, deleteProfile, listPrompts, getPromptFile, putPromptFile, createPromptFile, uploadPromptFile, getDefaultPrompt } from '../../api'
+import { getProfile, updateProfile, deleteProfile, getDefaultPrompt, getPrompt, putPrompt, resetPrompt } from '../../api'
 import { validateProvider } from '../../validation'
 import HelpIcon from '../shared/HelpIcon'
 
@@ -771,98 +771,37 @@ const PROMPT_TYPE_LABELS = {
   resume_parse: 'Resume Parsing',
 }
 
-function PromptModal({ typeKey, profileId, profileName, profileData, defaultModel, onClose, onSaved }) {
+function PromptModal({ typeKey, profileId, profileData, defaultModel, onClose, onSaved }) {
   const label = PROMPT_TYPE_LABELS[typeKey]
-  const currentFile = profileData[`prompt_${typeKey}`] || ''
-  const currentModel = profileData[`prompt_${typeKey}_model`] || ''
-  const isUnconfigured = !currentFile
 
-  const [promptFiles, setPromptFiles] = useState([])
-  const [selectedFile, setSelectedFile] = useState(currentFile)
-  const [modelOverride, setModelOverride] = useState(currentModel || (isUnconfigured ? defaultModel : ''))
   const [content, setContent] = useState('')
-  const [loadingContent, setLoadingContent] = useState(false)
-  const [contentError, setContentError] = useState(null)
-  const [contentNotice, setContentNotice] = useState(null)
+  const [model, setModel] = useState('')
+  const [isDefault, setIsDefault] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [saveError, setSaveError] = useState(null)
-  const [uploading, setUploading] = useState(false)
-  const [saveAsOpen, setSaveAsOpen] = useState(false)
-  const [saveAsName, setSaveAsName] = useState('')
-  const [saveAsError, setSaveAsError] = useState(null)
-  const [saveAsSubmitting, setSaveAsSubmitting] = useState(false)
   const [popOut, setPopOut] = useState(false)
   const textareaRef = useRef(null)
-  const originalContent = useRef('')
 
-  // Load file list on mount; also fetch default content when unconfigured
-  useEffect(() => {
-    listPrompts().then((r) => setPromptFiles(r.prompts || []))
-    if (isUnconfigured) {
-      setLoadingContent(true)
-      getDefaultPrompt(typeKey)
-        .then(({ path, content: text }) => {
-          setSelectedFile(path)
-          setContent(text)
-          originalContent.current = text
-        })
-        .catch(() => { /* leave blank if no default */ })
-        .finally(() => setLoadingContent(false))
-    }
-  }, [])
-
-  // Escape closes the pop-out when open, otherwise closes the modal.
   useEscape(popOut, () => setPopOut(false))
   useEscape(!popOut, onClose)
 
-  // Load file content when selection changes. If the configured file is gone
-  // (e.g. it was renamed), fall back to the type's default so the editor isn't
-  // left empty/errored and the user can re-link by saving.
+  // Load slot on mount
   useEffect(() => {
-    if (!selectedFile) { setContent(''); originalContent.current = ''; return }
     let cancelled = false
-    ;(async () => {
-      setLoadingContent(true)
-      setContentError(null)
-      setContentNotice(null)
-      try {
-        const text = await getPromptFile(selectedFile)
+    setLoading(true)
+    getPrompt(profileId, typeKey)
+      .then(({ content: c, model: m, is_default: d }) => {
         if (cancelled) return
-        setContent(text)
-        originalContent.current = text
-      } catch {
-        try {
-          const { content: text } = await getDefaultPrompt(typeKey)
-          if (cancelled) return
-          setContent(text)
-          originalContent.current = text
-          setContentNotice('Configured file not found — loaded the default. Pick a file or Save As to re-link.')
-        } catch {
-          if (!cancelled) setContentError('Could not load file')
-        }
-      } finally {
-        if (!cancelled) setLoadingContent(false)
-      }
-    })()
+        setContent(c)
+        setModel(m || '')
+        setIsDefault(d)
+      })
+      .catch(() => { if (!cancelled) setSaveError('Failed to load prompt') })
+      .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [selectedFile])
-
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const result = await uploadPromptFile(file)
-      const updated = await listPrompts()
-      setPromptFiles(updated.prompts || [])
-      setSelectedFile(result.path)
-    } catch {
-      setSaveError('Upload failed')
-    } finally {
-      setUploading(false)
-      e.target.value = ''
-    }
-  }
+  }, [profileId, typeKey])
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -870,15 +809,13 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
     if (!token || !textareaRef.current) return
     const ta = textareaRef.current
     let offset = ta.selectionStart ?? 0
-    // Try to get precise drop position
     if (document.caretPositionFromPoint) {
       const pos = document.caretPositionFromPoint(e.clientX, e.clientY)
       if (pos && pos.offsetNode === ta) offset = pos.offset
     }
     const before = content.slice(0, offset)
     const after = content.slice(offset)
-    const next = before + token + after
-    setContent(next)
+    setContent(before + token + after)
     requestAnimationFrame(() => {
       ta.focus()
       ta.setSelectionRange(offset + token.length, offset + token.length)
@@ -887,41 +824,15 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
 
   const handleDragOver = (e) => { e.preventDefault() }
 
-  const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
-
-  const [fieldErrors, setFieldErrors] = useState({})
-
   const handleSave = async () => {
-    const fe = {}
-    if (!selectedFile) fe.selectedFile = 'A prompt file must be selected'
-    setFieldErrors(fe)
-    if (Object.keys(fe).length > 0) return
     setSaving(true)
     setSaveError(null)
     try {
-      let resolvedFile = selectedFile
-      if (isDefaultPrompt(selectedFile)) {
-        // Always fork defaults into a profile-specific file; never mutate defaults
-        if (content !== originalContent.current || isUnconfigured) {
-          const baseName = selectedFile.split(/[\\/]/).pop().replace(/\.md$/i, '')
-          const filename = `${baseName}_${Date.now()}.md`
-          const result = await createPromptFile(filename, content)
-          resolvedFile = result.path
-          originalContent.current = content
-          setSelectedFile(resolvedFile)
-        }
-      } else if (content !== originalContent.current) {
-        await putPromptFile(selectedFile, content)
-        originalContent.current = content
-      }
-      // Patch profile with updated file ref and model
-      const newData = {
-        ...profileData,
-        [`prompt_${typeKey}`]: resolvedFile,
-        [`prompt_${typeKey}_model`]: modelOverride,
-      }
-      await updateProfile(profileId, { name: profileName || '', data: newData })
-      onSaved(typeKey, resolvedFile, modelOverride)
+      const res = await putPrompt(profileId, typeKey, { content, model })
+      setContent(res.content)
+      setModel(res.model || '')
+      setIsDefault(res.is_default)
+      onSaved(typeKey, res.model || '')
       window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
       onClose()
     } catch {
@@ -931,80 +842,21 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
     }
   }
 
-  // Reset to the shipped default. This is the ONLY way to point a profile at a
-  // defaults/ prompt: a normal Save forks defaults into a custom copy, so without
-  // this the user can never select a pure default.
   const handleReset = async () => {
-    setSaving(true)
+    setResetting(true)
     setSaveError(null)
     try {
-      const { path, content: text } = await getDefaultPrompt(typeKey)
-      const newData = {
-        ...profileData,
-        [`prompt_${typeKey}`]: path,
-        [`prompt_${typeKey}_model`]: modelOverride,
-      }
-      await updateProfile(profileId, { name: profileName || '', data: newData })
-      setSelectedFile(path)
-      setContent(text)
-      originalContent.current = text
-      setContentError(null)
-      setContentNotice(null)
-      onSaved(typeKey, path, modelOverride)
+      const res = await resetPrompt(profileId, typeKey)
+      setContent(res.content)
+      setModel(res.model || '')
+      setIsDefault(res.is_default)
       window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
-      onClose()
     } catch {
-      setSaveError('Reset to default failed')
+      setSaveError('Reset failed')
     } finally {
-      setSaving(false)
+      setResetting(false)
     }
   }
-
-  const suggestSaveAsName = () => {
-    const base = selectedFile
-      ? selectedFile.split(/[\\/]/).pop().replace(/\.md$/i, '')
-      : typeKey
-    const isDefault = isDefaultPrompt(selectedFile)
-    return isDefault ? `${base}_custom.md` : `${base}_copy.md`
-  }
-
-  const openSaveAs = () => {
-    setSaveAsName(suggestSaveAsName())
-    setSaveAsError(null)
-    setSaveAsOpen(true)
-  }
-
-  const handleSaveAsConfirm = async () => {
-    const filename = saveAsName.trim()
-    if (!filename) { setSaveAsError('Filename is required'); return }
-    const name = filename.endsWith('.md') ? filename : filename + '.md'
-    setSaveAsSubmitting(true)
-    setSaveAsError(null)
-    try {
-      const result = await createPromptFile(name, content)
-      const updated = await listPrompts()
-      setPromptFiles(updated.prompts || [])
-      setSelectedFile(result.path)
-      originalContent.current = content
-      setSaveAsOpen(false)
-      const newData = {
-        ...profileData,
-        [`prompt_${typeKey}`]: result.path,
-        [`prompt_${typeKey}_model`]: modelOverride,
-      }
-      await updateProfile(profileId, { name: profileName || '', data: newData })
-      onSaved(typeKey, result.path, modelOverride)
-      window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
-      onClose()
-    } catch (e) {
-      const msg = e?.message || ''
-      setSaveAsError(msg.includes('409') ? 'A file with that name already exists' : 'Save failed')
-    } finally {
-      setSaveAsSubmitting(false)
-    }
-  }
-
-  const basename = (path) => path.split(/[\\/]/).pop()
 
   const renderChipTray = () => (
     <div className="flex flex-col gap-2">
@@ -1050,11 +902,8 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   )
 
   const renderEditor = (extraTextareaClass = '') => {
-    if (loadingContent) return <p className="text-xs text-space-dim">Loading…</p>
-    if (contentError) return <p className="text-xs text-red-400">{contentError}</p>
+    if (loading) return <p className="text-xs text-space-dim">Loading…</p>
     return (
-      <>
-      {contentNotice && <p className="text-xs text-yellow-400 mb-1.5">{contentNotice}</p>}
       <textarea
         ref={textareaRef}
         rows={14}
@@ -1063,18 +912,9 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
         onChange={(e) => setContent(e.target.value)}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
-        placeholder={selectedFile ? '' : 'Select a file above to edit'}
-        disabled={!selectedFile}
       />
-      </>
     )
   }
-
-  // Ensure the currently-selected file is always a visible, pre-populated option,
-  // even when it lives in defaults/ (not returned by listPrompts) or no longer exists.
-  const fileOptions = (selectedFile && !promptFiles.some((f) => f.path === selectedFile))
-    ? [{ path: selectedFile, name: basename(selectedFile) + (isDefaultPrompt(selectedFile) ? ' (default)' : '') }, ...promptFiles]
-    : promptFiles
 
   return (
     <>
@@ -1083,61 +923,25 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
             <span className="text-sm font-semibold text-space-text">{label}</span>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleReset}
-                disabled={saving || loadingContent || isDefaultPrompt(selectedFile)}
-                title={isDefaultPrompt(selectedFile) ? 'Already using the default prompt' : 'Reset to default prompt'}
-                aria-label="Reset to default prompt"
-                className="text-space-dim hover:text-purple-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                  <path d="M3 3v5h5" />
-                </svg>
-              </button>
-              <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
-            </div>
+            <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Zone 1: File selector */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File <span className="text-red-400">*</span></label>
-              <div className="flex gap-2">
-                <select
-                  className={inputClass + ' flex-1'}
-                  value={selectedFile}
-                  onChange={(e) => { setSelectedFile(e.target.value); setFieldErrors(prev => { const n = { ...prev }; delete n.selectedFile; return n }) }}
-                >
-                  <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
-                  {fileOptions.map((f) => (
-                    <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
-                  ))}
-                </select>
-                <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                  {uploading ? '…' : 'Upload'}
-                  <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
-                </label>
-              </div>
-              {fieldErrors.selectedFile && <div className="text-red-400 text-sm mt-1">{fieldErrors.selectedFile}</div>}
-            </div>
-
-            {/* Zone 2: Model */}
+            {/* Model */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model</label>
               <input
                 className={inputClass}
-                value={modelOverride}
-                onChange={(e) => setModelOverride(e.target.value)}
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
                 placeholder={defaultModel || 'e.g. gpt-4o-mini (leave blank to use profile default)'}
               />
             </div>
 
-            {/* Zone 3: Chip tray (hidden while pop-out is open) */}
+            {/* Chip tray (hidden while pop-out is open) */}
             {!popOut && renderChipTray()}
 
-            {/* Zone 4: Editor (hidden while pop-out is open) */}
+            {/* Editor (hidden while pop-out is open) */}
             {!popOut && (
               <div className="flex flex-col gap-1.5 flex-1">
                 <div className="flex items-center justify-between">
@@ -1164,57 +968,29 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
           {/* Footer */}
           <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
             {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-            {saveAsOpen ? (
-              <div className="flex flex-col gap-2">
-                {saveAsError && <p className="text-xs text-red-400">{saveAsError}</p>}
-                <div className="flex gap-2 items-center">
-                  <input
-                    autoFocus
-                    className={inputClass + ' flex-1 text-xs'}
-                    value={saveAsName}
-                    onChange={(e) => { setSaveAsName(e.target.value); setSaveAsError(null) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAsConfirm(); if (e.key === 'Escape') setSaveAsOpen(false) }}
-                    placeholder="filename.md"
-                  />
-                  <button
-                    onClick={handleSaveAsConfirm}
-                    disabled={saveAsSubmitting}
-                    className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold transition-colors shrink-0"
-                  >
-                    {saveAsSubmitting ? '…' : 'Confirm'}
-                  </button>
-                  <button
-                    onClick={() => setSaveAsOpen(false)}
-                    className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text transition-colors shrink-0"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  onClick={openSaveAs}
-                  disabled={saving || loadingContent || !!contentError}
-                  className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text disabled:opacity-50 transition-colors shrink-0"
-                >
-                  Save As
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving || loadingContent || !!contentError}
-                  className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
-                >
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleReset}
+                disabled={saving || resetting || loading || isDefault}
+                title={isDefault ? 'Already using the default prompt' : 'Reset to default prompt'}
+                className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text disabled:opacity-50 transition-colors shrink-0"
+              >
+                {resetting ? 'Resetting…' : 'Reset to default'}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || resetting || loading}
+                className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1251,52 +1027,40 @@ const REFINEMENT_REFINE_CHIPS = [
   { label: 'critique', token: '{critique}' },
 ]
 
-function RefinementPromptModal({ docType, profileId, profileName, profileData, defaultModel, onClose, onSaved }) {
+function RefinementPromptModal({ docType, profileId, profileData, defaultModel, onClose, onSaved }) {
   const label = docType === 'resume' ? 'Resume Refinement' : 'Cover Letter Refinement'
 
   const [activeTab, setActiveTab] = useState('evaluator')
   const [maxTurns, setMaxTurns] = useState(profileData[`${docType}_refine_max_turns`] ?? 1)
   const [passScore, setPassScore] = useState(profileData[`${docType}_refine_pass_score`] ?? 0.80)
 
-  // Evaluator tab state
-  const [evalFile, setEvalFile] = useState(profileData[`prompt_${docType}_eval`] || '')
-  const [evalModel, setEvalModel] = useState(profileData[`prompt_${docType}_eval_model`] || '')
+  // Evaluator slot state
   const [evalContent, setEvalContent] = useState('')
-  const [evalLoading, setEvalLoading] = useState(false)
-  const [evalContentError, setEvalContentError] = useState(null)
-  const evalOriginal = useRef('')
+  const [evalModel, setEvalModel] = useState('')
+  const [evalIsDefault, setEvalIsDefault] = useState(true)
+  const [evalLoading, setEvalLoading] = useState(true)
   const evalTextareaRef = useRef(null)
 
-  // Rewriter tab state
-  const [refineFile, setRefineFile] = useState(profileData[`prompt_${docType}_refine`] || '')
-  const [refineModel, setRefineModel] = useState(profileData[`prompt_${docType}_refine_model`] || '')
+  // Rewriter slot state
   const [refineContent, setRefineContent] = useState('')
-  const [refineLoading, setRefineLoading] = useState(false)
-  const [refineContentError, setRefineContentError] = useState(null)
-  const refineOriginal = useRef('')
+  const [refineModel, setRefineModel] = useState('')
+  const [refineIsDefault, setRefineIsDefault] = useState(true)
+  const [refineLoading, setRefineLoading] = useState(true)
   const refineTextareaRef = useRef(null)
 
   // Shared state
-  const [promptFiles, setPromptFiles] = useState([])
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [saveError, setSaveError] = useState(null)
-  const [uploading, setUploading] = useState(false)
   const [popOut, setPopOut] = useState(false)
-  const [saveAsOpen, setSaveAsOpen] = useState(false)
-  const [saveAsName, setSaveAsName] = useState('')
-  const [saveAsError, setSaveAsError] = useState(null)
-  const [saveAsSubmitting, setSaveAsSubmitting] = useState(false)
 
   const isEval = activeTab === 'evaluator'
-  const currentFile = isEval ? evalFile : refineFile
-  const setCurrentFile = isEval ? setEvalFile : setRefineFile
-  const currentModel = isEval ? evalModel : refineModel
-  const setCurrentModel = isEval ? setEvalModel : setRefineModel
   const currentContent = isEval ? evalContent : refineContent
   const setCurrentContent = isEval ? setEvalContent : setRefineContent
+  const currentModel = isEval ? evalModel : refineModel
+  const setCurrentModel = isEval ? setEvalModel : setRefineModel
+  const currentIsDefault = isEval ? evalIsDefault : refineIsDefault
   const currentLoading = isEval ? evalLoading : refineLoading
-  const currentContentError = isEval ? evalContentError : refineContentError
-  const currentOriginal = isEval ? evalOriginal : refineOriginal
   const currentTextareaRef = isEval ? evalTextareaRef : refineTextareaRef
   const currentTypeKey = isEval ? `${docType}_eval` : `${docType}_refine`
   const extraChips = isEval ? REFINEMENT_EVAL_CHIPS : REFINEMENT_REFINE_CHIPS
@@ -1304,55 +1068,27 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
   useEscape(!popOut, onClose)
   useEscape(popOut, () => setPopOut(false))
 
+  // Load both slots on mount
   useEffect(() => {
-    listPrompts().then(r => setPromptFiles(r.prompts || []))
-  }, [])
-
-  // Load default content if file is unset
-  useEffect(() => {
-    if (!evalFile) {
-      setEvalLoading(true)
-      getDefaultPrompt(`${docType}_eval`)
-        .then(({ path, content }) => { setEvalFile(path); setEvalContent(content); evalOriginal.current = content })
-        .catch(() => {})
-        .finally(() => setEvalLoading(false))
-    }
-    if (!refineFile) {
-      setRefineLoading(true)
-      getDefaultPrompt(`${docType}_refine`)
-        .then(({ path, content }) => { setRefineFile(path); setRefineContent(content); refineOriginal.current = content })
-        .catch(() => {})
-        .finally(() => setRefineLoading(false))
-    }
-  }, [])
-
-  // Load content when file selection changes
-  useEffect(() => {
-    if (!evalFile) { setEvalContent(''); return }
-    setEvalLoading(true); setEvalContentError(null)
-    getPromptFile(evalFile)
-      .then(t => { setEvalContent(t); evalOriginal.current = t })
-      .catch(() => setEvalContentError('Could not load file'))
-      .finally(() => setEvalLoading(false))
-  }, [evalFile])
-
-  useEffect(() => {
-    if (!refineFile) { setRefineContent(''); return }
-    setRefineLoading(true); setRefineContentError(null)
-    getPromptFile(refineFile)
-      .then(t => { setRefineContent(t); refineOriginal.current = t })
-      .catch(() => setRefineContentError('Could not load file'))
-      .finally(() => setRefineLoading(false))
-  }, [refineFile])
-
-  const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
-  const basename = (path) => path?.split(/[\\/]/).pop() ?? ''
-
-  // Keep the active file selectable even when it lives in defaults/ (which
-  // listPrompts omits) or was renamed away.
-  const fileOptions = (currentFile && !promptFiles.some((f) => f.path === currentFile))
-    ? [{ path: currentFile, name: basename(currentFile) + (isDefaultPrompt(currentFile) ? ' (default)' : '') }, ...promptFiles]
-    : promptFiles
+    let cancelled = false
+    const evalKey = `${docType}_eval`
+    const refineKey = `${docType}_refine`
+    getPrompt(profileId, evalKey)
+      .then(({ content: c, model: m, is_default: d }) => {
+        if (cancelled) return
+        setEvalContent(c); setEvalModel(m || ''); setEvalIsDefault(d)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setEvalLoading(false) })
+    getPrompt(profileId, refineKey)
+      .then(({ content: c, model: m, is_default: d }) => {
+        if (cancelled) return
+        setRefineContent(c); setRefineModel(m || ''); setRefineIsDefault(d)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setRefineLoading(false) })
+    return () => { cancelled = true }
+  }, [profileId, docType])
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -1371,50 +1107,23 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
 
   const handleDragOver = (e) => e.preventDefault()
 
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const result = await uploadPromptFile(file)
-      const updated = await listPrompts()
-      setPromptFiles(updated.prompts || [])
-      setCurrentFile(result.path)
-    } catch { setSaveError('Upload failed') }
-    finally { setUploading(false); e.target.value = '' }
-  }
-
-  const _resolveFile = async (file, content, original, setFile) => {
-    if (!file) return file
-    if (isDefaultPrompt(file) && content !== original.current) {
-      const baseName = basename(file).replace(/\.md$/i, '')
-      const filename = `${baseName}_${Date.now()}.md`
-      const result = await createPromptFile(filename, content)
-      setFile(result.path)
-      original.current = content
-      return result.path
-    } else if (!isDefaultPrompt(file) && content !== original.current) {
-      await putPromptFile(file, content)
-      original.current = content
-    }
-    return file
-  }
-
   const handleSave = async () => {
     setSaving(true); setSaveError(null)
     try {
-      const resolvedEval = await _resolveFile(evalFile, evalContent, evalOriginal, setEvalFile)
-      const resolvedRefine = await _resolveFile(refineFile, refineContent, refineOriginal, setRefineFile)
+      // Save both prompt slots
+      const [evalRes, refineRes] = await Promise.all([
+        putPrompt(profileId, `${docType}_eval`, { content: evalContent, model: evalModel }),
+        putPrompt(profileId, `${docType}_refine`, { content: refineContent, model: refineModel }),
+      ])
+      setEvalContent(evalRes.content); setEvalModel(evalRes.model || ''); setEvalIsDefault(evalRes.is_default)
+      setRefineContent(refineRes.content); setRefineModel(refineRes.model || ''); setRefineIsDefault(refineRes.is_default)
+      // Save max_turns / pass_score to profile data
       const newData = {
         ...profileData,
-        [`prompt_${docType}_eval`]: resolvedEval,
-        [`prompt_${docType}_eval_model`]: evalModel,
-        [`prompt_${docType}_refine`]: resolvedRefine,
-        [`prompt_${docType}_refine_model`]: refineModel,
         [`${docType}_refine_max_turns`]: Number(maxTurns),
         [`${docType}_refine_pass_score`]: Number(passScore),
       }
-      await updateProfile(profileId, { name: profileName || '', data: newData })
+      await updateProfile(profileId, { name: profileData.name || '', data: newData })
       onSaved(newData)
       window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
       onClose()
@@ -1422,33 +1131,22 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
     finally { setSaving(false) }
   }
 
-  const openSaveAs = () => {
-    const base = currentFile ? basename(currentFile).replace(/\.md$/i, '') : currentTypeKey
-    setSaveAsName(isDefaultPrompt(currentFile ?? '') ? `${base}_custom.md` : `${base}_copy.md`)
-    setSaveAsError(null); setSaveAsOpen(true)
-  }
-
-  const handleSaveAsConfirm = async () => {
-    const filename = saveAsName.trim()
-    if (!filename) { setSaveAsError('Filename is required'); return }
-    const name = filename.endsWith('.md') ? filename : filename + '.md'
-    setSaveAsSubmitting(true); setSaveAsError(null)
+  const handleReset = async () => {
+    setResetting(true); setSaveError(null)
     try {
-      const result = await createPromptFile(name, currentContent)
-      const updated = await listPrompts()
-      setPromptFiles(updated.prompts || [])
-      setCurrentFile(result.path)
-      currentOriginal.current = currentContent
-      setSaveAsOpen(false)
-    } catch (e) {
-      const msg = e?.message || ''
-      setSaveAsError(msg.includes('409') ? 'A file with that name already exists' : 'Save failed')
-    } finally { setSaveAsSubmitting(false) }
+      const res = await resetPrompt(profileId, currentTypeKey)
+      if (isEval) {
+        setEvalContent(res.content); setEvalModel(res.model || ''); setEvalIsDefault(res.is_default)
+      } else {
+        setRefineContent(res.content); setRefineModel(res.model || ''); setRefineIsDefault(res.is_default)
+      }
+      window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
+    } catch { setSaveError('Reset failed') }
+    finally { setResetting(false) }
   }
 
   const renderEditor = (extraClass = '') => {
     if (currentLoading) return <p className="text-xs text-space-dim">Loading…</p>
-    if (currentContentError) return <p className="text-xs text-red-400">{currentContentError}</p>
     return (
       <textarea
         ref={currentTextareaRef}
@@ -1458,8 +1156,6 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
         onChange={e => setCurrentContent(e.target.value)}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
-        placeholder={currentFile ? '' : 'Select a file above to edit'}
-        disabled={!currentFile}
       />
     )
   }
@@ -1501,23 +1197,6 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
 
   const renderTabContent = () => (
     <div className="flex flex-col gap-4">
-      {/* File selector */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Prompt File</label>
-        <div className="flex gap-2">
-          <select className={inputClass + ' flex-1'} value={currentFile}
-            onChange={e => setCurrentFile(e.target.value)}>
-            <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
-            {fileOptions.map(f => (
-              <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
-            ))}
-          </select>
-          <label className={`px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-            {uploading ? '…' : 'Upload'}
-            <input type="file" accept=".md" className="hidden" onChange={handleUpload} />
-          </label>
-        </div>
-      </div>
       {/* Model */}
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-semibold uppercase tracking-widest text-space-dim">Model</label>
@@ -1585,37 +1264,23 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
           {/* Footer */}
           <div className="px-4 py-3 border-t border-space-border shrink-0 flex flex-col gap-2">
             {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-            {saveAsOpen ? (
-              <div className="flex flex-col gap-2">
-                {saveAsError && <p className="text-xs text-red-400">{saveAsError}</p>}
-                <div className="flex gap-2 items-center">
-                  <input autoFocus className={inputClass + ' flex-1 text-xs'} value={saveAsName}
-                    onChange={e => { setSaveAsName(e.target.value); setSaveAsError(null) }}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSaveAsConfirm(); if (e.key === 'Escape') setSaveAsOpen(false) }}
-                    placeholder="filename.md" />
-                  <button onClick={handleSaveAsConfirm} disabled={saveAsSubmitting}
-                    className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold shrink-0">
-                    {saveAsSubmitting ? '…' : 'Confirm'}
-                  </button>
-                  <button onClick={() => setSaveAsOpen(false)}
-                    className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text shrink-0">✕</button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button onClick={openSaveAs} disabled={saving || currentLoading || !!currentContentError}
-                  className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text disabled:opacity-50 shrink-0">
-                  Save As
-                </button>
-                <button onClick={handleSave} disabled={saving || currentLoading || !!currentContentError}
-                  className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors">
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-                <button onClick={onClose} className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors">
-                  Cancel
-                </button>
-              </div>
-            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleReset}
+                disabled={saving || resetting || currentLoading || currentIsDefault}
+                title={currentIsDefault ? 'Already using the default' : 'Reset this slot to default'}
+                className="px-3 py-2 rounded-lg border border-space-border text-xs text-space-dim hover:text-space-text disabled:opacity-50 shrink-0"
+              >
+                {resetting ? 'Resetting…' : 'Reset to default'}
+              </button>
+              <button onClick={handleSave} disabled={saving || resetting || evalLoading || refineLoading}
+                className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={onClose} className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors">
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1642,20 +1307,23 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
   )
 }
 
-function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) {
+function PromptsSection({ data, profileId, defaultModel, onSave }) {
   const [openModal, setOpenModal] = useState(null)           // typeKey string | null
   const [openRefinement, setOpenRefinement] = useState(null) // 'resume' | 'cover' | null
   const [togglingRefine, setTogglingRefine] = useState(null) // 'resume' | 'cover' | null
 
-  const handleSaved = (typeKey, filePath, modelOverride) => {
-    onSave({
-      [`prompt_${typeKey}`]: filePath,
-      [`prompt_${typeKey}_model`]: modelOverride,
-    })
+  // PromptModal notifies us of the model used; prompts table owns the content.
+  const handleSaved = (typeKey, model) => {
+    // No prompt_* path written to profile.data — prompts table owns it.
+    // Nothing to patch here; the stale event triggers a status refresh.
   }
 
   const handleRefinementSaved = (docType, newData) => {
-    onSave(newData)
+    // Persist max_turns / pass_score from RefinementPromptModal into profile data.
+    onSave({
+      [`${docType}_refine_max_turns`]: newData[`${docType}_refine_max_turns`],
+      [`${docType}_refine_pass_score`]: newData[`${docType}_refine_pass_score`],
+    })
   }
 
   const handleToggleRefinement = async (e, docType) => {
@@ -1671,8 +1339,6 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
     }
   }
 
-  const basename = (path) => path?.split(/[\\/]/).pop() ?? ''
-  const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
   const truncate = (s, n = 22) => s && s.length > n ? s.slice(0, n) + '…' : s
 
   return (
@@ -1682,14 +1348,9 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
 
           {/* ── Standard generation prompt cards ── */}
           {PROMPT_TYPE_KEYS.map((typeKey) => {
-            const filePath = data[`prompt_${typeKey}`] || ''
+            // Use _configured and _model flags returned by getProfile (DB-backed)
+            const configured = Boolean(data[`prompt_${typeKey}_configured`])
             const model = data[`prompt_${typeKey}_model`] || ''
-            // A prompt is "Custom" only when it points at a file outside defaults/.
-            // A defaults/ path means the profile is using the shipped default prompt.
-            // A prompt is "Custom" only when it points at a file outside defaults/.
-            // A defaults/ path means the profile is using the shipped default prompt.
-            const configured = filePath && filePath.endsWith('.md') && !isDefaultPrompt(filePath)
-            const bn = filePath ? basename(filePath) : null
 
             // After resume, inject resume-refinement card; after cover, inject cover-refinement card
             const refinementDocType = typeKey === 'resume' ? 'resume' : typeKey === 'cover' ? 'cover' : null
@@ -1708,10 +1369,6 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
                         <HelpIcon text={PROMPT_HELP[typeKey] || 'A prompt template used by the LLM.'} />
                       </span>
                     </span>
-                    {bn
-                      ? <span className="text-xs text-space-dim truncate">{bn}</span>
-                      : <span className="text-xs text-red-400/80">Not configured</span>
-                    }
                     {model
                       ? <span className="text-xs text-purple-400/70 truncate">{truncate(model)}</span>
                       : defaultModel && <span className="text-xs text-space-dim/50 truncate">{truncate(defaultModel)} (default)</span>
@@ -1724,8 +1381,8 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
 
                 {/* Refinement card — shown only after resume and cover */}
                 {refinementDocType && (() => {
-                  const evalPath = data[`prompt_${refinementDocType}_eval`] || ''
-                  const refinePath = data[`prompt_${refinementDocType}_refine`] || ''
+                  const evalConfigured = Boolean(data[`prompt_${refinementDocType}_eval_configured`])
+                  const refineConfigured = Boolean(data[`prompt_${refinementDocType}_refine_configured`])
                   const evalModel = data[`prompt_${refinementDocType}_eval_model`] || ''
                   const refineModel = data[`prompt_${refinementDocType}_refine_model`] || ''
                   const enabled = data[`${refinementDocType}_refine_enabled`] !== false
@@ -1740,11 +1397,11 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
                           {refinementDocType === 'resume' ? 'Resume Refinement' : 'Cover Letter Refinement'}
                         </span>
                         <span className="text-xs text-space-dim/70 truncate">
-                          Eval: {evalPath ? truncate(basename(evalPath)) : <span className="text-space-dim/40">default</span>}
+                          Eval: <span className={evalConfigured ? 'text-green-400/70' : 'text-space-dim/40'}>{evalConfigured ? 'Custom' : 'Default'}</span>
                           {evalModel ? <span className="text-purple-400/50"> · {truncate(evalModel, 16)}</span> : null}
                         </span>
                         <span className="text-xs text-space-dim/70 truncate">
-                          Rewrite: {refinePath ? truncate(basename(refinePath)) : <span className="text-space-dim/40">default</span>}
+                          Rewrite: <span className={refineConfigured ? 'text-green-400/70' : 'text-space-dim/40'}>{refineConfigured ? 'Custom' : 'Default'}</span>
                           {refineModel ? <span className="text-purple-400/50"> · {truncate(refineModel, 16)}</span> : null}
                         </span>
                       </div>
@@ -1773,7 +1430,6 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
         <PromptModal
           typeKey={openModal}
           profileId={profileId}
-          profileName={profileName}
           profileData={data}
           defaultModel={defaultModel}
           onClose={() => setOpenModal(null)}
@@ -1785,7 +1441,6 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
         <RefinementPromptModal
           docType={openRefinement}
           profileId={profileId}
-          profileName={profileName}
           profileData={data}
           defaultModel={defaultModel}
           onClose={() => setOpenRefinement(null)}
@@ -1913,8 +1568,6 @@ const PROFILE_DATA_DEFAULTS = {
   location: '', linkedin: '', github: '', website: '',
   skills: [], work_history: [], education: [], projects: [],
   target_roles: [], target_salary_min: null, target_salary_max: null,
-  prompt_scoring: '', prompt_resume: '', prompt_cover: '',
-  prompt_extraction: '', prompt_resume_parse: '',
 }
 
 export default function ProfileDetailView({ profileId, onDelete }) {
@@ -2001,7 +1654,6 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         <PromptsSection
           data={d}
           profileId={profileId}
-          profileName={profile.name}
           defaultModel={profile.llm_model || ''}
           onSave={handleSave}
         />
