@@ -161,7 +161,7 @@ class TestEvaluateResumeMd:
         )
         client = _make_llm_client("not json at all")
         with patch("core.job._OUTPUTS_DIR", tmp_path):
-            with pytest.raises(RuntimeError, match="not valid JSON|invalid JSON|no JSON object"):
+            with pytest.raises(RuntimeError, match="not valid JSON|no JSON object"):
                 job.evaluate_resume_md("Eval", user, client, "gpt-4o")
 
     def test_raises_on_missing_keys(self, tmp_path):
@@ -172,7 +172,7 @@ class TestEvaluateResumeMd:
         )
         client = _make_llm_client(json.dumps({"only_score": 0.5}))
         with patch("core.job._OUTPUTS_DIR", tmp_path):
-            with pytest.raises(RuntimeError, match="missing required keys|failed schema validation"):
+            with pytest.raises(RuntimeError, match="failed schema validation"):
                 job.evaluate_resume_md("Eval", user, client, "gpt-4o")
 
 
