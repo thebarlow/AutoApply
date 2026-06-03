@@ -613,6 +613,40 @@ def test_score_raises_on_bad_json(db_session):
         )
 
 
+def test_extract_description_maps_fields(db_session, monkeypatch):
+    from core.job import Job
+    import core.user as user_mod
+    import core.llm as llm_mod
+
+    job = Job.from_scraped(_make_scraped(job_key="ex_1"))
+    db_session.add(job)
+    db_session.commit()
+
+    fake_user = type("U", (), {
+        "resolve_prompt": lambda self, k: "extract {job.description}",
+        "prompt_extraction_model": "m",
+    })()
+    monkeypatch.setattr(user_mod.User, "load", classmethod(lambda cls, db: fake_user))
+
+    content = (
+        '{"required_skills": ["Python", "SQL"], "preferred_skills": [],'
+        ' "tech_stack": ["FastAPI"], "seniority": "senior", "role_type": "IC",'
+        ' "domain": "fintech", "key_responsibilities": ["ship features"],'
+        ' "company_signals": [], "work_arrangement": "remote",'
+        ' "employment_type": "full-time"}'
+    )
+    monkeypatch.setattr(
+        llm_mod, "get_client_for_profile",
+        lambda user, model: (_FakeClient(content), "m"),
+    )
+
+    job.extract_description(db_session)
+    assert job.ext_seniority == "senior"
+    assert job.ext_required_skills == "Python, SQL"
+    assert job.ext_tech_stack == "FastAPI"
+    assert job.ext_salary_min is None
+
+
 def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):
     from core.job import Job
     from datetime import datetime, timezone

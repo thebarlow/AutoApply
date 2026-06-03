@@ -11,7 +11,7 @@ from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import Session
 
 from db.database import Base
-from core.schemas import EvalResponse, ScoreResponse, parse_llm_json
+from core.schemas import EvalResponse, ExtractionResponse, ScoreResponse, parse_llm_json
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
@@ -603,7 +603,6 @@ class Job(Base):
             PromptNotConfiguredError: If extraction prompt is not configured.
             RuntimeError: If the LLM fails or returns invalid JSON.
         """
-        import re
         from core.user import User, PromptNotConfiguredError
         from core.llm import get_client_for_profile
 
@@ -629,30 +628,20 @@ class Job(Base):
         raw = choice.message.content
         if not raw:
             raise RuntimeError(f"LLM returned empty extraction response (finish_reason={choice.finish_reason!r})")
-        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-        raw = re.sub(r"\s*```$", "", raw.strip())
-        result = raw.strip()
-        if not result:
-            raise RuntimeError("LLM extraction returned empty content after fence stripping")
-        try:
-            data = json.loads(result)
-        except (json.JSONDecodeError, ValueError) as exc:
-            raise RuntimeError(f"LLM extraction is not valid JSON: {exc}") from exc
+        parsed = parse_llm_json(raw, ExtractionResponse)
 
-        self.ext_seniority = data.get("seniority", "")
-        self.ext_role_type = data.get("role_type", "")
-        self.ext_domain = data.get("domain", "")
-        self.ext_work_arrangement = data.get("work_arrangement", "")
-        self.ext_employment_type = data.get("employment_type", "")
-        self.ext_required_skills = ", ".join(data.get("required_skills") or [])
-        self.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
-        self.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
-        self.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
-        self.ext_company_signals = ", ".join(data.get("company_signals") or [])
-        salary_min = data.get("salary_min")
-        salary_max = data.get("salary_max")
-        self.ext_salary_min = float(salary_min) if salary_min is not None else None
-        self.ext_salary_max = float(salary_max) if salary_max is not None else None
+        self.ext_seniority = parsed.seniority
+        self.ext_role_type = parsed.role_type
+        self.ext_domain = parsed.domain
+        self.ext_work_arrangement = parsed.work_arrangement
+        self.ext_employment_type = parsed.employment_type
+        self.ext_required_skills = ", ".join(parsed.required_skills)
+        self.ext_preferred_skills = ", ".join(parsed.preferred_skills)
+        self.ext_tech_stack = ", ".join(parsed.tech_stack)
+        self.ext_key_responsibilities = ", ".join(parsed.key_responsibilities)
+        self.ext_company_signals = ", ".join(parsed.company_signals)
+        self.ext_salary_min = parsed.salary_min
+        self.ext_salary_max = parsed.salary_max
         db.flush()
         db.commit()
 
