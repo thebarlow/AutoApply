@@ -214,12 +214,14 @@ def init_db() -> None:
     _migrate_generated_at_columns()
     _migrate_flagged_column()
     _migrate_resume_eval_columns()
-    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates
+    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db
     db = SessionLocal()
     try:
         seed_field_help(db)
         seed_user_profile_field_help(db)
         seed_latex_templates(db)
+        seed_prompt_defaults(db)
+        migrate_file_prompts_to_db(db)
     finally:
         db.close()
 

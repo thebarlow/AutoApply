@@ -195,6 +195,46 @@ def seed_prompt_defaults(db: Session) -> None:
     db.commit()
 
 
+def migrate_file_prompts_to_db(db: Session) -> None:
+    """Port file-path-based profile prompts into the prompts table.
+
+    Idempotent: a profile that already has any prompts row is skipped. For each
+    of the nine prompt types, reads content from the file path stored in the
+    profile JSON (if it exists and exceeds 10 words), otherwise falls back to the
+    prompt_defaults content. Model comes from the profile JSON. Does not modify
+    the profile JSON.
+    """
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from core.user import User
+    from db.database import Prompt, PromptDefault
+
+    defaults = {d.type_key: d.content for d in db.query(PromptDefault).all()}
+    now = datetime.now(timezone.utc).isoformat()
+
+    for profile in db.query(User).all():
+        if db.query(Prompt).filter_by(profile_id=profile.id).first():
+            continue
+        data = json.loads(profile.data or "{}")
+        for type_key in PROMPT_TYPE_KEYS:
+            content = ""
+            path_str = data.get(f"prompt_{type_key}", "")
+            if path_str:
+                p = Path(path_str)
+                if p.exists():
+                    text = p.read_text(encoding="utf-8")
+                    if len(text.split()) > 10:
+                        content = text
+            if not content:
+                content = defaults.get(type_key, "")
+            model = data.get(f"prompt_{type_key}_model", "") or ""
+            db.add(Prompt(
+                profile_id=profile.id, type_key=type_key,
+                content=content, model=model, updated_at=now,
+            ))
+    db.commit()
+
+
 def seed_latex_templates(db: Session) -> None:
     """Register default LaTeX templates if not already present."""
     row = db.query(Config).filter_by(key="latex_templates").first()
