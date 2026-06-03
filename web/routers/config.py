@@ -22,25 +22,7 @@ from core.utils import render_pdf
 router = APIRouter()
 
 
-_PROMPTS_DEFAULTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "defaults"
 _PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
-
-
-def _prompt_configured(path: str, type_key: str = "") -> bool:
-    """Return True if a usable prompt exists for this slot.
-
-    Checks the profile-specific path first; falls back to prompts/defaults/{type_key}.md.
-    """
-    def _usable(p: Path) -> bool:
-        return p.exists() and bool(p.read_text(encoding="utf-8").strip())
-
-    if path:
-        p = Path(path)
-        if _usable(p):
-            return True
-    if type_key:
-        return _usable(_PROMPTS_DEFAULTS_DIR / f"{type_key}.md")
-    return False
 
 
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
@@ -624,6 +606,11 @@ _PROFILE_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_par
 
 
 # IMPORTANT: /active/prompt-status must be registered before /{profile_id}.
+def _prompt_row_configured(p) -> bool:
+    """A prompt slot is 'configured' when its content exceeds the minimum word count."""
+    return bool(p and len(p.content.split()) > User._MIN_PROMPT_WORDS)
+
+
 @router.get("/api/config/profiles/active/prompt-status")
 def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
     """Return {type_key: configured_bool} for the active profile's prompts.
@@ -641,8 +628,12 @@ def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
         row = db.query(User).first()
     if row is None:
         return {t: False for t in _PROFILE_PROMPT_TYPES}
-    data = json.loads(row.data) if row.data else {}
-    return {t: _prompt_configured(data.get(f"prompt_{t}", ""), t) for t in _PROFILE_PROMPT_TYPES}
+    from db.database import Prompt
+    status = {}
+    for t in _PROFILE_PROMPT_TYPES:
+        p = db.query(Prompt).filter_by(profile_id=row.id, type_key=t).first()
+        status[t] = _prompt_row_configured(p)
+    return status
 
 
 @router.get("/api/config/profiles/{profile_id}")
@@ -653,13 +644,13 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
     data = json.loads(row.data) if row.data else {}
     env = _read_env()
     has_llm_key = bool(env.get(f"LLM_KEY_PROFILE_{profile_id}"))
+    from db.database import Prompt
     prompt_types = ("scoring", "resume", "cover", "extraction", "resume_parse")
     prompt_fields = {}
     for t in prompt_types:
-        file_val = data.get(f"prompt_{t}", "")
-        prompt_fields[f"prompt_{t}_file"] = file_val
-        prompt_fields[f"prompt_{t}_model"] = data.get(f"prompt_{t}_model", "")
-        prompt_fields[f"prompt_{t}_configured"] = _prompt_configured(file_val, t)
+        p = db.query(Prompt).filter_by(profile_id=profile_id, type_key=t).first()
+        prompt_fields[f"prompt_{t}_model"] = p.model if p else ""
+        prompt_fields[f"prompt_{t}_configured"] = _prompt_row_configured(p)
     return {
         "id": row.id,
         "name": row.name,

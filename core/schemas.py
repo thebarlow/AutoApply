@@ -78,6 +78,50 @@ class ExtractionResponse(BaseModel):
     salary_max: float | None = None
 
 
+class WorkHistoryItem(BaseModel):
+    company: str = ""
+    title: str = ""
+    start: str = ""
+    end: str = ""
+    summary: str = ""
+
+
+class EducationItem(BaseModel):
+    institution: str = ""
+    degree: str = ""
+    field: str = ""
+    graduated: str = ""
+    gpa: float = 0
+
+
+class ProjectItem(BaseModel):
+    name: str = ""
+    description: str = ""
+    url: str = ""
+    technologies: list[str] = Field(default_factory=list)
+
+
+class ParseResponse(BaseModel):
+    """Parsed output of the `resume_parse` prompt (a structured profile)."""
+
+    first_name: str = ""
+    last_name: str = ""
+    hero: str = ""
+    email: str = ""
+    phone: str = ""
+    location: str = ""
+    linkedin: str = ""
+    github: str = ""
+    website: str = ""
+    skills: list[str] = Field(default_factory=list)
+    work_history: list[WorkHistoryItem] = Field(default_factory=list)
+    education: list[EducationItem] = Field(default_factory=list)
+    projects: list[ProjectItem] = Field(default_factory=list)
+    target_roles: list[str] = Field(default_factory=list)
+    target_salary_min: float | None = None
+    target_salary_max: float | None = None
+
+
 def parse_llm_json(raw: str, model: type[T]) -> T:
     """Parse and validate a JSON object out of a raw LLM response.
 

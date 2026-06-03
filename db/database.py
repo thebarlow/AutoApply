@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import Column, String, Text, create_engine, text
+from sqlalchemy import Column, Integer, String, Text, UniqueConstraint, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -27,6 +27,28 @@ class FieldHelp(Base):
     table_name = Column(String, primary_key=True)
     column_name = Column(String, primary_key=True)
     description = Column(Text, nullable=False, default="")
+
+class PromptDefault(Base):
+    """Global factory-default prompt content, one row per prompt type."""
+
+    __tablename__ = "prompt_defaults"
+    type_key = Column(String, primary_key=True)
+    content = Column(Text, nullable=False, default="")
+
+
+class Prompt(Base):
+    """A per-profile prompt slot: active content plus an optional model override."""
+
+    __tablename__ = "prompts"
+    __table_args__ = (UniqueConstraint("profile_id", "type_key", name="uq_prompts_profile_type"),)
+
+    id = Column(Integer, primary_key=True)
+    profile_id = Column(Integer, nullable=False)
+    type_key = Column(String, nullable=False)
+    content = Column(Text, nullable=False, default="")
+    model = Column(String, nullable=False, default="")
+    updated_at = Column(String)
+
 
 load_dotenv()
 
@@ -192,12 +214,14 @@ def init_db() -> None:
     _migrate_generated_at_columns()
     _migrate_flagged_column()
     _migrate_resume_eval_columns()
-    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates
+    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db
     db = SessionLocal()
     try:
         seed_field_help(db)
         seed_user_profile_field_help(db)
         seed_latex_templates(db)
+        seed_prompt_defaults(db)
+        migrate_file_prompts_to_db(db)
     finally:
         db.close()
 

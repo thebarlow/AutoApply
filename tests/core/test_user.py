@@ -118,14 +118,23 @@ def test_user_full_name_falls_back_to_first_last(db_session):
 
 def test_user_from_markdown_returns_profile_dict(db_session):
     from core.user import User
+    from db.database import Prompt, PromptDefault
+    from db.seed import PROMPT_TYPE_KEYS
     import unittest.mock as mock
 
-    db_session.add(User(name="Matt", data=json.dumps({
+    u = User(name="Matt", data=json.dumps({
         **SAMPLE_DATA,
         "llm_provider_type": "openai",
         "llm_model": "gpt-4o",
-        "prompt_resume_parse": "Parse this resume.",
-    })))
+    }))
+    db_session.add(u)
+    db_session.commit()
+    for tk in PROMPT_TYPE_KEYS:
+        db_session.add(PromptDefault(type_key=tk, content="default " * 20))
+    db_session.add(Prompt(
+        profile_id=u.id, type_key="resume_parse",
+        content="Parse this resume carefully and extract all structured information.", model="", updated_at="t",
+    ))
     db_session.commit()
 
     mock_client = MagicMock()
@@ -164,24 +173,19 @@ def test_user_master_resume_falls_back_to_render(db_session):
 
 def test_user_hydrates_new_fields_from_data(db_session):
     from core.user import User
-    from pathlib import Path
     data = {
         **SAMPLE_DATA,
         "website": "https://example.com",
-        "prompt_scoring": "custom scoring prompt",
-        "prompt_resume": "custom resume prompt",
-        "prompt_cover": "custom cover prompt",
-        "prompt_extraction": "custom extraction prompt",
     }
     db_session.add(User(name="Matt", data=json.dumps(data)))
     db_session.commit()
     user = User.load(db_session)
     assert user.website == "https://example.com"
-    assert user.prompt_scoring.endswith(".md")
-    assert Path(user.prompt_scoring).read_text(encoding="utf-8") == "custom scoring prompt"
-    assert user.prompt_resume.endswith(".md")
-    assert user.prompt_cover.endswith(".md")
-    assert user.prompt_extraction.endswith(".md")
+    # Prompts now live in the DB; _hydrate initialises model attrs to empty string.
+    assert user.prompt_scoring_model == ""
+    assert user.prompt_resume_model == ""
+    assert user.prompt_cover_model == ""
+    assert user.prompt_extraction_model == ""
 
 
 def test_user_hydrates_new_fields_default_to_empty(db_session):
@@ -190,50 +194,65 @@ def test_user_hydrates_new_fields_default_to_empty(db_session):
     db_session.commit()
     user = User.load(db_session)
     assert user.website == ""
-    assert user.prompt_scoring == ""
-    assert user.prompt_resume == ""
-    assert user.prompt_cover == ""
-    assert user.prompt_extraction == ""
+    # Prompts live in DB now; _model attrs default to empty string.
+    assert user.prompt_scoring_model == ""
+    assert user.prompt_resume_model == ""
+    assert user.prompt_cover_model == ""
+    assert user.prompt_extraction_model == ""
 
 
 def test_user_to_dict_includes_new_fields(db_session):
     from core.user import User
-    data = {**SAMPLE_DATA, "website": "https://portfolio.dev", "prompt_resume": "my prompt"}
+    data = {**SAMPLE_DATA, "website": "https://portfolio.dev"}
     db_session.add(User(name="Matt", data=json.dumps(data)))
     db_session.commit()
     user = User.load(db_session)
     serialized = user._to_dict()
     assert serialized["website"] == "https://portfolio.dev"
-    assert serialized["prompt_resume"].endswith(".md")
-    assert "prompt_scoring" in serialized
-    assert "prompt_cover" in serialized
-    assert "prompt_extraction" in serialized
+    # Prompts now live in the DB; they are no longer serialised into the profile JSON.
+    assert "prompt_resume" not in serialized
+    assert "prompt_scoring" not in serialized
 
 
 def test_user_prompt_resume_parse_round_trips(db_session):
     from core.user import User
-    from pathlib import Path
+    from db.database import Prompt, PromptDefault
+    from db.seed import PROMPT_TYPE_KEYS
     import json as _json
-    data = {**SAMPLE_DATA, "prompt_resume_parse": "Custom parse prompt: {user.first_name}"}
-    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    # Prompts live in DB now — seed a Prompt row directly.
+    u = User(name="Matt", data=_json.dumps(SAMPLE_DATA))
+    db_session.add(u)
+    db_session.commit()
+    for tk in PROMPT_TYPE_KEYS:
+        db_session.add(PromptDefault(type_key=tk, content="default " * 20))
+    db_session.add(Prompt(
+        profile_id=u.id, type_key="resume_parse",
+        content="Custom parse prompt: {user.first_name} " * 5,
+        model="", updated_at="t",
+    ))
     db_session.commit()
     user = User.load(db_session)
-    assert user.prompt_resume_parse.endswith(".md")
-    assert Path(user.prompt_resume_parse).read_text(encoding="utf-8") == "Custom parse prompt: {user.first_name}"
+    assert user.resolve_prompt("resume_parse").startswith("Custom parse prompt:")
 
 
 def test_from_markdown_uses_custom_system_prompt(db_session):
     from core.user import User
+    from db.database import Prompt, PromptDefault
+    from db.seed import PROMPT_TYPE_KEYS
     import json as _json
     import unittest.mock as mock
 
-    data = {
-        **SAMPLE_DATA,
-        "prompt_resume_parse": "You parse resumes for {user.first_name} and extract every detail with great care and precision.",
-        "llm_provider_type": "openai",
-        "llm_model": "gpt-4o",
-    }
-    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    data = {**SAMPLE_DATA, "llm_provider_type": "openai", "llm_model": "gpt-4o"}
+    u = User(name="Matt", data=_json.dumps(data))
+    db_session.add(u)
+    db_session.commit()
+    for tk in PROMPT_TYPE_KEYS:
+        db_session.add(PromptDefault(type_key=tk, content="default " * 20))
+    db_session.add(Prompt(
+        profile_id=u.id, type_key="resume_parse",
+        content="You parse resumes for {user.first_name} and extract every detail with great care and precision.",
+        model="", updated_at="t",
+    ))
     db_session.commit()
 
     mock_client = MagicMock()
@@ -259,56 +278,113 @@ def test_from_markdown_uses_custom_system_prompt(db_session):
     assert "You parse resumes for Matt and extract every detail with great care and precision." == system_msg["content"]
 
 
-# ── resolve_prompt validation / auto-reset ──────────────────────────────────
+# ── resolve_prompt validation / auto-reset (DB-based) ───────────────────────
 
-import core.user as _user_mod
-
-_DEFAULT_SCORING = (_user_mod._PROMPTS_DEFAULTS_DIR / "scoring.md")
-
-
-def _make_user(db_session, prompt_scoring):
+def _make_user_with_scoring(db_session, scoring_content, monkeypatch):
     from core.user import User
-    data = {**SAMPLE_DATA, "prompt_scoring": prompt_scoring}
-    u = User(name="Matt", data=json.dumps(data))
-    db_session.add(u)
-    db_session.commit()
-    u._hydrate()
-    return u
-
-
-def test_resolve_prompt_keeps_valid_custom(db_session, tmp_path, monkeypatch):
+    from db.database import Config, Prompt, PromptDefault
+    from db.seed import PROMPT_TYPE_KEYS
     sent = []
     monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
-    custom = tmp_path / "my_scoring.md"
-    custom.write_text("Score this job against the candidate carefully using at least eleven distinct words here.", encoding="utf-8")
-    u = _make_user(db_session, str(custom))
+    u = User(name="Matt", data=json.dumps(SAMPLE_DATA))
+    db_session.add(u)
+    db_session.commit()
+    db_session.add(Config(key="active_profile_id", value=str(u.id)))
+    for tk in PROMPT_TYPE_KEYS:
+        db_session.add(PromptDefault(type_key=tk, content="default scoring prompt word " * 5))
+    db_session.add(Prompt(profile_id=u.id, type_key="scoring", content=scoring_content, model="", updated_at="t"))
+    db_session.commit()
+    return User.load(db_session), sent
 
-    assert u.resolve_prompt("scoring").startswith("Score this job")
-    assert u.prompt_scoring == str(custom)  # unchanged
+
+def test_resolve_prompt_keeps_valid_custom(db_session, monkeypatch):
+    content = "Score this job against the candidate carefully using at least eleven distinct words here."
+    user, sent = _make_user_with_scoring(db_session, content, monkeypatch)
+    assert user.resolve_prompt("scoring").startswith("Score this job")
     assert sent == []  # no reset, no alert
 
 
-def test_resolve_prompt_resets_when_too_short(db_session, tmp_path, monkeypatch):
-    sent = []
-    monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
-    custom = tmp_path / "short.md"
-    custom.write_text("too short prompt", encoding="utf-8")  # 3 words
-    u = _make_user(db_session, str(custom))
-
-    content = u.resolve_prompt("scoring")
-    assert content == _DEFAULT_SCORING.read_text(encoding="utf-8").strip()
-    assert u.prompt_scoring == str(_DEFAULT_SCORING)  # persisted reset
+def test_resolve_prompt_resets_when_too_short(db_session, monkeypatch):
+    user, sent = _make_user_with_scoring(db_session, "too short prompt", monkeypatch)
+    result = user.resolve_prompt("scoring")
+    assert result.startswith("default scoring")
     assert len(sent) == 1 and sent[0][0] == "prompt_reset"
     assert "too short" in sent[0][1]["reason"]
 
 
-def test_resolve_prompt_resets_when_missing(db_session, tmp_path, monkeypatch):
+def test_resolve_prompt_resets_when_missing(db_session, monkeypatch):
+    # No Prompt row at all for scoring — simulates missing.
+    from core.user import User
+    from db.database import Config, PromptDefault
+    from db.seed import PROMPT_TYPE_KEYS
     sent = []
     monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
-    u = _make_user(db_session, str(tmp_path / "gone.md"))  # nonexistent
-
-    content = u.resolve_prompt("scoring")
-    assert content == _DEFAULT_SCORING.read_text(encoding="utf-8").strip()
-    assert u.prompt_scoring == str(_DEFAULT_SCORING)
+    u = User(name="Matt", data=json.dumps(SAMPLE_DATA))
+    db_session.add(u)
+    db_session.commit()
+    db_session.add(Config(key="active_profile_id", value=str(u.id)))
+    for tk in PROMPT_TYPE_KEYS:
+        db_session.add(PromptDefault(type_key=tk, content="default scoring prompt word " * 5))
+    db_session.commit()
+    user = User.load(db_session)
+    result = user.resolve_prompt("scoring")
+    assert result.startswith("default scoring")
     assert len(sent) == 1 and sent[0][0] == "prompt_reset"
-    assert "missing" in sent[0][1]["reason"]
+    assert "unset" in sent[0][1]["reason"]
+
+
+# ── DB-based resolve_prompt (Task 4) ────────────────────────────────────────
+
+def _make_profile_with_prompts(db, *, content="word " * 20, model=""):
+    from core.user import User
+    from db.database import Config, Prompt, PromptDefault
+    from db.seed import PROMPT_TYPE_KEYS
+    u = User(name="P", data=json.dumps(SAMPLE_DATA))
+    db.add(u)
+    db.commit()
+    db.add(Config(key="active_profile_id", value=str(u.id)))
+    for tk in PROMPT_TYPE_KEYS:
+        db.add(PromptDefault(type_key=tk, content="default " * 20))
+        db.add(Prompt(profile_id=u.id, type_key=tk, content=content, model=model, updated_at="t"))
+    db.commit()
+    return u
+
+
+def test_resolve_prompt_returns_db_content(db_session):
+    from core.user import User
+    _make_profile_with_prompts(db_session, content="custom scoring " * 10)
+    user = User.load(db_session)
+    assert user.resolve_prompt("scoring").startswith("custom scoring")
+
+
+def test_resolve_prompt_autoresets_when_too_short(db_session):
+    from core.user import User
+    from db.database import Prompt
+    u = _make_profile_with_prompts(db_session)
+    row = db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").first()
+    row.content = "too short"
+    db_session.commit()
+    user = User.load(db_session)
+    result = user.resolve_prompt("scoring")
+    assert result.startswith("default")
+    repaired = db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").first()
+    assert repaired.content.startswith("default")
+
+
+def test_resolve_prompt_raises_without_default(db_session):
+    from core.user import User, PromptNotConfiguredError
+    from db.database import Prompt, PromptDefault
+    u = _make_profile_with_prompts(db_session)
+    db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").delete()
+    db_session.query(PromptDefault).filter_by(type_key="scoring").delete()
+    db_session.commit()
+    user = User.load(db_session)
+    with pytest.raises(PromptNotConfiguredError):
+        user.resolve_prompt("scoring")
+
+
+def test_hydrate_populates_model_from_rows(db_session):
+    from core.user import User
+    _make_profile_with_prompts(db_session, model="gpt-x")
+    user = User.load(db_session)
+    assert user.prompt_scoring_model == "gpt-x"
