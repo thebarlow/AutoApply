@@ -64,3 +64,16 @@ def test_extraction_defaults():
     assert r.seniority == "senior"
     assert r.required_skills == []
     assert r.salary_min is None
+
+
+def test_parse_no_json_object_raises():
+    from core.schemas import parse_llm_json, EvalResponse
+    with pytest.raises(RuntimeError):
+        parse_llm_json("the model said no", EvalResponse)
+
+
+def test_parse_value_ending_in_backticks():
+    from core.schemas import parse_llm_json, Issue
+    # A JSON value whose content ends with backticks must not be corrupted.
+    r = parse_llm_json('{"category": "x", "description": "use ```code```"}', Issue)
+    assert r.description == "use ```code```"

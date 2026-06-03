@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import TypeVar
 
 from pydantic import BaseModel, Field, field_validator
@@ -99,21 +98,34 @@ def parse_llm_json(raw: str, model: type[T]) -> T:
     from pydantic import ValidationError
 
     text = (raw or "").strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\s*```$", "", text).strip()
-    first = text.find("{")
-    last = text.rfind("}")
-    if first != -1 and last > first:
-        text = text[first : last + 1]
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+    if text.endswith("```"):
+        text = text.rsplit("\n", 1)[0] if "\n" in text else text[:-3]
+    text = text.strip()
 
     if not text:
         raise RuntimeError("LLM returned empty content")
 
-    try:
-        data = json.loads(text)
-        return model.model_validate(data)
-    except (json.JSONDecodeError, ValueError, ValidationError) as exc:
+    first = text.find("{")
+    last = text.rfind("}")
+    if first == -1 or last <= first:
         preview = (raw or "")[:_PREVIEW_LEN].replace("\n", " ")
         raise RuntimeError(
-            f"Unparseable LLM response: {exc}. Preview: {preview!r}"
+            f"LLM response contains no JSON object. Preview: {preview!r}"
+        )
+    text = text[first : last + 1]
+
+    preview = (raw or "")[:_PREVIEW_LEN].replace("\n", " ")
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError(
+            f"LLM response is not valid JSON: {exc}. Preview: {preview!r}"
+        ) from exc
+    try:
+        return model.model_validate(data)
+    except ValidationError as exc:
+        raise RuntimeError(
+            f"LLM response failed schema validation: {exc}. Preview: {preview!r}"
         ) from exc
