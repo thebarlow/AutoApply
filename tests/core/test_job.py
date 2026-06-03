@@ -484,6 +484,25 @@ def test_evaluate_empty_doc_short_circuits_to_zero(db_session, tmp_path, monkeyp
     assert called["llm"] is False
 
 
+def test_evaluate_doc_md_parses_json(db_session, tmp_path, monkeypatch):
+    import core.job as job_mod
+    from core.job import Job
+    monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
+    job = Job.from_scraped(_make_scraped(job_key="ev_1"))
+    db_session.add(job)
+    db_session.commit()
+    (tmp_path / "ev_1_resume.md").write_text(
+        "---\nname: X\n---\n\n## Profile\nReal body here.", encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "core.llm.call_llm",
+        lambda *a, **k: '{"score": 0.9, "issues": [{"category": "structure", "description": "fix"}]}',
+    )
+    out = job.evaluate_resume_md("eval prompt {current_document}", object(), object(), "m")
+    assert out["score"] == 0.9
+    assert out["issues"][0]["category"] == "structure"
+
+
 def test_generate_cover_md_rejects_empty_content(db_session, tmp_path, monkeypatch):
     """A length-truncated (empty) LLM response must raise, not write a blank letter."""
     from unittest.mock import MagicMock

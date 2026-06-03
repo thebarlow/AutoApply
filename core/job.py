@@ -11,7 +11,7 @@ from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import Session
 
 from db.database import Base
-from core.schemas import ScoreResponse, parse_llm_json
+from core.schemas import EvalResponse, ScoreResponse, parse_llm_json
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
@@ -439,33 +439,11 @@ class Job(Base):
 
         raw = call_llm(prompt, client, model, max_tokens=8192)
 
-        cleaned = raw.strip()
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        first = cleaned.find("{")
-        last = cleaned.rfind("}")
-        if first != -1 and last > first:
-            cleaned = cleaned[first : last + 1]
-
-        try:
-            parsed = json.loads(cleaned)
-        except (json.JSONDecodeError, ValueError) as exc:
-            preview = (raw or "")[:200].replace("\n", " ")
-            raise RuntimeError(
-                f"Eval LLM returned invalid JSON: {exc}. Preview: {preview!r}"
-            ) from exc
-
-        if "score" not in parsed or "issues" not in parsed:
-            raise RuntimeError(
-                f"Eval response missing required keys; got {sorted(parsed.keys())}"
-            )
-
-        score = max(0.0, min(1.0, float(parsed["score"])))
-        issues = parsed.get("issues", [])
-        if not isinstance(issues, list):
-            issues = []
-
-        return {"score": score, "issues": issues}
+        parsed = parse_llm_json(raw, EvalResponse)
+        return {
+            "score": parsed.score,
+            "issues": [i.model_dump() for i in parsed.issues],
+        }
 
     def evaluate_resume_md(
         self,
