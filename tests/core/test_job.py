@@ -645,6 +645,42 @@ def test_extract_description_maps_fields(db_session, monkeypatch):
     assert job.ext_required_skills == "Python, SQL"
     assert job.ext_tech_stack == "FastAPI"
     assert job.ext_salary_min is None
+    assert job.ext_salary_max is None
+
+
+def test_extract_description_coerces_salary(db_session, monkeypatch):
+    from core.job import Job
+    import core.user as user_mod
+    import core.llm as llm_mod
+
+    job = Job.from_scraped(_make_scraped(job_key="ex_sal"))
+    db_session.add(job)
+    db_session.commit()
+
+    fake_user = type("U", (), {
+        "resolve_prompt": lambda self, k: "extract {job.description}",
+        "prompt_extraction_model": "m",
+    })()
+    monkeypatch.setattr(user_mod.User, "load", classmethod(lambda cls, db: fake_user))
+
+    # salary_min as a number, salary_max as a numeric string — both must end up float.
+    content = (
+        '{"seniority": "mid", "role_type": "IC", "domain": "x",'
+        ' "work_arrangement": "remote", "employment_type": "full-time",'
+        ' "required_skills": [], "preferred_skills": [], "tech_stack": [],'
+        ' "key_responsibilities": [], "company_signals": [],'
+        ' "salary_min": 90000, "salary_max": "120000"}'
+    )
+    # Patch target is core.llm because extract_description imports
+    # get_client_for_profile locally inside the method body.
+    monkeypatch.setattr(
+        llm_mod, "get_client_for_profile",
+        lambda user, model: (_FakeClient(content), "m"),
+    )
+
+    job.extract_description(db_session)
+    assert job.ext_salary_min == 90000.0
+    assert job.ext_salary_max == 120000.0
 
 
 def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):
