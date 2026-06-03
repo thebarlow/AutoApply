@@ -585,7 +585,7 @@ def test_score_raises_on_bad_json(db_session):
     db_session.add(job)
     db_session.commit()
     client = _FakeClient("not json at all")
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="not valid JSON|no JSON object"):
         job.score(
             user=object(), config={}, client=client, model="x",
             db=db_session, prompt_content="score this",

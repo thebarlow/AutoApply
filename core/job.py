@@ -11,6 +11,7 @@ from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import Session
 
 from db.database import Base
+from core.schemas import ScoreResponse, parse_llm_json
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
@@ -371,12 +372,10 @@ class Job(Base):
         if not raw:
             raise RuntimeError("LLM returned empty content")
 
-        from core.schemas import ScoreResponse, parse_llm_json
-
         parsed = parse_llm_json(raw, ScoreResponse)
 
         w1, w2 = config.get("w1", 0.5), config.get("w2", 0.5)
-        final = max(0.0, min(1.0, w1 * parsed.fit_score + w2 * parsed.desirability_score))
+        final = max(0.0, min(1.0, w1 * parsed.desirability_score + w2 * parsed.fit_score))
 
         self.desirability_score = parsed.desirability_score
         self.fit_score = parsed.fit_score
