@@ -192,8 +192,8 @@ def test_score_populates_scores(db_session):
     choice.message.content = _json.dumps({
         "desirability_score": 0.8,
         "fit_score": 0.7,
-        "desirability_justification": "Good salary.",
-        "fit_justification": "Python match.",
+        "desirability_justification": {"raised": ["Good salary."], "lowered": []},
+        "fit_justification": {"raised": ["Python match."], "lowered": []},
     })
     choice.finish_reason = "stop"
 
@@ -484,6 +484,27 @@ def test_evaluate_empty_doc_short_circuits_to_zero(db_session, tmp_path, monkeyp
     assert called["llm"] is False
 
 
+def test_evaluate_resume_md_returns_score_and_issues(db_session, tmp_path, monkeypatch):
+    import core.job as job_mod
+    from core.job import Job
+    monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
+    job = Job.from_scraped(_make_scraped(job_key="ev_1"))
+    db_session.add(job)
+    db_session.commit()
+    (tmp_path / "ev_1_resume.md").write_text(
+        "---\nname: X\n---\n\n## Profile\nReal body here.", encoding="utf-8"
+    )
+    # Patch target is core.llm (not core.job) because _evaluate_doc_md imports
+    # call_llm locally inside the method body.
+    monkeypatch.setattr(
+        "core.llm.call_llm",
+        lambda *a, **k: '{"score": 0.9, "issues": [{"category": "structure", "description": "fix"}]}',
+    )
+    out = job.evaluate_resume_md("eval prompt {current_document}", object(), object(), "m")
+    assert out["score"] == 0.9
+    assert out["issues"][0]["category"] == "structure"
+
+
 def test_generate_cover_md_rejects_empty_content(db_session, tmp_path, monkeypatch):
     """A length-truncated (empty) LLM response must raise, not write a blank letter."""
     from unittest.mock import MagicMock
@@ -524,6 +545,142 @@ def test_resume_generated_at_set_on_generate_pdf(db_session, tmp_path):
     db_session.refresh(job)
     assert job.resume_generated_at is not None
     assert "T" in job.resume_generated_at
+
+
+class _FakeUsage:
+    cost = 0.0
+
+
+class _FakeChoice:
+    def __init__(self, content):
+        self.message = type("M", (), {"content": content})()
+        self.finish_reason = "stop"
+
+
+class _FakeResponse:
+    def __init__(self, content):
+        self.choices = [_FakeChoice(content)]
+        self.usage = _FakeUsage()
+
+
+class _FakeCompletions:
+    def __init__(self, content):
+        self._content = content
+
+    def create(self, **kwargs):
+        return _FakeResponse(self._content)
+
+
+class _FakeClient:
+    def __init__(self, content):
+        self.chat = type("C", (), {"completions": _FakeCompletions(content)})()
+
+
+def test_score_populates_fields(db_session):
+    from core.job import Job
+    job = Job.from_scraped(_make_scraped())
+    db_session.add(job)
+    db_session.commit()
+    content = (
+        '{"fit_score": 0.8, "desirability_score": 0.6,'
+        ' "fit_justification": {"raised": ["Python match"], "lowered": []},'
+        ' "desirability_justification": {"raised": [], "lowered": ["low salary"]}}'
+    )
+    client = _FakeClient(content)
+    job.score(
+        user=object(), config={"w1": 0.5, "w2": 0.5},
+        client=client, model="x", db=db_session,
+        prompt_content="score this",
+    )
+    assert job.fit_score == 0.8
+    assert job.desirability_score == 0.6
+    assert job.final_score == pytest.approx(0.7)
+    import json as _json
+    just = _json.loads(job.score_justification)
+    assert just["fit"]["raised"] == ["Python match"]
+
+
+def test_score_raises_on_bad_json(db_session):
+    from core.job import Job
+    job = Job.from_scraped(_make_scraped())
+    db_session.add(job)
+    db_session.commit()
+    client = _FakeClient("not json at all")
+    with pytest.raises(RuntimeError, match="not valid JSON|no JSON object"):
+        job.score(
+            user=object(), config={}, client=client, model="x",
+            db=db_session, prompt_content="score this",
+        )
+
+
+def test_extract_description_maps_fields(db_session, monkeypatch):
+    from core.job import Job
+    import core.user as user_mod
+    import core.llm as llm_mod
+
+    job = Job.from_scraped(_make_scraped(job_key="ex_1"))
+    db_session.add(job)
+    db_session.commit()
+
+    fake_user = type("U", (), {
+        "resolve_prompt": lambda self, k: "extract {job.description}",
+        "prompt_extraction_model": "m",
+    })()
+    monkeypatch.setattr(user_mod.User, "load", classmethod(lambda cls, db: fake_user))
+
+    content = (
+        '{"required_skills": ["Python", "SQL"], "preferred_skills": [],'
+        ' "tech_stack": ["FastAPI"], "seniority": "senior", "role_type": "IC",'
+        ' "domain": "fintech", "key_responsibilities": ["ship features"],'
+        ' "company_signals": [], "work_arrangement": "remote",'
+        ' "employment_type": "full-time"}'
+    )
+    monkeypatch.setattr(
+        llm_mod, "get_client_for_profile",
+        lambda user, model: (_FakeClient(content), "m"),
+    )
+
+    job.extract_description(db_session)
+    assert job.ext_seniority == "senior"
+    assert job.ext_required_skills == "Python, SQL"
+    assert job.ext_tech_stack == "FastAPI"
+    assert job.ext_salary_min is None
+    assert job.ext_salary_max is None
+
+
+def test_extract_description_coerces_salary(db_session, monkeypatch):
+    from core.job import Job
+    import core.user as user_mod
+    import core.llm as llm_mod
+
+    job = Job.from_scraped(_make_scraped(job_key="ex_sal"))
+    db_session.add(job)
+    db_session.commit()
+
+    fake_user = type("U", (), {
+        "resolve_prompt": lambda self, k: "extract {job.description}",
+        "prompt_extraction_model": "m",
+    })()
+    monkeypatch.setattr(user_mod.User, "load", classmethod(lambda cls, db: fake_user))
+
+    # salary_min as a number, salary_max as a numeric string — both must end up float.
+    content = (
+        '{"seniority": "mid", "role_type": "IC", "domain": "x",'
+        ' "work_arrangement": "remote", "employment_type": "full-time",'
+        ' "required_skills": [], "preferred_skills": [], "tech_stack": [],'
+        ' "key_responsibilities": [], "company_signals": [],'
+        ' "salary_min": 90000, "salary_max": "120000"}'
+    )
+    # Patch target is core.llm because extract_description imports
+    # get_client_for_profile locally inside the method body.
+    monkeypatch.setattr(
+        llm_mod, "get_client_for_profile",
+        lambda user, model: (_FakeClient(content), "m"),
+    )
+
+    job.extract_description(db_session)
+    assert job.ext_salary_min == 90000.0
+    assert job.ext_salary_max == 120000.0
 
 
 def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):

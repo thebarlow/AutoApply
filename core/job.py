@@ -11,6 +11,7 @@ from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import Session
 
 from db.database import Base
+from core.schemas import EvalResponse, ExtractionResponse, ScoreResponse, parse_llm_json
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
@@ -371,33 +372,17 @@ class Job(Base):
         if not raw:
             raise RuntimeError("LLM returned empty content")
 
-        required = {"desirability_score", "fit_score", "desirability_justification", "fit_justification"}
-        cleaned = raw.strip()
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        first = cleaned.find("{")
-        last = cleaned.rfind("}")
-        if first != -1 and last > first:
-            cleaned = cleaned[first : last + 1]
-        try:
-            parsed = json.loads(cleaned)
-            if not required.issubset(parsed.keys()):
-                raise ValueError(f"Missing required keys; got {sorted(parsed.keys())}")
-        except (json.JSONDecodeError, ValueError, AttributeError) as e:
-            preview = (raw or "")[:300].replace("\n", " ")
-            raise RuntimeError(f"Unparseable LLM response: {e}. Preview: {preview!r}") from e
+        parsed = parse_llm_json(raw, ScoreResponse)
 
-        desirability = max(0.0, min(1.0, float(parsed["desirability_score"])))
-        fit = max(0.0, min(1.0, float(parsed["fit_score"])))
         w1, w2 = config.get("w1", 0.5), config.get("w2", 0.5)
-        final = max(0.0, min(1.0, w1 * desirability + w2 * fit))
+        final = max(0.0, min(1.0, w1 * parsed.desirability_score + w2 * parsed.fit_score))
 
-        self.desirability_score = desirability
-        self.fit_score = fit
+        self.desirability_score = parsed.desirability_score
+        self.fit_score = parsed.fit_score
         self.final_score = final
         self.score_justification = json.dumps({
-            "desirability": parsed["desirability_justification"],
-            "fit": parsed["fit_justification"],
+            "desirability": parsed.desirability_justification.model_dump(),
+            "fit": parsed.fit_justification.model_dump(),
         })
         db.commit()
 
@@ -454,33 +439,11 @@ class Job(Base):
 
         raw = call_llm(prompt, client, model, max_tokens=8192)
 
-        cleaned = raw.strip()
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        first = cleaned.find("{")
-        last = cleaned.rfind("}")
-        if first != -1 and last > first:
-            cleaned = cleaned[first : last + 1]
-
-        try:
-            parsed = json.loads(cleaned)
-        except (json.JSONDecodeError, ValueError) as exc:
-            preview = (raw or "")[:200].replace("\n", " ")
-            raise RuntimeError(
-                f"Eval LLM returned invalid JSON: {exc}. Preview: {preview!r}"
-            ) from exc
-
-        if "score" not in parsed or "issues" not in parsed:
-            raise RuntimeError(
-                f"Eval response missing required keys; got {sorted(parsed.keys())}"
-            )
-
-        score = max(0.0, min(1.0, float(parsed["score"])))
-        issues = parsed.get("issues", [])
-        if not isinstance(issues, list):
-            issues = []
-
-        return {"score": score, "issues": issues}
+        parsed = parse_llm_json(raw, EvalResponse)
+        return {
+            "score": parsed.score,
+            "issues": [i.model_dump() for i in parsed.issues],
+        }
 
     def evaluate_resume_md(
         self,
@@ -640,7 +603,6 @@ class Job(Base):
             PromptNotConfiguredError: If extraction prompt is not configured.
             RuntimeError: If the LLM fails or returns invalid JSON.
         """
-        import re
         from core.user import User, PromptNotConfiguredError
         from core.llm import get_client_for_profile
 
@@ -666,30 +628,20 @@ class Job(Base):
         raw = choice.message.content
         if not raw:
             raise RuntimeError(f"LLM returned empty extraction response (finish_reason={choice.finish_reason!r})")
-        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-        raw = re.sub(r"\s*```$", "", raw.strip())
-        result = raw.strip()
-        if not result:
-            raise RuntimeError("LLM extraction returned empty content after fence stripping")
-        try:
-            data = json.loads(result)
-        except (json.JSONDecodeError, ValueError) as exc:
-            raise RuntimeError(f"LLM extraction is not valid JSON: {exc}") from exc
+        parsed = parse_llm_json(raw, ExtractionResponse)
 
-        self.ext_seniority = data.get("seniority", "")
-        self.ext_role_type = data.get("role_type", "")
-        self.ext_domain = data.get("domain", "")
-        self.ext_work_arrangement = data.get("work_arrangement", "")
-        self.ext_employment_type = data.get("employment_type", "")
-        self.ext_required_skills = ", ".join(data.get("required_skills") or [])
-        self.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
-        self.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
-        self.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
-        self.ext_company_signals = ", ".join(data.get("company_signals") or [])
-        salary_min = data.get("salary_min")
-        salary_max = data.get("salary_max")
-        self.ext_salary_min = float(salary_min) if salary_min is not None else None
-        self.ext_salary_max = float(salary_max) if salary_max is not None else None
+        self.ext_seniority = parsed.seniority
+        self.ext_role_type = parsed.role_type
+        self.ext_domain = parsed.domain
+        self.ext_work_arrangement = parsed.work_arrangement
+        self.ext_employment_type = parsed.employment_type
+        self.ext_required_skills = ", ".join(parsed.required_skills)
+        self.ext_preferred_skills = ", ".join(parsed.preferred_skills)
+        self.ext_tech_stack = ", ".join(parsed.tech_stack)
+        self.ext_key_responsibilities = ", ".join(parsed.key_responsibilities)
+        self.ext_company_signals = ", ".join(parsed.company_signals)
+        self.ext_salary_min = parsed.salary_min
+        self.ext_salary_max = parsed.salary_max
         db.flush()
         db.commit()
 
