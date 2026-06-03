@@ -23,6 +23,30 @@ def _strip_url(url: str) -> str:
     return url.replace("https://www.", "").replace("https://", "").replace("http://", "").rstrip("/")
 
 
+def _split_body_for_education(fragment: str) -> tuple[str, str]:
+    """Split a rendered resume body so structured Education can be injected.
+
+    Education must appear as the section immediately after Profile. We strip any
+    LLM-generated Education section, then split before the *second* ``<h2>`` —
+    whatever it is (Experience, Projects, …) — so Education always lands after
+    the opening Profile section, even when no Experience section exists.
+
+    Returns ``(content_pre, content_post)``; ``content_post`` is empty when the
+    body has only one section (Education then trails Profile, which is correct).
+    """
+    fragment_no_edu = re.sub(
+        r"<h2[^>]*>\s*Education\s*</h2>.*?(?=<h2|\Z)",
+        "",
+        fragment,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    headers = list(re.finditer(r"<h2[^>]*>", fragment_no_edu, re.IGNORECASE))
+    if len(headers) >= 2:
+        split = headers[1].start()
+        return fragment_no_edu[:split], fragment_no_edu[split:]
+    return fragment_no_edu, ""
+
+
 def _parse_frontmatter(md_path: Path) -> dict[str, Any]:
     """Extract YAML front matter from a markdown file.
 
@@ -88,26 +112,12 @@ def render_pdf(
     today = _date.today()
     date_str = f"{today.day} {today.strftime('%B')} {today.year}"
 
-    # When frontmatter education is present, strip the LLM-generated Education
-    # section from the pandoc fragment and split at Experience so the template
-    # can inject the structured education block in the correct position
-    # (Profile → Education → Experience → …).
+    # When frontmatter education is present, inject the structured education
+    # block as the second section so the layout is Profile → Education → … .
     content_pre = fragment
     content_post = ""
     if meta.get("education"):
-        # Remove the <h2>Education</h2> section from the pandoc output
-        fragment_no_edu = re.sub(
-            r"<h2[^>]*>\s*Education\s*</h2>.*?(?=<h2|\Z)",
-            "",
-            fragment,
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        exp_match = re.search(r"(?=<h2[^>]*>\s*Experience\s*</h2>)", fragment_no_edu, re.IGNORECASE)
-        if exp_match:
-            content_pre = fragment_no_edu[: exp_match.start()]
-            content_post = fragment_no_edu[exp_match.start() :]
-        else:
-            content_pre = fragment_no_edu
+        content_pre, content_post = _split_body_for_education(fragment)
 
     env = Environment(autoescape=False)
     env.filters["strip_url"] = _strip_url
