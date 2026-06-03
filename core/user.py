@@ -432,8 +432,18 @@ class User(Base):
                 return p.read_text(encoding="utf-8")
         return self.render_for_prompt()
 
+    # Minimum words a configured prompt must contain to be considered usable.
+    # A path that is missing or whose content falls at/below this is treated as
+    # invalid and auto-reset to the shipped default before the run proceeds.
+    _MIN_PROMPT_WORDS: ClassVar[int] = 10
+
     def resolve_prompt(self, type_key: str) -> str:
         """Read and return the prompt file content for the given type.
+
+        Validates the configured prompt before any run: if its path is unset or
+        missing, or its content is <= _MIN_PROMPT_WORDS words, the profile is
+        reset to the shipped default (persisted), the user is alerted via SSE,
+        and the default content is returned so the run can still proceed.
 
         Args:
             type_key: One of the keys in _PROMPT_TYPES (e.g. "scoring", "resume").
@@ -442,16 +452,61 @@ class User(Base):
             Prompt text content.
 
         Raises:
-            PromptNotConfiguredError: If path is empty, file does not exist, or content is empty.
+            PromptNotConfiguredError: If neither the configured prompt nor the
+                shipped default yields usable content.
         """
         label = _PROMPT_LABELS.get(type_key, type_key)
         path_str = getattr(self, f"prompt_{type_key}", "")
         p = Path(path_str) if path_str else None
+
+        invalid_reason: Optional[str] = None
+        content = ""
         if p is None or not p.exists():
-            p = _PROMPTS_DEFAULTS_DIR / f"{type_key}.md"
-        if not p.exists():
+            invalid_reason = "the prompt file is unset or missing"
+        else:
+            content = p.read_text(encoding="utf-8").strip()
+            if len(content.split()) <= self._MIN_PROMPT_WORDS:
+                invalid_reason = f"the prompt is too short (must exceed {self._MIN_PROMPT_WORDS} words)"
+
+        if invalid_reason is None:
+            return content
+
+        # Invalid prompt — fall back to the shipped default and reset the profile.
+        default_path = _PROMPTS_DEFAULTS_DIR / f"{type_key}.md"
+        if not default_path.exists():
             raise PromptNotConfiguredError(f"{label} not configured")
-        content = p.read_text(encoding="utf-8").strip()
-        if not content:
+        default_content = default_path.read_text(encoding="utf-8").strip()
+        if not default_content:
             raise PromptNotConfiguredError(f"{label} not configured")
-        return content
+
+        self._reset_prompt_to_default(type_key, default_path, label, invalid_reason)
+        return default_content
+
+    def _reset_prompt_to_default(
+        self, type_key: str, default_path: Path, label: str, reason: str
+    ) -> None:
+        """Point the profile's prompt at its default, persist, and alert the user."""
+        setattr(self, f"prompt_{type_key}", str(default_path))
+        try:
+            from sqlalchemy.orm import object_session
+
+            sess = object_session(self)
+            if sess is not None:
+                self.save(sess)
+        except Exception:
+            # Persistence is best-effort; the run should still proceed on the default.
+            pass
+        try:
+            from web.sse import send
+
+            send(
+                "prompt_reset",
+                {
+                    "type_key": type_key,
+                    "label": label,
+                    "reason": reason,
+                    "message": f"{label} prompt was reset to default because {reason}.",
+                },
+            )
+        except Exception:
+            pass

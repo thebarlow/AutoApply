@@ -26,6 +26,7 @@ Read the target directory's `CONTEXT.md` before making changes there.
 | Database models, session setup, migrations | `db/` | Has `CONTEXT.md`; SQLite via SQLAlchemy, run `init_db.py` for idempotent column migrations |
 | System tray app (PyQt6) — floating job-card panel, WS client, PDF drag handles | `tray_app/` | Has `CONTEXT.md`; entry point is `tray_app/main.py` |
 | Project user docs, developer notes, Excalidraw diagrams | `Obsidian/Auto Apply/` | Has `CONTEXT.md`; served via `web/routers/docs_router.py`; includes untracked `_templates/` |
+| Backlog, planned work, multi-session task tracking | `TODO.md` | Update whenever scope changes or an item is completed |
 
 ## Running the App
 

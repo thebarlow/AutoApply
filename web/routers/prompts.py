@@ -89,6 +89,8 @@ def put_prompt_file(path: str, body: PromptFileBody) -> dict:
         raise HTTPException(status_code=404, detail="Prompt file not found")
     if p.is_relative_to(defaults_dir):
         raise HTTPException(status_code=403, detail="Default prompts are read-only")
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="Prompt content cannot be empty")
     p.write_text(body.content, encoding="utf-8")
     return _prompt_meta(p)
 
@@ -104,6 +106,8 @@ def create_prompt_file(body: CreatePromptFileBody) -> dict:
     filename = body.filename.strip()
     if not filename.lower().endswith(".md"):
         raise HTTPException(status_code=400, detail="Only .md files are accepted")
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="Prompt content cannot be empty")
     _PROMPTS_DIR.mkdir(exist_ok=True)
     dest = (_PROMPTS_DIR / filename).resolve()
     if not dest.is_relative_to(_PROMPTS_DIR.resolve()):

@@ -19,6 +19,17 @@ export default function App() {
   const [promptStatus, setPromptStatus] = useState({})
   const prereqs = usePrerequisites()
   const [wizardSkipped, setWizardSkipped] = useState(false)
+  const [toasts, setToasts] = useState([]) // { id, message }
+
+  const dismissToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const pushToast = useCallback((message) => {
+    const id = Date.now() + Math.random()
+    setToasts((prev) => [...prev, { id, message }])
+    setTimeout(() => dismissToast(id), 8000)
+  }, [dismissToast])
   const showWizard = prereqs.loaded && prereqs.isFirstRun && !wizardSkipped
 
   const refetchPromptStatus = useCallback(() => {
@@ -65,6 +76,9 @@ export default function App() {
             else next.delete(payload.data.job_key)
             return next
           })
+        } else if (payload.type === 'prompt_reset') {
+          pushToast(payload.data?.message || 'A prompt was reset to its default.')
+          refetchPromptStatus()
         } else if (payload.type === 'llm_action') {
           const { job_key, action, processing } = payload.data
           setProcessingActions((prev) => {
@@ -115,7 +129,7 @@ export default function App() {
       cancelled = true
       if (es) es.close()
     }
-  }, [upsertJob])
+  }, [upsertJob, pushToast, refetchPromptStatus])
 
   // Escape key clears selection
   useEffect(() => {
@@ -158,6 +172,26 @@ export default function App() {
             />
           )}
           <Navbar />
+          {toasts.length > 0 && (
+            <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-sm">
+              {toasts.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-start gap-2 bg-[#1a1414] border border-yellow-500/40 rounded-lg px-3 py-2 shadow-xl"
+                >
+                  <span className="text-yellow-400 mt-0.5 shrink-0">⚠</span>
+                  <p className="text-xs text-space-text flex-1">{t.message}</p>
+                  <button
+                    onClick={() => dismissToast(t.id)}
+                    className="text-space-dim hover:text-space-text text-sm leading-none shrink-0"
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <Dashboard>
             <div className="col-span-3 overflow-hidden h-full">
               <Pipeline

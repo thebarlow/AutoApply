@@ -694,6 +694,13 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   const hasResume = !!job.resume_path
   const hasCover = !!job.cover_path
 
+  // Cache-bust artifacts on both local (re)generation AND server-side updates
+  // (e.g. background refinement, which bumps {doc}_generated_at without touching
+  // the local in-flight nonce). Without the timestamp, the iframe keeps showing
+  // a stale PDF after refinement rewrites it.
+  const resumeCacheKey = `${artifactNonce.resume}-${encodeURIComponent(job.resume_generated_at || '')}`
+  const coverCacheKey = `${artifactNonce.cover}-${encodeURIComponent(job.cover_generated_at || '')}`
+
   return (
     <div className="flex flex-col gap-4">
       {job.last_result_error && (
@@ -933,15 +940,15 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
           {artifactView === 'markdown' && (
             <MarkdownView
               url={contentTab === 'resume'
-                ? `/api/jobs/${job.job_key}/resume/markdown?v=${artifactNonce.resume}`
-                : `/api/jobs/${job.job_key}/cover/markdown?v=${artifactNonce.cover}`}
+                ? `/api/jobs/${job.job_key}/resume/markdown?v=${resumeCacheKey}`
+                : `/api/jobs/${job.job_key}/cover/markdown?v=${coverCacheKey}`}
             />
           )}
           {artifactView === 'pdf' && (
             <iframe
               src={contentTab === 'resume'
-                ? `/api/jobs/${job.job_key}/resume?v=${artifactNonce.resume}`
-                : `/api/jobs/${job.job_key}/cover?v=${artifactNonce.cover}`}
+                ? `/api/jobs/${job.job_key}/resume?v=${resumeCacheKey}`
+                : `/api/jobs/${job.job_key}/cover?v=${coverCacheKey}`}
               className="w-full h-[600px] rounded border border-space-border"
               title={contentTab === 'resume' ? 'Resume PDF' : 'Cover Letter PDF'}
             />

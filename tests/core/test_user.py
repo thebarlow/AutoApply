@@ -229,7 +229,7 @@ def test_from_markdown_uses_custom_system_prompt(db_session):
 
     data = {
         **SAMPLE_DATA,
-        "prompt_resume_parse": "You parse resumes for {user.first_name}.",
+        "prompt_resume_parse": "You parse resumes for {user.first_name} and extract every detail with great care and precision.",
         "llm_provider_type": "openai",
         "llm_model": "gpt-4o",
     }
@@ -256,4 +256,59 @@ def test_from_markdown_uses_custom_system_prompt(db_session):
         User.from_markdown("resume text here", db_session)
 
     system_msg = next(m for m in captured["messages"] if m["role"] == "system")
-    assert "You parse resumes for Matt." == system_msg["content"]
+    assert "You parse resumes for Matt and extract every detail with great care and precision." == system_msg["content"]
+
+
+# ── resolve_prompt validation / auto-reset ──────────────────────────────────
+
+import core.user as _user_mod
+
+_DEFAULT_SCORING = (_user_mod._PROMPTS_DEFAULTS_DIR / "scoring.md")
+
+
+def _make_user(db_session, prompt_scoring):
+    from core.user import User
+    data = {**SAMPLE_DATA, "prompt_scoring": prompt_scoring}
+    u = User(name="Matt", data=json.dumps(data))
+    db_session.add(u)
+    db_session.commit()
+    u._hydrate()
+    return u
+
+
+def test_resolve_prompt_keeps_valid_custom(db_session, tmp_path, monkeypatch):
+    sent = []
+    monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
+    custom = tmp_path / "my_scoring.md"
+    custom.write_text("Score this job against the candidate carefully using at least eleven distinct words here.", encoding="utf-8")
+    u = _make_user(db_session, str(custom))
+
+    assert u.resolve_prompt("scoring").startswith("Score this job")
+    assert u.prompt_scoring == str(custom)  # unchanged
+    assert sent == []  # no reset, no alert
+
+
+def test_resolve_prompt_resets_when_too_short(db_session, tmp_path, monkeypatch):
+    sent = []
+    monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
+    custom = tmp_path / "short.md"
+    custom.write_text("too short prompt", encoding="utf-8")  # 3 words
+    u = _make_user(db_session, str(custom))
+
+    content = u.resolve_prompt("scoring")
+    assert content == _DEFAULT_SCORING.read_text(encoding="utf-8").strip()
+    assert u.prompt_scoring == str(_DEFAULT_SCORING)  # persisted reset
+    assert len(sent) == 1 and sent[0][0] == "prompt_reset"
+    assert "too short" in sent[0][1]["reason"]
+
+
+def test_resolve_prompt_resets_when_missing(db_session, tmp_path, monkeypatch):
+    sent = []
+    monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
+    u = _make_user(db_session, str(tmp_path / "gone.md"))  # nonexistent
+
+    content = u.resolve_prompt("scoring")
+    assert content == _DEFAULT_SCORING.read_text(encoding="utf-8").strip()
+    assert u.prompt_scoring == str(_DEFAULT_SCORING)
+    assert len(sent) == 1 and sent[0][0] == "prompt_reset"
+    assert "missing" in sent[0][1]["reason"]

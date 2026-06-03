@@ -1,10 +1,14 @@
-# auto_apply
+# Auto Apply
 
-![logo](./assets/icon.png)
-Semi-automated job scraping, tailored resume generation, and application management.
+
+<table style="border: none; border-collapse: collapse;">
+<tr>
+<td><img src="./assets/icon.png" width="200"></td>
+<td>Semi-automated job scraping, tailored resume generation, and application management.</td>
+</tr>
+</table>
 
 ---
-
 
 ## Setup
 
@@ -31,9 +35,14 @@ Navigate to [http://127.0.0.1:8080/](http://127.0.0.1:8080/)
 ---
 
 ## Onboarding process
+
 New users are required to create a User Profile, which can seed data from their current master resume. 
 User Profiles must contain an API key to an LLM. The onboarding process links to documents for users unfamiliar with the process.
 This API key will determine what LLM models auto apply uses for all of its generation tasks.
+<video src="assets/first_time_start.mp4" controls width="640">
+  Your browser does not support embedded video —
+  <a href="assets/first_time_start.mp4">download the onboarding walkthrough</a>.
+</video>
 
 ---
 

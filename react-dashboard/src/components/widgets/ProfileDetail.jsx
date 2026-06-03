@@ -783,6 +783,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   const [content, setContent] = useState('')
   const [loadingContent, setLoadingContent] = useState(false)
   const [contentError, setContentError] = useState(null)
+  const [contentNotice, setContentNotice] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -814,15 +815,36 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
   useEscape(popOut, () => setPopOut(false))
   useEscape(!popOut, onClose)
 
-  // Load file content when selection changes
+  // Load file content when selection changes. If the configured file is gone
+  // (e.g. it was renamed), fall back to the type's default so the editor isn't
+  // left empty/errored and the user can re-link by saving.
   useEffect(() => {
-    if (!selectedFile) { setContent(''); return }
-    setLoadingContent(true)
-    setContentError(null)
-    getPromptFile(selectedFile)
-      .then((text) => { setContent(text); originalContent.current = text })
-      .catch(() => setContentError('Could not load file'))
-      .finally(() => setLoadingContent(false))
+    if (!selectedFile) { setContent(''); originalContent.current = ''; return }
+    let cancelled = false
+    ;(async () => {
+      setLoadingContent(true)
+      setContentError(null)
+      setContentNotice(null)
+      try {
+        const text = await getPromptFile(selectedFile)
+        if (cancelled) return
+        setContent(text)
+        originalContent.current = text
+      } catch {
+        try {
+          const { content: text } = await getDefaultPrompt(typeKey)
+          if (cancelled) return
+          setContent(text)
+          originalContent.current = text
+          setContentNotice('Configured file not found — loaded the default. Pick a file or Save As to re-link.')
+        } catch {
+          if (!cancelled) setContentError('Could not load file')
+        }
+      } finally {
+        if (!cancelled) setLoadingContent(false)
+      }
+    })()
+    return () => { cancelled = true }
   }, [selectedFile])
 
   const handleUpload = async (e) => {
@@ -904,6 +926,35 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
       onClose()
     } catch {
       setSaveError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Reset to the shipped default. This is the ONLY way to point a profile at a
+  // defaults/ prompt: a normal Save forks defaults into a custom copy, so without
+  // this the user can never select a pure default.
+  const handleReset = async () => {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const { path, content: text } = await getDefaultPrompt(typeKey)
+      const newData = {
+        ...profileData,
+        [`prompt_${typeKey}`]: path,
+        [`prompt_${typeKey}_model`]: modelOverride,
+      }
+      await updateProfile(profileId, { name: profileName || '', data: newData })
+      setSelectedFile(path)
+      setContent(text)
+      originalContent.current = text
+      setContentError(null)
+      setContentNotice(null)
+      onSaved(typeKey, path, modelOverride)
+      window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
+      onClose()
+    } catch {
+      setSaveError('Reset to default failed')
     } finally {
       setSaving(false)
     }
@@ -1002,6 +1053,8 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
     if (loadingContent) return <p className="text-xs text-space-dim">Loading…</p>
     if (contentError) return <p className="text-xs text-red-400">{contentError}</p>
     return (
+      <>
+      {contentNotice && <p className="text-xs text-yellow-400 mb-1.5">{contentNotice}</p>}
       <textarea
         ref={textareaRef}
         rows={14}
@@ -1013,8 +1066,15 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
         placeholder={selectedFile ? '' : 'Select a file above to edit'}
         disabled={!selectedFile}
       />
+      </>
     )
   }
+
+  // Ensure the currently-selected file is always a visible, pre-populated option,
+  // even when it lives in defaults/ (not returned by listPrompts) or no longer exists.
+  const fileOptions = (selectedFile && !promptFiles.some((f) => f.path === selectedFile))
+    ? [{ path: selectedFile, name: basename(selectedFile) + (isDefaultPrompt(selectedFile) ? ' (default)' : '') }, ...promptFiles]
+    : promptFiles
 
   return (
     <>
@@ -1023,7 +1083,21 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-space-border shrink-0">
             <span className="text-sm font-semibold text-space-text">{label}</span>
-            <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleReset}
+                disabled={saving || loadingContent || isDefaultPrompt(selectedFile)}
+                title={isDefaultPrompt(selectedFile) ? 'Already using the default prompt' : 'Reset to default prompt'}
+                aria-label="Reset to default prompt"
+                className="text-space-dim hover:text-purple-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+              </button>
+              <button onClick={onClose} className="text-space-dim hover:text-space-text text-lg leading-none">×</button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
@@ -1037,7 +1111,7 @@ function PromptModal({ typeKey, profileId, profileName, profileData, defaultMode
                   onChange={(e) => { setSelectedFile(e.target.value); setFieldErrors(prev => { const n = { ...prev }; delete n.selectedFile; return n }) }}
                 >
                   <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
-                  {promptFiles.map((f) => (
+                  {fileOptions.map((f) => (
                     <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
                   ))}
                 </select>
@@ -1274,6 +1348,12 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
   const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
   const basename = (path) => path?.split(/[\\/]/).pop() ?? ''
 
+  // Keep the active file selectable even when it lives in defaults/ (which
+  // listPrompts omits) or was renamed away.
+  const fileOptions = (currentFile && !promptFiles.some((f) => f.path === currentFile))
+    ? [{ path: currentFile, name: basename(currentFile) + (isDefaultPrompt(currentFile) ? ' (default)' : '') }, ...promptFiles]
+    : promptFiles
+
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     const token = e.dataTransfer.getData('text/plain')
@@ -1428,7 +1508,7 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
           <select className={inputClass + ' flex-1'} value={currentFile}
             onChange={e => setCurrentFile(e.target.value)}>
             <option value="" style={{ color: '#000', backgroundColor: '#fff' }}>— select a file —</option>
-            {promptFiles.map(f => (
+            {fileOptions.map(f => (
               <option key={f.path} value={f.path} style={{ color: '#000', backgroundColor: '#fff' }}>{f.name}</option>
             ))}
           </select>
@@ -1592,6 +1672,7 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
   }
 
   const basename = (path) => path?.split(/[\\/]/).pop() ?? ''
+  const isDefaultPrompt = (path) => /[/\\]defaults[/\\]/.test(path)
   const truncate = (s, n = 22) => s && s.length > n ? s.slice(0, n) + '…' : s
 
   return (
@@ -1603,7 +1684,11 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
           {PROMPT_TYPE_KEYS.map((typeKey) => {
             const filePath = data[`prompt_${typeKey}`] || ''
             const model = data[`prompt_${typeKey}_model`] || ''
-            const configured = filePath && filePath.endsWith('.md')
+            // A prompt is "Custom" only when it points at a file outside defaults/.
+            // A defaults/ path means the profile is using the shipped default prompt.
+            // A prompt is "Custom" only when it points at a file outside defaults/.
+            // A defaults/ path means the profile is using the shipped default prompt.
+            const configured = filePath && filePath.endsWith('.md') && !isDefaultPrompt(filePath)
             const bn = filePath ? basename(filePath) : null
 
             // After resume, inject resume-refinement card; after cover, inject cover-refinement card

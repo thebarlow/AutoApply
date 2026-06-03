@@ -272,9 +272,21 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <p className="text-xs text-space-dim uppercase tracking-widest mb-0.5">Welcome back</p>
-        <h2 className="text-lg font-semibold text-space-text">{displayName}</h2>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => onSelect(activeProfile.id)}
+          className="flex flex-col text-left hover:opacity-80 transition-opacity min-w-0"
+        >
+          <span className="text-xs text-space-dim uppercase tracking-widest mb-0.5">Welcome back</span>
+          <span className="text-lg font-semibold text-space-text truncate">{displayName}</span>
+        </button>
+        <div className="self-stretch w-px bg-space-border ml-auto" />
+        <button
+          onClick={() => setShowSwitchUser(true)}
+          className="text-sm text-space-dim hover:text-purple-400 transition-colors shrink-0"
+        >
+          Switch User
+        </button>
       </div>
 
       <div className="flex gap-1.5">
@@ -463,13 +475,6 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
           </div>
         </>
       )}
-
-      <button
-        onClick={() => setShowSwitchUser(true)}
-        className="w-full py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text hover:border-purple-500/50 transition-colors mt-2"
-      >
-        Switch User
-      </button>
     </div>
   )
 }
