@@ -606,6 +606,11 @@ _PROFILE_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_par
 
 
 # IMPORTANT: /active/prompt-status must be registered before /{profile_id}.
+def _prompt_row_configured(p) -> bool:
+    """A prompt slot is 'configured' when its content exceeds the minimum word count."""
+    return bool(p and len(p.content.split()) > User._MIN_PROMPT_WORDS)
+
+
 @router.get("/api/config/profiles/active/prompt-status")
 def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
     """Return {type_key: configured_bool} for the active profile's prompts.
@@ -627,7 +632,7 @@ def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
     status = {}
     for t in _PROFILE_PROMPT_TYPES:
         p = db.query(Prompt).filter_by(profile_id=row.id, type_key=t).first()
-        status[t] = bool(p and len(p.content.split()) > 10)
+        status[t] = _prompt_row_configured(p)
     return status
 
 
@@ -645,7 +650,7 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
     for t in prompt_types:
         p = db.query(Prompt).filter_by(profile_id=profile_id, type_key=t).first()
         prompt_fields[f"prompt_{t}_model"] = p.model if p else ""
-        prompt_fields[f"prompt_{t}_configured"] = bool(p and len(p.content.split()) > 10)
+        prompt_fields[f"prompt_{t}_configured"] = _prompt_row_configured(p)
     return {
         "id": row.id,
         "name": row.name,
