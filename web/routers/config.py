@@ -22,25 +22,7 @@ from core.utils import render_pdf
 router = APIRouter()
 
 
-_PROMPTS_DEFAULTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "defaults"
 _PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
-
-
-def _prompt_configured(path: str, type_key: str = "") -> bool:
-    """Return True if a usable prompt exists for this slot.
-
-    Checks the profile-specific path first; falls back to prompts/defaults/{type_key}.md.
-    """
-    def _usable(p: Path) -> bool:
-        return p.exists() and bool(p.read_text(encoding="utf-8").strip())
-
-    if path:
-        p = Path(path)
-        if _usable(p):
-            return True
-    if type_key:
-        return _usable(_PROMPTS_DEFAULTS_DIR / f"{type_key}.md")
-    return False
 
 
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
