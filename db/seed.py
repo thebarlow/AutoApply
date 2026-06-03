@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 from db.database import Config, FieldHelp
 
 _GENERATOR_DIR = Path(__file__).parent.parent / "generator"
+_PROMPTS_DEFAULTS_DIR = Path(__file__).parent.parent / "prompts" / "defaults"
+
+PROMPT_TYPE_KEYS = (
+    "scoring", "resume", "cover", "extraction", "resume_parse",
+    "resume_eval", "resume_refine", "cover_eval", "cover_refine",
+)
 
 DEFAULT_LATEX_TEMPLATES = [
     {
@@ -165,6 +171,27 @@ def seed_default_config(db: Session) -> None:
     for key, value in DEFAULT_CONFIG.items():
         if not db.query(Config).filter_by(key=key).first():
             db.add(Config(key=key, value=value))
+    db.commit()
+
+
+def seed_prompt_defaults(db: Session) -> None:
+    """Seed prompt_defaults from prompts/defaults/*.md, only for missing rows.
+
+    The shipped .md files are one-time seed data; existing rows (which may have
+    been edited in the DB) are never overwritten.
+    """
+    from db.database import PromptDefault
+
+    for type_key in PROMPT_TYPE_KEYS:
+        if db.query(PromptDefault).filter_by(type_key=type_key).first():
+            continue
+        path = _PROMPTS_DEFAULTS_DIR / f"{type_key}.md"
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8")
+        if not content.strip():
+            continue
+        db.add(PromptDefault(type_key=type_key, content=content))
     db.commit()
 
 
