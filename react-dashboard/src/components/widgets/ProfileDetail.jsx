@@ -1027,7 +1027,7 @@ const REFINEMENT_REFINE_CHIPS = [
   { label: 'critique', token: '{critique}' },
 ]
 
-function RefinementPromptModal({ docType, profileId, profileData, defaultModel, onClose, onSaved }) {
+function RefinementPromptModal({ docType, profileId, profileName, profileData, defaultModel, onClose, onSaved }) {
   const label = docType === 'resume' ? 'Resume Refinement' : 'Cover Letter Refinement'
 
   const [activeTab, setActiveTab] = useState('evaluator')
@@ -1123,7 +1123,7 @@ function RefinementPromptModal({ docType, profileId, profileData, defaultModel, 
         [`${docType}_refine_max_turns`]: Number(maxTurns),
         [`${docType}_refine_pass_score`]: Number(passScore),
       }
-      await updateProfile(profileId, { name: profileData.name || '', data: newData })
+      await updateProfile(profileId, { name: profileName || '', data: newData })
       onSaved(newData)
       window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
       onClose()
@@ -1307,7 +1307,7 @@ function RefinementPromptModal({ docType, profileId, profileData, defaultModel, 
   )
 }
 
-function PromptsSection({ data, profileId, defaultModel, onSave }) {
+function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) {
   const [openModal, setOpenModal] = useState(null)           // typeKey string | null
   const [openRefinement, setOpenRefinement] = useState(null) // 'resume' | 'cover' | null
   const [togglingRefine, setTogglingRefine] = useState(null) // 'resume' | 'cover' | null
@@ -1441,6 +1441,7 @@ function PromptsSection({ data, profileId, defaultModel, onSave }) {
         <RefinementPromptModal
           docType={openRefinement}
           profileId={profileId}
+          profileName={profileName}
           profileData={data}
           defaultModel={defaultModel}
           onClose={() => setOpenRefinement(null)}
@@ -1654,6 +1655,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         <PromptsSection
           data={d}
           profileId={profileId}
+          profileName={profile.name}
           defaultModel={profile.llm_model || ''}
           onSave={handleSave}
         />
