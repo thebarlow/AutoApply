@@ -17,3 +17,18 @@ def configure_sqlalchemy_mappers():
     from sqlalchemy.orm import configure_mappers
 
     configure_mappers()
+
+
+@pytest.fixture(autouse=True)
+def isolate_prompts_dir(tmp_path, monkeypatch):
+    """Redirect prompt-blob persistence to a temp dir for every test.
+
+    User hydration migrates inline prompt strings into files under
+    core.user._PROMPTS_DIR (named ``{type}_{id}.md``). Without isolation, any
+    test that constructs a User would write fixture junk into the real,
+    version-controlled prompts/ directory. _PROMPTS_DEFAULTS_DIR is left
+    pointing at the real defaults, which resolve_prompt tests rely on.
+    """
+    import core.user as _user_mod
+
+    monkeypatch.setattr(_user_mod, "_PROMPTS_DIR", tmp_path / "prompts")

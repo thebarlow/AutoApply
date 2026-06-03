@@ -1,1 +1,0 @@
-custom cover prompt
