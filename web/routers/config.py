@@ -641,8 +641,12 @@ def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
         row = db.query(User).first()
     if row is None:
         return {t: False for t in _PROFILE_PROMPT_TYPES}
-    data = json.loads(row.data) if row.data else {}
-    return {t: _prompt_configured(data.get(f"prompt_{t}", ""), t) for t in _PROFILE_PROMPT_TYPES}
+    from db.database import Prompt
+    status = {}
+    for t in _PROFILE_PROMPT_TYPES:
+        p = db.query(Prompt).filter_by(profile_id=row.id, type_key=t).first()
+        status[t] = bool(p and len(p.content.split()) > 10)
+    return status
 
 
 @router.get("/api/config/profiles/{profile_id}")
@@ -653,13 +657,13 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
     data = json.loads(row.data) if row.data else {}
     env = _read_env()
     has_llm_key = bool(env.get(f"LLM_KEY_PROFILE_{profile_id}"))
+    from db.database import Prompt
     prompt_types = ("scoring", "resume", "cover", "extraction", "resume_parse")
     prompt_fields = {}
     for t in prompt_types:
-        file_val = data.get(f"prompt_{t}", "")
-        prompt_fields[f"prompt_{t}_file"] = file_val
-        prompt_fields[f"prompt_{t}_model"] = data.get(f"prompt_{t}_model", "")
-        prompt_fields[f"prompt_{t}_configured"] = _prompt_configured(file_val, t)
+        p = db.query(Prompt).filter_by(profile_id=profile_id, type_key=t).first()
+        prompt_fields[f"prompt_{t}_model"] = p.model if p else ""
+        prompt_fields[f"prompt_{t}_configured"] = bool(p and len(p.content.split()) > 10)
     return {
         "id": row.id,
         "name": row.name,
