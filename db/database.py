@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import Boolean, Column, Integer, String, Text, UniqueConstraint, create_engine, text
+from sqlalchemy import Column, Integer, String, Text, UniqueConstraint, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
