@@ -112,34 +112,19 @@ class User(Base):
         self.llm_provider_type = raw.get("llm_provider_type", "")
         self.llm_model = raw.get("llm_model", "")
 
-        migrated = False
-        for type_key in _PROMPT_TYPES:
-            field = f"prompt_{type_key}"
-            model_field = f"prompt_{type_key}_model"
-            val = raw.get(field, "")
-            # Migration: if value is a text blob (not a .md file path), write to file
-            if val and ("\n" in val or not val.endswith(".md")):
-                _PROMPTS_DIR.mkdir(exist_ok=True)
-                dest = _PROMPTS_DIR / f"{type_key}_{self.id}.md"
-                dest.write_text(val, encoding="utf-8")
-                val = str(dest)
-                migrated = True
-            setattr(self, field, val)
-            setattr(self, model_field, raw.get(model_field, ""))
+        # Initialize model attrs for all 9 prompt types (populated from DB rows in load()).
+        from db.seed import PROMPT_TYPE_KEYS
+        for type_key in PROMPT_TYPE_KEYS:
+            setattr(self, f"prompt_{type_key}_model", "")
         # Refinement config — resume
         self.resume_refine_enabled = bool(raw.get("resume_refine_enabled", True))
         self.resume_refine_max_turns = int(raw.get("resume_refine_max_turns", 3))
         self.resume_refine_pass_score = float(raw.get("resume_refine_pass_score", 0.80))
-        for rkey in ("resume_eval", "resume_refine", "cover_eval", "cover_refine"):
-            field = f"prompt_{rkey}"
-            model_field = f"prompt_{rkey}_model"
-            setattr(self, field, raw.get(field, ""))
-            setattr(self, model_field, raw.get(model_field, ""))
         # Refinement config — cover
         self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
         self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 3))
         self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
-        return migrated
+        return False
 
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
@@ -165,18 +150,12 @@ class User(Base):
             "llm_provider_type": self.llm_provider_type,
             "llm_model": self.llm_model,
         }
-        for type_key in _PROMPT_TYPES:
-            d[f"prompt_{type_key}"] = getattr(self, f"prompt_{type_key}", "")
-            d[f"prompt_{type_key}_model"] = getattr(self, f"prompt_{type_key}_model", "")
         d["resume_refine_enabled"] = self.resume_refine_enabled
         d["resume_refine_max_turns"] = self.resume_refine_max_turns
         d["resume_refine_pass_score"] = self.resume_refine_pass_score
         d["cover_refine_enabled"] = self.cover_refine_enabled
         d["cover_refine_max_turns"] = self.cover_refine_max_turns
         d["cover_refine_pass_score"] = self.cover_refine_pass_score
-        for rkey in ("resume_eval", "resume_refine", "cover_eval", "cover_refine"):
-            d[f"prompt_{rkey}"] = getattr(self, f"prompt_{rkey}", "")
-            d[f"prompt_{rkey}_model"] = getattr(self, f"prompt_{rkey}_model", "")
         return d
 
     @classmethod
@@ -216,6 +195,9 @@ class User(Base):
             raise RuntimeError("No user profile found. Add one via /config.")
 
         migrated = row._hydrate()
+        from db.database import Prompt
+        for r in db.query(Prompt).filter_by(profile_id=row.id).all():
+            setattr(row, f"prompt_{r.type_key}_model", r.model or "")
         if migrated:
             row.save(db)
         return row
@@ -438,75 +420,69 @@ class User(Base):
     _MIN_PROMPT_WORDS: ClassVar[int] = 10
 
     def resolve_prompt(self, type_key: str) -> str:
-        """Read and return the prompt file content for the given type.
+        """Return the active prompt content for the given type from the DB.
 
-        Validates the configured prompt before any run: if its path is unset or
-        missing, or its content is <= _MIN_PROMPT_WORDS words, the profile is
-        reset to the shipped default (persisted), the user is alerted via SSE,
-        and the default content is returned so the run can still proceed.
-
-        Args:
-            type_key: One of the keys in _PROMPT_TYPES (e.g. "scoring", "resume").
-
-        Returns:
-            Prompt text content.
+        Reads the prompts row for this profile. If the row is missing or its
+        content is <= _MIN_PROMPT_WORDS words, repairs it from prompt_defaults
+        (persisted), alerts the user via SSE, and returns the default content.
 
         Raises:
-            PromptNotConfiguredError: If neither the configured prompt nor the
-                shipped default yields usable content.
+            PromptNotConfiguredError: If no usable default exists.
         """
-        label = _PROMPT_LABELS.get(type_key, type_key)
-        path_str = getattr(self, f"prompt_{type_key}", "")
-        p = Path(path_str) if path_str else None
+        from sqlalchemy.orm import object_session
+        from db.database import Prompt, PromptDefault
 
+        label = _PROMPT_LABELS.get(type_key, type_key)
+        sess = object_session(self)
+        if sess is None:
+            raise PromptNotConfiguredError(f"{label} not configured")
+
+        row = sess.query(Prompt).filter_by(profile_id=self.id, type_key=type_key).first()
         invalid_reason: Optional[str] = None
-        content = ""
-        if p is None or not p.exists():
-            invalid_reason = "the prompt file is unset or missing"
-        else:
-            content = p.read_text(encoding="utf-8").strip()
-            if len(content.split()) <= self._MIN_PROMPT_WORDS:
-                invalid_reason = f"the prompt is too short (must exceed {self._MIN_PROMPT_WORDS} words)"
+        if row is None or not row.content:
+            invalid_reason = "the prompt is unset"
+        elif len(row.content.split()) <= self._MIN_PROMPT_WORDS:
+            invalid_reason = f"the prompt is too short (must exceed {self._MIN_PROMPT_WORDS} words)"
 
         if invalid_reason is None:
-            return content
+            return row.content
 
-        # Invalid prompt — fall back to the shipped default and reset the profile.
-        default_path = _PROMPTS_DEFAULTS_DIR / f"{type_key}.md"
-        if not default_path.exists():
-            raise PromptNotConfiguredError(f"{label} not configured")
-        default_content = default_path.read_text(encoding="utf-8").strip()
-        if not default_content:
+        default = sess.query(PromptDefault).filter_by(type_key=type_key).first()
+        if default is None or not default.content.strip():
             raise PromptNotConfiguredError(f"{label} not configured")
 
-        self._reset_prompt_to_default(type_key, default_path, label, invalid_reason)
-        return default_content
+        self._reset_prompt_to_default(type_key, default.content, label, invalid_reason)
+        return default.content
 
     def _reset_prompt_to_default(
-        self, type_key: str, default_path: Path, label: str, reason: str
+        self, type_key: str, default_content: str, label: str, reason: str
     ) -> None:
-        """Point the profile's prompt at its default, persist, and alert the user."""
-        setattr(self, f"prompt_{type_key}", str(default_path))
-        try:
-            from sqlalchemy.orm import object_session
+        """Repair the profile's prompts row from the default, persist, alert via SSE."""
+        from datetime import datetime, timezone
+        from sqlalchemy.orm import object_session
+        from db.database import Prompt
 
-            sess = object_session(self)
-            if sess is not None:
-                self.save(sess)
-        except Exception:
-            # Persistence is best-effort; the run should still proceed on the default.
-            pass
+        sess = object_session(self)
+        if sess is not None:
+            row = sess.query(Prompt).filter_by(profile_id=self.id, type_key=type_key).first()
+            now = datetime.now(timezone.utc).isoformat()
+            if row is None:
+                sess.add(Prompt(
+                    profile_id=self.id, type_key=type_key,
+                    content=default_content, model="", updated_at=now,
+                ))
+            else:
+                row.content = default_content
+                row.updated_at = now
+            try:
+                sess.commit()
+            except Exception:
+                sess.rollback()
         try:
             from web.sse import send
-
-            send(
-                "prompt_reset",
-                {
-                    "type_key": type_key,
-                    "label": label,
-                    "reason": reason,
-                    "message": f"{label} prompt was reset to default because {reason}.",
-                },
-            )
+            send("prompt_reset", {
+                "type_key": type_key, "label": label, "reason": reason,
+                "message": f"{label} prompt was reset to default because {reason}.",
+            })
         except Exception:
             pass
