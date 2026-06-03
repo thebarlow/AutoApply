@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
-import { getProfile, updateProfile, deleteProfile, getDefaultPrompt, getPrompt, putPrompt, resetPrompt } from '../../api'
+import { getProfile, updateProfile, deleteProfile, getPrompt, putPrompt, resetPrompt } from '../../api'
 import { validateProvider } from '../../validation'
 import HelpIcon from '../shared/HelpIcon'
 
@@ -829,10 +829,7 @@ function PromptModal({ typeKey, profileId, profileData, defaultModel, onClose, o
     setSaveError(null)
     try {
       const res = await putPrompt(profileId, typeKey, { content, model })
-      setContent(res.content)
-      setModel(res.model || '')
-      setIsDefault(res.is_default)
-      onSaved(typeKey, res.model || '')
+      onSaved(typeKey)
       window.dispatchEvent(new CustomEvent('auto-apply:prompt-status-stale'))
       onClose()
     } catch {
@@ -1273,6 +1270,7 @@ function RefinementPromptModal({ docType, profileId, profileName, profileData, d
               >
                 {resetting ? 'Resetting…' : 'Reset to default'}
               </button>
+              {/* block save until both slots loaded — save writes eval+refine together */}
               <button onClick={handleSave} disabled={saving || resetting || evalLoading || refineLoading}
                 className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors">
                 {saving ? 'Saving…' : 'Save'}
@@ -1312,10 +1310,10 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
   const [openRefinement, setOpenRefinement] = useState(null) // 'resume' | 'cover' | null
   const [togglingRefine, setTogglingRefine] = useState(null) // 'resume' | 'cover' | null
 
-  // PromptModal notifies us of the model used; prompts table owns the content.
-  const handleSaved = (typeKey, model) => {
-    // No prompt_* path written to profile.data — prompts table owns it.
-    // Nothing to patch here; the stale event triggers a status refresh.
+  const handleSaved = (typeKey) => {
+    // Prompt content/model live in the prompts table now — nothing to patch in
+    // profile.data. PromptModal dispatches 'auto-apply:prompt-status-stale' itself
+    // to refresh the status indicators.
   }
 
   const handleRefinementSaved = (docType, newData) => {
