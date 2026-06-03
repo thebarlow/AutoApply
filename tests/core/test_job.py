@@ -118,8 +118,9 @@ def test_job_serialize_returns_dict(db_session):
 
 
 def test_build_score_prompt_contains_job_and_user(db_session):
-    from core.job import Job, _DEFAULT_SCORE_PROMPT
-    from core.user import User
+    from core.job import Job
+    from core.user import User, _PROMPTS_DEFAULTS_DIR
+    _DEFAULT_SCORE_PROMPT = (_PROMPTS_DEFAULTS_DIR / "scoring.md").read_text(encoding="utf-8")
     job = Job.from_scraped(_make_scraped(title="Python Dev", company="Acme"))
     db_session.add(job)
     db_session.commit()
@@ -187,15 +188,17 @@ def test_score_populates_scores(db_session):
     user = User.load(db_session)
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = _json.dumps({
+    choice = mock_client.chat.completions.create.return_value.choices[0]
+    choice.message.content = _json.dumps({
         "desirability_score": 0.8,
         "fit_score": 0.7,
         "desirability_justification": "Good salary.",
         "fit_justification": "Python match.",
     })
+    choice.finish_reason = "stop"
 
     config = {"w1": 0.5, "w2": 0.5}
-    job.score(user, config, mock_client, "gpt-4", db_session)
+    job.score(user, config, mock_client, "gpt-4", db_session, "Score this job.")
 
     fetched = db_session.query(Job).first()
     assert fetched.desirability_score == 0.8
@@ -216,11 +219,22 @@ def test_build_description_prompt_substitutes_fields(db_session):
 
 def test_extract_description_populates_ext_columns(db_session):
     from core.job import Job
+    from core.user import User
     from unittest.mock import MagicMock, patch
     import json as _json
 
     job = Job.from_scraped(_make_scraped(description="Needs Python and FastAPI."))
     db_session.add(job)
+
+    data = {
+        "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
+        "email": "", "phone": "", "location": "", "hero": "", "linkedin": "", "github": "",
+        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
+        "target_salary_min": 0, "target_salary_max": 0,
+        "target_roles": ["SWE"], "resume_path": "", "md_path": "",
+        "prompt_extraction": "Extract structured fields from this posting: {job.description}",
+    }
+    db_session.add(User(name="Matt", data=_json.dumps(data)))
     db_session.commit()
 
     extraction_result = _json.dumps({
@@ -237,18 +251,11 @@ def test_extract_description_populates_ext_columns(db_session):
     })
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = extraction_result
-    mock_client.chat.completions.create.return_value.choices[0].finish_reason = "stop"
+    choice = mock_client.chat.completions.create.return_value.choices[0]
+    choice.message.content = extraction_result
+    choice.finish_reason = "stop"
 
-    from db.database import Config
-    db_session.add(Config(key="active_description_prompt_id", value="p1"))
-    db_session.add(Config(key="description_prompts", value=_json.dumps([{
-        "id": "p1", "content": "Extract: {job.description}",
-        "provider_name": "test", "model_id": "m",
-    }])))
-    db_session.commit()
-
-    with patch("core.llm.get_client_for_named_provider", return_value=(mock_client, "m")):
+    with patch("core.llm.get_client_for_profile", return_value=(mock_client, "m")):
         job.extract_description(db_session)
 
     fetched = db_session.query(Job).first()
@@ -259,17 +266,17 @@ def test_extract_description_populates_ext_columns(db_session):
 
 def test_extract_description_skips_if_already_populated(db_session):
     from core.job import Job
-    from unittest.mock import MagicMock
+    from unittest.mock import patch
 
     job = Job.from_scraped(_make_scraped())
     job.ext_seniority = "Senior"
     db_session.add(job)
     db_session.commit()
 
-    mock_client = MagicMock()
-    # extract_description should not call the LLM at all
-    job.extract_description(db_session)
-    mock_client.chat.completions.create.assert_not_called()
+    # An already-extracted job must short-circuit before resolving a client/prompt.
+    with patch("core.llm.get_client_for_profile") as mock_factory:
+        job.extract_description(db_session)
+        mock_factory.assert_not_called()
     assert db_session.query(Job).first().ext_seniority == "Senior"
 
 
@@ -452,6 +459,52 @@ def test_serialize_includes_salary_and_applied_at(db_session):
     assert result["ext_salary_min"] == 70000.0
     assert result["ext_salary_max"] == 90000.0
     assert result["applied_at"] == "2026-05-01T12:00:00+00:00"
+
+
+def test_evaluate_empty_doc_short_circuits_to_zero(db_session, tmp_path, monkeypatch):
+    """An empty document body must score 0 without calling the LLM."""
+    from unittest.mock import MagicMock
+    import core.job as job_mod
+    from core.job import Job
+
+    monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
+    job = Job(job_key="empty-eval", source="test", url="https://example.com/e", state="new")
+    (tmp_path / "empty-eval_cover.md").write_text("---\ncompany: X\n---\n\n   \n", encoding="utf-8")
+
+    called = {"llm": False}
+
+    def _fail_llm(*a, **k):
+        called["llm"] = True
+        raise AssertionError("LLM must not be called for empty doc")
+
+    monkeypatch.setattr("core.llm.call_llm", _fail_llm)
+    result = job._evaluate_doc_md("cover", "EVAL {current_document}", MagicMock(), MagicMock(), "m")
+    assert result["score"] == 0.0
+    assert result["issues"]
+    assert called["llm"] is False
+
+
+def test_generate_cover_md_rejects_empty_content(db_session, tmp_path, monkeypatch):
+    """A length-truncated (empty) LLM response must raise, not write a blank letter."""
+    from unittest.mock import MagicMock
+    import core.job as job_mod
+    from core.job import Job
+
+    monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr("core.llm.call_llm", lambda *a, **k: "   ")
+    user = MagicMock()
+    user.master_resume.return_value = ""
+    user.first_name = "A"
+    user.last_name = "B"
+    user.email = "a@b.com"
+    user.phone = ""
+    user.location = ""
+    user.education = None
+    user.full_name.return_value = "A B"
+    job = Job(job_key="empty-gen", source="test", url="https://example.com/g", state="new")
+    with pytest.raises(RuntimeError, match="empty content"):
+        job.generate_cover_md(user, "PROMPT", MagicMock(), "m", db_session)
+    assert not (tmp_path / "empty-gen_cover.md").exists()
 
 
 def test_resume_generated_at_set_on_generate_pdf(db_session, tmp_path):

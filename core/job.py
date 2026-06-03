@@ -437,6 +437,18 @@ class Job(Base):
 
         _, body = _strip_yaml_frontmatter(md_path.read_text(encoding="utf-8"))
 
+        # An empty document body (e.g. a generation that hit the token limit and
+        # produced only frontmatter) must never be scored by the LLM — it
+        # hallucinates a passing grade. Short-circuit to a hard failure.
+        if not body.strip():
+            return {
+                "score": 0.0,
+                "issues": [{
+                    "category": "personalization",
+                    "description": "Document body is empty — nothing to evaluate.",
+                }],
+            }
+
         prompt = eval_prompt.replace("{current_document}", body)
         prompt = _apply_template(prompt, {"job": self, "user": user})
 
@@ -632,6 +644,10 @@ class Job(Base):
         from core.user import User, PromptNotConfiguredError
         from core.llm import get_client_for_profile
 
+        # Idempotent: skip jobs already extracted to avoid redundant LLM cost.
+        if self.ext_seniority:
+            return
+
         user = User.load(db)
         prompt_content = user.resolve_prompt("extraction")
         client, model = get_client_for_profile(user, user.prompt_extraction_model)
@@ -787,6 +803,12 @@ class Job(Base):
         frontmatter = self._build_frontmatter(user, db)
         prompt = self.build_resume_prompt(user, prompt_content, db)
         content = call_llm(prompt, client, model, max_tokens=16384)
+        if not content.strip():
+            raise RuntimeError(
+                "Resume generation returned empty content — the model likely hit its "
+                "token limit before producing output (common with reasoning models). "
+                "Try a non-reasoning model or a shorter prompt."
+            )
         content = strip_header_block(content)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
         md_path.write_text(frontmatter + content, encoding="utf-8")
@@ -816,6 +838,12 @@ class Job(Base):
         frontmatter = self._build_frontmatter(user, db)
         prompt = self.build_cover_prompt(user, prompt_content, db)
         content = call_llm(prompt, client, model, max_tokens=16384)
+        if not content.strip():
+            raise RuntimeError(
+                "Cover letter generation returned empty content — the model likely hit "
+                "its token limit before producing output (common with reasoning models). "
+                "Try a non-reasoning model or a shorter prompt."
+            )
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
         md_path.write_text(frontmatter + content, encoding="utf-8")
 
