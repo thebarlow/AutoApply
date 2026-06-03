@@ -371,33 +371,19 @@ class Job(Base):
         if not raw:
             raise RuntimeError("LLM returned empty content")
 
-        required = {"desirability_score", "fit_score", "desirability_justification", "fit_justification"}
-        cleaned = raw.strip()
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        first = cleaned.find("{")
-        last = cleaned.rfind("}")
-        if first != -1 and last > first:
-            cleaned = cleaned[first : last + 1]
-        try:
-            parsed = json.loads(cleaned)
-            if not required.issubset(parsed.keys()):
-                raise ValueError(f"Missing required keys; got {sorted(parsed.keys())}")
-        except (json.JSONDecodeError, ValueError, AttributeError) as e:
-            preview = (raw or "")[:300].replace("\n", " ")
-            raise RuntimeError(f"Unparseable LLM response: {e}. Preview: {preview!r}") from e
+        from core.schemas import ScoreResponse, parse_llm_json
 
-        desirability = max(0.0, min(1.0, float(parsed["desirability_score"])))
-        fit = max(0.0, min(1.0, float(parsed["fit_score"])))
+        parsed = parse_llm_json(raw, ScoreResponse)
+
         w1, w2 = config.get("w1", 0.5), config.get("w2", 0.5)
-        final = max(0.0, min(1.0, w1 * desirability + w2 * fit))
+        final = max(0.0, min(1.0, w1 * parsed.fit_score + w2 * parsed.desirability_score))
 
-        self.desirability_score = desirability
-        self.fit_score = fit
+        self.desirability_score = parsed.desirability_score
+        self.fit_score = parsed.fit_score
         self.final_score = final
         self.score_justification = json.dumps({
-            "desirability": parsed["desirability_justification"],
-            "fit": parsed["fit_justification"],
+            "desirability": parsed.desirability_justification.model_dump(),
+            "fit": parsed.fit_justification.model_dump(),
         })
         db.commit()
 

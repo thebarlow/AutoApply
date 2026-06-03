@@ -192,8 +192,8 @@ def test_score_populates_scores(db_session):
     choice.message.content = _json.dumps({
         "desirability_score": 0.8,
         "fit_score": 0.7,
-        "desirability_justification": "Good salary.",
-        "fit_justification": "Python match.",
+        "desirability_justification": {"raised": ["Good salary."], "lowered": []},
+        "fit_justification": {"raised": ["Python match."], "lowered": []},
     })
     choice.finish_reason = "stop"
 
@@ -524,6 +524,72 @@ def test_resume_generated_at_set_on_generate_pdf(db_session, tmp_path):
     db_session.refresh(job)
     assert job.resume_generated_at is not None
     assert "T" in job.resume_generated_at
+
+
+class _FakeUsage:
+    cost = 0.0
+
+
+class _FakeChoice:
+    def __init__(self, content):
+        self.message = type("M", (), {"content": content})()
+        self.finish_reason = "stop"
+
+
+class _FakeResponse:
+    def __init__(self, content):
+        self.choices = [_FakeChoice(content)]
+        self.usage = _FakeUsage()
+
+
+class _FakeCompletions:
+    def __init__(self, content):
+        self._content = content
+
+    def create(self, **kwargs):
+        return _FakeResponse(self._content)
+
+
+class _FakeClient:
+    def __init__(self, content):
+        self.chat = type("C", (), {"completions": _FakeCompletions(content)})()
+
+
+def test_score_populates_fields(db_session):
+    from core.job import Job
+    job = Job.from_scraped(_make_scraped())
+    db_session.add(job)
+    db_session.commit()
+    content = (
+        '{"fit_score": 0.8, "desirability_score": 0.6,'
+        ' "fit_justification": {"raised": ["Python match"], "lowered": []},'
+        ' "desirability_justification": {"raised": [], "lowered": ["low salary"]}}'
+    )
+    client = _FakeClient(content)
+    job.score(
+        user=object(), config={"w1": 0.5, "w2": 0.5},
+        client=client, model="x", db=db_session,
+        prompt_content="score this",
+    )
+    assert job.fit_score == 0.8
+    assert job.desirability_score == 0.6
+    assert job.final_score == pytest.approx(0.7)
+    import json as _json
+    just = _json.loads(job.score_justification)
+    assert just["fit"]["raised"] == ["Python match"]
+
+
+def test_score_raises_on_bad_json(db_session):
+    from core.job import Job
+    job = Job.from_scraped(_make_scraped())
+    db_session.add(job)
+    db_session.commit()
+    client = _FakeClient("not json at all")
+    with pytest.raises(RuntimeError):
+        job.score(
+            user=object(), config={}, client=client, model="x",
+            db=db_session, prompt_content="score this",
+        )
 
 
 def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):
