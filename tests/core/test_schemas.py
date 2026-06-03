@@ -77,3 +77,27 @@ def test_parse_value_ending_in_backticks():
     # A JSON value whose content ends with backticks must not be corrupted.
     r = parse_llm_json('{"category": "x", "description": "use ```code```"}', Issue)
     assert r.description == "use ```code```"
+
+
+def test_parse_response_full():
+    from core.schemas import parse_llm_json, ParseResponse
+    raw = (
+        '{"first_name":"A","last_name":"B","skills":["Python"],'
+        '"work_history":[{"company":"Acme","title":"SWE","start":"2020","end":"Present","summary":"x"}],'
+        '"education":[{"institution":"U","degree":"BS","field":"EE","graduated":"2018","gpa":3.5}],'
+        '"projects":[{"name":"p","description":"d","url":"","technologies":["Python"]}],'
+        '"target_salary_min":100000,"target_salary_max":150000}'
+    )
+    r = parse_llm_json(raw, ParseResponse)
+    assert r.first_name == "A"
+    assert r.work_history[0].company == "Acme"
+    assert r.target_salary_min == 100000
+
+
+def test_parse_response_partial_defaults():
+    from core.schemas import parse_llm_json, ParseResponse
+    r = parse_llm_json('{"first_name": "A"}', ParseResponse)
+    assert r.last_name == ""
+    assert r.skills == []
+    assert r.work_history == []
+    assert r.target_salary_min is None

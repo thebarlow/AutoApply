@@ -239,7 +239,6 @@ class User(Base):
         Raises:
             ValueError: If the LLM returns invalid JSON.
         """
-        import re
         from core.llm import get_client_for_profile
         from core.job import _apply_template
 
@@ -263,28 +262,14 @@ class User(Base):
                 {"role": "user", "content": md_text},
             ],
         )
+        from core.schemas import ParseResponse, parse_llm_json
+
         raw = response.choices[0].message.content or ""
-        cleaned = raw.strip()
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        first = cleaned.find("{")
-        last = cleaned.rfind("}")
-        if first != -1 and last > first:
-            cleaned = cleaned[first : last + 1]
         try:
-            parsed = json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            preview = raw[:300].replace("\n", " ")
-            raise ValueError(f"LLM returned invalid JSON ({exc}). Response preview: {preview!r}") from exc
-        if not isinstance(parsed, dict):
-            raise ValueError("LLM returned unexpected JSON shape")
-        for key in ("skills", "work_history", "education", "projects", "target_roles"):
-            if not isinstance(parsed.get(key), list):
-                parsed[key] = []
-        defaults = {
-            "projects": [], "target_salary_min": None, "target_salary_max": None,
-            "target_roles": [], "resume_path": "", "md_path": "",
-        }
+            parsed = parse_llm_json(raw, ParseResponse).model_dump()
+        except RuntimeError as exc:
+            raise ValueError(str(exc)) from exc
+        defaults = {"resume_path": "", "md_path": ""}
         return {**defaults, **parsed}
 
     @classmethod
