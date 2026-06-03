@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import TypeVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -95,8 +95,6 @@ def parse_llm_json(raw: str, model: type[T]) -> T:
         RuntimeError: If the text is empty, not valid JSON, or fails validation.
             The message includes a truncated preview of ``raw``.
     """
-    from pydantic import ValidationError
-
     text = (raw or "").strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
