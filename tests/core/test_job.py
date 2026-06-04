@@ -516,7 +516,7 @@ def test_generate_cover_md_rejects_empty_content(db_session, tmp_path, monkeypat
     from core.job import Job
 
     monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr("core.llm.call_llm", lambda *a, **k: "   ")
+    monkeypatch.setattr(job_mod, "call_llm", lambda *a, **k: "   ", raising=False)
     user = MagicMock()
     user.master_resume.return_value = ""
     user.render_work_history_indexed.return_value = ""
@@ -754,3 +754,65 @@ def test_generate_resume_md_writes_document_and_markdown(db_session, tmp_path, m
     assert md.startswith("---")
     assert "## Profile" in md
     assert "- Built X" in md
+
+
+def test_generate_cover_md_writes_document(db_session, tmp_path, monkeypatch):
+    import json
+    import core.job as job_mod
+    from core.job import Job
+    from core.user import User
+    from db.database import Document
+
+    monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
+    db_session.add(User(name="Jane Doe", data=json.dumps({
+        "first_name": "Jane", "last_name": "Doe", "email": "j@x.com",
+    })))
+    db_session.commit()
+    user = User.load(db_session)
+    job = Job(job_key="k2", source="x", title="SWE", company="Acme", url="http://x/2")
+    db_session.add(job)
+    db_session.commit()
+
+    monkeypatch.setattr(job_mod, "call_llm", lambda *a, **k: "Dear team, I am great.", raising=False)
+    job.generate_cover_md(user, "Write a letter.", client=object(), model="m", db=db_session)
+
+    row = Document.fetch(db_session, "k2", "cover")
+    assert row is not None
+    doc = json.loads(row.structured_json)
+    assert doc["body"] == "Dear team, I am great."
+    assert doc["signoff"]["name"] == "Jane Doe"
+    md = (tmp_path / "k2_cover.md").read_text(encoding="utf-8")
+    assert md.startswith("---")
+    assert "Dear team" in md
+
+
+def test_render_meta_uses_snapshot_not_live_profile(db_session, tmp_path, monkeypatch):
+    import json
+    import core.job as job_mod
+    from core.job import Job
+    from core.user import User
+
+    monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
+    db_session.add(User(name="Jane Doe", data=json.dumps({
+        "first_name": "Jane", "last_name": "Doe", "email": "old@x.com",
+    })))
+    db_session.commit()
+    user = User.load(db_session)
+    job = Job(job_key="k3", source="x", title="SWE", company="Acme", url="http://x/3")
+    db_session.add(job)
+    db_session.commit()
+    monkeypatch.setattr(job_mod, "call_llm", lambda *a, **k: "Body.", raising=False)
+    job.generate_cover_md(user, "Write.", client=object(), model="m", db=db_session)
+
+    # Simulate a later profile edit.
+    user.email = "new@x.com"
+    user.save(db_session)
+
+    captured = {}
+    def fake_render(md_path, pdf_path, template_path, max_pages=None, meta=None):
+        captured["meta"] = meta
+        pdf_path.write_bytes(b"%PDF-1.4")
+    monkeypatch.setattr(job_mod, "render_pdf", fake_render, raising=False)
+
+    job.generate_cover_pdf(tmp_path / "tmpl.html", db_session)
+    assert captured["meta"]["email"] == "old@x.com"   # snapshot, not live profile
