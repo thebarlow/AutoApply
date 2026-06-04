@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from core.schemas import (
-    ResumeDocument, ResumeExperience, ResumeProject, ResumeSkillGroup,
-    ResumeGeneration, ExperienceRef, ProjectRef,
+    ExperienceRef,
+    ProjectRef,
+    ResumeDocument,
+    ResumeExperience,
+    ResumeGeneration,
+    ResumeProject,
+    ResumeSkillGroup,
 )
 from core.document_builder import apply_resume_patch
 
