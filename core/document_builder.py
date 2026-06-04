@@ -36,6 +36,9 @@ def build_resume_header(user: Any, db: Session) -> ResumeHeader:
     first = user.first_name or ""
     last = user.last_name or ""
     name = f"{first} {last}".strip() or user.full_name()
+    # Absent github/linkedin/website are stored as "" (the schema default).
+    # Unlike _frontmatter_data, which omits empty keys, the conditional
+    # inclusion happens later at meta-build time (Job._meta_from_header).
     return ResumeHeader(
         name=name,
         email=user.email or "",
