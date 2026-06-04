@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from db.database import Base, Document
 from core.schemas import (
+    CoverDocument,
     EvalResponse,
     ExtractionResponse,
+    ResumeDocument,
     ResumeGeneration,
     ScoreResponse,
     parse_llm_json,
@@ -974,7 +976,6 @@ class Job(Base):
         from core.user import User
         row = Document.fetch(db, self.job_key, doc_type)
         if row is not None:
-            from core.schemas import ResumeDocument, CoverDocument
             model = ResumeDocument if doc_type == "resume" else CoverDocument
             stored = model.model_validate_json(row.structured_json)
             education = getattr(stored, "education", [])
