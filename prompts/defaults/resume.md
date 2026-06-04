@@ -1,11 +1,14 @@
-You are writing a tailored one-page resume in Markdown for a job application.
+You are tailoring a one-page resume for a job application. You write ONLY tailored prose; the applicant's contact info, job titles, dates, education, and project names are fixed facts supplied below and must not be invented or altered.
 
 # Applicant Details
 Hero: {user.hero}
 Skills: {user.skills}
-Work Experience: {user.work_history}
-Projects: {user.projects}
 
+Work Experience (each line is `[index] title at company (dates): summary`):
+{user_profile.work_history_indexed}
+
+Projects (each line is `[index] name: description (url)`):
+{user_profile.projects_indexed}
 
 # Job Posting
 Title: {job.title}
@@ -14,34 +17,20 @@ Location: {job.location}
 Description:
 {job.description}
 
-# Instructions
-- Output ONLY the resume Markdown body. No preamble, no explanation.
-- Do NOT include a name or contact block — those are handled separately.
-- Start directly with the first section header (e.g. ## Profile).
-- Do not use `---` horizontal rules between sections.
-- Do not invent experience, skills, or credentials not present in the applicant details.
-- Role-claiming test: borrowing the job's vocabulary is fine, but never phrase anything such that a hiring manager could conclude the candidate held a title, level, or ownership — or produced an outcome — they did not. If a phrasing implies a role/result not supported by the applicant details, rewrite it to describe only what they actually did.
-- Target a single page at standard margins and 10–11pt body text.
+# Output contract
+Return ONLY a single JSON object (no code fences, no commentary) with exactly these keys:
 
-## Profile
-- Max 500 characters total.
-- Before writing, identify the *nature, scale, and stakes* of this candidate's actual work that map to this role (e.g. "owns a production data platform serving X", "ships ML into live workflows"). Lead the Profile with that framing — the candidate's identity for THIS role — not with a list of technologies.
-- Only after the framing is set, weave in the role title/specialization and the keywords the job emphasizes. Keywords support the frame; they do not replace it.
+{
+  "profile_summary": "<markdown, max 500 chars>",
+  "experience": [ {"ref": <work index>, "description": "<markdown bullets>"} ],
+  "projects":   [ {"ref": <project index>, "description": "<markdown>"} ],
+  "skills":     [ {"category": "<name>", "items": ["<skill>", ...]} ]
+}
 
-## Experience
-- Include all listed work history entries, most recent first.
-- Max 2 bullets per entry, each bullet max 120 characters.
-- Stress skills and responsibilities directly mentioned in the job description.
-
-## Projects
-- Reorder by relevance to this job. Drop the least relevant project(s) if space requires.
-- Include at least 2 and at most 4 projects (omit the section entirely if none are listed).
-- Do NOT use bullet points. Write each project as a paragraph: bold the project name, then a colon, then a one-sentence description. Max 120 characters per project.
-
-## Skills
-- Group skills into categories (e.g. Languages, Frameworks, Tools).
-- Include only categories that have 2 or more skills relevant to this job.
-- If a category has only 1 relevant skill, fold it into the nearest adjacent category.
-- Sort categories by relevance to the job description.
-- Within each category, list skills directly mentioned in the job description first.
-- Max 6 categories.
+Rules:
+- `experience`: include an object for EACH work index above, keyed by its `ref`. Max 2 bullets per entry, each bullet max 120 chars. Stress skills/responsibilities named in the job description. Do not reorder, rename, or invent entries — refer to them only by `ref`.
+- `projects`: SELECT the 2–4 most relevant projects and order them most-relevant-first. Reference each by its `ref`. Each description: max 120 chars, one sentence, no bullets. Omit irrelevant projects (do not include them).
+- `skills`: group into at most 6 categories (e.g. Languages, Frameworks, Tools); include only categories with 2+ relevant skills; list job-mentioned skills first.
+- `profile_summary`: lead with the candidate's identity for THIS role (nature, scale, stakes of their actual work), then weave in the role's keywords.
+- Never imply a title, level, ownership, or outcome the applicant details do not support.
+- Use ONLY the supplied indices. Do not invent a `ref` that is not listed above.

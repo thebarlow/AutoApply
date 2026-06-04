@@ -248,6 +248,41 @@ def _migrate_resume_eval_columns() -> None:
         conn.commit()
 
 
+def _migrate_resume_prompt_v2() -> None:
+    """Force the résumé default + all profile résumé prompts to the Phase 3a contract.
+
+    Runs once (gated by Config key ``resume_prompt_v2``). Overwrites custom
+    résumé prompt edits — required because the old free-form prompt no longer
+    parses under the structured ResumeGeneration contract.
+    """
+    from pathlib import Path
+
+    db = SessionLocal()
+    try:
+        flag = db.query(Config).filter_by(key="resume_prompt_v2").first()
+        if flag and flag.value == "1":
+            return
+        new_content = (
+            Path(__file__).parent.parent / "prompts" / "defaults" / "resume.md"
+        ).read_text(encoding="utf-8")
+
+        default = db.query(PromptDefault).filter_by(type_key="resume").first()
+        if default is None:
+            db.add(PromptDefault(type_key="resume", content=new_content))
+        else:
+            default.content = new_content
+        for row in db.query(Prompt).filter_by(type_key="resume").all():
+            row.content = new_content
+
+        if flag is None:
+            db.add(Config(key="resume_prompt_v2", value="1"))
+        else:
+            flag.value = "1"
+        db.commit()
+    finally:
+        db.close()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -271,6 +306,7 @@ def init_db() -> None:
         migrate_file_prompts_to_db(db)
     finally:
         db.close()
+    _migrate_resume_prompt_v2()
 
 
 def get_db():
