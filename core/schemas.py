@@ -122,6 +122,98 @@ class ParseResponse(BaseModel):
     target_salary_max: float | None = None
 
 
+# ── Structured résumé/cover documents (Phase 3a) ─────────────────────────────
+
+
+class ResumeHeader(BaseModel):
+    """Snapshot of profile contact info captured at generation time."""
+
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    location: str = ""
+    github: str = ""
+    linkedin: str = ""
+    website: str = ""
+
+
+class ResumeExperience(BaseModel):
+    """One work-history entry: structural fields from profile, prose from LLM."""
+
+    company: str = ""
+    title: str = ""
+    start: str = ""
+    end: str = ""
+    description: str = ""  # Markdown bullets — LLM-authored
+
+
+class ResumeProject(BaseModel):
+    """One project: name/url from profile, prose from LLM."""
+
+    name: str = ""
+    url: str = ""
+    description: str = ""  # Markdown — LLM-authored
+
+
+class ResumeSkillGroup(BaseModel):
+    """An LLM-chosen skill category and its items."""
+
+    category: str = ""
+    items: list[str] = Field(default_factory=list)
+
+
+class ResumeDocument(BaseModel):
+    """The stored, assembled résumé artifact (source of truth)."""
+
+    header: ResumeHeader = Field(default_factory=ResumeHeader)
+    education: list[EducationItem] = Field(default_factory=list)
+    profile_summary: str = ""
+    experience: list[ResumeExperience] = Field(default_factory=list)
+    projects: list[ResumeProject] = Field(default_factory=list)
+    skills: list[ResumeSkillGroup] = Field(default_factory=list)
+    section_order: list[str] = Field(default_factory=list)
+
+
+class SignOff(BaseModel):
+    """Cover-letter sign-off snapshot."""
+
+    name: str = ""
+
+
+class CoverDocument(BaseModel):
+    """The stored cover-letter artifact."""
+
+    header: ResumeHeader = Field(default_factory=ResumeHeader)
+    body: str = ""  # Markdown — LLM-authored
+    signoff: SignOff = Field(default_factory=SignOff)
+
+
+# ── LLM résumé output contract (prose-only, keyed by profile ref) ────────────
+
+
+class ExperienceRef(BaseModel):
+    """LLM prose for one work-history entry, keyed by its profile index."""
+
+    ref: int
+    description: str = ""
+
+
+class ProjectRef(BaseModel):
+    """LLM prose for one selected project, keyed by its profile index."""
+
+    ref: int
+    description: str = ""
+
+
+class ResumeGeneration(BaseModel):
+    """Parsed output of the rewritten `resume` prompt (prose-only, keyed)."""
+
+    profile_summary: str = ""
+    experience: list[ExperienceRef] = Field(default_factory=list)
+    projects: list[ProjectRef] = Field(default_factory=list)
+    skills: list[ResumeSkillGroup] = Field(default_factory=list)
+
+
 def parse_llm_json(raw: str, model: type[T]) -> T:
     """Parse and validate a JSON object out of a raw LLM response.
 

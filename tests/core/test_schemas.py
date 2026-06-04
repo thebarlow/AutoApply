@@ -101,3 +101,56 @@ def test_parse_response_partial_defaults():
     assert r.skills == []
     assert r.work_history == []
     assert r.target_salary_min is None
+
+
+def test_resume_generation_parses_full_output():
+    from core.schemas import ResumeGeneration, parse_llm_json
+    raw = """{
+      "profile_summary": "Senior engineer.",
+      "experience": [{"ref": 0, "description": "- Did X"}],
+      "projects": [{"ref": 2, "description": "Built Y"}],
+      "skills": [{"category": "Languages", "items": ["Python", "Go"]}]
+    }"""
+    gen = parse_llm_json(raw, ResumeGeneration)
+    assert gen.profile_summary == "Senior engineer."
+    assert gen.experience[0].ref == 0
+    assert gen.projects[0].description == "Built Y"
+    assert gen.skills[0].items == ["Python", "Go"]
+
+
+def test_resume_generation_parses_partial_output():
+    from core.schemas import ResumeGeneration, parse_llm_json
+    gen = parse_llm_json('{"profile_summary": "Hi"}', ResumeGeneration)
+    assert gen.profile_summary == "Hi"
+    assert gen.experience == []
+    assert gen.projects == []
+    assert gen.skills == []
+
+
+def test_resume_document_round_trips():
+    from core.schemas import (
+        ResumeDocument, ResumeHeader, ResumeExperience, ResumeProject,
+        ResumeSkillGroup, EducationItem,
+    )
+    doc = ResumeDocument(
+        header=ResumeHeader(name="Jane Doe", email="j@x.com"),
+        education=[EducationItem(institution="MIT", degree="BS", field="EE")],
+        profile_summary="Summary",
+        experience=[ResumeExperience(company="Acme", title="Eng", description="- X")],
+        projects=[ResumeProject(name="P", url="u", description="d")],
+        skills=[ResumeSkillGroup(category="Lang", items=["Python"])],
+        section_order=["Profile", "Experience", "Education", "Projects", "Skills"],
+    )
+    again = ResumeDocument.model_validate_json(doc.model_dump_json())
+    assert again == doc
+
+
+def test_cover_document_round_trips():
+    from core.schemas import CoverDocument, ResumeHeader, SignOff
+    doc = CoverDocument(
+        header=ResumeHeader(name="Jane Doe"),
+        body="Dear hiring manager,",
+        signoff=SignOff(name="Jane Doe"),
+    )
+    again = CoverDocument.model_validate_json(doc.model_dump_json())
+    assert again == doc
