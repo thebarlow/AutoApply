@@ -766,7 +766,6 @@ class Job(Base):
             model: Model identifier string.
             db: SQLAlchemy session.
         """
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         prompt = self.build_resume_prompt(user, prompt_content, db)
         raw = call_llm(prompt, client, model, max_tokens=16384)
         if not (raw or "").strip():
@@ -799,7 +798,6 @@ class Job(Base):
             model: Model identifier string.
             db: SQLAlchemy session.
         """
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         prompt = self.build_cover_prompt(user, prompt_content, db)
         content = call_llm(prompt, client, model, max_tokens=16384)
         if not content.strip():
@@ -813,7 +811,11 @@ class Job(Base):
         self.write_cover_markdown(doc)
 
     def write_resume_markdown(self, doc: "ResumeDocument") -> None:
-        """Write the derived résumé `.md` (front matter + assembled body)."""
+        """Write the derived résumé .md (front matter + assembled body).
+
+        Args:
+            doc: Structured résumé produced by ``build_resume_document``.
+        """
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
         body = assemble_resume_markdown(doc)
@@ -821,7 +823,11 @@ class Job(Base):
         md_path.write_text(frontmatter + body, encoding="utf-8")
 
     def write_cover_markdown(self, doc: "CoverDocument") -> None:
-        """Write the derived cover `.md` (front matter + assembled body)."""
+        """Write the derived cover .md (front matter + assembled body).
+
+        Args:
+            doc: Structured cover letter produced by ``build_cover_document``.
+        """
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         frontmatter = self._build_frontmatter_from_header(doc.header, [])
         body = assemble_cover_markdown(doc)
