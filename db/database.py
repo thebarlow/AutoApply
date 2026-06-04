@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from sqlalchemy import Column, Integer, String, Text, UniqueConstraint, create_engine, text
@@ -80,21 +81,18 @@ class Document(Base):
     @classmethod
     def upsert(cls, db: "Session", job_key: str, doc_type: str, structured_json: str) -> "Document":
         """Insert or replace the document for (job_key, doc_type) and commit."""
-        from datetime import datetime, timezone
-
         row = cls.fetch(db, job_key, doc_type)
-        now = datetime.now(timezone.utc).isoformat()
         if row is None:
             row = cls(
                 job_key=job_key,
                 doc_type=doc_type,
                 structured_json=structured_json,
-                created_at=now,
+                created_at=datetime.now(timezone.utc).isoformat(),
             )
             db.add(row)
         else:
+            # Only update the content; leave created_at frozen at its original insert time.
             row.structured_json = structured_json
-            row.created_at = now
         db.commit()
         return row
 

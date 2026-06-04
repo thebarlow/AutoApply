@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 @pytest.fixture
 def db_session():
     from db.database import Base
+    # These imports register Job and User ORM models with Base.metadata before create_all.
     import core.job   # noqa: F401
     import core.user  # noqa: F401
     engine = create_engine(
