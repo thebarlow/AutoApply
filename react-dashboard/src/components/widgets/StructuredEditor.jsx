@@ -156,11 +156,39 @@ function EducationForm({ items, onChange }) {
   )
 }
 
-function Section({ title, children }) {
+function Section({ title, action, children }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">{title}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">{title}</p>
+        {action}
+      </div>
       {children}
+    </div>
+  )
+}
+
+// full-size pop-out editor for long Markdown fields
+function MarkdownPopOut({ title, value, onChange, onClose }) {
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center p-6"
+         onClick={(e) => { e.stopPropagation(); onClose() }}>
+      <div className="bg-space-card border border-space-border rounded-xl w-full max-w-4xl h-[85vh] p-4 flex flex-col gap-3 shadow-2xl"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-space-text">{title}</h3>
+          <button onClick={onClose} className="text-space-dim hover:text-space-text">✕</button>
+        </div>
+        <textarea
+          autoFocus
+          className="flex-1 bg-space-bg border border-space-border rounded px-3 py-2 text-space-text text-sm font-mono resize-none"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <div className="flex justify-end">
+          <button onClick={onClose} className="px-3 py-1 rounded text-xs bg-purple-600 hover:bg-purple-500 text-white">Done</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -172,6 +200,7 @@ export default function StructuredEditOverlay({ job, docType, onClose, onSaved }
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [dirty, setDirty] = useState(false)
+  const [expandBody, setExpandBody] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -193,10 +222,14 @@ export default function StructuredEditOverlay({ job, docType, onClose, onSaved }
   }, [dirty, onClose])
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') requestClose() }
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      if (expandBody) { setExpandBody(false); return }
+      requestClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [requestClose])
+  }, [requestClose, expandBody])
 
   const handleSave = async () => {
     setSaving(true); setError(null)
@@ -213,7 +246,7 @@ export default function StructuredEditOverlay({ job, docType, onClose, onSaved }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={requestClose}>
-      <div className="bg-space-panel border border-space-border rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-4 flex flex-col gap-4"
+      <div className="bg-space-card border border-space-border rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-4 flex flex-col gap-4 shadow-2xl"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-space-text">Edit {docType}</h3>
@@ -236,7 +269,18 @@ export default function StructuredEditOverlay({ job, docType, onClose, onSaved }
         {doc && docType === 'cover' && (
           <>
             <Section title="Header"><HeaderForm header={doc.header || {}} onChange={(h) => patch({ header: h })} /></Section>
-            <Section title="Body (Markdown)">
+            <Section
+              title="Body (Markdown)"
+              action={
+                <button
+                  onClick={() => setExpandBody(true)}
+                  className="text-xs text-space-dim hover:text-space-text"
+                  title="Pop out to a full-size editor"
+                >
+                  ⤢ pop out
+                </button>
+              }
+            >
               <Text area label="" value={doc.body} onChange={(v) => patch({ body: v })} />
             </Section>
             <Section title="Sign-off">
@@ -252,6 +296,14 @@ export default function StructuredEditOverlay({ job, docType, onClose, onSaved }
           </button>
         </div>
       </div>
+      {doc && docType === 'cover' && expandBody && (
+        <MarkdownPopOut
+          title="Body (Markdown)"
+          value={doc.body}
+          onChange={(v) => patch({ body: v })}
+          onClose={() => setExpandBody(false)}
+        />
+      )}
     </div>
   )
 }
