@@ -72,30 +72,50 @@ const STATE_LABELS = { new: 'New', pending_review: 'Pending Review', ready: 'Rea
 const ALL_STATES = Object.keys(STATE_LABELS)
 
 function ExtractionView({ data }) {
-  const fields = [
-    { key: 'seniority', label: 'Seniority' },
-    { key: 'role_type', label: 'Role Type' },
-    { key: 'domain', label: 'Domain' },
-    { key: 'work_arrangement', label: 'Work Arrangement' },
-    { key: 'employment_type', label: 'Employment Type' },
+  const metaKeys = ['seniority', 'role_type', 'domain', 'work_arrangement', 'employment_type']
+  const meta = metaKeys.map((k) => data[k]).filter((v) => v && String(v).trim())
+
+  const chipGroups = [
     { key: 'required_skills', label: 'Required Skills' },
     { key: 'preferred_skills', label: 'Preferred Skills' },
     { key: 'tech_stack', label: 'Tech Stack' },
+  ]
+  const bulletGroups = [
     { key: 'key_responsibilities', label: 'Responsibilities' },
     { key: 'company_signals', label: 'Company Signals' },
   ]
+  const asList = (v) => (Array.isArray(v) ? v.filter((x) => x && String(x).trim()) : [])
+
   return (
     <div className="flex flex-col gap-3">
-      {fields.map(({ key, label }) => {
-        const val = data[key]
-        if (!val || (Array.isArray(val) && val.length === 0)) return null
+      {meta.length > 0 && (
+        <p className="text-xs text-space-text">{meta.join(' · ')}</p>
+      )}
+
+      {chipGroups.map(({ key, label }) => {
+        const items = asList(data[key])
+        if (items.length === 0) return null
         return (
           <div key={key}>
             <p className="text-xs font-semibold text-space-dim mb-1">{label}</p>
-            {Array.isArray(val)
-              ? <ul className="list-disc list-inside text-xs space-y-0.5 text-space-text">{val.map((v, i) => <li key={i}>{v}</li>)}</ul>
-              : <p className="text-xs text-space-text">{val}</p>
-            }
+            <div className="flex flex-wrap gap-1">
+              {items.map((v, i) => (
+                <span key={i} className="inline-block rounded bg-white/10 px-1.5 py-0.5 text-xs text-space-text">{v}</span>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      {bulletGroups.map(({ key, label }) => {
+        const items = asList(data[key])
+        if (items.length === 0) return null
+        return (
+          <div key={key}>
+            <p className="text-xs font-semibold text-space-dim mb-1">{label}</p>
+            <ul className="list-disc list-inside text-xs space-y-0.5 text-space-text">
+              {items.map((v, i) => <li key={i}>{v}</li>)}
+            </ul>
           </div>
         )
       })}
