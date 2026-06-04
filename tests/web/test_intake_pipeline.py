@@ -65,3 +65,15 @@ def test_run_pipeline_closes_db_session_on_error(monkeypatch):
         run_pipeline("abc123")
 
     mock_db.close.assert_called_once()
+
+
+def test_turn_snapshot_is_structured_json(tmp_path, monkeypatch):
+    import web.intake_pipeline as ip
+    from core.schemas import ResumeDocument, ResumeExperience
+    from db.database import Document
+    job_key = "snap1"
+    doc = ResumeDocument(experience=[ResumeExperience(company="Acme", title="Eng", description="x")])
+    snap = tmp_path / f"{job_key}_resume_turn_0.json"
+    snap.write_text(doc.model_dump_json(), encoding="utf-8")
+    loaded = ResumeDocument.model_validate_json(snap.read_text(encoding="utf-8"))
+    assert loaded.experience[0].company == "Acme"

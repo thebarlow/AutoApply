@@ -394,10 +394,14 @@ def serve_doc_turn_markdown(job_key: str, doc_type: str, n: int, db: Session = D
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.md"
+    path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Turn {n} snapshot not found")
-    return path.read_text(encoding="utf-8")
+    from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
+    raw = path.read_text(encoding="utf-8")
+    if doc_type == "resume":
+        return assemble_resume_markdown(ResumeDocument.model_validate_json(raw))
+    return assemble_cover_markdown(CoverDocument.model_validate_json(raw))
 
 
 def _doc_model(doc_type: str) -> type[ResumeDocument] | type[CoverDocument]:
@@ -554,7 +558,7 @@ def mark_job_action_seen(job_key: str, action: str, db: Session = Depends(get_db
     _emit(job)
     # Delete per-turn refinement snapshots for the dismissed action
     if action in ("resume", "cover"):
-        for snap in _GENERATOR_OUTPUTS.glob(f"{job_key}_{action}_turn_*.md"):
+        for snap in _GENERATOR_OUTPUTS.glob(f"{job_key}_{action}_turn_*.json"):
             try:
                 snap.unlink()
             except OSError:
