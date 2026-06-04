@@ -1,0 +1,89 @@
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from db.database import get_db, Base, Document
+from core.job import Job, JobState
+import core.user  # noqa: F401
+
+
+@pytest.fixture
+def db_session():
+    import core.job   # noqa: F401
+    import core.user  # noqa: F401
+    engine = create_engine("sqlite:///:memory:",
+                           connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
+    Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def client(db_session):
+    from web.main import app
+    app.dependency_overrides[get_db] = lambda: db_session
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def _job(db, key="k1"):
+    j = Job(job_key=key, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
+    db.add(j)
+    db.commit()
+    return j
+
+
+def _resume_payload():
+    return {
+        "header": {"name": "Jane Doe", "email": "j@x.com"},
+        "education": [],
+        "profile_summary": "hi",
+        "experience": [{"company": "Acme", "title": "Eng", "start": "2020", "end": "2024", "description": "- x"}],
+        "projects": [],
+        "skills": [{"category": "Lang", "items": ["Python"]}],
+        "section_order": [],
+    }
+
+
+def test_get_document_404_when_absent(client, db_session):
+    _job(db_session)
+    assert client.get("/api/jobs/k1/resume/document").status_code == 404
+
+
+def test_put_document_persists_and_returns(client, db_session, monkeypatch):
+    import core.job as jobmod
+    monkeypatch.setattr(jobmod.Job, "generate_resume_pdf", lambda self, t, db, max_pages=1: None)
+    monkeypatch.setattr(jobmod.Job, "write_resume_markdown", lambda self, doc: None)
+    _job(db_session)
+    r = client.put("/api/jobs/k1/resume/document", json=_resume_payload())
+    assert r.status_code == 200
+    assert r.json()["profile_summary"] == "hi"
+    assert r.json()["section_order"][0] == "Profile"        # recomputed
+    row = Document.fetch(db_session, "k1", "resume")
+    assert row is not None and '"hi"' in row.structured_json
+
+
+def test_get_document_after_put(client, db_session, monkeypatch):
+    import core.job as jobmod
+    monkeypatch.setattr(jobmod.Job, "generate_resume_pdf", lambda self, t, db, max_pages=1: None)
+    monkeypatch.setattr(jobmod.Job, "write_resume_markdown", lambda self, doc: None)
+    _job(db_session)
+    client.put("/api/jobs/k1/resume/document", json=_resume_payload())
+    g = client.get("/api/jobs/k1/resume/document")
+    assert g.status_code == 200 and g.json()["experience"][0]["company"] == "Acme"
+
+
+def test_put_document_rejects_malformed(client, db_session):
+    _job(db_session)
+    bad = {"experience": "not-a-list"}
+    assert client.put("/api/jobs/k1/resume/document", json=bad).status_code == 400
+
+
+def test_markdown_put_route_is_gone(client, db_session):
+    _job(db_session)
+    assert client.put("/api/jobs/k1/resume/markdown", content=b"# x").status_code == 405

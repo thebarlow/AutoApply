@@ -184,11 +184,14 @@ export const updateJobFields = (jobKey, fields) =>
     body: JSON.stringify(fields),
   })
 
-export const putDocumentMarkdown = (jobKey, docType, markdown) =>
-  _fetch(`/api/jobs/${jobKey}/${docType}/markdown`, {
+export const getDocument = (jobKey, docType) =>
+  _fetch(`/api/jobs/${jobKey}/${docType}/document`)
+
+export const putDocument = (jobKey, docType, doc) =>
+  _fetch(`/api/jobs/${jobKey}/${docType}/document`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'text/plain' },
-    body: markdown,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(doc),
   })
 
 export const flagJob = (jobKey, flagged) =>

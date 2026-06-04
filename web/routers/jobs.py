@@ -4,16 +4,18 @@ import json as _json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from core.job import Job, JobState
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
-from db.database import get_db, Config
+from core.schemas import ResumeDocument, CoverDocument
+from core.document_assembler import resume_section_order
+from db.database import get_db, Config, Document
 from web.sse import send as _sse_send
 from web import llm_status
 
@@ -398,65 +400,58 @@ def serve_doc_turn_markdown(job_key: str, doc_type: str, n: int, db: Session = D
     return path.read_text(encoding="utf-8")
 
 
-async def _read_body_text(request: Request) -> str:
-    """Read request body as UTF-8 text; bridges async body-reading into sync route handlers."""
-    raw = await request.body()
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Request body must be valid UTF-8 text")
+def _doc_model(doc_type: str):
+    return ResumeDocument if doc_type == "resume" else CoverDocument
 
 
-def _put_document_markdown_sync(
+@router.get("/{job_key}/{doc_type}/document")
+def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
+    if doc_type not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
+    if Job.get(job_key, db) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    row = Document.fetch(db, job_key, doc_type)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return _json.loads(row.structured_json)
+
+
+@router.put("/{job_key}/{doc_type}/document")
+def put_document(
     job_key: str,
-    doc_type: str,  # "resume" or "cover"
-    content: str,
-    db: Session,
+    doc_type: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
 ):
+    if doc_type not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    suffix = "_resume.md" if doc_type == "resume" else "_cover.md"
-    md_path = _GENERATOR_OUTPUTS / f"{job_key}{suffix}"
-    md_path.parent.mkdir(parents=True, exist_ok=True)
-    old_content = md_path.read_text(encoding="utf-8") if md_path.exists() else None
-    md_path.write_text(content, encoding="utf-8")
+    try:
+        doc = _doc_model(doc_type).model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid document: {exc}")
+
+    if doc_type == "resume":
+        doc.section_order = resume_section_order(doc)
+
+    Document.upsert(db, job_key, doc_type, doc.model_dump_json())
 
     try:
         if doc_type == "resume":
+            job.write_resume_markdown(doc)
             job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=1)
         else:
+            job.write_cover_markdown(doc)
             job.generate_cover_pdf(_COVER_TEMPLATE, db)
     except Exception as exc:
-        if old_content is not None:
-            md_path.write_text(old_content, encoding="utf-8")
-        else:
-            md_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
 
-    db.commit()
     db.refresh(job)
     _emit(job)
-    return job.serialize()
-
-
-@router.put("/{job_key}/resume/markdown")
-def put_resume_markdown(
-    job_key: str,
-    content: str = Depends(_read_body_text),
-    db: Session = Depends(get_db),
-):
-    return _put_document_markdown_sync(job_key, "resume", content, db)
-
-
-@router.put("/{job_key}/cover/markdown")
-def put_cover_markdown(
-    job_key: str,
-    content: str = Depends(_read_body_text),
-    db: Session = Depends(get_db),
-):
-    return _put_document_markdown_sync(job_key, "cover", content, db)
+    return doc.model_dump()
 
 
 def _do_extract_description(job: Job, db: Session) -> None:
