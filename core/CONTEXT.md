@@ -6,12 +6,15 @@ Shared business logic. No framework dependencies — used by `web/`, `scraper/`,
 
 ```
 core/
-├── job.py          # Job entity + all LLM-driven methods (score, generate, extract, eval, refine)
-├── user.py         # User entity; profile load/save, prompt resolution, degree/skills helpers
-├── llm.py          # LLM client construction and model resolution
-├── utils.py        # Misc helpers (sanitization, path utilities, PDF rendering)
-├── session_cost.py # Thread-safe accumulator for per-session LLM spend (from usage.cost)
-└── skill_analytics.py # Skill token normalization + frequency aggregation across jobs (no LLM)
+├── job.py               # Job entity + all LLM-driven methods (score, generate, extract, eval, refine)
+├── user.py              # User entity; profile load/save, prompt resolution, degree/skills helpers
+├── llm.py               # LLM client construction and model resolution
+├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
+├── session_cost.py      # Thread-safe accumulator for per-session LLM spend (from usage.cost)
+├── skill_analytics.py   # Skill token normalization + frequency aggregation across jobs (no LLM)
+├── schemas.py           # Pydantic models for structured résumé/cover generation (ResumeDocument, CoverDocument, ResumeGeneration, sub-models)
+├── document_builder.py  # Snapshots profile data at generation time and joins LLM prose to structured profile data
+└── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
 ```
 
 **Note:** `core/scorer.py` and `core/profile_parser.py` were deleted — stale `.pyc` files remain in `__pycache__/` and can be ignored. Scoring logic moved into `job.py`.
@@ -46,6 +49,9 @@ core/
 | Mapping a skill to its tech category | `skill_analytics.py` → `tech_category()` |
 | Testing if a job lists a skill (any extraction field) | `skill_analytics.py` → `job_has_skill()` |
 | Shared utilities | `utils.py` |
+| Pydantic models for structured document artifacts | `schemas.py` |
+| Snapshot profile + join LLM prose to structured data (résumé/cover build) | `document_builder.py` → `build_resume_document()`, `build_cover_document()` |
+| Render a structured document to canonical Markdown | `document_assembler.py` → `assemble_resume_markdown()`, `assemble_cover_markdown()` |
 
 ## LLM Integration
 
@@ -62,6 +68,50 @@ See project memory note: the project uses the **OpenAI SDK** with multi-provider
 
 - Skill matching between user skills and job requirements is **fully delegated to the LLM** — the full user skills list is injected into scoring/generation prompts via `{user.skills}` placeholders; no Python-side filtering occurs.
 - Eval prompts receive `{user.education_degrees}` (via `User.education_degrees`) to supply ground-truth degree data for hallucination detection. Degrees are **excluded** from hallucination penalties — only skills/experience claims are checked.
+
+## Structured Résumé / Cover Generation
+
+Phase 3a introduced a structured generation path so that generated documents are stored as typed data, not only as flat Markdown files.
+
+### Schemas (`core/schemas.py`)
+
+- **`ResumeGeneration`** — the LLM output contract. JSON-only; contains prose keyed by ref (experience/project refs), skills, and profile section text. The résumé prompt was rewritten to this contract; a one-time migration (`_migrate_resume_prompt_v2`, gated by Config key `resume_prompt_v2`) force-updates the default and all profile résumé prompts on first `init_db` run.
+- **`ResumeDocument` / `CoverDocument`** — stored artifact models. Serialized to `structured_json` in the `documents` table.
+- Sub-models: `ResumeHeader`, `ResumeExperience`, `ResumeProject`, `ResumeSkillGroup`, `SignOff`, `ExperienceRef`, `ProjectRef`.
+
+### Document Builder (`core/document_builder.py`)
+
+Snapshots the user's profile at generation time and joins LLM prose to the structural profile data. No LLM calls; no rendering.
+
+- **`build_resume_header`** — captures name, email, phone, location, and social links (github/linkedin/website) from the `config` table.
+- **`build_resume_document`** — Experience = ALL work-history entries in profile order (most-recent-first as stored). An entry the LLM omitted is kept with an empty description. Projects = the LLM-selected subset in LLM order; out-of-range or duplicate refs are ignored (logged). Education is snapshotted from the profile.
+- **`build_cover_document`** — same header snapshot; body prose from the LLM output.
+
+### Document Assembler (`core/document_assembler.py`)
+
+Pure module — no DB access, no LLM calls. Renders a `ResumeDocument` or `CoverDocument` to canonical-ordered Markdown.
+
+Canonical section order: **Profile → Experience → Education → Projects → Skills**. Empty sections are omitted. Constants: `CANONICAL_SECTIONS`, `resume_section_order`.
+
+### `generate_resume_md` / `generate_cover_md` (in `job.py`)
+
+After the LLM call:
+1. Parses the response into `ResumeGeneration`.
+2. Calls `build_resume_document` / `build_cover_document` to produce the typed artifact.
+3. Upserts the artifact into the `documents` table (`Document.upsert`) — this is the **source of truth**.
+4. Assembles canonical Markdown via the document assembler and writes `generator/outputs/{job_key}_resume.md` / `{job_key}_cover.md` (YAML front matter sourced from the snapshot header).
+
+### `_render_meta` snapshot behavior
+
+`Job._render_meta(doc_type, db)` reads contact and education data from the stored `Document` snapshot when one exists, so re-rendering an old job uses generation-time data rather than the live profile. Falls back to `_frontmatter_data` (live profile) when no document row exists (e.g. jobs generated before Phase 3a).
+
+### `documents` table
+
+Defined in `db/database.py` as `Document`. Columns: `id`, `job_key`, `doc_type` ("resume"|"cover"), `structured_json`, `created_at`. Unique constraint on `(job_key, doc_type)`. Helpers: `Document.fetch(job_key, doc_type, db)`, `Document.upsert(job_key, doc_type, model, db)`.
+
+### Known Issues / Phase 3a Caveat
+
+A manual `.md` edit, eval, or refine mutates the flat `.md` file but does **not** update the stored `Document` — they diverge. This is the same trade-off as today's refine path diverging from the original generation. **Phase 3b** resolves this: field-level editing + structured eval/refine will make the structured document the single source of truth, with `.md` as a purely derived output.
 
 ## Key Invariants
 
