@@ -10,8 +10,20 @@ from typing import Any, Optional
 from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import Session
 
-from db.database import Base
-from core.schemas import EvalResponse, ExtractionResponse, ScoreResponse, parse_llm_json
+from db.database import Base, Document
+from core.schemas import (
+    CoverDocument,
+    EvalResponse,
+    ExtractionResponse,
+    ResumeDocument,
+    ResumeGeneration,
+    ScoreResponse,
+    parse_llm_json,
+)
+from core.llm import call_llm
+from core.document_builder import build_resume_document, build_cover_document
+from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
+from core.utils import render_pdf
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
@@ -705,6 +717,12 @@ class Job(Base):
         Returns:
             Rendered prompt string.
         """
+        template = template.replace(
+            "{user_profile.work_history_indexed}", user.render_work_history_indexed()
+        )
+        template = template.replace(
+            "{user_profile.projects_indexed}", user.render_projects_indexed()
+        )
         template = template.replace("{user_profile.master_resume}", user.master_resume())
         if "{job.extracted_description}" in template:
             if not self.ext_seniority:
@@ -748,22 +766,23 @@ class Job(Base):
             model: Model identifier string.
             db: SQLAlchemy session.
         """
-        from core.llm import call_llm
-        from core.utils import strip_header_block
-
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        frontmatter = self._build_frontmatter(user, db)
         prompt = self.build_resume_prompt(user, prompt_content, db)
-        content = call_llm(prompt, client, model, max_tokens=16384)
-        if not content.strip():
+        raw = call_llm(prompt, client, model, max_tokens=16384)
+        if not (raw or "").strip():
             raise RuntimeError(
                 "Resume generation returned empty content — the model likely hit its "
                 "token limit before producing output (common with reasoning models). "
                 "Try a non-reasoning model or a shorter prompt."
             )
-        content = strip_header_block(content)
+        generation = parse_llm_json(raw, ResumeGeneration)
+        doc = build_resume_document(user, generation, db)
+        Document.upsert(db, self.job_key, "resume", doc.model_dump_json())
+
+        frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
+        body = assemble_resume_markdown(doc)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
-        md_path.write_text(frontmatter + content, encoding="utf-8")
+        md_path.write_text(frontmatter + body, encoding="utf-8")
 
     def generate_cover_md(
         self,
@@ -784,10 +803,7 @@ class Job(Base):
             model: Model identifier string.
             db: SQLAlchemy session.
         """
-        from core.llm import call_llm
-
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        frontmatter = self._build_frontmatter(user, db)
         prompt = self.build_cover_prompt(user, prompt_content, db)
         content = call_llm(prompt, client, model, max_tokens=16384)
         if not content.strip():
@@ -796,8 +812,13 @@ class Job(Base):
                 "its token limit before producing output (common with reasoning models). "
                 "Try a non-reasoning model or a shorter prompt."
             )
+        doc = build_cover_document(user, content.strip(), db)
+        Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+
+        frontmatter = self._build_frontmatter_from_header(doc.header, [])
+        body = assemble_cover_markdown(doc)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
-        md_path.write_text(frontmatter + content, encoding="utf-8")
+        md_path.write_text(frontmatter + body, encoding="utf-8")
 
     def generate_resume_pdf(self, template_path: Path, db: Session, max_pages: int | None = 1) -> None:
         """Render resume PDF from existing markdown and update resume_path.
@@ -815,14 +836,11 @@ class Job(Base):
             FileNotFoundError: If the resume markdown file does not exist.
             RuntimeError: If `max_pages` is set and the rendered resume exceeds that limit.
         """
-        from core.utils import render_pdf
-        from core.user import User
-
         md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
-        meta = self._frontmatter_data(User.load(db), db)
+        meta = self._render_meta("resume", db)
         render_pdf(md_path, pdf_path, template_path, max_pages=max_pages, meta=meta)
         self.resume_path = str(pdf_path)
         self.resume_generated_at = datetime.now(timezone.utc).isoformat()
@@ -840,14 +858,11 @@ class Job(Base):
         Raises:
             FileNotFoundError: If the cover letter markdown file does not exist.
         """
-        from core.utils import render_pdf
-        from core.user import User
-
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Cover markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_cover.pdf"
-        meta = self._frontmatter_data(User.load(db), db)
+        meta = self._render_meta("cover", db)
         render_pdf(md_path, pdf_path, template_path, meta=meta)
         self.cover_path = str(pdf_path)
         self.cover_generated_at = datetime.now(timezone.utc).isoformat()
@@ -919,6 +934,62 @@ class Job(Base):
         if self.company:
             data["company"] = self.company
         return data
+
+    def _meta_from_header(self, header: Any, education: list) -> dict:
+        """Build the render/front-matter meta dict from a snapshot header.
+
+        Mirrors _frontmatter_data's shape (firstname/lastname split from name,
+        github/linkedin/website only when set, education list, company from job).
+        """
+        name = header.name or ""
+        # rpartition keeps the final token as the surname (the cover template
+        # displays lastname prominently), matching its name.split()[-1] fallback.
+        first, _, last = name.rpartition(" ")
+        if not first:  # single-token name → it is the first name
+            first, last = last, ""
+        data: dict = {
+            "name": name,
+            "firstname": first,
+            "lastname": last,
+            "email": header.email or "",
+            "phone": header.phone or "",
+            "location": header.location or "",
+        }
+        if header.github:
+            data["github"] = header.github
+        if header.linkedin:
+            data["linkedin"] = header.linkedin
+        if header.website:
+            data["website"] = header.website
+        if education:
+            data["education"] = [e.model_dump() for e in education]
+        if self.company:
+            data["company"] = self.company
+        return data
+
+    def _render_meta(self, doc_type: str, db: Session) -> dict:
+        """Render meta from the stored document snapshot, falling back to profile.
+
+        Realizes snapshot behavior: an existing generated document renders from
+        the contact/education captured at generation time, not the live profile.
+        """
+        from core.user import User
+        row = Document.fetch(db, self.job_key, doc_type)
+        if row is not None:
+            model = ResumeDocument if doc_type == "resume" else CoverDocument
+            stored = model.model_validate_json(row.structured_json)
+            education = getattr(stored, "education", [])
+            return self._meta_from_header(stored.header, education)
+        return self._frontmatter_data(User.load(db), db)
+
+    def _build_frontmatter_from_header(self, header: Any, education: list) -> str:
+        """Serialize a snapshot header to a YAML front matter string."""
+        import yaml
+        return "---\n" + yaml.dump(
+            self._meta_from_header(header, education),
+            allow_unicode=True,
+            default_flow_style=False,
+        ) + "---\n\n"
 
     def _build_frontmatter(self, user: Any, db: Session) -> str:
         """Serialize frontmatter data to a YAML front matter string."""

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from sqlalchemy import Column, Integer, String, Text, UniqueConstraint, create_engine, text
@@ -48,6 +49,52 @@ class Prompt(Base):
     content = Column(Text, nullable=False, default="")
     model = Column(String, nullable=False, default="")
     updated_at = Column(String)
+
+
+class Document(Base):
+    """A stored, structured generated document (résumé or cover) per job.
+
+    ``structured_json`` is the serialized Pydantic document model and is the
+    source of truth. One row per (job_key, doc_type).
+    """
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint("job_key", "doc_type", name="uq_documents_job_type"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    job_key = Column(String, nullable=False)
+    doc_type = Column(String, nullable=False)  # "resume" | "cover"
+    structured_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String)
+
+    @classmethod
+    def fetch(cls, db: "Session", job_key: str, doc_type: str) -> "Document | None":
+        """Return the stored document for (job_key, doc_type), or None."""
+        return (
+            db.query(cls)
+            .filter_by(job_key=job_key, doc_type=doc_type)
+            .first()
+        )
+
+    @classmethod
+    def upsert(cls, db: "Session", job_key: str, doc_type: str, structured_json: str) -> "Document":
+        """Insert or replace the document for (job_key, doc_type) and commit."""
+        row = cls.fetch(db, job_key, doc_type)
+        if row is None:
+            row = cls(
+                job_key=job_key,
+                doc_type=doc_type,
+                structured_json=structured_json,
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+            db.add(row)
+        else:
+            # Only update the content; leave created_at frozen at its original insert time.
+            row.structured_json = structured_json
+        db.commit()
+        return row
 
 
 load_dotenv()
@@ -201,6 +248,41 @@ def _migrate_resume_eval_columns() -> None:
         conn.commit()
 
 
+def _migrate_resume_prompt_v2() -> None:
+    """Force the résumé default + all profile résumé prompts to the Phase 3a contract.
+
+    Runs once (gated by Config key ``resume_prompt_v2``). Overwrites custom
+    résumé prompt edits — required because the old free-form prompt no longer
+    parses under the structured ResumeGeneration contract.
+    """
+    from pathlib import Path
+
+    db = SessionLocal()
+    try:
+        flag = db.query(Config).filter_by(key="resume_prompt_v2").first()
+        if flag and flag.value == "1":
+            return
+        new_content = (
+            Path(__file__).parent.parent / "prompts" / "defaults" / "resume.md"
+        ).read_text(encoding="utf-8")
+
+        default = db.query(PromptDefault).filter_by(type_key="resume").first()
+        if default is None:
+            db.add(PromptDefault(type_key="resume", content=new_content))
+        else:
+            default.content = new_content
+        for row in db.query(Prompt).filter_by(type_key="resume").all():
+            row.content = new_content
+
+        if flag is None:
+            db.add(Config(key="resume_prompt_v2", value="1"))
+        else:
+            flag.value = "1"
+        db.commit()
+    finally:
+        db.close()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -224,6 +306,7 @@ def init_db() -> None:
         migrate_file_prompts_to_db(db)
     finally:
         db.close()
+    _migrate_resume_prompt_v2()
 
 
 def get_db():
