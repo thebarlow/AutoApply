@@ -55,6 +55,11 @@ web/
 - **Structured document editing (Phase 3b)** — `GET /api/jobs/{job_key}/{doc_type}/document` returns the stored structured JSON; `PUT` validates the body against a Pydantic `ResumeDocument`/`CoverDocument`, upserts the `Document` row, re-assembles the `.md`, and re-renders the PDF. Errors: `400` invalid `doc_type` or validation failure, `404` missing job or document, `500` render failure after the document was persisted. The old raw-Markdown editor bridge (`PUT .../markdown` and helpers `_put_document_markdown_sync` / `_read_body_text`) was retired.
 - **Per-turn refinement snapshots** are written as structured JSON `{job_key}_{doc_type}_turn_{n}.json` in `generator/outputs/`. `GET /api/jobs/{job_key}/{doc_type}/turn/{n}/markdown` assembles Markdown on the fly from that JSON (`422` on schema mismatch).
 
+## Known caveats (Phase 3b)
+
+- **`PUT .../document` is not transactional across DB and disk (by design).** `Document.upsert` commits the structured edit *before* the `.md`/PDF are re-rendered. If rendering then fails, the route returns `500` but the structured doc is **kept** — deliberately, so the user's edits are not lost and they can trim oversized content and re-save. The on-disk PDF may be stale until the next successful save (it self-heals on re-save). Do not "fix" this by restoring the previous JSON on failure — that would discard the user's edit.
+- **`_save_turn_snapshot` silently skips a turn if no `Document` row exists** for the job/doc_type (logs a warning, writes no `.json`). `_restore_best` then ignores that turn. In practice the refine writer commits the row before the loop snapshots it, so this only surfaces under unexpected ordering; the warning print is the debugging hook.
+
 ## API Surface
 
 | Method | Path | Purpose |
