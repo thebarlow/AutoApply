@@ -53,6 +53,7 @@ core/
 | Snapshot profile + join LLM prose to structured data (résumé/cover build) | `document_builder.py` → `build_resume_document()`, `build_cover_document()` |
 | Apply a prose-only keyed patch to a stored `ResumeDocument` (refine path) | `document_builder.py` → `apply_resume_patch()` |
 | Render a structured document to canonical Markdown | `document_assembler.py` → `assemble_resume_markdown()`, `assemble_cover_markdown()` |
+| Structured (JSON) LLM call with strict-JSON hardening + one retry | `job.py` → `_llm_json_with_retry()` |
 
 ## LLM Integration
 
@@ -108,7 +109,7 @@ After the LLM call:
 
 ### `documents` table
 
-Defined in `db/database.py` as `Document`. Columns: `id`, `job_key`, `doc_type` ("resume"|"cover"), `structured_json`, `created_at`. Unique constraint on `(job_key, doc_type)`. Helpers: `Document.fetch(job_key, doc_type, db)`, `Document.upsert(job_key, doc_type, model, db)`.
+Defined in `db/database.py` as `Document`. Columns: `id`, `job_key`, `doc_type` ("resume"|"cover"), `structured_json`, `created_at`. Unique constraint on `(job_key, doc_type)`. Helpers: `Document.fetch(db, job_key, doc_type)`, `Document.upsert(db, job_key, doc_type, structured_json)` (upsert commits).
 
 ### Phase 3b: structured document as source of truth
 
@@ -118,5 +119,6 @@ The structured `Document` table is now the **single source of truth**; the `.md`
 
 - `Job` methods that call the LLM receive an already-constructed client + model string — they do not read config themselves.
 - All DB writes inside `Job` methods use the session passed in; callers are responsible for commit/rollback.
-- `refine_resume_md` passes `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). The manual-edit path (`web/routers/jobs.py` `_put_document_markdown_sync`) also passes `max_pages=1`.
+- `refine_resume_md` passes `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). The structured-edit path (`web/routers/jobs.py` `put_document`) also passes `max_pages=1`.
 - `_refine_doc_md` uses `max_tokens=32768` to avoid truncation on rewrites.
+- Structured résumé generate/refine call the LLM through `_llm_json_with_retry` (module-level in `job.py`): it appends a strict-JSON instruction (`_JSON_RETRY_SUFFIX`) and retries once with a corrective nudge when `parse_llm_json` fails. This guards against small/fast models breaking a markdown value out of its JSON string.

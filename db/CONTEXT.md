@@ -30,3 +30,23 @@ Each migration function in `database.py` is idempotent (checks `PRAGMA table_inf
 | `resume_generated_at`, `cover_generated_at` | `jobs` | TEXT | `_migrate_generated_at_columns` |
 | `flagged` | `jobs` | BOOLEAN (default 0) | `_migrate_flagged_column` |
 | `resume_eval_score`, `resume_eval_turns`, `resume_eval_log`, `cover_eval_score`, `cover_eval_turns`, `cover_eval_log` | `jobs` | REAL/INTEGER/TEXT | `_migrate_resume_eval_columns` |
+
+## Tables beyond `jobs` / `config`
+
+| Table | Model | Purpose | Phase |
+|---|---|---|---|
+| `prompt_defaults` | `PromptDefault` | Factory prompt defaults, one row per `type_key`. Seeded from `prompts/defaults/*.md`. | 2 |
+| `prompts` | `Prompt` | Per-profile active prompt slots `(profile_id, type_key)` + per-type `model` override. | 2 |
+| `documents` | `Document` | Structured generated artifact per `(job_key, doc_type)`; `structured_json` is the **source of truth**. Unique on `(job_key, doc_type)`. Helpers: `Document.fetch(db, job_key, doc_type)`, `Document.upsert(db, job_key, doc_type, structured_json)` (upsert commits). | 3a |
+
+## Prompt-content reseed migrations
+
+These overwrite prompt **content** (not schema) once, gated by a `config` flag, because the new prompt contract is incompatible with the old text:
+
+| Migration fn | Gate (`config` key) | Effect |
+|---|---|---|
+| `migrate_file_prompts_to_db` (`db/seed.py`) | — | One-time import of legacy file-based prompts into the `prompts` table. |
+| `_migrate_resume_prompt_v2` | `resume_prompt_v2` | Force-reseeds the résumé **generation** prompt to the `ResumeGeneration` JSON contract (Phase 3a). |
+| `_migrate_resume_refine_prompt_v2` | `resume_refine_prompt_v2` | Force-reseeds the résumé **refine** prompt to the keyed-patch contract (Phase 3b). |
+
+All are called from `init_db` and are idempotent (return early once the gate flag is set).
