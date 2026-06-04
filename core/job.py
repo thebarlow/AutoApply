@@ -943,7 +943,11 @@ class Job(Base):
         github/linkedin/website only when set, education list, company from job).
         """
         name = header.name or ""
-        first, _, last = name.partition(" ")
+        # rpartition keeps the final token as the surname (the cover template
+        # displays lastname prominently), matching its name.split()[-1] fallback.
+        first, _, last = name.rpartition(" ")
+        if not first:  # single-token name → it is the first name
+            first, last = last, ""
         data: dict = {
             "name": name,
             "firstname": first,
