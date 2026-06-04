@@ -50,6 +50,55 @@ class Prompt(Base):
     updated_at = Column(String)
 
 
+class Document(Base):
+    """A stored, structured generated document (résumé or cover) per job.
+
+    ``structured_json`` is the serialized Pydantic document model and is the
+    source of truth. One row per (job_key, doc_type).
+    """
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint("job_key", "doc_type", name="uq_documents_job_type"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    job_key = Column(String, nullable=False)
+    doc_type = Column(String, nullable=False)  # "resume" | "cover"
+    structured_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String)
+
+    @classmethod
+    def fetch(cls, db: "Session", job_key: str, doc_type: str) -> "Document | None":
+        """Return the stored document for (job_key, doc_type), or None."""
+        return (
+            db.query(cls)
+            .filter_by(job_key=job_key, doc_type=doc_type)
+            .first()
+        )
+
+    @classmethod
+    def upsert(cls, db: "Session", job_key: str, doc_type: str, structured_json: str) -> "Document":
+        """Insert or replace the document for (job_key, doc_type) and commit."""
+        from datetime import datetime, timezone
+
+        row = cls.fetch(db, job_key, doc_type)
+        now = datetime.now(timezone.utc).isoformat()
+        if row is None:
+            row = cls(
+                job_key=job_key,
+                doc_type=doc_type,
+                structured_json=structured_json,
+                created_at=now,
+            )
+            db.add(row)
+        else:
+            row.structured_json = structured_json
+            row.created_at = now
+        db.commit()
+        return row
+
+
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///auto_apply.db")
