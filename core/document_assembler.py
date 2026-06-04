@@ -22,7 +22,7 @@ def _experience_section(doc: ResumeDocument) -> str:
         return ""
     parts: list[str] = ["## Experience"]
     for e in doc.experience:
-        dates = f"{e.start}–{e.end}".strip("–")
+        dates = " – ".join(filter(None, [e.start, e.end]))
         heading = f"### {e.title}, {e.company}".strip(", ")
         if dates:
             heading += f" ({dates})"
