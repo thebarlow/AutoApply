@@ -71,6 +71,46 @@ def test_user_load_raises_when_no_profile(db_session):
         User.load(db_session)
 
 
+def test_render_work_history_indexed():
+    import json
+    from core.user import User
+    u = User(name="X", data=json.dumps({
+        "work_history": [
+            {"company": "Acme", "title": "Eng", "start": "2020", "end": "2024", "summary": "s1"},
+            {"company": "Beta", "title": "Dev", "start": "2018", "end": "2020", "summary": "s2"},
+        ],
+    }))
+    u._hydrate()
+    out = u.render_work_history_indexed()
+    assert "[0]" in out and "Acme" in out
+    assert "[1]" in out and "Beta" in out
+    assert out.index("[0]") < out.index("[1]")
+
+
+def test_render_projects_indexed():
+    import json
+    from core.user import User
+    u = User(name="X", data=json.dumps({
+        "projects": [
+            {"name": "P0", "description": "d0", "url": "u0", "technologies": ["Py"]},
+            {"name": "P1", "description": "d1", "url": "", "technologies": []},
+        ],
+    }))
+    u._hydrate()
+    out = u.render_projects_indexed()
+    assert "[0]" in out and "P0" in out
+    assert "[1]" in out and "P1" in out
+
+
+def test_render_indexed_empty():
+    import json
+    from core.user import User
+    u = User(name="X", data=json.dumps({}))
+    u._hydrate()
+    assert u.render_work_history_indexed() == ""
+    assert u.render_projects_indexed() == ""
+
+
 def test_user_load_uses_active_profile_id(db_session):
     from core.user import User
     # Insert two profiles

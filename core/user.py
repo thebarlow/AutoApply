@@ -383,6 +383,29 @@ class User(Base):
             result += f"\n\nProjects:\n{projects}"
         return result
 
+    def render_work_history_indexed(self) -> str:
+        """Render work history with stable integer indices for prompt `ref` keying.
+
+        Index N corresponds to ``self.work_history[N]`` so the LLM's returned
+        ``ref`` values join back to the correct entry.
+        """
+        return "\n".join(
+            f"[{i}] {e.title} at {e.company} ({e.start}–{e.end}): {e.summary}"
+            for i, e in enumerate(self.work_history)
+        )
+
+    def render_projects_indexed(self) -> str:
+        """Render projects with stable integer indices for prompt `ref` keying.
+
+        Index N corresponds to ``self.projects[N]``.
+        """
+        return "\n".join(
+            f"[{i}] {e.name}: {e.description}"
+            + (f" ({e.url})" if e.url else "")
+            + (f" — {', '.join(e.technologies)}" if e.technologies else "")
+            for i, e in enumerate(self.projects)
+        )
+
     def master_resume(self) -> str:
         """Return the master resume markdown for prompt injection.
 
