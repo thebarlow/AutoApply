@@ -567,68 +567,6 @@ def test_patch_job_fields_ignores_unknown_keys(client, db_session):
     assert res.json()["title"] == "T"
 
 
-# --- PUT /api/jobs/{job_key}/{type}/markdown ---
-
-def test_put_resume_markdown_writes_file_and_rerenders(client, db_session, monkeypatch, tmp_path):
-    job = _make_job(db_session, "job_md")
-    # Redirect generator outputs to tmp_path and stub PDF rendering.
-    import web.routers.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "_GENERATOR_OUTPUTS", tmp_path)
-    called = {}
-    def fake_resume_pdf(self, template, db, max_pages=1):
-        called["resume"] = True
-        self.resume_generated_at = "2026-05-28T00:00:00+00:00"
-    monkeypatch.setattr(Job, "generate_resume_pdf", fake_resume_pdf)
-
-    res = client.put(
-        "/api/jobs/job_md/resume/markdown",
-        content="# Hello\nUpdated body",
-        headers={"Content-Type": "text/plain"},
-    )
-    assert res.status_code == 200
-    assert called.get("resume") is True
-    md_path = tmp_path / "job_md_resume.md"
-    assert md_path.read_text(encoding="utf-8") == "# Hello\nUpdated body"
-    assert res.json()["resume_generated_at"] == "2026-05-28T00:00:00+00:00"
-
-
-def test_put_cover_markdown_writes_file_and_rerenders(client, db_session, monkeypatch, tmp_path):
-    _make_job(db_session, "job_cv")
-    import web.routers.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "_GENERATOR_OUTPUTS", tmp_path)
-    called = {}
-    def fake_cover_pdf(self, template, db):
-        called["cover"] = True
-        self.cover_generated_at = "2026-05-28T00:00:00+00:00"
-    monkeypatch.setattr(Job, "generate_cover_pdf", fake_cover_pdf)
-
-    res = client.put(
-        "/api/jobs/job_cv/cover/markdown",
-        content="Cover content",
-        headers={"Content-Type": "text/plain"},
-    )
-    assert res.status_code == 200
-    assert called.get("cover") is True
-    assert (tmp_path / "job_cv_cover.md").read_text(encoding="utf-8") == "Cover content"
-
-
-def test_put_resume_markdown_404_when_missing(client):
-    res = client.put(
-        "/api/jobs/nope/resume/markdown",
-        content="x",
-        headers={"Content-Type": "text/plain"},
-    )
-    assert res.status_code == 404
-
-
-def test_put_resume_markdown_handler_is_sync():
-    """PUT handler must be a plain function, not a coroutine — sync_playwright requires no event loop."""
-    import asyncio
-    import web.routers.jobs as jobs_mod
-    assert not asyncio.iscoroutinefunction(jobs_mod.put_resume_markdown)
-    assert not asyncio.iscoroutinefunction(jobs_mod.put_cover_markdown)
-
-
 # --- PATCH /api/jobs/{job_key}/flag ---
 
 def test_flag_job(client, db_session):

@@ -27,6 +27,69 @@ from core.utils import render_pdf
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
+# Appended to every structured (JSON) LLM call. Small/fast models (e.g. DeepSeek
+# Flash, Haiku) sometimes break a markdown `description` out of its JSON string,
+# producing invalid JSON ("Expecting value" at the value position). This makes
+# the contract explicit; the retry below recovers the residual nondeterministic
+# failures.
+_JSON_RETRY_SUFFIX = (
+    "\n\nReturn ONLY a single valid JSON object. Output compact JSON. Every "
+    "newline inside a string value MUST be escaped as \\n — never break a string "
+    "across physical lines. Do not emit markdown, code fences, comments, or any "
+    "text outside the JSON object."
+)
+
+
+def _llm_json_with_retry(
+    prompt: str,
+    client: Any,
+    model: str,
+    model_cls: type,
+    *,
+    max_tokens: int,
+    empty_msg: str,
+    retries: int = 1,
+):
+    """Call the LLM for a structured JSON response, retrying once on parse failure.
+
+    Appends a strict-JSON instruction to harden the contract, then parses the
+    response against ``model_cls``. If parsing fails (the model emitted invalid
+    JSON), retries with an added corrective note up to ``retries`` times before
+    re-raising the last error.
+
+    Args:
+        prompt: The fully-substituted prompt (before the JSON hardening suffix).
+        client: An OpenAI-compatible client instance.
+        model: Model identifier string.
+        model_cls: The Pydantic model to validate the JSON against.
+        max_tokens: Maximum tokens in the response.
+        empty_msg: Error message to raise if the LLM returns empty content.
+        retries: Number of retries after the initial attempt (default 1).
+
+    Returns:
+        A validated instance of ``model_cls``.
+
+    Raises:
+        RuntimeError: If the response is empty, or still unparseable after retries.
+    """
+    sent = prompt + _JSON_RETRY_SUFFIX
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        raw = call_llm(sent, client, model, max_tokens=max_tokens)
+        if not (raw or "").strip():
+            raise RuntimeError(empty_msg)
+        try:
+            return parse_llm_json(raw, model_cls)
+        except RuntimeError as exc:
+            last_exc = exc
+            sent = (
+                prompt
+                + _JSON_RETRY_SUFFIX
+                + "\n\nYour previous reply was NOT valid JSON and failed to parse. "
+                "Return ONLY a single valid, compact JSON object this time."
+            )
+    raise last_exc  # type: ignore[misc]
+
 
 def _field_to_str(value: Any) -> str:
     """Render a job or user field value to a string for template substitution."""
@@ -487,51 +550,64 @@ class Job(Base):
         client: Any,
         model: str,
         issues: list,
+        db: Any,
     ) -> None:
-        """Rewrite a generated document to address evaluation issues.
+        """Refine a generated document by patching its structured form.
 
-        Overwrites the existing markdown file in generator/outputs/ in place.
-        Preserves the YAML front matter block from the original file.
-        Caller is responsible for calling generate_resume_pdf / generate_cover_pdf
-        and committing eval fields to the DB.
-
-        Args:
-            doc_type: "resume" or "cover".
-            user: Hydrated User instance.
-            refine_prompt: Rewriter prompt template.
-            client: OpenAI-compatible client.
-            model: Model identifier string.
-            issues: List of issue dicts from the evaluator.
+        Loads the stored Document (source of truth). For résumés the LLM returns
+        a prose-only keyed patch (ResumeGeneration) applied to the document's
+        prose leaves — structural facts and the header snapshot are never
+        touched. For covers the LLM rewrites the body prose. The patched
+        document is re-persisted and the `.md` re-assembled. Caller renders the
+        PDF and commits eval fields.
 
         Raises:
-            FileNotFoundError: If the document markdown file does not exist.
+            FileNotFoundError: If no stored Document exists for this job/doc_type.
+            RuntimeError: If the LLM returns empty or unparseable content.
         """
-        from core.llm import call_llm
-        from core.utils import strip_header_block
+        from core.document_builder import apply_resume_patch
 
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_{doc_type}.md"
-        if not md_path.exists():
+        row = Document.fetch(db, self.job_key, doc_type)
+        if row is None:
             raise FileNotFoundError(
-                f"{doc_type.capitalize()} markdown not found: {md_path}"
+                f"No structured {doc_type} document found for {self.job_key}"
             )
-
-        frontmatter, body = _strip_yaml_frontmatter(
-            md_path.read_text(encoding="utf-8")
-        )
 
         critique = json.dumps(issues)
-        prompt = refine_prompt.replace("{current_document}", body)
-        prompt = prompt.replace("{critique}", critique)
-        prompt = _apply_template(prompt, {"job": self, "user": user})
+        prompt = refine_prompt.replace("{critique}", critique)
 
-        content = call_llm(prompt, client, model, max_tokens=32768)
-        if not content:
-            raise RuntimeError(
-                f"{doc_type.capitalize()} rewrite returned empty content — "
-                "input may be too long for the model's context window"
+        if doc_type == "resume":
+            doc = ResumeDocument.model_validate_json(row.structured_json)
+            prompt = prompt.replace("{current_profile_summary}", doc.profile_summary)
+            prompt = prompt.replace(
+                "{current_experience_indexed}",
+                "\n".join(
+                    f"[{i}] {e.title} at {e.company} ({e.start}–{e.end})"
+                    for i, e in enumerate(doc.experience)
+                ),
             )
-        content = strip_header_block(content)
-        md_path.write_text(frontmatter + content, encoding="utf-8")
+            prompt = prompt.replace(
+                "{current_projects_indexed}",
+                "\n".join(f"[{i}] {p.name}" for i, p in enumerate(doc.projects)),
+            )
+            prompt = _apply_template(prompt, {"job": self, "user": user})
+            generation = _llm_json_with_retry(
+                prompt, client, model, ResumeGeneration,
+                max_tokens=32768, empty_msg="Resume refine returned empty content",
+            )
+            patched = apply_resume_patch(doc, generation)
+            Document.upsert(db, self.job_key, "resume", patched.model_dump_json())
+            self.write_resume_markdown(patched)
+        else:
+            doc = CoverDocument.model_validate_json(row.structured_json)
+            prompt = prompt.replace("{current_document}", doc.body)
+            prompt = _apply_template(prompt, {"job": self, "user": user})
+            content = call_llm(prompt, client, model, max_tokens=32768)
+            if not (content or "").strip():
+                raise RuntimeError("Cover refine returned empty content")
+            doc.body = (content or "").strip()
+            Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+            self.write_cover_markdown(doc)
 
     def refine_resume_md(
         self,
@@ -543,7 +619,7 @@ class Job(Base):
         issues: list,
         template_path: Any,
     ) -> None:
-        """Rewrite resume markdown and regenerate the PDF.
+        """Patch the stored structured résumé, re-assemble the .md, and regenerate the PDF.
 
         Args:
             user: Hydrated User instance.
@@ -554,7 +630,7 @@ class Job(Base):
             issues: List of issue dicts from evaluate_resume_md.
             template_path: Path to the HTML resume template for PDF rendering.
         """
-        self._refine_doc_md("resume", user, refine_prompt, client, model, issues)
+        self._refine_doc_md("resume", user, refine_prompt, client, model, issues, db)
         self.generate_resume_pdf(template_path, db, max_pages=1)
 
     def refine_cover_md(
@@ -567,7 +643,7 @@ class Job(Base):
         issues: list,
         template_path: Any,
     ) -> None:
-        """Rewrite cover letter markdown and regenerate the PDF.
+        """Patch the stored structured cover letter, re-assemble the .md, and regenerate the PDF.
 
         Args:
             user: Hydrated User instance.
@@ -578,7 +654,7 @@ class Job(Base):
             issues: List of issue dicts from evaluate_cover_md.
             template_path: Path to the HTML cover letter template for PDF rendering.
         """
-        self._refine_doc_md("cover", user, refine_prompt, client, model, issues)
+        self._refine_doc_md("cover", user, refine_prompt, client, model, issues, db)
         self.generate_cover_pdf(template_path, db)
 
     # ── Description extraction ─────────────────────────────────────────────────
@@ -766,23 +842,18 @@ class Job(Base):
             model: Model identifier string.
             db: SQLAlchemy session.
         """
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         prompt = self.build_resume_prompt(user, prompt_content, db)
-        raw = call_llm(prompt, client, model, max_tokens=16384)
-        if not (raw or "").strip():
-            raise RuntimeError(
+        generation = _llm_json_with_retry(
+            prompt, client, model, ResumeGeneration, max_tokens=16384,
+            empty_msg=(
                 "Resume generation returned empty content — the model likely hit its "
                 "token limit before producing output (common with reasoning models). "
                 "Try a non-reasoning model or a shorter prompt."
-            )
-        generation = parse_llm_json(raw, ResumeGeneration)
+            ),
+        )
         doc = build_resume_document(user, generation, db)
         Document.upsert(db, self.job_key, "resume", doc.model_dump_json())
-
-        frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
-        body = assemble_resume_markdown(doc)
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
-        md_path.write_text(frontmatter + body, encoding="utf-8")
+        self.write_resume_markdown(doc)
 
     def generate_cover_md(
         self,
@@ -803,7 +874,6 @@ class Job(Base):
             model: Model identifier string.
             db: SQLAlchemy session.
         """
-        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         prompt = self.build_cover_prompt(user, prompt_content, db)
         content = call_llm(prompt, client, model, max_tokens=16384)
         if not content.strip():
@@ -814,7 +884,27 @@ class Job(Base):
             )
         doc = build_cover_document(user, content.strip(), db)
         Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+        self.write_cover_markdown(doc)
 
+    def write_resume_markdown(self, doc: "ResumeDocument") -> None:
+        """Write the derived résumé .md (front matter + assembled body).
+
+        Args:
+            doc: Structured résumé produced by ``build_resume_document``.
+        """
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
+        body = assemble_resume_markdown(doc)
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        md_path.write_text(frontmatter + body, encoding="utf-8")
+
+    def write_cover_markdown(self, doc: "CoverDocument") -> None:
+        """Write the derived cover .md (front matter + assembled body).
+
+        Args:
+            doc: Structured cover letter produced by ``build_cover_document``.
+        """
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         frontmatter = self._build_frontmatter_from_header(doc.header, [])
         body = assemble_cover_markdown(doc)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"

@@ -107,6 +107,54 @@ def build_resume_document(
     return doc
 
 
+def apply_resume_patch(
+    doc: ResumeDocument, generation: ResumeGeneration
+) -> ResumeDocument:
+    """Apply a prose-only refine patch to a stored ResumeDocument.
+
+    Refs key by POSITION in the stored document's lists (experience/projects),
+    not profile indices — the document is the source of truth at refine time.
+    Structural facts (company/title/dates, project name/url) and the header
+    snapshot are never modified. Returns a new document with section_order
+    recomputed.
+
+    An empty ``generation.profile_summary`` intentionally clears the Profile
+    section; the patch is a full prose replacement, so the LLM is expected to
+    always supply the summary.
+
+    Args:
+        doc: The stored résumé document (source of truth).
+        generation: The LLM patch (ResumeGeneration), prose keyed by position.
+
+    Returns:
+        A patched copy of ``doc``.
+    """
+    patched = doc.model_copy(deep=True)
+    patched.profile_summary = generation.profile_summary
+
+    seen_exp: set[int] = set()
+    for item in generation.experience:
+        if not (0 <= item.ref < len(patched.experience)) or item.ref in seen_exp:
+            _log.warning("Refine: ignoring experience ref %s (out of range/duplicate)", item.ref)
+            continue
+        seen_exp.add(item.ref)
+        patched.experience[item.ref].description = item.description
+
+    seen_proj: set[int] = set()
+    for item in generation.projects:
+        if not (0 <= item.ref < len(patched.projects)) or item.ref in seen_proj:
+            _log.warning("Refine: ignoring project ref %s (out of range/duplicate)", item.ref)
+            continue
+        seen_proj.add(item.ref)
+        patched.projects[item.ref].description = item.description
+
+    if generation.skills:
+        patched.skills = generation.skills
+
+    patched.section_order = resume_section_order(patched)
+    return patched
+
+
 def build_cover_document(user: Any, body: str, db: Session) -> CoverDocument:
     """Build a cover document: snapshot header + LLM body + sign-off."""
     header = build_resume_header(user, db)

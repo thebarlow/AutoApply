@@ -33,12 +33,16 @@ Per-profile editing is one slot per type (no file library): the dashboard (Profi
 | Job scoring | `defaults/scoring.md` |
 | Resume generation | `defaults/resume.md` |
 | Resume evaluation (refinement loop) | `defaults/resume_eval.md` |
-| Resume refinement (refinement loop) | `defaults/resume_refine.md` |
+| Resume refinement (refinement loop) | `defaults/resume_refine.md` (keyed-patch contract — see below) |
 | Cover letter generation | `defaults/cover.md` |
 | Cover letter evaluation (refinement loop) | `defaults/cover_eval.md` |
 | Cover letter refinement (refinement loop) | `defaults/cover_refine.md` |
 | Job description extraction | `defaults/extraction.md` |
 | Resume parsing (profile ingestion) | `defaults/resume_parse.md` |
+
+## Resume refine: keyed-patch contract (Phase 3b)
+
+`resume_refine.md` no longer returns full Markdown. It now returns a JSON `ResumeGeneration` **patch** keyed by document position (experience/project refs), applied to the stored `ResumeDocument` via `apply_resume_patch`. The new default is force-reseeded into `prompt_defaults` and all profile résumé-refine slots by the `resume_refine_prompt_v2` Config gate migration in `db/database.py`.
 
 ## Dead Files (safe to delete)
 

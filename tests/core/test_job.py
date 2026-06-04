@@ -816,3 +816,35 @@ def test_render_meta_uses_snapshot_not_live_profile(db_session, tmp_path, monkey
 
     job.generate_cover_pdf(tmp_path / "tmpl.html", db_session)
     assert captured["meta"]["email"] == "old@x.com"   # snapshot, not live profile
+
+
+def test_write_cover_markdown_roundtrips_assembler(tmp_path, monkeypatch):
+    import core.job as jobmod
+    from core.schemas import CoverDocument, ResumeHeader, SignOff
+    monkeypatch.setattr(jobmod, "_OUTPUTS_DIR", tmp_path)
+    job = jobmod.Job(job_key="k1", source="x", title="t", company="c", url="u", state="new")
+    doc = CoverDocument(
+        header=ResumeHeader(name="Ada Lovelace", email="ada@example.com"),
+        body="Dear Hiring Team, I am thrilled to apply.",
+        signoff=SignOff(name="Ada Lovelace"),
+    )
+    job.write_cover_markdown(doc)
+    text = (tmp_path / "k1_cover.md").read_text(encoding="utf-8")
+    assert text.startswith("---\n")   # front matter present
+    assert "Dear Hiring Team" in text
+
+
+def test_write_resume_markdown_roundtrips_assembler(tmp_path, monkeypatch):
+    import core.job as jobmod
+    from core.schemas import ResumeDocument, ResumeExperience
+    monkeypatch.setattr(jobmod, "_OUTPUTS_DIR", tmp_path)
+    job = jobmod.Job(job_key="k1", source="x", title="t", company="c", url="u", state="new")
+    doc = ResumeDocument(
+        profile_summary="hi",
+        experience=[ResumeExperience(company="Acme", title="Eng", start="2020", end="2024", description="- did things")],
+    )
+    job.write_resume_markdown(doc)
+    text = (tmp_path / "k1_resume.md").read_text(encoding="utf-8")
+    assert text.startswith("---\n")          # front matter present
+    assert "## Experience" in text
+    assert "- did things" in text

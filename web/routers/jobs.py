@@ -4,16 +4,22 @@ import json as _json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from core.job import Job, JobState
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
-from db.database import get_db, Config
+from core.schemas import ResumeDocument, CoverDocument
+from core.document_assembler import (
+    resume_section_order,
+    assemble_resume_markdown,
+    assemble_cover_markdown,
+)
+from db.database import get_db, Config, Document
 from web.sse import send as _sse_send
 from web import llm_status
 
@@ -392,71 +398,71 @@ def serve_doc_turn_markdown(job_key: str, doc_type: str, n: int, db: Session = D
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.md"
+    path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Turn {n} snapshot not found")
-    return path.read_text(encoding="utf-8")
-
-
-async def _read_body_text(request: Request) -> str:
-    """Read request body as UTF-8 text; bridges async body-reading into sync route handlers."""
-    raw = await request.body()
+    raw = path.read_text(encoding="utf-8")
     try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Request body must be valid UTF-8 text")
+        if doc_type == "resume":
+            return assemble_resume_markdown(ResumeDocument.model_validate_json(raw))
+        return assemble_cover_markdown(CoverDocument.model_validate_json(raw))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Snapshot schema mismatch: {exc}") from exc
 
 
-def _put_document_markdown_sync(
+def _doc_model(doc_type: str) -> type[ResumeDocument] | type[CoverDocument]:
+    return ResumeDocument if doc_type == "resume" else CoverDocument
+
+
+@router.get("/{job_key}/{doc_type}/document")
+def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
+    if doc_type not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
+    # Explicit job-existence check mirrors put_document: distinguishes "job missing" (404) from "document missing" (404 below).
+    if Job.get(job_key, db) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    row = Document.fetch(db, job_key, doc_type)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return _json.loads(row.structured_json)
+
+
+@router.put("/{job_key}/{doc_type}/document")
+def put_document(
     job_key: str,
-    doc_type: str,  # "resume" or "cover"
-    content: str,
-    db: Session,
+    doc_type: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
 ):
+    if doc_type not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    suffix = "_resume.md" if doc_type == "resume" else "_cover.md"
-    md_path = _GENERATOR_OUTPUTS / f"{job_key}{suffix}"
-    md_path.parent.mkdir(parents=True, exist_ok=True)
-    old_content = md_path.read_text(encoding="utf-8") if md_path.exists() else None
-    md_path.write_text(content, encoding="utf-8")
+    try:
+        doc = _doc_model(doc_type).model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid document: {exc}")
+
+    if doc_type == "resume":
+        doc.section_order = resume_section_order(doc)
+
+    Document.upsert(db, job_key, doc_type, doc.model_dump_json())
 
     try:
         if doc_type == "resume":
+            job.write_resume_markdown(doc)
             job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=1)
         else:
+            job.write_cover_markdown(doc)
             job.generate_cover_pdf(_COVER_TEMPLATE, db)
     except Exception as exc:
-        if old_content is not None:
-            md_path.write_text(old_content, encoding="utf-8")
-        else:
-            md_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
 
-    db.commit()
     db.refresh(job)
     _emit(job)
-    return job.serialize()
-
-
-@router.put("/{job_key}/resume/markdown")
-def put_resume_markdown(
-    job_key: str,
-    content: str = Depends(_read_body_text),
-    db: Session = Depends(get_db),
-):
-    return _put_document_markdown_sync(job_key, "resume", content, db)
-
-
-@router.put("/{job_key}/cover/markdown")
-def put_cover_markdown(
-    job_key: str,
-    content: str = Depends(_read_body_text),
-    db: Session = Depends(get_db),
-):
-    return _put_document_markdown_sync(job_key, "cover", content, db)
+    return doc.model_dump()
 
 
 def _do_extract_description(job: Job, db: Session) -> None:
@@ -558,7 +564,7 @@ def mark_job_action_seen(job_key: str, action: str, db: Session = Depends(get_db
     _emit(job)
     # Delete per-turn refinement snapshots for the dismissed action
     if action in ("resume", "cover"):
-        for snap in _GENERATOR_OUTPUTS.glob(f"{job_key}_{action}_turn_*.md"):
+        for snap in _GENERATOR_OUTPUTS.glob(f"{job_key}_{action}_turn_*.json"):
             try:
                 snap.unlink()
             except OSError:

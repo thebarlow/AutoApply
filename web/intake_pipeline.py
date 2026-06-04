@@ -86,7 +86,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
 
     Alternates between LLM evaluation and LLM rewriting until the document
     scores above pass_score or the turn limit is reached.  Per-turn snapshots
-    are written to generator/outputs/ as {job_key}_{doc_type}_turn_{n}.md and
+    are written to generator/outputs/ as {job_key}_{doc_type}_turn_{n}.json and
     deleted when the user dismisses the review action via /seen/{action}.
 
     Args:
@@ -94,7 +94,6 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
         doc_type: "resume" or "cover".
     """
     import json as _json
-    import shutil
     from pathlib import Path
 
     _GEN_DIR = Path(__file__).parent.parent / "generator"
@@ -109,43 +108,56 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
     log_field = f"{doc_type}_eval_log"
     eval_key = f"{doc_type}_eval"
     refine_key = f"{doc_type}_refine"
-    main_md = _OUTPUTS / f"{job_key}_{doc_type}.md"
+
+    from db.database import Document
 
     def _save_turn_snapshot(n: int) -> None:
-        """Copy the current main doc to a numbered turn snapshot."""
-        dest = _OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.md"
+        """Snapshot the stored structured document for this turn as JSON."""
+        dest = _OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
+        sdb = SessionLocal()
         try:
-            shutil.copy2(main_md, dest)
+            row = Document.fetch(sdb, job_key, doc_type)
+            if row is not None:
+                dest.write_text(row.structured_json, encoding="utf-8")
+            else:
+                print(f"[refinement:{doc_type}] {job_key}: snapshot turn {n}: no Document row — skipped", flush=True)
         except Exception as e:
-            print(f"[refinement:{doc_type}] {job_key}: failed to snapshot turn {n}: {e}", flush=True)
+            print(f"[refinement:{doc_type}] {job_key}: snapshot turn {n} failed: {e}", flush=True)
+        finally:
+            sdb.close()
 
     def _restore_best(eval_log: list) -> None:
-        """Restore the highest-scoring turn snapshot as the live document and regen PDF."""
+        """Re-persist the highest-scoring turn's structured doc and re-render."""
         if not eval_log:
             return
         best = max(eval_log, key=lambda e: e["score"])
         best_n = best["turn"]
-        snap = _OUTPUTS / f"{job_key}_{doc_type}_turn_{best_n}.md"
-        if not snap.exists() or not main_md.exists():
+        snap = _OUTPUTS / f"{job_key}_{doc_type}_turn_{best_n}.json"
+        if not snap.exists():
             return
-        # Only restore if the best turn isn't already the current doc
-        if snap.read_bytes() == main_md.read_bytes():
-            return
-        shutil.copy2(snap, main_md)
-        print(f"[refinement:{doc_type}] {job_key}: restored turn {best_n} (best score={best['score']:.2f})", flush=True)
-        # Regen PDF from restored markdown
+        structured_json = snap.read_text(encoding="utf-8")
         db2 = SessionLocal()
         try:
+            row = Document.fetch(db2, job_key, doc_type)
+            if row is not None and row.structured_json == structured_json:
+                return  # best turn already live
+            Document.upsert(db2, job_key, doc_type, structured_json)
             job2 = Job.get(job_key, db2)
             if job2:
-                regen_fn = getattr(job2, f"generate_{doc_type}_pdf")
-                regen_fn(template_path, db2)
+                from core.schemas import ResumeDocument, CoverDocument
+                if doc_type == "resume":
+                    job2.write_resume_markdown(ResumeDocument.model_validate_json(structured_json))
+                    job2.generate_resume_pdf(template_path, db2, max_pages=1)
+                else:
+                    job2.write_cover_markdown(CoverDocument.model_validate_json(structured_json))
+                    job2.generate_cover_pdf(template_path, db2)
                 setattr(job2, score_field, best["score"])
                 db2.commit()
                 db2.refresh(job2)
                 _emit(job2)
+                print(f"[refinement:{doc_type}] {job_key}: restored turn {best_n} (best={best['score']:.2f})", flush=True)
         except Exception as e:
-            print(f"[refinement:{doc_type}] {job_key}: PDF regen after restore failed: {e}", flush=True)
+            print(f"[refinement:{doc_type}] {job_key}: restore failed: {e}", flush=True)
             db2.rollback()
         finally:
             db2.close()

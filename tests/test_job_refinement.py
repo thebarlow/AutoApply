@@ -6,7 +6,12 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
 from core.job import Job, _strip_yaml_frontmatter
+from db.database import Base
 
 
 # ─── _strip_yaml_frontmatter ──────────────────────────────────────────────────
@@ -177,71 +182,30 @@ class TestEvaluateResumeMd:
 
 
 # ─── refine_resume_md ─────────────────────────────────────────────────────────
+#
+# refine_resume_md / _refine_doc_md now patch the stored structured Document
+# rather than rewriting the raw markdown file. The structured-patch behavior is
+# covered in detail by tests/core/test_job_refine_structured.py; here we only
+# assert the wrapper threads db and the not-found guard fires when no Document
+# row exists.
 
 class TestRefineResumeMd:
-    def test_overwrites_file_preserving_frontmatter(self, tmp_path):
-        job = _make_job()
-        user = _make_user()
-        original_fm = "---\nname: Jane Doe\nemail: jane@example.com\n---\n\n"
-        (tmp_path / "test_job_resume.md").write_text(
-            original_fm + "## Profile\nOld content.", encoding="utf-8"
+    def test_raises_file_not_found_when_no_document(self):
+        import core.user  # noqa: F401
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
         )
-        client = _make_llm_client(
-            "## Profile\nImproved content.\n\n## Experience\nBetter bullets."
-        )
-        db = MagicMock()
-        template_path = MagicMock(spec=Path)
-
-        with patch("core.job._OUTPUTS_DIR", tmp_path):
-            with patch.object(job, "generate_resume_pdf") as mock_pdf:
-                job.refine_resume_md(
-                    user, "Rewrite: {current_document}\nIssues: {critique}",
-                    client, "gpt-4o", db,
-                    [{"category": "tailoring", "description": "Too generic"}],
-                    template_path,
-                )
-                mock_pdf.assert_called_once_with(template_path, db, max_pages=1)
-
-        result = (tmp_path / "test_job_resume.md").read_text(encoding="utf-8")
-        assert "name: Jane Doe" in result          # frontmatter preserved
-        assert "Improved content." in result        # new content
-        assert "Old content." not in result         # old content replaced
-
-    def test_injects_critique_as_json(self, tmp_path):
-        job = _make_job()
-        user = _make_user()
-        (tmp_path / "test_job_resume.md").write_text(
-            "---\nname: Jane\n---\n\n## Profile\nContent.", encoding="utf-8"
-        )
-        captured = {}
-        def fake_create(**kwargs):
-            captured["prompt"] = kwargs["messages"][0]["content"]
-            choice = MagicMock()
-            choice.message.content = "## Profile\nResult."
-            choice.finish_reason = "stop"
-            r = MagicMock()
-            r.choices = [choice]
-            r.usage = None
-            return r
-        client = MagicMock()
-        client.chat.completions.create.side_effect = fake_create
-        issues = [{"category": "structure", "description": "Bullet too long"}]
-
-        with patch("core.job._OUTPUTS_DIR", tmp_path):
-            with patch.object(job, "generate_resume_pdf"):
-                job.refine_resume_md(
-                    user, "Resume: {current_document} Critique: {critique}",
-                    client, "gpt-4o", MagicMock(), issues, MagicMock(spec=Path),
-                )
-
-        assert json.dumps(issues) in captured["prompt"]
-
-    def test_raises_file_not_found(self, tmp_path):
-        job = _make_job()
-        user = _make_user()
-        with patch("core.job._OUTPUTS_DIR", tmp_path):
+        Base.metadata.create_all(engine)
+        db = sessionmaker(bind=engine)()
+        try:
+            job = Job(job_key="no_doc", source="x", title="t",
+                      company="Acme", url="u", state="new")
+            db.add(job)
+            db.commit()
             with pytest.raises(FileNotFoundError):
-                job.refine_resume_md(
-                    user, "Rewrite", MagicMock(), "gpt-4o",
-                    MagicMock(), [], MagicMock(spec=Path),
-                )
+                job._refine_doc_md("resume", object(), "p", None, "m", [], db)
+        finally:
+            db.close()
+            Base.metadata.drop_all(engine)

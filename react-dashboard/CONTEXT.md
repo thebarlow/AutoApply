@@ -24,6 +24,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Pipeline tabs (Inbox / Processing / Outbound / Archives) | `src/components/widgets/Pipeline.jsx` |
 | Tab job-state filters | `src/components/widgets/Pipeline.jsx` — `TABS` config |
 | Job detail preview (Description / Resume / Cover sub-tabs) | `src/components/widgets/Settings.jsx` — Preview tab section |
+| Structured per-section document form editor (overlay) | `src/components/widgets/StructuredEditor.jsx` — loads via `getDocument`, saves via `putDocument` |
 | Process / Generate / Regenerate / Apply buttons | `src/components/widgets/Settings.jsx` — Preview tab |
 | Action buttons gating / prerequisite enforcement | `src/components/shared/GatedButton.jsx` |
 | User profile list, active profile selector, Create Profile modal | `src/components/widgets/Settings.jsx` — User tab |
@@ -44,6 +45,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Help icon tooltip component | `src/components/shared/HelpIcon.jsx` |
 | Loading spinner component | `src/components/shared/Spinner.jsx` |
 | API calls (jobs, profiles, providers, generate, apply, setup status) | `src/api.js` |
+| Structured document fetch/save | `src/api.js` — `getDocument` / `putDocument` (replaced `putDocumentMarkdown`) |
 | Global state (jobs list, selected job, processing keys, active tab) | `src/App.jsx` |
 | SSE real-time job update subscription | `src/App.jsx` — `useEffect` with EventSource |
 | Global CSS, background noise texture, dark theme base | `src/index.css` |
@@ -63,6 +65,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Preview tab has three sub-tabs driven by local `previewTab` state
 - `CreateProfile` inline modal lives here, not in ProfileDetail
 - AnimatePresence handles slide transitions between User list and ProfileDetail
+- Document editing now uses the structured `StructuredEditor` overlay; the raw-Markdown editing overlay (`DocumentEditOverlay`) is retired. `MarkdownView` remains as a read-only derived preview.
 
 ### ProfileCards.jsx
 - Card grid for selecting and activating profiles
