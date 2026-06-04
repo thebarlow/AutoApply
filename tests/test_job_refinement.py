@@ -6,7 +6,12 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
 from core.job import Job, _strip_yaml_frontmatter
+from db.database import Base
 
 
 # ─── _strip_yaml_frontmatter ──────────────────────────────────────────────────
@@ -186,12 +191,21 @@ class TestEvaluateResumeMd:
 
 class TestRefineResumeMd:
     def test_raises_file_not_found_when_no_document(self):
-        job = _make_job()
-        user = _make_user()
-        db = MagicMock()
-        db.query.return_value.filter_by.return_value.first.return_value = None
-        with pytest.raises(FileNotFoundError):
-            job.refine_resume_md(
-                user, "Rewrite", MagicMock(), "gpt-4o",
-                db, [], MagicMock(spec=Path),
-            )
+        import core.user  # noqa: F401
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(engine)
+        db = sessionmaker(bind=engine)()
+        try:
+            job = Job(job_key="no_doc", source="x", title="t",
+                      company="Acme", url="u", state="new")
+            db.add(job)
+            db.commit()
+            with pytest.raises(FileNotFoundError):
+                job._refine_doc_md("resume", object(), "p", None, "m", [], db)
+        finally:
+            db.close()
+            Base.metadata.drop_all(engine)

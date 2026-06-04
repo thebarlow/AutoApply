@@ -511,10 +511,10 @@ class Job(Base):
             )
 
         critique = json.dumps(issues)
+        prompt = refine_prompt.replace("{critique}", critique)
 
         if doc_type == "resume":
             doc = ResumeDocument.model_validate_json(row.structured_json)
-            prompt = refine_prompt.replace("{critique}", critique)
             prompt = prompt.replace("{current_profile_summary}", doc.profile_summary)
             prompt = prompt.replace(
                 "{current_experience_indexed}",
@@ -537,13 +537,12 @@ class Job(Base):
             self.write_resume_markdown(patched)
         else:
             doc = CoverDocument.model_validate_json(row.structured_json)
-            prompt = refine_prompt.replace("{critique}", critique)
             prompt = prompt.replace("{current_document}", doc.body)
             prompt = _apply_template(prompt, {"job": self, "user": user})
             content = call_llm(prompt, client, model, max_tokens=32768)
-            if not content.strip():
+            if not (content or "").strip():
                 raise RuntimeError("Cover refine returned empty content")
-            doc.body = content.strip()
+            doc.body = (content or "").strip()
             Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
             self.write_cover_markdown(doc)
 
@@ -557,7 +556,7 @@ class Job(Base):
         issues: list,
         template_path: Any,
     ) -> None:
-        """Rewrite resume markdown and regenerate the PDF.
+        """Patch the stored structured résumé, re-assemble the .md, and regenerate the PDF.
 
         Args:
             user: Hydrated User instance.
@@ -581,7 +580,7 @@ class Job(Base):
         issues: list,
         template_path: Any,
     ) -> None:
-        """Rewrite cover letter markdown and regenerate the PDF.
+        """Patch the stored structured cover letter, re-assemble the .md, and regenerate the PDF.
 
         Args:
             user: Hydrated User instance.
