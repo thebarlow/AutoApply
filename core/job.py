@@ -27,6 +27,69 @@ from core.utils import render_pdf
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
+# Appended to every structured (JSON) LLM call. Small/fast models (e.g. DeepSeek
+# Flash, Haiku) sometimes break a markdown `description` out of its JSON string,
+# producing invalid JSON ("Expecting value" at the value position). This makes
+# the contract explicit; the retry below recovers the residual nondeterministic
+# failures.
+_JSON_RETRY_SUFFIX = (
+    "\n\nReturn ONLY a single valid JSON object. Output compact JSON. Every "
+    "newline inside a string value MUST be escaped as \\n — never break a string "
+    "across physical lines. Do not emit markdown, code fences, comments, or any "
+    "text outside the JSON object."
+)
+
+
+def _llm_json_with_retry(
+    prompt: str,
+    client: Any,
+    model: str,
+    model_cls: type,
+    *,
+    max_tokens: int,
+    empty_msg: str,
+    retries: int = 1,
+):
+    """Call the LLM for a structured JSON response, retrying once on parse failure.
+
+    Appends a strict-JSON instruction to harden the contract, then parses the
+    response against ``model_cls``. If parsing fails (the model emitted invalid
+    JSON), retries with an added corrective note up to ``retries`` times before
+    re-raising the last error.
+
+    Args:
+        prompt: The fully-substituted prompt (before the JSON hardening suffix).
+        client: An OpenAI-compatible client instance.
+        model: Model identifier string.
+        model_cls: The Pydantic model to validate the JSON against.
+        max_tokens: Maximum tokens in the response.
+        empty_msg: Error message to raise if the LLM returns empty content.
+        retries: Number of retries after the initial attempt (default 1).
+
+    Returns:
+        A validated instance of ``model_cls``.
+
+    Raises:
+        RuntimeError: If the response is empty, or still unparseable after retries.
+    """
+    sent = prompt + _JSON_RETRY_SUFFIX
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        raw = call_llm(sent, client, model, max_tokens=max_tokens)
+        if not (raw or "").strip():
+            raise RuntimeError(empty_msg)
+        try:
+            return parse_llm_json(raw, model_cls)
+        except RuntimeError as exc:
+            last_exc = exc
+            sent = (
+                prompt
+                + _JSON_RETRY_SUFFIX
+                + "\n\nYour previous reply was NOT valid JSON and failed to parse. "
+                "Return ONLY a single valid, compact JSON object this time."
+            )
+    raise last_exc  # type: ignore[misc]
+
 
 def _field_to_str(value: Any) -> str:
     """Render a job or user field value to a string for template substitution."""
@@ -528,10 +591,10 @@ class Job(Base):
                 "\n".join(f"[{i}] {p.name}" for i, p in enumerate(doc.projects)),
             )
             prompt = _apply_template(prompt, {"job": self, "user": user})
-            raw = call_llm(prompt, client, model, max_tokens=32768)
-            if not (raw or "").strip():
-                raise RuntimeError("Resume refine returned empty content")
-            generation = parse_llm_json(raw, ResumeGeneration)
+            generation = _llm_json_with_retry(
+                prompt, client, model, ResumeGeneration,
+                max_tokens=32768, empty_msg="Resume refine returned empty content",
+            )
             patched = apply_resume_patch(doc, generation)
             Document.upsert(db, self.job_key, "resume", patched.model_dump_json())
             self.write_resume_markdown(patched)
@@ -780,14 +843,14 @@ class Job(Base):
             db: SQLAlchemy session.
         """
         prompt = self.build_resume_prompt(user, prompt_content, db)
-        raw = call_llm(prompt, client, model, max_tokens=16384)
-        if not (raw or "").strip():
-            raise RuntimeError(
+        generation = _llm_json_with_retry(
+            prompt, client, model, ResumeGeneration, max_tokens=16384,
+            empty_msg=(
                 "Resume generation returned empty content — the model likely hit its "
                 "token limit before producing output (common with reasoning models). "
                 "Try a non-reasoning model or a shorter prompt."
-            )
-        generation = parse_llm_json(raw, ResumeGeneration)
+            ),
+        )
         doc = build_resume_document(user, generation, db)
         Document.upsert(db, self.job_key, "resume", doc.model_dump_json())
         self.write_resume_markdown(doc)
