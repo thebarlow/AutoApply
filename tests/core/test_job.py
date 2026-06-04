@@ -374,19 +374,23 @@ def test_generate_resume_md_writes_file(db_session, tmp_path):
     db_session.commit()
     user = User.load(db_session)
 
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = "## Experience\n- Did things"
-    mock_client.chat.completions.create.return_value.choices[0].finish_reason = "stop"
+    fake = _json.dumps({
+        "profile_summary": "Did things.",
+        "experience": [],
+        "projects": [],
+        "skills": [{"category": "Languages", "items": ["Python"]}],
+    })
 
     outputs = tmp_path / "outputs"
     outputs.mkdir()
-    with patch("core.job._OUTPUTS_DIR", outputs):
-        job.generate_resume_md(user, "Write resume for {job.title}", mock_client, "gpt-4", db_session)
+    with patch("core.job._OUTPUTS_DIR", outputs), \
+            patch("core.job.call_llm", lambda *a, **k: fake):
+        job.generate_resume_md(user, "Write resume for {job.title}", object(), "gpt-4", db_session)
 
     md_file = outputs / "remotive_1_resume.md"
     assert md_file.exists()
     content = md_file.read_text()
-    assert "## Experience" in content
+    assert "## Skills" in content
 
 
 def test_intake_spawns_background_thread_and_calls_extract(db_session):
@@ -515,6 +519,8 @@ def test_generate_cover_md_rejects_empty_content(db_session, tmp_path, monkeypat
     monkeypatch.setattr("core.llm.call_llm", lambda *a, **k: "   ")
     user = MagicMock()
     user.master_resume.return_value = ""
+    user.render_work_history_indexed.return_value = ""
+    user.render_projects_indexed.return_value = ""
     user.first_name = "A"
     user.last_name = "B"
     user.email = "a@b.com"
@@ -700,3 +706,51 @@ def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):
     db_session.refresh(job)
     assert job.cover_generated_at is not None
     assert "T" in job.cover_generated_at
+
+
+def test_generate_resume_md_writes_document_and_markdown(db_session, tmp_path, monkeypatch):
+    import json
+    import core.job as job_mod
+    from core.job import Job
+    from core.user import User
+    from db.database import Document
+
+    monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
+
+    db_session.add(User(name="Jane Doe", data=json.dumps({
+        "first_name": "Jane", "last_name": "Doe", "email": "j@x.com",
+        "work_history": [
+            {"company": "Acme", "title": "Eng", "start": "2020", "end": "2024", "summary": "s1"},
+        ],
+        "projects": [{"name": "P0", "description": "d0", "url": "u0", "technologies": []}],
+        "education": [{"institution": "MIT", "degree": "BS", "field": "EE", "graduated": "2018", "gpa": 3.9}],
+    })))
+    db_session.commit()
+    user = User.load(db_session)
+
+    job = Job(job_key="k1", source="x", title="SWE", company="Acme", url="http://x/1")
+    db_session.add(job)
+    db_session.commit()
+
+    fake = json.dumps({
+        "profile_summary": "Ships software.",
+        "experience": [{"ref": 0, "description": "- Built X"}],
+        "projects": [{"ref": 0, "description": "A project."}],
+        "skills": [{"category": "Languages", "items": ["Python"]}],
+    })
+    monkeypatch.setattr(job_mod, "call_llm", lambda *a, **k: fake, raising=False)
+    prompt = "History:\n{user_profile.work_history_indexed}\nProjects:\n{user_profile.projects_indexed}"
+
+    job.generate_resume_md(user, prompt, client=object(), model="m", db=db_session)
+
+    row = Document.fetch(db_session, "k1", "resume")
+    assert row is not None
+    doc = json.loads(row.structured_json)
+    assert doc["profile_summary"] == "Ships software."
+    assert doc["experience"][0]["company"] == "Acme"
+    assert doc["header"]["name"] == "Jane Doe"
+
+    md = (tmp_path / "k1_resume.md").read_text(encoding="utf-8")
+    assert md.startswith("---")
+    assert "## Profile" in md
+    assert "- Built X" in md

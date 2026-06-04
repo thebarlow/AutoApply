@@ -10,8 +10,17 @@ from typing import Any, Optional
 from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import Session
 
-from db.database import Base
-from core.schemas import EvalResponse, ExtractionResponse, ScoreResponse, parse_llm_json
+from db.database import Base, Document
+from core.schemas import (
+    EvalResponse,
+    ExtractionResponse,
+    ResumeGeneration,
+    ScoreResponse,
+    parse_llm_json,
+)
+from core.llm import call_llm
+from core.document_builder import build_resume_document, build_cover_document
+from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
 
 _OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
 
@@ -705,6 +714,12 @@ class Job(Base):
         Returns:
             Rendered prompt string.
         """
+        template = template.replace(
+            "{user_profile.work_history_indexed}", user.render_work_history_indexed()
+        )
+        template = template.replace(
+            "{user_profile.projects_indexed}", user.render_projects_indexed()
+        )
         template = template.replace("{user_profile.master_resume}", user.master_resume())
         if "{job.extracted_description}" in template:
             if not self.ext_seniority:
@@ -748,22 +763,23 @@ class Job(Base):
             model: Model identifier string.
             db: SQLAlchemy session.
         """
-        from core.llm import call_llm
-        from core.utils import strip_header_block
-
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        frontmatter = self._build_frontmatter(user, db)
         prompt = self.build_resume_prompt(user, prompt_content, db)
-        content = call_llm(prompt, client, model, max_tokens=16384)
-        if not content.strip():
+        raw = call_llm(prompt, client, model, max_tokens=16384)
+        if not (raw or "").strip():
             raise RuntimeError(
                 "Resume generation returned empty content — the model likely hit its "
                 "token limit before producing output (common with reasoning models). "
                 "Try a non-reasoning model or a shorter prompt."
             )
-        content = strip_header_block(content)
+        generation = parse_llm_json(raw, ResumeGeneration)
+        doc = build_resume_document(user, generation, db)
+        Document.upsert(db, self.job_key, "resume", doc.model_dump_json())
+
+        frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
+        body = assemble_resume_markdown(doc)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
-        md_path.write_text(frontmatter + content, encoding="utf-8")
+        md_path.write_text(frontmatter + body, encoding="utf-8")
 
     def generate_cover_md(
         self,
@@ -919,6 +935,43 @@ class Job(Base):
         if self.company:
             data["company"] = self.company
         return data
+
+    def _meta_from_header(self, header: Any, education: list) -> dict:
+        """Build the render/front-matter meta dict from a snapshot header.
+
+        Mirrors _frontmatter_data's shape (firstname/lastname split from name,
+        github/linkedin/website only when set, education list, company from job).
+        """
+        name = header.name or ""
+        first, _, last = name.partition(" ")
+        data: dict = {
+            "name": name,
+            "firstname": first,
+            "lastname": last,
+            "email": header.email or "",
+            "phone": header.phone or "",
+            "location": header.location or "",
+        }
+        if header.github:
+            data["github"] = header.github
+        if header.linkedin:
+            data["linkedin"] = header.linkedin
+        if header.website:
+            data["website"] = header.website
+        if education:
+            data["education"] = [e.model_dump() for e in education]
+        if self.company:
+            data["company"] = self.company
+        return data
+
+    def _build_frontmatter_from_header(self, header: Any, education: list) -> str:
+        """Serialize a snapshot header to a YAML front matter string."""
+        import yaml
+        return "---\n" + yaml.dump(
+            self._meta_from_header(header, education),
+            allow_unicode=True,
+            default_flow_style=False,
+        ) + "---\n\n"
 
     def _build_frontmatter(self, user: Any, db: Session) -> str:
         """Serialize frontmatter data to a YAML front matter string."""
