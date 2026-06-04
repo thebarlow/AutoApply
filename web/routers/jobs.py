@@ -14,7 +14,11 @@ from core.job import Job, JobState
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
 from core.schemas import ResumeDocument, CoverDocument
-from core.document_assembler import resume_section_order
+from core.document_assembler import (
+    resume_section_order,
+    assemble_resume_markdown,
+    assemble_cover_markdown,
+)
 from db.database import get_db, Config, Document
 from web.sse import send as _sse_send
 from web import llm_status
@@ -397,11 +401,13 @@ def serve_doc_turn_markdown(job_key: str, doc_type: str, n: int, db: Session = D
     path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Turn {n} snapshot not found")
-    from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
     raw = path.read_text(encoding="utf-8")
-    if doc_type == "resume":
-        return assemble_resume_markdown(ResumeDocument.model_validate_json(raw))
-    return assemble_cover_markdown(CoverDocument.model_validate_json(raw))
+    try:
+        if doc_type == "resume":
+            return assemble_resume_markdown(ResumeDocument.model_validate_json(raw))
+        return assemble_cover_markdown(CoverDocument.model_validate_json(raw))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Snapshot schema mismatch: {exc}") from exc
 
 
 def _doc_model(doc_type: str) -> type[ResumeDocument] | type[CoverDocument]:

@@ -86,7 +86,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
 
     Alternates between LLM evaluation and LLM rewriting until the document
     scores above pass_score or the turn limit is reached.  Per-turn snapshots
-    are written to generator/outputs/ as {job_key}_{doc_type}_turn_{n}.md and
+    are written to generator/outputs/ as {job_key}_{doc_type}_turn_{n}.json and
     deleted when the user dismisses the review action via /seen/{action}.
 
     Args:
@@ -119,6 +119,8 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
             row = Document.fetch(sdb, job_key, doc_type)
             if row is not None:
                 dest.write_text(row.structured_json, encoding="utf-8")
+            else:
+                print(f"[refinement:{doc_type}] {job_key}: snapshot turn {n}: no Document row — skipped", flush=True)
         except Exception as e:
             print(f"[refinement:{doc_type}] {job_key}: snapshot turn {n} failed: {e}", flush=True)
         finally:
