@@ -51,6 +51,7 @@ core/
 | Shared utilities | `utils.py` |
 | Pydantic models for structured document artifacts | `schemas.py` |
 | Snapshot profile + join LLM prose to structured data (résumé/cover build) | `document_builder.py` → `build_resume_document()`, `build_cover_document()` |
+| Apply a prose-only keyed patch to a stored `ResumeDocument` (refine path) | `document_builder.py` → `apply_resume_patch()` |
 | Render a structured document to canonical Markdown | `document_assembler.py` → `assemble_resume_markdown()`, `assemble_cover_markdown()` |
 
 ## LLM Integration
@@ -109,9 +110,9 @@ After the LLM call:
 
 Defined in `db/database.py` as `Document`. Columns: `id`, `job_key`, `doc_type` ("resume"|"cover"), `structured_json`, `created_at`. Unique constraint on `(job_key, doc_type)`. Helpers: `Document.fetch(job_key, doc_type, db)`, `Document.upsert(job_key, doc_type, model, db)`.
 
-### Known Issues / Phase 3a Caveat
+### Phase 3b: structured document as source of truth
 
-A manual `.md` edit, eval, or refine mutates the flat `.md` file but does **not** update the stored `Document` — they diverge. This is the same trade-off as today's refine path diverging from the original generation. **Phase 3b** resolves this: field-level editing + structured eval/refine will make the structured document the single source of truth, with `.md` as a purely derived output.
+The structured `Document` table is now the **single source of truth**; the `.md` is purely derived. The `.md` is written only by `write_resume_markdown` / `write_cover_markdown` (assemble from the document + snapshot front matter), which are invoked from generation, structured editing, and refine — never edited directly. `_refine_doc_md` now patches the structured document (via `apply_resume_patch` for résumés), re-persists it, then re-derives `.md` + PDF; it takes `db` as a parameter.
 
 ## Key Invariants
 
