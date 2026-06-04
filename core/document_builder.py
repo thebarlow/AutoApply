@@ -107,6 +107,46 @@ def build_resume_document(
     return doc
 
 
+def apply_resume_patch(
+    doc: ResumeDocument, generation: ResumeGeneration
+) -> ResumeDocument:
+    """Apply a prose-only refine patch to a stored ResumeDocument.
+
+    Refs key by POSITION in the stored document's lists (experience/projects),
+    not profile indices — the document is the source of truth at refine time.
+    Structural facts (company/title/dates, project name/url) and the header
+    snapshot are never modified. Returns a new document with section_order
+    recomputed.
+
+    Args:
+        doc: The stored résumé document (source of truth).
+        generation: The LLM patch (ResumeGeneration), prose keyed by position.
+
+    Returns:
+        A patched copy of ``doc``.
+    """
+    patched = doc.model_copy(deep=True)
+    patched.profile_summary = generation.profile_summary
+
+    for item in generation.experience:
+        if 0 <= item.ref < len(patched.experience):
+            patched.experience[item.ref].description = item.description
+        else:
+            _log.warning("Refine: ignoring experience ref %s (out of range)", item.ref)
+
+    for item in generation.projects:
+        if 0 <= item.ref < len(patched.projects):
+            patched.projects[item.ref].description = item.description
+        else:
+            _log.warning("Refine: ignoring project ref %s (out of range)", item.ref)
+
+    if generation.skills:
+        patched.skills = generation.skills
+
+    patched.section_order = resume_section_order(patched)
+    return patched
+
+
 def build_cover_document(user: Any, body: str, db: Session) -> CoverDocument:
     """Build a cover document: snapshot header + LLM body + sign-off."""
     header = build_resume_header(user, db)
