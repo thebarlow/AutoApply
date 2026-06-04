@@ -778,11 +778,7 @@ class Job(Base):
         generation = parse_llm_json(raw, ResumeGeneration)
         doc = build_resume_document(user, generation, db)
         Document.upsert(db, self.job_key, "resume", doc.model_dump_json())
-
-        frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
-        body = assemble_resume_markdown(doc)
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
-        md_path.write_text(frontmatter + body, encoding="utf-8")
+        self.write_resume_markdown(doc)
 
     def generate_cover_md(
         self,
@@ -814,7 +810,19 @@ class Job(Base):
             )
         doc = build_cover_document(user, content.strip(), db)
         Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+        self.write_cover_markdown(doc)
 
+    def write_resume_markdown(self, doc: "ResumeDocument") -> None:
+        """Write the derived résumé `.md` (front matter + assembled body)."""
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
+        body = assemble_resume_markdown(doc)
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        md_path.write_text(frontmatter + body, encoding="utf-8")
+
+    def write_cover_markdown(self, doc: "CoverDocument") -> None:
+        """Write the derived cover `.md` (front matter + assembled body)."""
+        _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         frontmatter = self._build_frontmatter_from_header(doc.header, [])
         body = assemble_cover_markdown(doc)
         md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
