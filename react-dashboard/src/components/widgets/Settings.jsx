@@ -461,7 +461,6 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     }
   }
   const [contentTab, setContentTab] = useState('description')
-  const [descView, setDescView] = useState(() => job?.extraction_json_exists ? 'extracted' : 'raw')
   const [artifactView, setArtifactView] = useState(() => job?.resume_path ? 'pdf' : 'markdown')
   const [localLoadingTabs, setLocalLoadingTabs] = useState(() => new Set())
   const [actionError, setActionError] = useState(null)
@@ -508,7 +507,6 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   // Reset all state when a different job is selected
   useEffect(() => {
     setContentTab('description')
-    setDescView(job?.extraction_json_exists ? 'extracted' : 'raw')
     setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
     setLocalLoadingTabs(new Set())
     setActionError(null)
@@ -691,15 +689,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       {/* Content area */}
       {contentTab === 'description' && (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <SubToggle
-              options={[
-                { key: 'raw', label: 'Raw' },
-                { key: 'extracted', label: 'Processed', disabled: !job.extraction_json_exists },
-              ]}
-              value={descView}
-              onChange={setDescView}
-            />
+          <div className="flex items-center justify-end">
             <GatedButton
               action="score"
               onClick={handleAction}
@@ -711,16 +701,19 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             </GatedButton>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
-          {descView === 'raw' && (
-            <p className="text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
+
+          {job.extraction
+            ? <ExtractionView data={job.extraction} />
+            : <p className="text-xs text-space-dim">No extraction yet.</p>}
+
+          <details className="border-t border-space-border pt-2">
+            <summary className="text-xs font-semibold text-space-dim cursor-pointer select-none hover:text-space-text">
+              Raw Description
+            </summary>
+            <p className="mt-2 text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
               {job.description || 'No description available.'}
             </p>
-          )}
-          {descView === 'extracted' && (
-            job.extraction
-              ? <ExtractionView data={job.extraction} />
-              : <p className="text-xs text-space-dim">No extraction yet.</p>
-          )}
+          </details>
         </div>
       )}
 
