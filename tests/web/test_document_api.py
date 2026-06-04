@@ -85,5 +85,19 @@ def test_put_document_rejects_malformed(client, db_session):
 
 
 def test_markdown_put_route_is_gone(client, db_session):
+    # 405 because the GET .../markdown route still exists; only the PUT handler was removed.
     _job(db_session)
     assert client.put("/api/jobs/k1/resume/markdown", content=b"# x").status_code == 405
+
+
+def test_put_cover_document_persists(client, db_session, monkeypatch):
+    import core.job as jobmod
+    monkeypatch.setattr(jobmod.Job, "write_cover_markdown", lambda self, doc: None)
+    monkeypatch.setattr(jobmod.Job, "generate_cover_pdf", lambda self, t, db: None)
+    _job(db_session, key="kc")
+    payload = {"header": {"name": "Jane Doe", "email": "j@x.com"}, "body": "Cover body text.", "signoff": {}}
+    r = client.put("/api/jobs/kc/cover/document", json=payload)
+    assert r.status_code == 200
+    assert r.json()["body"] == "Cover body text."
+    row = Document.fetch(db_session, "kc", "cover")
+    assert row is not None and "Cover body text." in row.structured_json

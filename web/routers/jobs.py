@@ -400,7 +400,7 @@ def serve_doc_turn_markdown(job_key: str, doc_type: str, n: int, db: Session = D
     return path.read_text(encoding="utf-8")
 
 
-def _doc_model(doc_type: str):
+def _doc_model(doc_type: str) -> type[ResumeDocument] | type[CoverDocument]:
     return ResumeDocument if doc_type == "resume" else CoverDocument
 
 
@@ -408,6 +408,7 @@ def _doc_model(doc_type: str):
 def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
     if doc_type not in ("resume", "cover"):
         raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
+    # Explicit job-existence check mirrors put_document: distinguishes "job missing" (404) from "document missing" (404 below).
     if Job.get(job_key, db) is None:
         raise HTTPException(status_code=404, detail="Job not found")
     row = Document.fetch(db, job_key, doc_type)
