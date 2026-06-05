@@ -223,6 +223,7 @@ class Job(Base):
     resume_path = Column(String)
     cover_path = Column(String)
     resume_generated_at = Column(String)
+    resume_docx_path = Column(String)
     cover_generated_at = Column(String)
     applied_at = Column(String)
     sheets_row_id = Column(String)

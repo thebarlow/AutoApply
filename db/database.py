@@ -248,6 +248,15 @@ def _migrate_resume_eval_columns() -> None:
         conn.commit()
 
 
+def _migrate_resume_docx_column() -> None:
+    """Add resume_docx_path column to jobs table if missing."""
+    with engine.connect() as conn:
+        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
+        if "resume_docx_path" not in existing:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN resume_docx_path TEXT"))
+        conn.commit()
+
+
 def _migrate_resume_prompt_v2() -> None:
     """Force the résumé default + all profile résumé prompts to the Phase 3a contract.
 
@@ -331,6 +340,7 @@ def init_db() -> None:
     _migrate_generated_at_columns()
     _migrate_flagged_column()
     _migrate_resume_eval_columns()
+    _migrate_resume_docx_column()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db
     db = SessionLocal()
     try:
