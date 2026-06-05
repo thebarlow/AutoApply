@@ -24,32 +24,32 @@ html, body {
   margin: 0 0 0.06in 0;
 }
 
-.contact-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  row-gap: 0.04in;
-  column-gap: 0.1in;
+/* Single flowing row (not a real grid): items wrap and pack ~3 per line for the
+   density of the old 3-column look, but render as one continuous, correctly
+   ordered text run so the ATS text layer extracts cleanly (no column scramble). */
+.contact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.04in 0.14in;
+  font-size: 10pt;
+  color: #222;
 }
 
 .contact-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10pt;
-  color: #222;
   white-space: nowrap;
-  overflow: hidden;
 }
 
-.contact-item svg {
-  flex-shrink: 0;
-  color: #444;
+/* Dotted-leader separator between items; decorative (::after), so the glyph
+   never enters the extracted text layer. */
+.contact-item:not(:last-child)::after {
+  content: " ····";
+  margin-left: 0.14in;
+  letter-spacing: 2px;
+  color: #bbb;
 }
 
 .contact-item span,
 .contact-item a {
-  overflow: hidden;
-  text-overflow: ellipsis;
   color: #222;
   text-decoration: none;
 }
