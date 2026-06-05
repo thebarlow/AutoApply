@@ -54,11 +54,29 @@ def test_run_ats_check_passes_on_clean_pdf(db_session, tmp_path, monkeypatch):
     class _User:
         skills = ["Python"]
 
-    with patch("core.ats_gate.extract_text", return_value=fake_pt), \
-         patch("core.ats_gate.call_llm", return_value=_PARSED_OK):
+    with patch("core.ats_gate.extract_text", return_value=fake_pt) as mock_extract, \
+         patch("core.ats_gate.call_llm", return_value=_PARSED_OK) as mock_llm:
         report = job.run_ats_check(db_session, _User(), client=object(), model="m")
 
     assert report.passed is True
+    assert mock_extract.called
+    assert mock_llm.called, "semantic round-trip LLM should have been invoked"
+
+
+def test_run_ats_check_missing_document_raises(db_session, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobmod, "_OUTPUTS_DIR", tmp_path, raising=True)
+    (tmp_path / "job2_resume.pdf").write_bytes(b"%PDF-1.4 fake")  # PDF exists, but no Document row
+
+    job = Job.__new__(Job)
+    job.job_key = "job2"
+    job.ext_required_skills = ""
+    job.ext_preferred_skills = ""
+
+    class _User:
+        skills = []
+
+    with pytest.raises(FileNotFoundError, match="No structured resume document"):
+        job.run_ats_check(db_session, _User(), client=object(), model="m")
 
 
 def test_run_ats_check_missing_pdf_raises(db_session, tmp_path, monkeypatch):
