@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from db.database import get_db
 from web.main import app
 from core.schemas import AtsReport, AtsIssue
 
@@ -21,7 +22,7 @@ def test_confirm_applied_blocked_on_critical():
     with patch("web.routers.tray._gate_report_for", return_value=bad), \
          patch("web.routers.tray.Job.get") as get, \
          patch("web.routers.tray.Job.mark_applied") as mark:
-        get.return_value = object()  # non-None job so we pass the 404 check
+        get.return_value = MagicMock()  # non-None job so we pass the 404 check
         resp = _client().post("/api/jobs/job1/confirm-applied")
     assert resp.status_code == 409
     assert resp.json()["detail"]["passed"] is False
@@ -29,9 +30,6 @@ def test_confirm_applied_blocked_on_critical():
 
 
 def test_confirm_applied_proceeds_when_passed():
-    from unittest.mock import MagicMock
-    from db.database import get_db
-
     ok = AtsReport.build(score=1.0, issues=[], extracted_text="t")
     fake_db = MagicMock()
 
@@ -57,7 +55,6 @@ def test_gate_report_for_resolves_model_without_attribute_error(monkeypatch):
 
     class _FakeJob:
         def run_ats_check(self, db, user, client, model):
-            from core.schemas import AtsReport
             return AtsReport.build(score=1.0, issues=[], extracted_text="")
 
     captured = {}
@@ -72,3 +69,12 @@ def test_gate_report_for_resolves_model_without_attribute_error(monkeypatch):
     report = tray._gate_report_for(_FakeJob(), db=object())
     assert report.passed is True
     assert captured.get("called") is True
+
+
+def test_confirm_applied_missing_artifact_returns_422():
+    with patch("web.routers.tray._gate_report_for", side_effect=FileNotFoundError("missing")), \
+         patch("web.routers.tray.Job.get", return_value=MagicMock()), \
+         patch("web.routers.tray.Job.mark_applied") as mark:
+        resp = _client().post("/api/jobs/job1/confirm-applied")
+    assert resp.status_code == 422
+    mark.assert_not_called()

@@ -18,7 +18,13 @@ _tray_ws: WebSocket | None = None
 
 
 def _gate_report_for(job: Job, db: Session) -> AtsReport:
-    """Resolve the active profile's user/client/model and run the ATS gate."""
+    """Resolve the active profile's user/client/model and run the ATS gate.
+
+    Raises:
+        FileNotFoundError: Propagated from ``run_ats_check`` when the résumé
+            PDF or stored Document record is absent (e.g. job was never
+            generated).
+    """
     user = User.load(db)
     client, model = get_client_for_profile(user)
     return job.run_ats_check(db, user, client, model)
@@ -52,7 +58,10 @@ def confirm_applied(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    report = _gate_report_for(job, db)
+    try:
+        report = _gate_report_for(job, db)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     if not report.passed:
         raise HTTPException(status_code=409, detail=report.model_dump())
     job.mark_applied(db)
