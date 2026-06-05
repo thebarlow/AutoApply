@@ -25,8 +25,14 @@ def db_session():
 @pytest.fixture
 def client(db_session, monkeypatch):
     app.dependency_overrides[get_db] = lambda: db_session
-    # Patch os._exit so tests don't kill the process
+    # Patch the exit paths so no daemon thread can call the real _exit_process.
+    # The spawners sleep before exiting; if the monkeypatch on _exit_process
+    # reverted at teardown before the thread fired, it would taskkill/os._exit
+    # the pytest process mid-suite. Patching the spawners removes the thread
+    # (and the race) entirely.
     monkeypatch.setattr("web.routers.shutdown._exit_process", lambda: None)
+    monkeypatch.setattr("web.routers.shutdown._delayed_exit", lambda *a, **k: None)
+    monkeypatch.setattr("web.routers.shutdown._wait_and_exit", lambda *a, **k: None)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
