@@ -30,6 +30,7 @@ Each migration function in `database.py` is idempotent (checks `PRAGMA table_inf
 | `resume_generated_at`, `cover_generated_at` | `jobs` | TEXT | `_migrate_generated_at_columns` |
 | `flagged` | `jobs` | BOOLEAN (default 0) | `_migrate_flagged_column` |
 | `resume_eval_score`, `resume_eval_turns`, `resume_eval_log`, `cover_eval_score`, `cover_eval_turns`, `cover_eval_log` | `jobs` | REAL/INTEGER/TEXT | `_migrate_resume_eval_columns` |
+| `resume_docx_path` | `jobs` | TEXT | `_migrate_resume_docx_column` |
 
 ## Tables beyond `jobs` / `config`
 
@@ -48,5 +49,6 @@ These overwrite prompt **content** (not schema) once, gated by a `config` flag, 
 | `migrate_file_prompts_to_db` (`db/seed.py`) | — | One-time import of legacy file-based prompts into the `prompts` table. |
 | `_migrate_resume_prompt_v2` | `resume_prompt_v2` | Force-reseeds the résumé **generation** prompt to the `ResumeGeneration` JSON contract (Phase 3a). |
 | `_migrate_resume_refine_prompt_v2` | `resume_refine_prompt_v2` | Force-reseeds the résumé **refine** prompt to the keyed-patch contract (Phase 3b). |
+| `_seed_ats_parse_prompt` | — | Seeds the `ats_parse` `PromptDefault` row on first `init_db` run (used by the ATS semantic layer). |
 
 All are called from `init_db` and are idempotent (return early once the gate flag is set).

@@ -6,7 +6,7 @@ Shared business logic. No framework dependencies — used by `web/`, `scraper/`,
 
 ```
 core/
-├── job.py               # Job entity + all LLM-driven methods (score, generate, extract, eval, refine)
+├── job.py               # Job entity + all LLM-driven methods (score, generate, extract, eval, refine, ATS check)
 ├── user.py              # User entity; profile load/save, prompt resolution, degree/skills helpers
 ├── llm.py               # LLM client construction and model resolution
 ├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
@@ -14,7 +14,8 @@ core/
 ├── skill_analytics.py   # Skill token normalization + frequency aggregation across jobs (no LLM)
 ├── schemas.py           # Pydantic models for structured résumé/cover generation (ResumeDocument, CoverDocument, ResumeGeneration, sub-models)
 ├── document_builder.py  # Snapshots profile data at generation time and joins LLM prose to structured profile data
-└── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
+├── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
+└── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ```
 
 **Note:** `core/scorer.py` and `core/profile_parser.py` were deleted — stale `.pyc` files remain in `__pycache__/` and can be ignored. Scoring logic moved into `job.py`.
@@ -54,6 +55,9 @@ core/
 | Apply a prose-only keyed patch to a stored `ResumeDocument` (refine path) | `document_builder.py` → `apply_resume_patch()` |
 | Render a structured document to canonical Markdown | `document_assembler.py` → `assemble_resume_markdown()`, `assemble_cover_markdown()` |
 | Structured (JSON) LLM call with strict-JSON hardening + one retry | `job.py` → `_llm_json_with_retry()` |
+| ATS parseability gate (mechanical hard-block + LLM advisory) | `ats_gate.py` → `run_gate()` / `Job.run_ats_check()` |
+| Mechanical ATS checks (contact, sections, skills, glyph-junk, text-layer) | `ats_gate.py` → `check_mechanical()` |
+| Semantic ATS roundtrip check (LLM re-parse of extracted text) | `ats_gate.py` → `check_roundtrip()` |
 
 ## LLM Integration
 
@@ -114,6 +118,28 @@ Defined in `db/database.py` as `Document`. Columns: `id`, `job_key`, `doc_type` 
 ### Phase 3b: structured document as source of truth
 
 The structured `Document` table is now the **single source of truth**; the `.md` is purely derived. The `.md` is written only by `write_resume_markdown` / `write_cover_markdown` (assemble from the document + snapshot front matter), which are invoked from generation, structured editing, and refine — never edited directly. `_refine_doc_md` now patches the structured document (via `apply_resume_patch` for résumés), re-persists it, then re-derives `.md` + PDF; it takes `db` as a parameter.
+
+## ATS Gate (`core/ats_gate.py`)
+
+Two-layer gate that validates the rendered résumé PDF before the application is submitted.
+
+**Mechanical layer (`check_mechanical`)** — deterministic, hard-block on any critical issue:
+- Contact presence and order (name → email → phone in the header)
+- Required section headings present (Experience, Skills, etc.)
+- Skills listed in the job's `ext_required_skills` survive in the extracted PDF text
+- Glyph-junk detection (high ratio of non-ASCII / replacement characters)
+- Text-layer check (pdfplumber; flags image-only PDFs that ATS systems cannot parse)
+
+**Semantic layer (`check_roundtrip`)** — LLM re-parse via the existing client (advisory, non-blocking by default): asks the model to re-extract key fields from the raw PDF text and compares against the source document.
+
+`run_gate(job, db, user, client, model) -> AtsReport` orchestrates both layers and produces a scored report. Entry point on `Job` is `Job.run_ats_check(db, user, client, model) -> AtsReport`.
+
+Invoked by `POST /api/jobs/{job_key}/confirm-applied` (`web/routers/tray.py`), which:
+- Returns **HTTP 422** if the résumé PDF or `Document` artifact is missing.
+- Returns **HTTP 409** if `AtsReport` contains any critical (hard-block) issue.
+- Advances state to `applied` only when the gate passes.
+
+The `ats_parse` prompt used by the semantic layer is a DB-seeded `PromptDefault` (type key `"ats_parse"`). It is **not** in `PROMPT_TYPE_KEYS` — it is seeded directly by `init_db` and is not exposed for per-profile override.
 
 ## Key Invariants
 
