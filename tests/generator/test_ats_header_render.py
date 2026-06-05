@@ -44,3 +44,4 @@ def test_real_template_header_extracts_in_order(tmp_path):
     contact_missing_issues = [i for i in issues if i.code == "contact_missing"]
     assert not contact_order_issues, f"contact_order fired: {contact_order_issues}"
     assert not contact_missing_issues, f"contact_missing fired: {contact_missing_issues}"
+    assert not any(i.code == "glyph_junk" for i in issues)

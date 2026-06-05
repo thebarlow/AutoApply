@@ -11,6 +11,7 @@
     {% if name %}
     <header class="resume-header">
       <h1>{{ name }}</h1>
+      <!-- Contact field order is load-bearing for ATS parsing: email, phone, location must come first and in sequence. -->
       <div class="contact-row">
 
         {% if email %}
