@@ -220,6 +220,7 @@ def test_build_description_prompt_substitutes_fields(db_session):
 def test_extract_description_populates_ext_columns(db_session):
     from core.job import Job
     from core.user import User
+    from db.database import Prompt
     from unittest.mock import MagicMock, patch
     import json as _json
 
@@ -232,9 +233,16 @@ def test_extract_description_populates_ext_columns(db_session):
         "skills": ["Python"], "work_history": [], "education": [], "projects": [],
         "target_salary_min": 0, "target_salary_max": 0,
         "target_roles": ["SWE"], "resume_path": "", "md_path": "",
-        "prompt_extraction": "Extract structured fields from this posting: {job.description}",
     }
-    db_session.add(User(name="Matt", data=_json.dumps(data)))
+    user = User(name="Matt", data=_json.dumps(data))
+    db_session.add(user)
+    db_session.commit()
+    # Prompts live in the DB now — seed an extraction Prompt row for this profile.
+    db_session.add(Prompt(
+        profile_id=user.id, type_key="extraction",
+        content="Extract the structured fields and required skills from the following job posting text here: {job.description}",
+        model="", updated_at="t",
+    ))
     db_session.commit()
 
     extraction_result = _json.dumps({
