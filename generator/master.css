@@ -23,19 +23,22 @@ html, body {
   margin: 0 0 0.06in 0;
 }
 
-.contact-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  row-gap: 0.04in;
-  column-gap: 0.1in;
+.contact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.04in 0.1in;
+  font-size: 8.5pt;
+  color: #444;
 }
 
 .contact-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 8.5pt;
-  color: #444;
+  white-space: nowrap;
+}
+
+.contact-item:not(:last-child)::after {
+  content: " \2022";
+  margin-left: 0.1in;
+  color: #999;
 }
 
 .contact-item a {
