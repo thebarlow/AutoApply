@@ -72,30 +72,50 @@ const STATE_LABELS = { new: 'New', pending_review: 'Pending Review', ready: 'Rea
 const ALL_STATES = Object.keys(STATE_LABELS)
 
 function ExtractionView({ data }) {
-  const fields = [
-    { key: 'seniority', label: 'Seniority' },
-    { key: 'role_type', label: 'Role Type' },
-    { key: 'domain', label: 'Domain' },
-    { key: 'work_arrangement', label: 'Work Arrangement' },
-    { key: 'employment_type', label: 'Employment Type' },
+  const metaKeys = ['seniority', 'role_type', 'domain', 'work_arrangement', 'employment_type']
+  const meta = metaKeys.map((k) => data[k]).filter((v) => v && String(v).trim())
+
+  const chipGroups = [
     { key: 'required_skills', label: 'Required Skills' },
     { key: 'preferred_skills', label: 'Preferred Skills' },
     { key: 'tech_stack', label: 'Tech Stack' },
+  ]
+  const bulletGroups = [
     { key: 'key_responsibilities', label: 'Responsibilities' },
     { key: 'company_signals', label: 'Company Signals' },
   ]
+  const asList = (v) => (Array.isArray(v) ? v.filter((x) => x && String(x).trim()) : [])
+
   return (
     <div className="flex flex-col gap-3">
-      {fields.map(({ key, label }) => {
-        const val = data[key]
-        if (!val || (Array.isArray(val) && val.length === 0)) return null
+      {meta.length > 0 && (
+        <p className="text-xs text-space-text">{meta.join(' · ')}</p>
+      )}
+
+      {chipGroups.map(({ key, label }) => {
+        const items = asList(data[key])
+        if (items.length === 0) return null
         return (
           <div key={key}>
             <p className="text-xs font-semibold text-space-dim mb-1">{label}</p>
-            {Array.isArray(val)
-              ? <ul className="list-disc list-inside text-xs space-y-0.5 text-space-text">{val.map((v, i) => <li key={i}>{v}</li>)}</ul>
-              : <p className="text-xs text-space-text">{val}</p>
-            }
+            <div className="flex flex-wrap gap-1">
+              {items.map((v, i) => (
+                <span key={i} className="inline-block rounded bg-white/10 px-1.5 py-0.5 text-xs text-space-text">{v}</span>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      {bulletGroups.map(({ key, label }) => {
+        const items = asList(data[key])
+        if (items.length === 0) return null
+        return (
+          <div key={key}>
+            <p className="text-xs font-semibold text-space-dim mb-1">{label}</p>
+            <ul className="list-disc list-inside text-xs space-y-0.5 text-space-text">
+              {items.map((v, i) => <li key={i}>{v}</li>)}
+            </ul>
           </div>
         )
       })}
@@ -441,7 +461,6 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     }
   }
   const [contentTab, setContentTab] = useState('description')
-  const [descView, setDescView] = useState(() => job?.extraction_json_exists ? 'extracted' : 'raw')
   const [artifactView, setArtifactView] = useState(() => job?.resume_path ? 'pdf' : 'markdown')
   const [localLoadingTabs, setLocalLoadingTabs] = useState(() => new Set())
   const [actionError, setActionError] = useState(null)
@@ -488,7 +507,6 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   // Reset all state when a different job is selected
   useEffect(() => {
     setContentTab('description')
-    setDescView(job?.extraction_json_exists ? 'extracted' : 'raw')
     setArtifactView(job?.resume_path ? 'pdf' : 'markdown')
     setLocalLoadingTabs(new Set())
     setActionError(null)
@@ -671,15 +689,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       {/* Content area */}
       {contentTab === 'description' && (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <SubToggle
-              options={[
-                { key: 'raw', label: 'Raw' },
-                { key: 'extracted', label: 'Processed', disabled: !job.extraction_json_exists },
-              ]}
-              value={descView}
-              onChange={setDescView}
-            />
+          <div className="flex items-center justify-end">
             <GatedButton
               action="score"
               onClick={handleAction}
@@ -691,16 +701,19 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             </GatedButton>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
-          {descView === 'raw' && (
-            <p className="text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
+
+          {job.extraction
+            ? <ExtractionView data={job.extraction} />
+            : <p className="text-xs text-space-dim">No extraction yet.</p>}
+
+          <details className="border-t border-space-border pt-2">
+            <summary className="text-xs font-semibold text-space-dim cursor-pointer select-none hover:text-space-text">
+              Raw Description
+            </summary>
+            <p className="mt-2 text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
               {job.description || 'No description available.'}
             </p>
-          )}
-          {descView === 'extracted' && (
-            job.extraction
-              ? <ExtractionView data={job.extraction} />
-              : <p className="text-xs text-space-dim">No extraction yet.</p>
-          )}
+          </details>
         </div>
       )}
 
