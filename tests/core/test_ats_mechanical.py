@@ -74,6 +74,13 @@ def test_skill_not_held_is_not_flagged():
     assert not any(i.code == "present_skill_dropped" for i in issues)
 
 
+def test_hyphen_in_phone_does_not_trigger_glyph_junk():
+    full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\nPython, SQL\n"
+    pt = PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    issues = check_mechanical(pt, _doc(), [], [], [])
+    assert not any(i.code == "glyph_junk" for i in issues)
+
+
 def test_glyph_junk_is_warning():
     # U+E000 is a Private Use Area glyph — matches the [-] regex
     pua = ""
