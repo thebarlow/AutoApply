@@ -281,9 +281,67 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
         db.close()
 
 
+def run_ats_gate(job_key: str) -> None:
+    """Run the ATS gate over the current résumé render and persist the report.
+
+    Background entry point. Resolves the active profile's client/model, runs both
+    gate layers (mechanical + LLM round-trip), stores the report on the job, and
+    emits a UI update. Failures (missing artifacts, no profile) are logged and
+    swallowed so they never break the request that spawned this thread.
+    """
+    llm_status.start(job_key, "ats")
+    db = SessionLocal()
+    try:
+        job = Job.get(job_key, db)
+        if job is None:
+            return
+        try:
+            user = User.load(db)
+        except RuntimeError as exc:
+            print(f"[ats] {job_key}: no profile — {exc}", flush=True)
+            return
+        try:
+            client, model = get_client_for_profile(user)
+        except RuntimeError as exc:
+            print(f"[ats] {job_key}: LLM client error — {exc}", flush=True)
+            return
+        try:
+            report = job.run_ats_check(db, user, client, model)
+        except FileNotFoundError as exc:
+            print(f"[ats] {job_key}: artifact missing — {exc}", flush=True)
+            return
+        job.store_ats_report(report)
+        db.commit()
+        db.refresh(job)
+        _emit(job)
+        print(
+            f"[ats] {job_key}: passed={report.passed} score={report.score:.2f} "
+            f"issues={len(report.issues)}",
+            flush=True,
+        )
+    except Exception as exc:
+        db.rollback()
+        print(f"[ats] {job_key}: gate run failed — {exc}", flush=True)
+    finally:
+        db.close()
+        llm_status.finish(job_key, "ats")
+
+
 def run_resume_refinement(job_key: str) -> None:
-    """Run the evaluate→rewrite loop for a generated resume."""
-    _run_doc_refinement(job_key, "resume")
+    """Run the evaluate→rewrite loop for a generated resume, then the ATS gate.
+
+    The gate runs after refinement settles so it scores the final résumé render.
+    ``_run_doc_refinement`` is a no-op when refinement is disabled or set to 0
+    turns, so this also covers the "gate right after generation" case.
+
+    Runs in a daemon thread; any failure is logged rather than raised so it never
+    surfaces as an unhandled thread exception.
+    """
+    try:
+        _run_doc_refinement(job_key, "resume")
+    except Exception as exc:
+        print(f"[refinement:resume] {job_key}: refinement failed — {exc}", flush=True)
+    run_ats_gate(job_key)
 
 
 def run_cover_refinement(job_key: str) -> None:

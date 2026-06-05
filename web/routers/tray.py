@@ -59,10 +59,15 @@ def confirm_applied(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    try:
-        report = _gate_report_for(job, db)
-    except (FileNotFoundError, RuntimeError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    # Trust the stored ATS report (produced automatically after generation/refine).
+    # Missing or stale → block until a fresh check completes; failed → hard-block.
+    if job.ats_report_json is None or job.ats_is_stale():
+        raise HTTPException(
+            status_code=422,
+            detail="ATS check has not completed for the current résumé. "
+            "Wait for it to finish or regenerate the résumé.",
+        )
+    report = AtsReport.model_validate_json(job.ats_report_json)
     if not report.passed:
         raise HTTPException(status_code=409, detail=report.model_dump())
     job.mark_applied(db)

@@ -257,6 +257,22 @@ def _migrate_resume_docx_column() -> None:
         conn.commit()
 
 
+def _migrate_ats_report_columns() -> None:
+    """Add the ATS-gate report columns to jobs table if missing."""
+    cols = {
+        "ats_passed": "BOOLEAN",
+        "ats_score": "REAL",
+        "ats_report_json": "TEXT",
+        "ats_checked_at": "TEXT",
+    }
+    with engine.connect() as conn:
+        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
+        for name, sqltype in cols.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {name} {sqltype}"))
+        conn.commit()
+
+
 def _migrate_resume_prompt_v2() -> None:
     """Force the résumé default + all profile résumé prompts to the Phase 3a contract.
 
@@ -327,6 +343,43 @@ def _migrate_resume_refine_prompt_v2() -> None:
         db.close()
 
 
+def _migrate_resume_eval_prompt_v2() -> None:
+    """Force the résumé-eval default + profile prompts to the present-and-relevant
+    skill-coverage contract.
+
+    Runs once (gated by Config key ``resume_eval_prompt_v2``). Overwrites custom
+    edits so the eval loop enforces that skills the candidate has and the job
+    wants survive generation into the résumé (mirrors the ATS gate's
+    present_skill_dropped intersection one step earlier).
+    """
+    from pathlib import Path
+
+    db = SessionLocal()
+    try:
+        flag = db.query(Config).filter_by(key="resume_eval_prompt_v2").first()
+        if flag and flag.value == "1":
+            return
+        new_content = (
+            Path(__file__).parent.parent / "prompts" / "defaults" / "resume_eval.md"
+        ).read_text(encoding="utf-8")
+
+        default = db.query(PromptDefault).filter_by(type_key="resume_eval").first()
+        if default is None:
+            db.add(PromptDefault(type_key="resume_eval", content=new_content))
+        else:
+            default.content = new_content
+        for row in db.query(Prompt).filter_by(type_key="resume_eval").all():
+            row.content = new_content
+
+        if flag is None:
+            db.add(Config(key="resume_eval_prompt_v2", value="1"))
+        else:
+            flag.value = "1"
+        db.commit()
+    finally:
+        db.close()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -341,6 +394,7 @@ def init_db() -> None:
     _migrate_flagged_column()
     _migrate_resume_eval_columns()
     _migrate_resume_docx_column()
+    _migrate_ats_report_columns()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db
     db = SessionLocal()
     try:
@@ -353,6 +407,7 @@ def init_db() -> None:
         db.close()
     _migrate_resume_prompt_v2()
     _migrate_resume_refine_prompt_v2()
+    _migrate_resume_eval_prompt_v2()
     _seed_ats_parse_prompt()
 
 

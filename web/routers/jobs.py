@@ -23,6 +23,16 @@ from db.database import get_db, Config, Document
 from web.sse import send as _sse_send
 from web import llm_status
 
+def _spawn(target, *args) -> None:
+    """Start a fire-and-forget daemon thread.
+
+    Centralized so tests can disable background work (the suite patches this to a
+    no-op to avoid lingering gate threads); production always spawns.
+    """
+    import threading
+    threading.Thread(target=target, args=args, daemon=True).start()
+
+
 _GENERATOR_DIR = Path(__file__).parent.parent.parent / "generator"
 _GENERATOR_OUTPUTS = _GENERATOR_DIR / "outputs"
 _RESUME_TEMPLATE = _GENERATOR_DIR / "resume_template.html"
@@ -306,8 +316,11 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
         llm_status.finish(job_key, "resume")
     db.refresh(job)
     _emit(job)
-    # Spawn background refinement loop if enabled
-    _maybe_start_refinement(job_key, "resume", db)
+    # Always run the résumé post-process in the background: refinement (if
+    # enabled) followed by the ATS gate. When refinement is off/0 turns the
+    # refine step is a no-op and the gate still runs right after generation.
+    from web.intake_pipeline import run_resume_refinement
+    _spawn(run_resume_refinement, job_key)
     return job.serialize()
 
 
@@ -462,6 +475,11 @@ def put_document(
 
     db.refresh(job)
     _emit(job)
+    # A manual résumé edit re-rendered the PDF, invalidating any prior ATS
+    # report; re-run the gate in the background so the stored report stays fresh.
+    if doc_type == "resume":
+        from web.intake_pipeline import run_ats_gate
+        _spawn(run_ats_gate, job_key)
     return doc.model_dump()
 
 

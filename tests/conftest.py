@@ -32,3 +32,17 @@ def isolate_prompts_dir(tmp_path, monkeypatch):
     import core.user as _user_mod
 
     monkeypatch.setattr(_user_mod, "_PROMPTS_DIR", tmp_path / "prompts")
+
+
+@pytest.fixture(autouse=True)
+def disable_background_spawns(monkeypatch):
+    """Neutralize fire-and-forget daemon threads spawned by web endpoints.
+
+    Generation/edit endpoints spawn real ATS-gate/refinement threads that open
+    the live SessionLocal. Left running, they linger past the test and can crash
+    the interpreter at shutdown. Tests exercise those functions directly; the
+    spawn itself is not under test here.
+    """
+    import web.routers.jobs as _jobs_mod
+
+    monkeypatch.setattr(_jobs_mod, "_spawn", lambda *a, **k: None)

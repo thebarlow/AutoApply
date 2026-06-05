@@ -13,41 +13,82 @@ def _client():
     return TestClient(app)
 
 
-def test_confirm_applied_blocked_on_critical():
-    bad = AtsReport.build(
-        score=0.5,
-        issues=[AtsIssue(layer="mechanical", severity="critical", code="contact_order", message="x")],
-        extracted_text="t",
-    )
-    with patch("web.routers.tray._gate_report_for", return_value=bad), \
-         patch("web.routers.tray.Job.get") as get, \
-         patch("web.routers.tray.Job.mark_applied") as mark:
-        get.return_value = MagicMock()  # non-None job so we pass the 404 check
-        resp = _client().post("/api/jobs/job1/confirm-applied")
-    assert resp.status_code == 409
-    assert resp.json()["detail"]["passed"] is False
-    mark.assert_not_called()
+def _job_with_report(report: AtsReport | None, *, stale: bool = False) -> MagicMock:
+    job = MagicMock()
+    job.ats_report_json = report.model_dump_json() if report is not None else None
+    job.ats_is_stale.return_value = stale
+    job.serialize.return_value = {"job_key": "job1"}
+    return job
 
 
-def test_confirm_applied_proceeds_when_passed():
-    ok = AtsReport.build(score=1.0, issues=[], extracted_text="t")
+def _with_db():
     fake_db = MagicMock()
 
     def override_db():
         yield fake_db
 
     app.dependency_overrides[get_db] = override_db
+    return fake_db
+
+
+def test_confirm_applied_blocked_on_critical():
+    bad = AtsReport.build(
+        score=0.5,
+        issues=[AtsIssue(layer="mechanical", severity="critical", code="contact_order", message="x")],
+        extracted_text="t",
+    )
+    job = _job_with_report(bad)
+    _with_db()
     try:
-        with patch("web.routers.tray._gate_report_for", return_value=ok), \
-             patch("web.routers.tray.Job.get") as get, \
+        with patch("web.routers.tray.Job.get", return_value=job), \
              patch("web.routers.tray._emit"):
-            job = get.return_value
-            job.serialize.return_value = {"job_key": "job1"}
+            resp = _client().post("/api/jobs/job1/confirm-applied")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["passed"] is False
+    job.mark_applied.assert_not_called()
+
+
+def test_confirm_applied_proceeds_when_passed():
+    ok = AtsReport.build(score=1.0, issues=[], extracted_text="t")
+    job = _job_with_report(ok)
+    _with_db()
+    try:
+        with patch("web.routers.tray.Job.get", return_value=job), \
+             patch("web.routers.tray._emit"):
             resp = _client().post("/api/jobs/job1/confirm-applied")
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert resp.status_code == 200
     job.mark_applied.assert_called_once()
+
+
+def test_confirm_applied_no_report_returns_422():
+    job = _job_with_report(None)
+    _with_db()
+    try:
+        with patch("web.routers.tray.Job.get", return_value=job), \
+             patch("web.routers.tray._emit"):
+            resp = _client().post("/api/jobs/job1/confirm-applied")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert resp.status_code == 422
+    job.mark_applied.assert_not_called()
+
+
+def test_confirm_applied_stale_report_returns_422():
+    ok = AtsReport.build(score=1.0, issues=[], extracted_text="t")
+    job = _job_with_report(ok, stale=True)
+    _with_db()
+    try:
+        with patch("web.routers.tray.Job.get", return_value=job), \
+             patch("web.routers.tray._emit"):
+            resp = _client().post("/api/jobs/job1/confirm-applied")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert resp.status_code == 422
+    job.mark_applied.assert_not_called()
 
 
 def test_gate_report_for_resolves_model_without_attribute_error(monkeypatch):
@@ -69,21 +110,3 @@ def test_gate_report_for_resolves_model_without_attribute_error(monkeypatch):
     report = tray._gate_report_for(_FakeJob(), db=object())
     assert report.passed is True
     assert captured.get("called") is True
-
-
-def test_confirm_applied_no_profile_returns_422():
-    with patch("web.routers.tray._gate_report_for", side_effect=RuntimeError("no profile")), \
-         patch("web.routers.tray.Job.get", return_value=MagicMock()), \
-         patch("web.routers.tray.Job.mark_applied") as mark:
-        resp = _client().post("/api/jobs/job1/confirm-applied")
-    assert resp.status_code == 422
-    mark.assert_not_called()
-
-
-def test_confirm_applied_missing_artifact_returns_422():
-    with patch("web.routers.tray._gate_report_for", side_effect=FileNotFoundError("missing")), \
-         patch("web.routers.tray.Job.get", return_value=MagicMock()), \
-         patch("web.routers.tray.Job.mark_applied") as mark:
-        resp = _client().post("/api/jobs/job1/confirm-applied")
-    assert resp.status_code == 422
-    mark.assert_not_called()

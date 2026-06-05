@@ -225,6 +225,11 @@ class Job(Base):
     resume_generated_at = Column(String)
     resume_docx_path = Column(String)
     cover_generated_at = Column(String)
+    # ── ATS gate — last report for the current résumé render ────────────────────
+    ats_passed = Column(Boolean)        # null = never checked
+    ats_score = Column(Float)
+    ats_report_json = Column(Text)      # full AtsReport JSON for UI display
+    ats_checked_at = Column(String)     # ISO timestamp of the check
     applied_at = Column(String)
     sheets_row_id = Column(String)
     unread_indicator = Column(String)   # null | "ok" | "error"
@@ -980,6 +985,30 @@ class Job(Base):
         return ats_gate.run_gate(pt, doc, required, preferred, user_skills,
                                  roundtrip_prompt, client, model)
 
+    def store_ats_report(self, report: "AtsReport") -> None:
+        """Persist an AtsReport onto the job's columns (caller commits).
+
+        Records the result of the gate run so ``confirm-applied`` can trust the
+        stored report instead of re-running the gate. Sets ``ats_checked_at`` to
+        now; staleness is later judged against ``resume_generated_at``.
+        """
+        self.ats_passed = report.passed
+        self.ats_score = report.score
+        self.ats_report_json = report.model_dump_json()
+        self.ats_checked_at = datetime.now(timezone.utc).isoformat()
+
+    def ats_is_stale(self) -> bool:
+        """True if no ATS check covers the current résumé render.
+
+        Stale when the gate never ran, or the résumé PDF was (re)rendered after
+        the last check (``resume_generated_at`` newer than ``ats_checked_at``).
+        """
+        if not self.ats_checked_at:
+            return True
+        if self.resume_generated_at and self.resume_generated_at > self.ats_checked_at:
+            return True
+        return False
+
     def generate_cover_pdf(self, template_path: Path, db: Session) -> None:
         """Render cover letter PDF from existing markdown and update cover_path.
 
@@ -1201,6 +1230,14 @@ class Job(Base):
             "cover_path": self.cover_path,
             "resume_generated_at": self.resume_generated_at or "",
             "cover_generated_at": self.cover_generated_at or "",
+            "ats_passed": self.ats_passed,
+            "ats_score": self.ats_score,
+            "ats_checked_at": self.ats_checked_at or "",
+            "ats_stale": self.ats_is_stale(),
+            "ats_issues": (
+                json.loads(self.ats_report_json).get("issues", [])
+                if self.ats_report_json else []
+            ),
             "resume_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_resume.md").exists(),
             "cover_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_cover.md").exists(),
             "extraction_json_exists": (has_extraction := bool(self.ext_required_skills or self.ext_seniority)),

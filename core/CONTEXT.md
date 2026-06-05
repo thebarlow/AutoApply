@@ -132,12 +132,14 @@ Two-layer gate that validates the rendered résumé PDF before the application i
 
 **Semantic layer (`check_roundtrip`)** — LLM re-parse via the existing client (advisory, non-blocking by default): asks the model to re-extract key fields from the raw PDF text and compares against the source document.
 
-`run_gate(job, db, user, client, model) -> AtsReport` orchestrates both layers and produces a scored report. Entry point on `Job` is `Job.run_ats_check(db, user, client, model) -> AtsReport`.
+`run_gate(...) -> AtsReport` orchestrates both layers and produces a scored report. Entry point on `Job` is `Job.run_ats_check(db, user, client, model) -> AtsReport` (read-only). `Job.store_ats_report(report)` persists it to the `ats_passed` / `ats_score` / `ats_report_json` / `ats_checked_at` columns; `Job.ats_is_stale()` reports whether the résumé was re-rendered after the last check.
 
-Invoked by `POST /api/jobs/{job_key}/confirm-applied` (`web/routers/tray.py`), which:
-- Returns **HTTP 422** if the résumé PDF or `Document` artifact is missing.
-- Returns **HTTP 409** if `AtsReport` contains any critical (hard-block) issue.
-- Advances state to `applied` only when the gate passes.
+**When the gate runs (auto, after generation):** the gate runs automatically in a background thread after the résumé is finalized — i.e. after the refinement loop settles, or immediately after generation when refinement is off/0 turns (`web/intake_pipeline.run_resume_refinement` → `run_ats_gate`). It also re-runs after a manual résumé edit (`PUT /{job_key}/resume/document`). Both layers run on every auto-trigger. The report is stored on the job and surfaced in the tray UI (`serialize()` exposes `ats_passed` / `ats_score` / `ats_stale` / `ats_issues`).
+
+**At apply (`POST /api/jobs/{job_key}/confirm-applied`, `web/routers/tray.py`):** the handler **trusts the stored report** — it does not re-run the gate:
+- **HTTP 422** if no report exists yet or the report is stale (résumé changed since the last check).
+- **HTTP 409** if the stored `AtsReport` has any critical (hard-block) issue.
+- Advances state to `applied` only when the stored report passed and is current.
 
 The `ats_parse` prompt used by the semantic layer is a DB-seeded `PromptDefault` (type key `"ats_parse"`). It is **not** in `PROMPT_TYPE_KEYS` — it is seeded directly by `init_db` and is not exposed for per-profile override.
 
