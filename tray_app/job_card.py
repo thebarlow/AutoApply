@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+    QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout,
 )
 
 from tray_app.drag_handle import DragHandle
@@ -41,17 +41,21 @@ class JobCard(QFrame):
 
         title_label = QLabel(f"<b>{role}</b>")
         title_label.setStyleSheet("color: #212529; background: transparent;")
+        # Wrap long titles so they don't force the card wider than the panel
+        # (horizontal scrolling is off; otherwise the buttons get clipped).
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
         sep_label = QLabel("|")
         sep_label.setStyleSheet("color: #adb5bd; background: transparent;")
 
         company_label = QLabel(company)
         company_label.setStyleSheet("color: #495057; background: transparent;")
+        company_label.setWordWrap(True)
 
-        label_row.addWidget(title_label)
+        label_row.addWidget(title_label, 1)
         label_row.addWidget(sep_label)
-        label_row.addWidget(company_label)
-        label_row.addStretch()
+        label_row.addWidget(company_label, 1)
         layout.addLayout(label_row)
 
         # --- Content row ---

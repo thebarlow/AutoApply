@@ -42,7 +42,7 @@ tray_app/
 
 ## Known Issues / Future Improvements
 
-- No known bugs at time of writing.
+- Long job titles previously overflowed the card and clipped the ✓/✕ buttons (panel max width 360px, no horizontal scroll). Fixed by enabling `setWordWrap` on the title/company labels in `job_card.py` and giving the title `Ignored` horizontal size policy so it can't force the card wider than the panel.
 - Dismiss (✕) does not notify the server — dismissed jobs stay in `state=generated` indefinitely. A `/api/jobs/{id}/dismiss` endpoint and matching API call could address this.
 - `AUTO_APPLY_API_BASE` env var is read in `job_card.py` but not in `ws_client.py` or `main.py`; those are hardcoded to `localhost:8080`. All three should use the same env var.
 - No per-card timeout or expiry — cards accumulate if the user never acts on them.
