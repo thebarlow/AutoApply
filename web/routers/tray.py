@@ -24,6 +24,7 @@ def _gate_report_for(job: Job, db: Session) -> AtsReport:
         FileNotFoundError: Propagated from ``run_ats_check`` when the résumé
             PDF or stored Document record is absent (e.g. job was never
             generated).
+        RuntimeError: Raised by ``User.load`` when no profile exists in the DB.
     """
     user = User.load(db)
     client, model = get_client_for_profile(user)
@@ -60,7 +61,7 @@ def confirm_applied(job_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     try:
         report = _gate_report_for(job, db)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, RuntimeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     if not report.passed:
         raise HTTPException(status_code=409, detail=report.model_dump())

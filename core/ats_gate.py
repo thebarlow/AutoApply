@@ -102,9 +102,10 @@ def check_mechanical(
                                    message=f"Header {label} '{v}' not found in extracted text."))
 
     # contact_order — email/phone/location must appear in document order.
-    # Restrict to the header region: index() finds the first occurrence, so a
-    # contact value repeated in the body could otherwise scramble the result.
-    HEADER_REGION = 300  # chars; enough for name + contact line on any résumé
+    # Restrict to the header region. 300 chars ≈ name (~30) + up to 6 contact
+    # fields (~40 each); index() finds the first occurrence, so a contact value
+    # repeated in the body could otherwise scramble the order check.
+    HEADER_REGION = 300
     header_low = low[:HEADER_REGION]
     order_fields = [f for f in (doc.header.email, doc.header.phone, doc.header.location)
                     if (f or "").strip() and (f or "").strip().lower() in header_low]

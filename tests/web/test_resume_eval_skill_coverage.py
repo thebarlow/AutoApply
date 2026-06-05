@@ -7,3 +7,4 @@ def test_resume_eval_prompt_enforces_present_relevant_skills():
     assert "Hard Skills:" not in content
     assert "MUST appear in the resume" in content
     assert "highest priority" in content
+    assert "transferable adjacent skills" in content

@@ -71,6 +71,15 @@ def test_gate_report_for_resolves_model_without_attribute_error(monkeypatch):
     assert captured.get("called") is True
 
 
+def test_confirm_applied_no_profile_returns_422():
+    with patch("web.routers.tray._gate_report_for", side_effect=RuntimeError("no profile")), \
+         patch("web.routers.tray.Job.get", return_value=MagicMock()), \
+         patch("web.routers.tray.Job.mark_applied") as mark:
+        resp = _client().post("/api/jobs/job1/confirm-applied")
+    assert resp.status_code == 422
+    mark.assert_not_called()
+
+
 def test_confirm_applied_missing_artifact_returns_422():
     with patch("web.routers.tray._gate_report_for", side_effect=FileNotFoundError("missing")), \
          patch("web.routers.tray.Job.get", return_value=MagicMock()), \
