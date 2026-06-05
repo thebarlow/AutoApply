@@ -165,6 +165,7 @@ def check_roundtrip(
     """
     sent = prompt.replace("{extracted_text}", pt.text)
     try:
+        # Parsing-only task; AtsParsedFields is compact, so a small token budget suffices.
         raw = call_llm(sent, client, model, max_tokens=2048)
         parsed = parse_llm_json(raw or "", AtsParsedFields)
     except Exception:
@@ -177,4 +178,7 @@ def check_roundtrip(
     if doc.header.email and parsed.email and parsed.email.strip().lower() != doc.header.email.strip().lower():
         issues.append(AtsIssue(layer="semantic", severity="warning", code="roundtrip_email",
                                message=f"Parser read email as '{parsed.email}', expected '{doc.header.email}'."))
+    if doc.header.phone and parsed.phone and parsed.phone.strip().lower() != doc.header.phone.strip().lower():
+        issues.append(AtsIssue(layer="semantic", severity="warning", code="roundtrip_phone",
+                               message=f"Parser read phone as '{parsed.phone}', expected '{doc.header.phone}'."))
     return issues
