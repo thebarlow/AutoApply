@@ -6,12 +6,22 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session
 
 from core.job import Job
+from core.llm import get_client_for_profile
+from core.schemas import AtsReport
+from core.user import User
 from db.database import get_db
 from web.sse import send as _sse_send
 
 router = APIRouter()
 
 _tray_ws: WebSocket | None = None
+
+
+def _gate_report_for(job: Job, db: Session) -> AtsReport:
+    """Resolve the active profile's user/client/model and run the ATS gate."""
+    user = User.load(db)
+    client, model = get_client_for_profile(user, user.prompt_ats_parse_model)
+    return job.run_ats_check(db, user, client, model)
 
 
 def _emit(job: Job) -> None:
@@ -42,6 +52,9 @@ def confirm_applied(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    report = _gate_report_for(job, db)
+    if not report.passed:
+        raise HTTPException(status_code=409, detail=report.model_dump())
     job.mark_applied(db)
     db.refresh(job)
     _emit(job)
