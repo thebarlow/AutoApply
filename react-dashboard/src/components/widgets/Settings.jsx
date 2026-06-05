@@ -89,7 +89,7 @@ function ExtractionView({ data }) {
   return (
     <div className="flex flex-col gap-3">
       {meta.length > 0 && (
-        <p className="text-xs text-space-text">{meta.join(' · ')}</p>
+        <p className="text-xs text-space-text text-center border-b border-space-border pb-3">{meta.join(' · ')}</p>
       )}
 
       {chipGroups.map(({ key, label }) => {
@@ -706,8 +706,8 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             ? <ExtractionView data={job.extraction} />
             : <p className="text-xs text-space-dim">No extraction yet.</p>}
 
-          <details className="border-t border-space-border pt-2">
-            <summary className="text-xs font-semibold text-space-dim cursor-pointer select-none hover:text-space-text">
+          <details className="border-t-2 border-space-border pt-2">
+            <summary className="text-xs font-bold text-center text-space-dim cursor-pointer select-none hover:text-space-text">
               Raw Description
             </summary>
             <p className="mt-2 text-xs text-space-dim leading-relaxed whitespace-pre-wrap">
