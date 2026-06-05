@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 @pytest.fixture
 def db_session():
+    """In-memory SQLite session for isolated database tests."""
     from db.database import Base
     import core.job   # noqa: F401
     import core.user  # noqa: F401
@@ -15,6 +16,7 @@ def db_session():
     session = sessionmaker(bind=engine)()
     yield session
     session.close()
+    Base.metadata.drop_all(engine)
 
 
 def test_seed_ats_parse_prompt_inserts_default(db_session, monkeypatch):
