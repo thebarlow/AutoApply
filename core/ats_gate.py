@@ -38,14 +38,16 @@ def extract_text(pdf_path: str | Path) -> PdfText:
     return PdfText(text=full, lines=lines)
 
 
-# Minimal synonym map for skill-survival matching. Lowercased keys → variants.
-_SKILL_SYNONYMS: dict[str, list[str]] = {
+# Minimal synonym map for skill-survival matching. Declared one-way; the
+# reverse direction is derived so each pair is maintained in a single place.
+_RAW_SYNONYMS: dict[str, list[str]] = {
     "nlp": ["natural language processing"],
-    "natural language processing": ["nlp"],
     "javascript": ["js"],
-    "js": ["javascript"],
     "postgresql": ["postgres"],
-    "postgres": ["postgresql"],
+}
+_SKILL_SYNONYMS: dict[str, list[str]] = {
+    **{k: list(v) for k, v in _RAW_SYNONYMS.items()},
+    **{syn: [k] for k, vs in _RAW_SYNONYMS.items() for syn in vs},
 }
 
 
@@ -99,15 +101,20 @@ def check_mechanical(
                                    message=f"Header {label} '{v}' not found in extracted text."))
 
     # contact_order — email/phone/location must appear in document order.
+    # Restrict to the header region: index() finds the first occurrence, so a
+    # contact value repeated in the body could otherwise scramble the result.
+    HEADER_REGION = 300  # chars; enough for name + contact line on any résumé
+    header_low = low[:HEADER_REGION]
     order_fields = [f for f in (doc.header.email, doc.header.phone, doc.header.location)
-                    if (f or "").strip() and (f or "").strip().lower() in low]
-    positions = [low.index(f.strip().lower()) for f in order_fields]
+                    if (f or "").strip() and (f or "").strip().lower() in header_low]
+    positions = [header_low.index(f.strip().lower()) for f in order_fields]
     if positions != sorted(positions):
         issues.append(AtsIssue(layer="mechanical", severity="critical",
                                code="contact_order",
                                message="Contact fields extracted out of order (column-scramble risk)."))
 
-    # section_missing — every section header in section_order must be present.
+    # section_missing — section_order values are lowercase by convention; the
+    # PDF text is lowercased into `low`, so the comparison is case-insensitive.
     for section in doc.section_order:
         if section.lower() not in low:
             issues.append(AtsIssue(layer="mechanical", severity="critical",

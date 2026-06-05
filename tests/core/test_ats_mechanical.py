@@ -19,7 +19,7 @@ def _clean_text() -> PdfText:
         "EDUCATION\nBS\n"
         "SKILLS\nPython, SQL\n"
     )
-    return PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    return PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
 
 
 def _codes(issues):
@@ -39,28 +39,28 @@ def test_no_text_layer_is_critical():
 
 def test_missing_email_is_critical_contact_missing():
     pt = _clean_text()
-    pt = PdfText(text=pt.text.replace("jane@x.com", ""), lines=[l for l in pt.lines if "jane@x.com" not in l])
+    pt = PdfText(text=pt.text.replace("jane@x.com", ""), lines=[ln for ln in pt.lines if "jane@x.com" not in ln])
     issues = check_mechanical(pt, _doc(), [], [], [])
     assert "contact_missing" in _codes(issues)
 
 
 def test_contact_order_scramble_is_critical():
     full = "Jane Doe\n555-1212 • jane@x.com • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\n"
-    pt = PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), [], [], [])
     assert "contact_order" in _codes(issues)
 
 
 def test_missing_section_is_critical():
     full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nSKILLS\n"  # no EDUCATION
-    pt = PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), [], [], [])
     assert "section_missing" in _codes(issues)
 
 
 def test_present_relevant_skill_dropped_is_warning():
     full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\nPython\n"
-    pt = PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), ["SQL"], [], ["Python", "SQL"])
     dropped = [i for i in issues if i.code == "present_skill_dropped"]
     assert dropped and dropped[0].severity == "warning"
@@ -69,14 +69,14 @@ def test_present_relevant_skill_dropped_is_warning():
 
 def test_skill_not_held_is_not_flagged():
     full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\nPython, SQL\n"
-    pt = PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), ["Rust"], [], ["Python", "SQL"])
     assert not any(i.code == "present_skill_dropped" for i in issues)
 
 
 def test_hyphen_in_phone_does_not_trigger_glyph_junk():
     full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\nPython, SQL\n"
-    pt = PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), [], [], [])
     assert not any(i.code == "glyph_junk" for i in issues)
 
@@ -85,6 +85,21 @@ def test_glyph_junk_is_warning():
     # U+E000 is a Private Use Area glyph — matches the [-] regex
     pua = ""
     full = f"Jane Doe\n{pua}jane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\n"
-    pt = PdfText(text=full, lines=[l.strip() for l in full.splitlines() if l.strip()])
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), [], [], [])
     assert "glyph_junk" in _codes(issues)
+
+
+def test_contact_order_correct_order_no_issue():
+    full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\n"
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
+    issues = check_mechanical(pt, _doc(), [], [], [])
+    assert not any(i.code == "contact_order" for i in issues)
+
+
+def test_contact_value_repeated_in_body_does_not_scramble_order():
+    full = ("Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\n"
+            "Reachable at 555-1212 for references\nEDUCATION\nSKILLS\n")
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
+    issues = check_mechanical(pt, _doc(), [], [], [])
+    assert not any(i.code == "contact_order" for i in issues)
