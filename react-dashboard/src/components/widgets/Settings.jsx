@@ -1181,6 +1181,12 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
 
   const isPreviewDisabled = selectedJob === null
 
+  // Selecting a job (App sets activeTab='Preview') must surface the Preview even
+  // when the user is deep in a profile view — pop back to main so it renders.
+  useEffect(() => {
+    if (selectedJob) setView('main')
+  }, [selectedJob?.job_key])
+
   const handleTabClick = (tab) => {
     if (tab === 'Preview' && isPreviewDisabled) return
     onTabChange(tab)
