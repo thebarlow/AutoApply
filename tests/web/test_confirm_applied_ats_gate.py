@@ -50,3 +50,25 @@ def test_confirm_applied_proceeds_when_passed():
         app.dependency_overrides.pop(get_db, None)
     assert resp.status_code == 200
     job.mark_applied.assert_called_once()
+
+
+def test_gate_report_for_resolves_model_without_attribute_error(monkeypatch):
+    import web.routers.tray as tray
+
+    class _FakeJob:
+        def run_ats_check(self, db, user, client, model):
+            from core.schemas import AtsReport
+            return AtsReport.build(score=1.0, issues=[], extracted_text="")
+
+    captured = {}
+
+    def _fake_get_client(user, model_override=""):
+        captured["called"] = True
+        return (object(), "some-model")
+
+    monkeypatch.setattr(tray, "get_client_for_profile", _fake_get_client)
+    monkeypatch.setattr(tray.User, "load", classmethod(lambda cls, db: object()))
+
+    report = tray._gate_report_for(_FakeJob(), db=object())
+    assert report.passed is True
+    assert captured.get("called") is True

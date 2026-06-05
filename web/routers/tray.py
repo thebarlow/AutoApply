@@ -20,7 +20,7 @@ _tray_ws: WebSocket | None = None
 def _gate_report_for(job: Job, db: Session) -> AtsReport:
     """Resolve the active profile's user/client/model and run the ATS gate."""
     user = User.load(db)
-    client, model = get_client_for_profile(user, user.prompt_ats_parse_model)
+    client, model = get_client_for_profile(user)
     return job.run_ats_check(db, user, client, model)
 
 
