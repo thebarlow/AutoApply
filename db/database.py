@@ -353,6 +353,26 @@ def init_db() -> None:
         db.close()
     _migrate_resume_prompt_v2()
     _migrate_resume_refine_prompt_v2()
+    _seed_ats_parse_prompt()
+
+
+def _seed_ats_parse_prompt() -> None:
+    """Seed the ats_parse semantic-layer prompt as a PromptDefault (idempotent).
+
+    Kept out of PROMPT_TYPE_KEYS so it is not exposed as a per-profile prompt;
+    the ATS gate loads it directly from prompt_defaults.
+    """
+    from pathlib import Path
+
+    db = SessionLocal()
+    try:
+        if db.query(PromptDefault).filter_by(type_key="ats_parse").first():
+            return
+        content = (Path(__file__).parent.parent / "prompts" / "defaults" / "ats_parse.md").read_text(encoding="utf-8")
+        db.add(PromptDefault(type_key="ats_parse", content=content))
+        db.commit()
+    finally:
+        db.close()
 
 
 def get_db():
