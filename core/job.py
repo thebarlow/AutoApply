@@ -959,7 +959,7 @@ class Job(Base):
         self.cover_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
 
-    def generate_resume_docx(self, db: Any) -> None:
+    def generate_resume_docx(self, db: Session) -> None:
         """Render a DOCX résumé from the existing markdown via pandoc.
 
         DOCX is inherently single-column and highly ATS-parseable, so it is
@@ -979,6 +979,7 @@ class Job(Base):
         if not md_path.exists():
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
         out_path = _OUTPUTS_DIR / f"{self.job_key}_resume.docx"
+        # Resolve to repo root: core/job.py → core/ → repo root → generator/
         reference = Path(__file__).parent.parent / "generator" / "reference.docx"
         cmd = ["pandoc", str(md_path), "-o", str(out_path)]
         if reference.exists():
