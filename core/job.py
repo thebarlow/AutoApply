@@ -959,6 +959,36 @@ class Job(Base):
         self.cover_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
 
+    def generate_resume_docx(self, db: Any) -> None:
+        """Render a DOCX résumé from the existing markdown via pandoc.
+
+        DOCX is inherently single-column and highly ATS-parseable, so it is
+        emitted as an alternate artifact and is not run through the ATS gate.
+        Requires generator/outputs/{job_key}_resume.md to exist.
+
+        Args:
+            db: SQLAlchemy session.
+
+        Raises:
+            FileNotFoundError: If the résumé markdown file does not exist.
+            RuntimeError: If pandoc fails.
+        """
+        import subprocess
+
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        if not md_path.exists():
+            raise FileNotFoundError(f"Resume markdown not found: {md_path}")
+        out_path = _OUTPUTS_DIR / f"{self.job_key}_resume.docx"
+        reference = Path(__file__).parent.parent / "generator" / "reference.docx"
+        cmd = ["pandoc", str(md_path), "-o", str(out_path)]
+        if reference.exists():
+            cmd += ["--reference-doc", str(reference)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"pandoc docx export failed: {result.stderr.strip()}")
+        self.resume_docx_path = str(out_path)
+        db.commit()
+
     # ── Private helpers ────────────────────────────────────────────────────────
 
     def _ext_to_markdown(self) -> str:
