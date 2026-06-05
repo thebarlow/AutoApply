@@ -182,3 +182,26 @@ def check_roundtrip(
         issues.append(AtsIssue(layer="semantic", severity="warning", code="roundtrip_phone",
                                message=f"Parser read phone as '{parsed.phone}', expected '{doc.header.phone}'."))
     return issues
+
+
+def run_gate(
+    pt: PdfText,
+    doc: ResumeDocument,
+    required_skills: list[str],
+    preferred_skills: list[str],
+    user_skills: list[str],
+    roundtrip_prompt: str,
+    client,
+    model: str,
+) -> AtsReport:
+    """Run both ATS layers and assemble a report.
+
+    Mechanical issues hard-block (critical). Semantic issues are advisory.
+    Score = 1.0 − 0.25·(#critical) − 0.05·(#warning), clamped to [0, 1].
+    """
+    issues = check_mechanical(pt, doc, required_skills, preferred_skills, user_skills)
+    issues += check_roundtrip(pt, doc, roundtrip_prompt, client, model)
+    n_crit = sum(1 for i in issues if i.severity == "critical")
+    n_warn = sum(1 for i in issues if i.severity == "warning")
+    score = max(0.0, min(1.0, 1.0 - 0.25 * n_crit - 0.05 * n_warn))
+    return AtsReport.build(score=score, issues=issues, extracted_text=pt.text)
