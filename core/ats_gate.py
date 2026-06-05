@@ -16,7 +16,8 @@ from pathlib import Path
 
 import pdfplumber
 
-from core.schemas import AtsIssue, AtsReport, AtsParsedFields, PdfText, ResumeDocument
+from core.llm import call_llm
+from core.schemas import AtsIssue, AtsReport, AtsParsedFields, PdfText, ResumeDocument, parse_llm_json
 
 
 def extract_text(pdf_path: str | Path) -> PdfText:
@@ -138,4 +139,42 @@ def check_mechanical(
                                code="glyph_junk",
                                message="Icon-font/private-use glyphs found in text layer."))
 
+    return issues
+
+
+def check_roundtrip(
+    pt: PdfText,
+    doc: ResumeDocument,
+    prompt: str,
+    client,
+    model: str,
+) -> list[AtsIssue]:
+    """Advisory: ask the LLM to parse the extracted text, diff vs the document.
+
+    Args:
+        pt: Extracted PDF text.
+        doc: The stored ResumeDocument (ground truth).
+        prompt: ats_parse template containing a ``{extracted_text}`` placeholder.
+        client: OpenAI-compatible client.
+        model: Model identifier.
+
+    Returns:
+        Warning-only AtsIssue list. Never raises on a model mismatch — on any
+        LLM/parse failure it returns an empty list (advisory layer must not break
+        the gate).
+    """
+    sent = prompt.replace("{extracted_text}", pt.text)
+    try:
+        raw = call_llm(sent, client, model, max_tokens=2048)
+        parsed = parse_llm_json(raw or "", AtsParsedFields)
+    except Exception:
+        return []
+
+    issues: list[AtsIssue] = []
+    if doc.header.name and parsed.name and parsed.name.strip().lower() != doc.header.name.strip().lower():
+        issues.append(AtsIssue(layer="semantic", severity="warning", code="roundtrip_name",
+                               message=f"Parser read name as '{parsed.name}', expected '{doc.header.name}'."))
+    if doc.header.email and parsed.email and parsed.email.strip().lower() != doc.header.email.strip().lower():
+        issues.append(AtsIssue(layer="semantic", severity="warning", code="roundtrip_email",
+                               message=f"Parser read email as '{parsed.email}', expected '{doc.header.email}'."))
     return issues
