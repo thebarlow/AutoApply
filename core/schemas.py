@@ -263,3 +263,47 @@ def parse_llm_json(raw: str, model: type[T]) -> T:
         raise RuntimeError(
             f"LLM response failed schema validation: {exc}. Preview: {preview!r}"
         ) from exc
+
+
+# ── ATS gate (PDF parseability) ──────────────────────────────────────────────
+
+
+class PdfText(BaseModel):
+    """Text extracted from a rendered PDF for ATS analysis."""
+
+    text: str = ""
+    lines: list[str] = Field(default_factory=list)
+
+
+class AtsIssue(BaseModel):
+    """One ATS finding. `critical` issues hard-block; `warning` issues are advisory."""
+
+    layer: str  # "mechanical" | "semantic"
+    severity: str  # "critical" | "warning"
+    code: str
+    message: str
+
+
+class AtsReport(BaseModel):
+    """Result of running the ATS gate over a rendered résumé PDF."""
+
+    passed: bool = True
+    score: float = 1.0
+    issues: list[AtsIssue] = Field(default_factory=list)
+    extracted_text: str = ""
+
+    @classmethod
+    def build(cls, score: float, issues: list[AtsIssue], extracted_text: str) -> "AtsReport":
+        passed = not any(i.severity == "critical" for i in issues)
+        return cls(passed=passed, score=score, issues=issues, extracted_text=extracted_text)
+
+
+class AtsParsedFields(BaseModel):
+    """Semantic round-trip contract: what a parser extracted from the PDF text."""
+
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    sections: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    experience_dates: list[str] = Field(default_factory=list)
