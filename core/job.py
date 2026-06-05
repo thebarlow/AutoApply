@@ -937,6 +937,49 @@ class Job(Base):
         self.resume_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
 
+    def run_ats_check(self, db: Any, user: Any, client: Any, model: str) -> "AtsReport":
+        """Run the ATS gate over this job's rendered résumé PDF.
+
+        Loads the rendered PDF and the stored ResumeDocument (source of truth),
+        runs the deterministic mechanical checks (hard-block) plus the advisory
+        LLM round-trip, and returns the report. Does not mutate job state — the
+        caller decides what to do with ``report.passed``.
+
+        Args:
+            db: SQLAlchemy session.
+            user: Hydrated User instance (provides ``skills``).
+            client: OpenAI-compatible client.
+            model: Model identifier.
+
+        Returns:
+            AtsReport.
+
+        Raises:
+            FileNotFoundError: If the PDF or stored ResumeDocument is missing.
+        """
+        from core import ats_gate
+        from core.schemas import ResumeDocument
+        from db.database import Document, PromptDefault
+
+        pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
+        if not pdf_path.exists():
+            raise FileNotFoundError(f"Resume PDF not found: {pdf_path}")
+        row = Document.fetch(db, self.job_key, "resume")
+        if row is None:
+            raise FileNotFoundError(f"No structured resume document for {self.job_key}")
+        doc = ResumeDocument.model_validate_json(row.structured_json)
+
+        required = [s.strip() for s in (self.ext_required_skills or "").split(",") if s.strip()]
+        preferred = [s.strip() for s in (self.ext_preferred_skills or "").split(",") if s.strip()]
+        user_skills = list(getattr(user, "skills", []) or [])
+
+        prompt_row = db.query(PromptDefault).filter_by(type_key="ats_parse").first()
+        roundtrip_prompt = prompt_row.content if prompt_row else "{extracted_text}"
+
+        pt = ats_gate.extract_text(pdf_path)
+        return ats_gate.run_gate(pt, doc, required, preferred, user_skills,
+                                 roundtrip_prompt, client, model)
+
     def generate_cover_pdf(self, template_path: Path, db: Session) -> None:
         """Render cover letter PDF from existing markdown and update cover_path.
 
