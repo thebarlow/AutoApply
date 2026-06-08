@@ -97,6 +97,19 @@ class Document(Base):
         return row
 
 
+class SkillAlias(Base):
+    """Global skill synonym map. A group is all rows sharing one ``canonical``.
+
+    ``alias_key`` is the lowercased, trimmed token; ``canonical`` is the display
+    name and the group's identity. Each canonical also has a self-row
+    (``alias_key == canonical.lower()``) so a group is never empty.
+    """
+
+    __tablename__ = "skill_aliases"
+    alias_key = Column(String, primary_key=True)
+    canonical = Column(String, nullable=False)
+
+
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///auto_apply.db")
@@ -395,13 +408,14 @@ def init_db() -> None:
     _migrate_resume_eval_columns()
     _migrate_resume_docx_column()
     _migrate_ats_report_columns()
-    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db
+    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db, seed_skill_aliases
     db = SessionLocal()
     try:
         seed_field_help(db)
         seed_user_profile_field_help(db)
         seed_latex_templates(db)
         seed_prompt_defaults(db)
+        seed_skill_aliases(db)
         migrate_file_prompts_to_db(db)
     finally:
         db.close()

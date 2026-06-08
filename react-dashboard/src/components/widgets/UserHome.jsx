@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { getProfiles, getStats, getSkillFrequency, getJobsForSkill } from '../../api'
 import ProfileCards from './ProfileCards'
+import SkillChipModal from './SkillChipModal'
 
 const WINDOWS = [
   { key: 'session', label: 'Session' },
@@ -70,7 +71,7 @@ function SkillBadge({ status }) {
   )
 }
 
-function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, onHover, badgeFor }) {
+function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, onHover, badgeFor, onLabelClick }) {
   return (
     <div className="flex items-center gap-3">
       <ResponsiveContainer width={120} height={120}>
@@ -106,18 +107,45 @@ function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, o
       </ResponsiveContainer>
       <div className="flex flex-col gap-1">
         {slices.map((s, i) => (
-          <button
+          <div
             key={s[labelKey]}
-            onClick={() => { onHover(null); onSliceClick(s) }}
             onMouseEnter={() => onHover(i)}
             onMouseLeave={() => onHover(null)}
-            className="flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1.5"
           >
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
             {badgeFor && <SkillBadge status={badgeFor(s)} />}
-            <span className={`text-xs ${s[labelKey] === activeName ? 'text-purple-300 font-semibold' : 'text-space-dim'}`}>{s[labelKey]}</span>
+            {onLabelClick ? (
+              <button
+                type="button"
+                onClick={() => onLabelClick(s[labelKey])}
+                className={`text-xs hover:underline ${s[labelKey] === activeName ? 'text-purple-300 font-semibold' : 'text-space-dim'}`}
+              >
+                {s[labelKey]}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { onHover(null); onSliceClick(s) }}
+                className={`text-xs hover:opacity-80 transition-opacity ${s[labelKey] === activeName ? 'text-purple-300 font-semibold' : 'text-space-dim'}`}
+              >
+                {s[labelKey]}
+              </button>
+            )}
+            {onLabelClick && (
+              <button
+                type="button"
+                title="Filter jobs by this skill"
+                onClick={() => { onHover(null); onSliceClick(s) }}
+                className="text-space-dim hover:text-purple-400 transition-colors shrink-0"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            )}
             <span className="text-xs font-medium text-space-text ml-auto pl-2">{s.value}</span>
-          </button>
+          </div>
         ))}
       </div>
     </div>
@@ -138,6 +166,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   const [hoveredSkill, setHoveredSkill] = useState(null)
   const [hoveredIndex, setHoveredIndex] = useState(null)
   const [drillCategory, setDrillCategory] = useState(null)
+  const [modalSkill, setModalSkill] = useState(null)
 
   const fetchProfiles = () => {
     getProfiles()
@@ -260,6 +289,16 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
       </text>
     )
   }
+  const renderSkillTick = ({ x, y, payload }) => (
+    <text
+      x={x} y={y} dy={3} textAnchor="end"
+      fontSize={10} fill="#8888aa"
+      style={{ cursor: 'pointer' }}
+      onClick={() => setModalSkill(payload.value)}
+    >
+      {payload.value}
+    </text>
+  )
   const renderTotalLabel = ({ x, y, width, height, index }) => {
     const row = skillBars[index]
     if (!row || row.skill !== emphasizedSkill) return null
@@ -371,6 +410,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                       onSliceClick={(s) => handleSkillClick(s.skill)}
                       onHover={setHoveredIndex}
                       badgeFor={skillStatus}
+                      onLabelClick={(skillName) => setModalSkill(skillName)}
                     />
                   </div>
                 ) : (
@@ -396,7 +436,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                       </filter>
                     </defs>
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: '#8888aa' }} />
-                    <YAxis type="category" dataKey="skill" width={90} tick={{ fontSize: 10, fill: '#8888aa' }} />
+                    <YAxis type="category" dataKey="skill" width={90} tick={renderSkillTick} />
                     <Tooltip
                       cursor={false}
                       content={({ active, payload }) =>
@@ -474,6 +514,14 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
             )}
           </div>
         </>
+      )}
+      {modalSkill && (
+        <SkillChipModal
+          skill={modalSkill}
+          isOwned={profileSkills.has(modalSkill)}
+          onClose={() => setModalSkill(null)}
+          onChanged={() => { getSkillFrequency().then(setSkillFreq).catch(() => {}) }}
+        />
       )}
     </div>
   )

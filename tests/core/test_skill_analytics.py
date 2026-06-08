@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from core.skill_analytics import normalize_skill, aggregate_skill_frequency, job_has_skill, tech_category
+from core.skill_analytics import (
+    normalize_skill,
+    aggregate_skill_frequency,
+    job_has_skill,
+    tech_category,
+    skill_key,
+)
 
 
 class TestNormalizeSkill:
@@ -77,20 +83,20 @@ class TestAggregateSkillFrequency:
     def test_required_is_high(self):
         result = aggregate_skill_frequency([_FakeJob(required="Python")])
         assert result["skills"] == [
-            {"skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
+            {"key": "python", "skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
         ]
         assert result["total_jobs"] == 1
 
     def test_preferred_is_med(self):
         result = aggregate_skill_frequency([_FakeJob(preferred="React")])
         assert result["skills"] == [
-            {"skill": "React", "high": 0, "med": 1, "low": 0, "category": "Frontend"}
+            {"key": "react", "skill": "React", "high": 0, "med": 1, "low": 0, "category": "Frontend"}
         ]
 
     def test_tech_stack_only_is_low(self):
         result = aggregate_skill_frequency([_FakeJob(tech_stack="Docker")])
         assert result["skills"] == [
-            {"skill": "Docker", "high": 0, "med": 0, "low": 1, "category": "DevOps"}
+            {"key": "docker", "skill": "Docker", "high": 0, "med": 0, "low": 1, "category": "DevOps"}
         ]
 
     def test_required_wins_over_preferred_and_tech(self):
@@ -98,7 +104,7 @@ class TestAggregateSkillFrequency:
             [_FakeJob(required="Python", preferred="Python", tech_stack="Python")]
         )
         assert result["skills"] == [
-            {"skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
+            {"key": "python", "skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
         ]
         assert result["total_jobs"] == 1
 
@@ -107,7 +113,7 @@ class TestAggregateSkillFrequency:
             [_FakeJob(preferred="React", tech_stack="React")]
         )
         assert result["skills"] == [
-            {"skill": "React", "high": 0, "med": 1, "low": 0, "category": "Frontend"}
+            {"key": "react", "skill": "React", "high": 0, "med": 1, "low": 0, "category": "Frontend"}
         ]
 
     def test_tiers_accumulate_across_jobs(self):
@@ -135,7 +141,7 @@ class TestAggregateSkillFrequency:
     def test_dedupes_within_field(self):
         result = aggregate_skill_frequency([_FakeJob(required="Python, python")])
         assert result["skills"] == [
-            {"skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
+            {"key": "python", "skill": "Python", "high": 1, "med": 0, "low": 0, "category": "Languages"}
         ]
 
     def test_unknown_skill_categorized_as_other(self):
@@ -169,3 +175,45 @@ class TestJobHasSkill:
     def test_empty_fields_return_false(self):
         job = _FakeJob()
         assert job_has_skill(job, "Python") is False
+
+
+class _J:
+    def __init__(self, req="", pref="", tech=""):
+        self.ext_required_skills = req
+        self.ext_preferred_skills = pref
+        self.ext_tech_stack = tech
+
+
+def test_skill_key_folds_case():
+    assert skill_key("FASTAPI") == skill_key("FastAPI") == "fastapi"
+
+
+def test_skill_key_applies_alias():
+    aliases = {"js": "JavaScript", "javascript": "JavaScript"}
+    assert skill_key("JS", aliases) == "javascript"
+    assert skill_key("javascript", aliases) == "javascript"
+
+
+def test_aggregate_merges_case_variants_with_frequent_display():
+    jobs = [_J(req="FastAPI"), _J(req="FastAPI"), _J(req="FASTAPI")]
+    result = aggregate_skill_frequency(jobs)
+    rows = {r["key"]: r for r in result["skills"]}
+    assert set(rows) == {"fastapi"}
+    row = rows["fastapi"]
+    assert row["high"] == 3
+    assert row["skill"] == "FastAPI"
+
+
+def test_aggregate_uses_alias_canonical_for_display():
+    jobs = [_J(req="js"), _J(req="JavaScript")]
+    aliases = {"js": "JavaScript", "javascript": "JavaScript"}
+    result = aggregate_skill_frequency(jobs, aliases=aliases)
+    rows = {r["key"]: r for r in result["skills"]}
+    assert set(rows) == {"javascript"}
+    assert rows["javascript"]["skill"] == "JavaScript"
+    assert rows["javascript"]["high"] == 2
+
+
+def test_job_has_skill_is_case_insensitive():
+    assert job_has_skill(_J(req="FASTAPI"), "FastAPI") is True
+    assert job_has_skill(_J(req="Python"), "Rust") is False

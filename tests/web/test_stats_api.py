@@ -162,9 +162,9 @@ def test_skill_frequency_returns_unified_shape(client, db_session):
     assert set(data) == {"skills", "categories", "total_jobs", "profile_skills"}
     assert data["total_jobs"] == 2
     skills = {row["skill"]: row for row in data["skills"]}
-    assert skills["Python"] == {"skill": "Python", "high": 2, "med": 0, "low": 0, "category": "Languages"}
-    assert skills["Docker"] == {"skill": "Docker", "high": 0, "med": 1, "low": 0, "category": "DevOps"}
-    assert skills["AWS"] == {"skill": "AWS", "high": 0, "med": 0, "low": 1, "category": "Cloud"}
+    assert skills["Python"] == {"key": "python", "skill": "Python", "high": 2, "med": 0, "low": 0, "category": "Languages"}
+    assert skills["Docker"] == {"key": "docker", "skill": "Docker", "high": 0, "med": 1, "low": 0, "category": "DevOps"}
+    assert skills["AWS"] == {"key": "aws", "skill": "AWS", "high": 0, "med": 0, "low": 1, "category": "Cloud"}
     cats = {c["category"]: c["count"] for c in data["categories"]}
     assert cats["Languages"] == 2
     assert cats["Frontend"] == 1
@@ -205,6 +205,21 @@ def test_skill_frequency_jobs_excludes_deleted_jobs(client, db_session):
     assert set(r.json()["job_keys"]) == {"g1"}
 
 
+def test_profile_skill_absent_from_jobs_still_listed(client, db_session):
+    import json
+    from core.user import User
+    from db.database import Config
+    u = User(name="T", data=json.dumps({"skills": ["Rust"]}))
+    db_session.add(u)
+    db_session.flush()
+    db_session.add(Config(key="active_profile_id", value=str(u.id)))
+    _make_extracted_job(db_session, "p1", required="Python")
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency")
+    assert "Rust" in r.json()["profile_skills"]
+
+
 def test_skill_frequency_empty_db(client):
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200
@@ -236,3 +251,15 @@ def test_skill_frequency_jobs_no_match_returns_empty(client, db_session):
 
     r = client.get("/api/skill-frequency/jobs?skill=Rust")
     assert r.json()["job_keys"] == []
+
+
+def test_skill_frequency_merges_case_variants(client, db_session):
+    _make_extracted_job(db_session, "c1", required="FastAPI")
+    _make_extracted_job(db_session, "c2", required="FASTAPI")
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency")
+    data = r.json()
+    fastapi_rows = [row for row in data["skills"] if row["key"] == "fastapi"]
+    assert len(fastapi_rows) == 1
+    assert fastapi_rows[0]["high"] == 2

@@ -9,10 +9,10 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from core.job import Job
-from core.skill_analytics import aggregate_skill_frequency, job_has_skill, normalize_skill
+from core.skill_analytics import aggregate_skill_frequency, job_has_skill
 from core.session_cost import get_session_start
 from core.user import User
-from db.database import get_db
+from db.database import get_db, SkillAlias
 
 router = APIRouter(prefix="/api")
 
@@ -22,6 +22,26 @@ router = APIRouter(prefix="/api")
 # re-extractions (which don't change the count) still refresh within a minute.
 _SKILL_CACHE: dict = {"sig": None, "ts": 0.0, "result": None}
 _SKILL_CACHE_TTL = 60.0
+
+
+def _load_aliases(db: Session) -> dict[str, str] | None:
+    """Merged alias map: built-in _ALIASES plus DB overrides.
+
+    Returns None if the alias table is empty (signals callers to use _ALIASES
+    directly, which is the same result but avoids an unnecessary dict copy).
+    """
+    from core.skill_analytics import _ALIASES
+    rows = db.query(SkillAlias).all()
+    if not rows:
+        return None
+    merged = dict(_ALIASES)
+    merged.update({row.alias_key: row.canonical for row in rows})
+    return merged
+
+
+def invalidate_skill_cache() -> None:
+    """Reset the skill-frequency cache. Call after any alias mutation."""
+    _SKILL_CACHE.update(sig=None, ts=0.0, result=None)
 
 _VALID_WINDOWS = {"session", "today", "week", "all_time"}
 _ALL_STATES = ["new", "pending_review", "ready", "applied", "contact", "rejected"]
@@ -130,7 +150,11 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
         ),
     )
 
-    sig = db.query(Job).filter(extracted_filter).count()
+    # Count before loading so a concurrent alias insert can't yield a map with N
+    # rows signed under N+1 (and cached wrong) on READ COMMITTED backends.
+    alias_sig = db.query(SkillAlias).count()
+    aliases = _load_aliases(db)
+    sig = (db.query(Job).filter(extracted_filter).count(), alias_sig)
     now = time.monotonic()
     cached = _SKILL_CACHE["result"]
     if (
@@ -152,20 +176,25 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
                 or j.ext_seniority
             )
         ]
-        agg = aggregate_skill_frequency(extracted)
+        agg = aggregate_skill_frequency(extracted, aliases=aliases)
         _SKILL_CACHE.update(sig=sig, ts=now, result=agg)
 
     # Profile skills are cheap to compute and profile-specific, so resolve them
     # fresh (outside the job-aggregation cache).
+    from core.skill_analytics import normalize_skill, skill_key
+    key_to_display = {row["key"]: row["skill"] for row in agg["skills"]}
     profile_skills: list[str] = []
     try:
         user = User.load(db)
         seen: set[str] = set()
         for raw in getattr(user, "skills", []) or []:
-            canonical = normalize_skill(raw)
-            if canonical and canonical not in seen:
-                seen.add(canonical)
-                profile_skills.append(canonical)
+            pk = skill_key(raw, aliases)
+            # Prefer the chart's display so the "have" badge matches; fall back to
+            # the plain normalized name for skills not present in any job.
+            display = key_to_display.get(pk) or normalize_skill(raw, aliases)
+            if display and display not in seen:
+                seen.add(display)
+                profile_skills.append(display)
     except Exception:
         profile_skills = []
 
@@ -197,5 +226,6 @@ def get_jobs_for_skill(
         )
         .all()
     )
-    keys = [j.job_key for j in jobs if job_has_skill(j, skill)]
+    aliases = _load_aliases(db)
+    keys = [j.job_key for j in jobs if job_has_skill(j, skill, aliases)]
     return {"job_keys": keys}
