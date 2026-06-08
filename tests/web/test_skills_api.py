@@ -6,6 +6,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.database import Base, SkillAlias
+from fastapi.testclient import TestClient
+from db.database import get_db
+from web.main import app
+import core.user  # noqa: F401
 
 
 @pytest.fixture
@@ -42,3 +46,77 @@ def test_seed_skill_aliases_is_idempotent(db_session):
     assert db_session.query(SkillAlias).filter_by(alias_key="javascript").one().canonical == "JavaScript"
     seed_skill_aliases(db_session)
     assert db_session.query(SkillAlias).count() == first
+
+
+@pytest.fixture
+def client(db_session):
+    app.dependency_overrides[get_db] = lambda: db_session
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def _seed_profile(db, skills):
+    import json
+    from core.user import User
+    from db.database import Config
+    u = User(name="Test", data=json.dumps({"skills": skills}))
+    db.add(u)
+    db.flush()
+    db.add(Config(key="active_profile_id", value=str(u.id)))
+    db.commit()
+    return u
+
+
+def test_assign_creates_group(client, db_session):
+    from db.seed import seed_skill_aliases
+    seed_skill_aliases(db_session)
+    r = client.post("/api/skills/aliases/assign", json={"skill": "FastAPI", "canonical": "FastAPI"})
+    assert r.status_code == 200
+    r2 = client.post("/api/skills/aliases/assign", json={"skill": "fast api", "canonical": "FastAPI"})
+    assert set(r2.json()["members"]) >= {"fastapi", "fast api"}
+
+
+def test_assign_moves_member_between_groups(client, db_session):
+    client.post("/api/skills/aliases/assign", json={"skill": "rtk", "canonical": "Redux"})
+    client.post("/api/skills/aliases/assign", json={"skill": "rtk", "canonical": "Redux Toolkit"})
+    r = client.get("/api/skills/aliases")
+    groups = {g["canonical"]: g["members"] for g in r.json()["groups"]}
+    assert "rtk" in groups["Redux Toolkit"]
+    assert "rtk" not in groups.get("Redux", [])
+
+
+def test_search_matches_members(client, db_session):
+    client.post("/api/skills/aliases/assign", json={"skill": "k8s", "canonical": "Kubernetes"})
+    r = client.get("/api/skills/aliases/search", params={"q": "k8"})
+    assert "Kubernetes" in r.json()["canonicals"]
+
+
+def test_remove_member(client, db_session):
+    client.post("/api/skills/aliases/assign", json={"skill": "Kubernetes", "canonical": "Kubernetes"})
+    client.post("/api/skills/aliases/assign", json={"skill": "k8s", "canonical": "Kubernetes"})
+    r = client.request("DELETE", "/api/skills/aliases/member", json={"skill": "k8s"})
+    assert r.status_code == 204
+    r2 = client.get("/api/skills/aliases")
+    groups = {g["canonical"]: g["members"] for g in r2.json()["groups"]}
+    assert "k8s" not in groups["Kubernetes"]
+
+
+def test_cannot_remove_canonical_self_row(client, db_session):
+    client.post("/api/skills/aliases/assign", json={"skill": "Kubernetes", "canonical": "Kubernetes"})
+    r = client.request("DELETE", "/api/skills/aliases/member", json={"skill": "Kubernetes"})
+    assert r.status_code == 400
+
+
+def test_profile_add_and_remove(client, db_session):
+    _seed_profile(db_session, [])
+    r = client.post("/api/skills/profile", json={"skill": "Python"})
+    assert "Python" in r.json()["skills"]
+    r2 = client.post("/api/skills/profile", json={"skill": "python"})
+    assert r2.json()["skills"].count("Python") == 1
+    r3 = client.request("DELETE", "/api/skills/profile", json={"skill": "Python"})
+    assert "Python" not in r3.json()["skills"]
+
+
+def test_assign_rejects_empty(client, db_session):
+    r = client.post("/api/skills/aliases/assign", json={"skill": "", "canonical": "X"})
+    assert r.status_code == 400
