@@ -106,41 +106,53 @@ def tech_category(skill: str) -> str:
     return _TECH_CATEGORIES.get(skill.lower(), "Other")
 
 
-def normalize_skill(raw: str) -> str | None:
-    """Normalize a raw skill token to a canonical display name.
+def skill_key(raw: str, aliases: dict[str, str] | None = None) -> str | None:
+    """Return the case-folded grouping key for a raw token, or None for junk.
 
-    Returns ``None`` for empty/junk tokens. Applies, in order: lowercase +
-    trim for alias lookup; strip trailing version tokens; strip surrounding
-    punctuation; alias map; title-case fallback for unknown skills.
-
-    Args:
-        raw: Raw skill string from a job posting or resume extraction.
-
-    Returns:
-        Canonical display name, or None if the token is empty or junk.
+    Strips a trailing version token and edge punctuation, lowercases, then maps
+    through ``aliases`` (defaulting to the built-in ``_ALIASES`` map when not
+    provided). For an aliased token the key is the canonical's lowercase, so all
+    members of a group share one key; otherwise the key is the cleaned token's
+    lowercase.
     """
     if not raw:
         return None
-
     stripped = _EDGE_PUNCT.sub("", raw.strip())
     if not stripped:
         return None
-
-    # Drop a trailing version token (e.g. "Python 3.11" -> "Python").
     versionless = _VERSION_TAIL.sub("", stripped).strip()
     candidate = versionless or stripped
-
+    if not re.search(r"[a-zA-Z]", candidate) or re.match(r"^\d", candidate):
+        return None
     key = candidate.lower()
-    if key in _ALIASES:
-        return _ALIASES[key]
+    effective_aliases = _ALIASES if aliases is None else aliases
+    if key in effective_aliases:
+        return effective_aliases[key].lower()
+    return key
 
-    # Reject tokens that are nothing but digits/punctuation, or version-like
-    # strings that lead with a digit (e.g. "3.x", "17", "2.0").
-    if not re.search(r"[a-zA-Z]", candidate):
-        return None
-    if re.match(r"^\d", candidate):
-        return None
 
+def normalize_skill(raw: str, aliases: dict[str, str] | None = None) -> str | None:
+    """Normalize a raw skill token to a canonical display name, or None.
+
+    Case-insensitive: tokens differing only by case resolve to one display.
+    When ``aliases`` maps the token (directly or via its group canonical) the
+    canonical display is returned; otherwise the cleaned token is title-cased
+    (all-caps acronyms preserved). Corpus-frequency display selection happens in
+    ``aggregate_skill_frequency``, not here.
+    """
+    if not raw:
+        return None
+    stripped = _EDGE_PUNCT.sub("", raw.strip())
+    if not stripped:
+        return None
+    versionless = _VERSION_TAIL.sub("", stripped).strip()
+    candidate = versionless or stripped
+    if not re.search(r"[a-zA-Z]", candidate) or re.match(r"^\d", candidate):
+        return None
+    key = candidate.lower()
+    effective_aliases = _ALIASES if aliases is None else aliases
+    if key in effective_aliases:
+        return effective_aliases[key]
     # Title-case unknown skills, preserving all-caps acronyms (e.g. "AWS").
     words = []
     for word in candidate.split():
@@ -149,6 +161,7 @@ def normalize_skill(raw: str) -> str | None:
 
 
 class SkillRow(TypedDict):
+    key: str
     skill: str
     high: int
     med: int
@@ -167,95 +180,100 @@ class SkillFrequencyResult(TypedDict):
     total_jobs: int
 
 
-def _normalized_skills(raw: str | None) -> set[str]:
-    """Split a comma-separated field and return distinct normalized skills."""
-    skills: set[str] = set()
-    for token in (raw or "").split(","):
-        canonical = normalize_skill(token)
-        if canonical:
-            skills.add(canonical)
-    return skills
+def job_has_skill(job: object, canonical_skill: str, aliases: dict[str, str] | None = None) -> bool:
+    """True if the skill (matched case-insensitively) appears in any extraction field."""
+    # None means "use built-in _ALIASES"; an explicit dict (even {}) overrides.
+    effective_aliases: dict[str, str] = _ALIASES if aliases is None else aliases
+    target = skill_key(canonical_skill, effective_aliases)
+    if target is None:
+        return False
+    keys: set[str] = set()
+    for attr in ("ext_required_skills", "ext_preferred_skills", "ext_tech_stack"):
+        for token in (getattr(job, attr, None) or "").split(","):
+            k = skill_key(token, effective_aliases)
+            if k:
+                keys.add(k)
+    return target in keys
 
 
-def job_has_skill(job: object, canonical_skill: str) -> bool:
-    """True if the normalized skill appears in any extraction field of the job.
-
-    Args:
-        job: A job object with ``ext_required_skills``, ``ext_preferred_skills``,
-            and ``ext_tech_stack`` string attributes.
-        canonical_skill: The canonical display name to match (e.g. "Python"),
-            as produced by ``normalize_skill``.
-
-    Returns:
-        True if the skill is listed in required, preferred, or tech-stack fields.
-    """
-    return canonical_skill in (
-        _normalized_skills(getattr(job, "ext_required_skills", None))
-        | _normalized_skills(getattr(job, "ext_preferred_skills", None))
-        | _normalized_skills(getattr(job, "ext_tech_stack", None))
-    )
-
-
-def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
+def aggregate_skill_frequency(
+    jobs: Iterable[object], aliases: dict[str, str] | None = None
+) -> SkillFrequencyResult:
     """Aggregate skills into one importance-tiered space, plus category counts.
 
-    For each job, a skill's tier is the strongest field it appears in:
-    High (``ext_required_skills``) > Med (``ext_preferred_skills``) >
-    Low (``ext_tech_stack`` only). A skill counts once per job at its strongest
-    tier, so ``high + med + low`` for a skill is the number of distinct jobs
-    mentioning it in any field. ``categories`` counts distinct jobs per
-    category (via ``tech_category``). ``total_jobs`` is all jobs passed in.
-
-    Args:
-        jobs: Iterable of job objects with ``ext_required_skills``,
-            ``ext_preferred_skills``, and ``ext_tech_stack`` string attributes.
-
-    Returns:
-        ``SkillFrequencyResult`` with ``skills`` (sorted by total desc, then
-        name asc), ``categories`` (count desc, then name asc), and ``total_jobs``.
+    Skills are grouped by case-folded key (see ``skill_key``). A skill's tier per
+    job is the strongest field it appears in (required > preferred > tech-stack),
+    so ``high + med + low`` equals the number of distinct jobs mentioning it.
+    Display name is the alias canonical if the key is aliased, else the most
+    frequent original casing across jobs (tie-break alphabetical).
     """
+    # None means "use built-in _ALIASES"; an explicit dict (even {}) overrides.
+    effective_aliases: dict[str, str] = _ALIASES if aliases is None else aliases
+    canonical_by_lower = {c.lower(): c for c in effective_aliases.values()}
     high: dict[str, int] = defaultdict(int)
     med: dict[str, int] = defaultdict(int)
     low: dict[str, int] = defaultdict(int)
+    casing: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     category_counts: dict[str, int] = defaultdict(int)
     total_jobs = 0
 
+    def keyed(raw: str | None) -> dict[str, str]:
+        """Map of key -> original cleaned spelling for one comma-separated field.
+
+        Also accumulates casing counts for all tokens so display can pick the
+        most-frequent original casing across the whole corpus.
+        """
+        out: dict[str, str] = {}
+        for token in (raw or "").split(","):
+            t = token.strip()
+            k = skill_key(t, effective_aliases)
+            if k:
+                casing[k][t] += 1
+                out[k] = t  # last-wins for tier counting; casing tracked above
+        return out
+
+    def display(k: str) -> str:
+        if k in canonical_by_lower:
+            return canonical_by_lower[k]
+        # Return the most-frequent original casing from the corpus (tie-break
+        # alphabetical). This preserves e.g. "FastAPI" over "FASTAPI".
+        best = sorted(casing[k].items(), key=lambda kv: (-kv[1], kv[0]))
+        return best[0][0] if best else k
+
     for job in jobs:
         total_jobs += 1
-        req = _normalized_skills(getattr(job, "ext_required_skills", None))
-        pref = _normalized_skills(getattr(job, "ext_preferred_skills", None))
-        tech = _normalized_skills(getattr(job, "ext_tech_stack", None))
-        all_skills = req | pref | tech
-        for skill in all_skills:
-            # Mutually exclusive by the elif chain: each skill is counted once
-            # per job at its strongest tier, so high+med+low == distinct jobs.
-            if skill in req:
-                high[skill] += 1
-            elif skill in pref:
-                med[skill] += 1
+        req = keyed(getattr(job, "ext_required_skills", None))
+        pref = keyed(getattr(job, "ext_preferred_skills", None))
+        tech = keyed(getattr(job, "ext_tech_stack", None))
+        all_keys = {**tech, **pref, **req}  # later wins for tier counting
+        for k in all_keys:
+            if k in req:
+                high[k] += 1
+            elif k in pref:
+                med[k] += 1
             else:
-                low[skill] += 1
-        for category in {tech_category(s) for s in all_skills}:
+                low[k] += 1
+        for category in {tech_category(display(k)) for k in all_keys}:
             category_counts[category] += 1
 
+    all_skill_keys = set(high) | set(med) | set(low)
     skills = [
         {
-            "skill": skill,
-            "high": high.get(skill, 0),
-            "med": med.get(skill, 0),
-            "low": low.get(skill, 0),
-            "category": tech_category(skill),
+            "key": k,
+            "skill": display(k),
+            "high": high.get(k, 0),
+            "med": med.get(k, 0),
+            "low": low.get(k, 0),
+            "category": tech_category(display(k)),
         }
-        for skill in sorted(
-            set(high) | set(med) | set(low),
-            key=lambda s: (-(high.get(s, 0) + med.get(s, 0) + low.get(s, 0)), s),
+        for k in sorted(
+            all_skill_keys,
+            key=lambda k: (-(high.get(k, 0) + med.get(k, 0) + low.get(k, 0)), display(k)),
         )
     ]
     categories = [
-        {"category": category, "count": count}
-        for category, count in sorted(
-            category_counts.items(), key=lambda kv: (-kv[1], kv[0])
-        )
+        {"category": c, "count": n}
+        for c, n in sorted(category_counts.items(), key=lambda kv: (-kv[1], kv[0]))
     ]
     return {"skills": skills, "categories": categories, "total_jobs": total_jobs}
 

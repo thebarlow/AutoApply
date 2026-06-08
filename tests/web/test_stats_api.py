@@ -162,9 +162,9 @@ def test_skill_frequency_returns_unified_shape(client, db_session):
     assert set(data) == {"skills", "categories", "total_jobs", "profile_skills"}
     assert data["total_jobs"] == 2
     skills = {row["skill"]: row for row in data["skills"]}
-    assert skills["Python"] == {"skill": "Python", "high": 2, "med": 0, "low": 0, "category": "Languages"}
-    assert skills["Docker"] == {"skill": "Docker", "high": 0, "med": 1, "low": 0, "category": "DevOps"}
-    assert skills["AWS"] == {"skill": "AWS", "high": 0, "med": 0, "low": 1, "category": "Cloud"}
+    assert skills["Python"] == {"key": "python", "skill": "Python", "high": 2, "med": 0, "low": 0, "category": "Languages"}
+    assert skills["Docker"] == {"key": "docker", "skill": "Docker", "high": 0, "med": 1, "low": 0, "category": "DevOps"}
+    assert skills["AWS"] == {"key": "aws", "skill": "AWS", "high": 0, "med": 0, "low": 1, "category": "Cloud"}
     cats = {c["category"]: c["count"] for c in data["categories"]}
     assert cats["Languages"] == 2
     assert cats["Frontend"] == 1
