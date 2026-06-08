@@ -117,6 +117,24 @@ def test_profile_add_and_remove(client, db_session):
     assert "Python" not in r3.json()["skills"]
 
 
+def test_owned_skills_matches_case_and_alias(client, db_session):
+    from db.seed import seed_skill_aliases
+    seed_skill_aliases(db_session)  # gives k8s -> Kubernetes
+    _seed_profile(db_session, ["Python", "Kubernetes"])
+    r = client.post(
+        "/api/skills/owned",
+        json={"skills": ["python", "k8s", "Rust", "FastAPI"]},
+    )
+    assert r.status_code == 200
+    # "python" matches Python (case), "k8s" matches Kubernetes (alias); others not.
+    assert set(r.json()["owned"]) == {"python", "k8s"}
+
+
+def test_owned_skills_empty_when_no_profile(client, db_session):
+    r = client.post("/api/skills/owned", json={"skills": ["Python"]})
+    assert r.json()["owned"] == []
+
+
 def test_assign_rejects_empty(client, db_session):
     r = client.post("/api/skills/aliases/assign", json={"skill": "", "canonical": "X"})
     assert r.status_code == 400

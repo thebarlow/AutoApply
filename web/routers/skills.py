@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from core.skill_analytics import skill_key
 from core.user import User
 from db.database import SkillAlias, get_db
-from web.routers.stats import invalidate_skill_cache
+from web.routers.stats import _load_aliases, invalidate_skill_cache
 
 router = APIRouter(prefix="/api/skills")
 
@@ -19,6 +19,10 @@ class AssignBody(BaseModel):
 
 class SkillBody(BaseModel):
     skill: str
+
+
+class SkillsBody(BaseModel):
+    skills: list[str]
 
 
 def _raw_key(token: str) -> str | None:
@@ -95,6 +99,26 @@ def remove_member(body: SkillBody, db: Session = Depends(get_db)):
     db.delete(row)
     db.commit()
     invalidate_skill_cache()
+
+
+@router.post("/owned")
+def owned_skills(body: SkillsBody, db: Session = Depends(get_db)) -> dict:
+    """Return the subset of the given skill tokens the active profile possesses.
+
+    Matching is case- and alias-aware (built-in + DB aliases), so a "k8s" token
+    is owned when the profile lists "Kubernetes". Echoes back the original input
+    strings so the caller can map results straight onto its chips.
+    """
+    aliases = _load_aliases(db)
+    try:
+        user = User.load(db)
+    except Exception:
+        return {"owned": []}
+    profile_keys = {
+        k for k in (skill_key(s, aliases) for s in (user.skills or [])) if k
+    }
+    owned = [s for s in body.skills if skill_key(s, aliases) in profile_keys]
+    return {"owned": owned}
 
 
 @router.post("/profile")

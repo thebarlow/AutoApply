@@ -191,6 +191,13 @@ export const removeProfileSkill = (skill) =>
     body: JSON.stringify({ skill }),
   })
 
+export const getOwnedSkills = (skills) =>
+  _fetch('/api/skills/owned', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skills }),
+  })
+
 export const uploadJob = (fields) => {
   const uuid = crypto.randomUUID()
   const body = {
