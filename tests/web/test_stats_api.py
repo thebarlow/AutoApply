@@ -183,6 +183,28 @@ def test_skill_frequency_excludes_non_extracted_jobs(client, db_session):
     assert {row["skill"] for row in data["skills"]} == {"Python"}
 
 
+def test_skill_frequency_excludes_deleted_jobs(client, db_session):
+    _make_extracted_job(db_session, "d1", required="Python")
+    deleted = _make_extracted_job(db_session, "d2", required="Rust")
+    deleted.state = "deleted"
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency")
+    data = r.json()
+    assert data["total_jobs"] == 1
+    assert {row["skill"] for row in data["skills"]} == {"Python"}
+
+
+def test_skill_frequency_jobs_excludes_deleted_jobs(client, db_session):
+    _make_extracted_job(db_session, "g1", required="Python")
+    deleted = _make_extracted_job(db_session, "g2", required="Python")
+    deleted.state = "deleted"
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency/jobs?skill=Python")
+    assert set(r.json()["job_keys"]) == {"g1"}
+
+
 def test_skill_frequency_empty_db(client):
     r = client.get("/api/skill-frequency")
     assert r.status_code == 200

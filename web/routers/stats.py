@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from core.job import Job
@@ -120,11 +120,14 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
     normalized to canonical names, so the UI can flag which in-demand skills the
     profile already covers.
     """
-    extracted_filter = or_(
-        Job.ext_required_skills.isnot(None),
-        Job.ext_preferred_skills.isnot(None),
-        Job.ext_tech_stack.isnot(None),
-        Job.ext_seniority.isnot(None),
+    extracted_filter = and_(
+        Job.state != "deleted",
+        or_(
+            Job.ext_required_skills.isnot(None),
+            Job.ext_preferred_skills.isnot(None),
+            Job.ext_tech_stack.isnot(None),
+            Job.ext_seniority.isnot(None),
+        ),
     )
 
     sig = db.query(Job).filter(extracted_filter).count()
@@ -182,6 +185,7 @@ def get_jobs_for_skill(
     jobs = (
         db.query(Job)
         .filter(
+            Job.state != "deleted",
             or_(
                 Job.ext_required_skills.isnot(None),
                 Job.ext_preferred_skills.isnot(None),
@@ -189,7 +193,7 @@ def get_jobs_for_skill(
                 # Mirrors the extracted-job filter in get_skill_frequency; a
                 # seniority-only job simply won't match job_has_skill below.
                 Job.ext_seniority.isnot(None),
-            )
+            ),
         )
         .all()
     )

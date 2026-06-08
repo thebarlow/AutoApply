@@ -5,9 +5,7 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Bugs
 
-- [ ] **In-Demand Skills charts retain deleted-job skills** — Skill frequency charts don't drop
-  skills belonging to deleted jobs. Fix the counting to exclude deleted jobs and recount the
-  existing stored data.
+_(none)_
 
 ## Features
 
@@ -40,6 +38,15 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   "Hands-on experience with LLMs and generative AI" → "LLMs, generative AI".
 
 ## Done
+
+- [x] **"Ready" jobs vanished from Inbox and Archives** — `ready` was in neither `INBOX_STATES`
+  nor `ARCHIVE_STATES` in `Pipeline.jsx`, so ready jobs matched no tab. Added `ready` to the
+  Inbox (generated-but-not-applied jobs stay actionable).
+
+- [x] **In-Demand Skills charts retained deleted-job skills** — `get_skill_frequency` and
+  `/skill-frequency/jobs` in `web/routers/stats.py` didn't exclude soft-deleted jobs
+  (`state == 'deleted'`). Added the exclusion to both queries; counts recompute live so existing
+  data recounts automatically.
 
 - [x] **LLM & document hardening — Phase 1: structured LLM parsing** — LLM responses for data tasks
   validate against Pydantic models via `core/schemas.py` `parse_llm_json` (`ScoreResponse`,
