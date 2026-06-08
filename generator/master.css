@@ -23,27 +23,42 @@ html, body {
   margin: 0 0 0.06in 0;
 }
 
+/* 5-track grid: value / leader / value / leader / value. Leaders only sit
+   between items; value tracks are `auto` so columns align across rows and long
+   URLs never overflow. First column is flush-left, last flush-right. */
 .contact-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.04in 0.1in;
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr auto;
+  column-gap: 0.1in;
+  row-gap: 0.05in;
   font-size: 8.5pt;
   color: #444;
 }
 
-.contact-item {
+.contact-val {
+  display: inline-flex;
+  align-items: center;
   white-space: nowrap;
-}
-
-.contact-item:not(:last-child)::after {
-  content: " \2022";
-  margin-left: 0.1in;
-  color: #999;
-}
-
-.contact-item a {
   color: #444;
   text-decoration: none;
+}
+
+/* Decorative icon — SVG lives outside the text layer, so ATS extraction sees
+   only the contact value text. Sized to the surrounding text. */
+.contact-icon {
+  width: 0.95em;
+  height: 0.95em;
+  flex: none;
+  margin-right: 0.05in;
+  color: #666;
+}
+
+/* Dotted leader drawn as a border-bottom, not text — purely decorative, so no
+   dot glyphs enter the extracted text layer. */
+.leader {
+  align-self: end;
+  border-bottom: 1.5px dotted #bbb;
+  transform: translateY(-0.05in);
 }
 
 h2 {
