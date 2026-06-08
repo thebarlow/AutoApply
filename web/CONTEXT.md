@@ -20,7 +20,8 @@ web/
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
-    ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency
+    ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
+    ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
     ├── shutdown.py          # POST /api/shutdown (graceful or immediate server exit)
     ├── tray.py              # Tray app integration endpoints
     ├── events.py            # SSE endpoint (/api/events)
@@ -35,6 +36,7 @@ web/
 | Ingesting a job from the browser extension or triggering API scrapers | `routers/scraper.py` |
 | Pipeline activity stats by time window | `routers/stats.py` |
 | Skill frequency across extracted jobs | `routers/stats.py` (delegates to `core/skill_analytics.py`) |
+| Skill alias groups + marking profile skills | `routers/skills.py` (invalidates `stats.py` skill cache on mutation) |
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Server shutdown (immediate or wait for LLM) | `routers/shutdown.py` |
 | LLM provider/model/key config | `routers/config.py` |

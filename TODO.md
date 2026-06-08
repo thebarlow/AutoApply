@@ -9,18 +9,11 @@ _(none)_
 
 ## Features
 
-- [ ] **Skill aliases** — Skills need a list of known aliases so equivalents are merged
-  (e.g. `FASTAPI` and `FastAPI` currently count separately). Normalize via an alias map.
-
 - [ ] **Remove Activity chart** — The Activity chart is underwhelming; remove it.
 
 - [ ] **Settings → User tab application stats** — Show "You've applied to {x} jobs" with
   "applied to {x}" highlighted and clickable; clicking rotates through other stats
   ("scraped {x}", "made resumes for {x}", …). Above it, a time control: Today / Week / All time.
-
-- [ ] **Clickable skill chips** — Skill chips (In-Demand Skills graph + parsed job descriptions)
-  open a modal where the user can assign an alias or mark the skill as one they have
-  (or remove a marked skill). Overlaps with the Skill aliases item.
 
 - [ ] **Document user feedback** — Let the user give feedback on a generated document (resume/cover
   letter) that feeds back into regeneration.
@@ -38,6 +31,13 @@ _(none)_
   "Hands-on experience with LLMs and generative AI" → "LLMs, generative AI".
 
 ## Done
+
+- [x] **Skill aliases + clickable chips** — Global `skill_aliases` table (arbitrary-size synonym
+  groups, seeded from the curated `_ALIASES` map); case variants now merge automatically
+  (`FASTAPI`/`FastAPI` → one entry). `SkillChipModal` (opened from In-Demand legend names, By-Skill
+  bar labels, and job-description chips) assigns aliases, edits groups, and marks skills as owned.
+  Backend: `web/routers/skills.py`, case-folded `core/skill_analytics.py`, alias-aware
+  `web/routers/stats.py` with cache invalidation.
 
 - [x] **"Ready" jobs vanished from Inbox and Archives** — `ready` was in neither `INBOX_STATES`
   nor `ARCHIVE_STATES` in `Pipeline.jsx`, so ready jobs matched no tab. Added `ready` to the
