@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from core.job import Job
 from core.skill_analytics import aggregate_skill_frequency, job_has_skill
-from core.session_cost import get_session_start
 from core.user import User
 from db.database import get_db, SkillAlias
 
@@ -43,22 +41,8 @@ def invalidate_skill_cache() -> None:
     """Reset the skill-frequency cache. Call after any alias mutation."""
     _SKILL_CACHE.update(sig=None, ts=0.0, result=None)
 
-_VALID_WINDOWS = {"session", "today", "week", "all_time"}
+_VALID_WINDOWS = {"today", "week", "all_time"}
 _ALL_STATES = ["new", "pending_review", "ready", "applied", "contact", "rejected"]
-
-
-def _date_label(date_str: str) -> str:
-    """Convert YYYY-MM-DD to 'Mon D' display label."""
-    try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-        return dt.strftime("%b %#d")
-    except (ValueError, TypeError):
-        return date_str
-
-
-def _iso_to_date(iso: str) -> str:
-    """Extract YYYY-MM-DD from an ISO datetime string."""
-    return iso[:10] if iso else ""
 
 
 @router.get("/stats")
@@ -73,9 +57,7 @@ def get_stats(
         )
 
     now = datetime.now(timezone.utc)
-    if window == "session":
-        cutoff = get_session_start()
-    elif window == "today":
+    if window == "today":
         cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif window == "week":
         cutoff = now - timedelta(days=7)
@@ -84,51 +66,24 @@ def get_stats(
 
     cutoff_iso = cutoff.isoformat() if cutoff else None
 
-    # Scraped: bucket by scraped_at date
-    scraped_q = db.query(Job).filter(Job.scraped_at.isnot(None))
-    if cutoff_iso:
-        scraped_q = scraped_q.filter(Job.scraped_at >= cutoff_iso)
-
-    scraped_by_date: dict[str, int] = defaultdict(int)
-    for job in scraped_q.all():
-        scraped_by_date[_iso_to_date(job.scraped_at)] += 1
-
-    # Resumes: bucket by resume_generated_at
-    resume_q = db.query(Job).filter(Job.resume_generated_at.isnot(None))
-    if cutoff_iso:
-        resume_q = resume_q.filter(Job.resume_generated_at >= cutoff_iso)
-
-    resumes_by_date: dict[str, int] = defaultdict(int)
-    for job in resume_q.all():
-        resumes_by_date[_iso_to_date(job.resume_generated_at)] += 1
-
-    # Covers: bucket by cover_generated_at
-    cover_q = db.query(Job).filter(Job.cover_generated_at.isnot(None))
-    if cutoff_iso:
-        cover_q = cover_q.filter(Job.cover_generated_at >= cutoff_iso)
-
-    covers_by_date: dict[str, int] = defaultdict(int)
-    for job in cover_q.all():
-        covers_by_date[_iso_to_date(job.cover_generated_at)] += 1
-
-    # Merge date keys (YYYY-MM-DD) and sort chronologically
-    all_dates = sorted(
-        set(scraped_by_date) | set(resumes_by_date) | set(covers_by_date)
-    )
-    bars = [
-        {
-            "label": _date_label(d),
-            "scraped": scraped_by_date.get(d, 0),
-            "resumes": resumes_by_date.get(d, 0),
-            "covers": covers_by_date.get(d, 0),
-        }
-        for d in all_dates
-    ]
-
     # by_state: pipeline snapshot, not window-filtered
     by_state = {s: db.query(Job).filter(Job.state == s).count() for s in _ALL_STATES}
 
-    return {"bars": bars, "by_state": by_state}
+    # totals: window-filtered counts driving the User-tab stat counter. Each
+    # metric counts jobs whose corresponding timestamp falls within the window.
+    def _count(column) -> int:
+        q = db.query(Job).filter(column.isnot(None))
+        if cutoff_iso:
+            q = q.filter(column >= cutoff_iso)
+        return q.count()
+
+    totals = {
+        "applied": _count(Job.applied_at),
+        "scraped": _count(Job.scraped_at),
+        "resumes": _count(Job.resume_generated_at),
+    }
+
+    return {"by_state": by_state, "totals": totals}
 
 
 @router.get("/skill-frequency")

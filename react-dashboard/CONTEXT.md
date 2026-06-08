@@ -75,7 +75,8 @@ Two-panel layout split 3:2 in a 5-column grid:
 
 ### UserHome.jsx
 - Stats dashboard shown in right panel home tab
-- Recharts bar + pie charts; time-window selector (Session / Today / Week / All Time)
+- Rotating stat counter ("You've applied to {x} jobs"); clicking the highlighted phrase cycles Applied → Scraped → Resumes (`STAT_METRICS`), reading `stats.totals` from `/api/stats`
+- In-Demand Skills recharts pie/bar charts; time-window selector (Today / Week / All Time) drives the counter via `getStats(win)`
 - Embeds `ProfileCards` for quick profile switching
 
 ### Onboarding/Wizard.jsx

@@ -8,10 +8,17 @@ import ProfileCards from './ProfileCards'
 import SkillChipModal from './SkillChipModal'
 
 const WINDOWS = [
-  { key: 'session', label: 'Session' },
   { key: 'today', label: 'Today' },
   { key: 'week', label: 'Week' },
   { key: 'all_time', label: 'All Time' },
+]
+
+// Rotating stat counter: clicking the highlighted phrase advances to the next.
+// `verb` is the highlighted, clickable text; the count is woven into it.
+const STAT_METRICS = [
+  { key: 'applied', verb: (n) => `applied to ${n}` },
+  { key: 'scraped', verb: (n) => `scraped ${n}` },
+  { key: 'resumes', verb: (n) => `made resumes for ${n}` },
 ]
 
 const SKILL_FIELDS = [
@@ -156,7 +163,8 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [showSwitchUser, setShowSwitchUser] = useState(false)
-  const [win, setWin] = useState('session')
+  const [win, setWin] = useState('all_time')
+  const [metricIdx, setMetricIdx] = useState(0)
   const [stats, setStats] = useState(null)
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState(null)
@@ -348,27 +356,25 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
       {!statsError && (
         <>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-space-dim mb-2">Activity</p>
             {statsLoading && !stats && <p className="text-xs text-space-dim">Loading…</p>}
-            {!statsLoading && stats && stats.bars.length === 0 && (
-              <p className="text-xs text-space-dim">No activity yet.</p>
-            )}
-            {!statsLoading && stats && stats.bars.length > 0 && (
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={stats.bars} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#8888aa' }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#8888aa' }} />
-                  <Tooltip
-                    contentStyle={{ background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 8, fontSize: 11 }}
-                    labelStyle={{ color: '#c8c8e8' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11, color: '#8888aa' }} />
-                  <Bar dataKey="scraped" name="Scraped" fill="#7c3aed" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="resumes" name="Resumes" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="covers" name="Covers" fill="#0d9488" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+            {stats && (() => {
+              const metric = STAT_METRICS[metricIdx]
+              const count = stats.totals?.[metric.key] ?? 0
+              return (
+                <p className="text-sm text-space-dim">
+                  You've{' '}
+                  <button
+                    type="button"
+                    onClick={() => setMetricIdx((i) => (i + 1) % STAT_METRICS.length)}
+                    title="Click to see another stat"
+                    className="font-semibold text-purple-300 hover:text-purple-200 transition-colors"
+                  >
+                    {metric.verb(count)}
+                  </button>{' '}
+                  jobs
+                </p>
+              )
+            })()}
           </div>
 
           <div>

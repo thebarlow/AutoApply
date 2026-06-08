@@ -9,12 +9,6 @@ _(none)_
 
 ## Features
 
-- [ ] **Remove Activity chart** — The Activity chart is underwhelming; remove it.
-
-- [ ] **Settings → User tab application stats** — Show "You've applied to {x} jobs" with
-  "applied to {x}" highlighted and clickable; clicking rotates through other stats
-  ("scraped {x}", "made resumes for {x}", …). Above it, a time control: Today / Week / All time.
-
 - [ ] **Document user feedback** — Let the user give feedback on a generated document (resume/cover
   letter) that feeds back into regeneration.
 
@@ -31,6 +25,14 @@ _(none)_
   "Hands-on experience with LLMs and generative AI" → "LLMs, generative AI".
 
 ## Done
+
+- [x] **Settings → User tab application stats** — Rotating counter in `UserHome.jsx`: "You've
+  applied to {x} jobs" with the verb+count highlighted/clickable, cycling Applied → Scraped →
+  Resumes (`STAT_METRICS`). Today/Week/All-time control filters counts via new `totals` field on
+  `GET /api/stats` (window-filtered by `applied_at`/`scraped_at`/`resume_generated_at`).
+
+- [x] **Remove Activity chart** — Removed the scraped/resumes/covers bar chart from `UserHome.jsx`;
+  dropped the orphaned `session` window from `/api/stats` (`_VALID_WINDOWS`, `get_session_start`).
 
 - [x] **Description chip ownership styling** — Processed-description skill chips are colored by a
   3-state ownership check (`POST /api/skills/owned`, alias + case aware): green = a skill I have,
