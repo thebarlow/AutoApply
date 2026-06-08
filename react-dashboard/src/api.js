@@ -158,6 +158,39 @@ export async function ensureProfileWithProvider(name, llm) {
   return { id: profile.id, name: profile.name || name }
 }
 
+export const getSkillAliases = () => _fetch('/api/skills/aliases')
+
+export const searchSkillAliases = (q) =>
+  _fetch('/api/skills/aliases/search?' + new URLSearchParams({ q }))
+
+export const assignSkillAlias = (skill, canonical) =>
+  _fetch('/api/skills/aliases/assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skill, canonical }),
+  })
+
+export const removeSkillAliasMember = (skill) =>
+  _fetch('/api/skills/aliases/member', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skill }),
+  })
+
+export const addProfileSkill = (skill) =>
+  _fetch('/api/skills/profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skill }),
+  })
+
+export const removeProfileSkill = (skill) =>
+  _fetch('/api/skills/profile', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skill }),
+  })
+
 export const uploadJob = (fields) => {
   const uuid = crypto.randomUUID()
   const body = {
