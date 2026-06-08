@@ -150,8 +150,10 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
         ),
     )
 
-    aliases = _load_aliases(db)
+    # Count before loading so a concurrent alias insert can't yield a map with N
+    # rows signed under N+1 (and cached wrong) on READ COMMITTED backends.
     alias_sig = db.query(SkillAlias).count()
+    aliases = _load_aliases(db)
     sig = (db.query(Job).filter(extracted_filter).count(), alias_sig)
     now = time.monotonic()
     cached = _SKILL_CACHE["result"]
@@ -179,7 +181,7 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
 
     # Profile skills are cheap to compute and profile-specific, so resolve them
     # fresh (outside the job-aggregation cache).
-    from core.skill_analytics import skill_key
+    from core.skill_analytics import normalize_skill, skill_key
     key_to_display = {row["key"]: row["skill"] for row in agg["skills"]}
     profile_skills: list[str] = []
     try:
@@ -187,7 +189,9 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
         seen: set[str] = set()
         for raw in getattr(user, "skills", []) or []:
             pk = skill_key(raw, aliases)
-            display = key_to_display.get(pk)
+            # Prefer the chart's display so the "have" badge matches; fall back to
+            # the plain normalized name for skills not present in any job.
+            display = key_to_display.get(pk) or normalize_skill(raw, aliases)
             if display and display not in seen:
                 seen.add(display)
                 profile_skills.append(display)

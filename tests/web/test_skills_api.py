@@ -120,3 +120,12 @@ def test_profile_add_and_remove(client, db_session):
 def test_assign_rejects_empty(client, db_session):
     r = client.post("/api/skills/aliases/assign", json={"skill": "", "canonical": "X"})
     assert r.status_code == 400
+
+
+def test_assign_canonical_collides_with_existing_alias_key(client, db_session):
+    client.post("/api/skills/aliases/assign", json={"skill": "React", "canonical": "React"})
+    # Typing the lowercased "react" as the canonical should adopt the existing
+    # "React" group rather than fork a second, lowercased group.
+    r = client.post("/api/skills/aliases/assign", json={"skill": "reactjs", "canonical": "react"})
+    assert r.json()["canonical"] == "React"
+    assert "reactjs" in r.json()["members"]

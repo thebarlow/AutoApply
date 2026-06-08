@@ -64,7 +64,13 @@ def assign_alias(body: AssignBody, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=400, detail="skill is not a valid token")
     canonical = body.canonical.strip()
     ckey = canonical.lower()
-    if not db.query(SkillAlias).filter_by(alias_key=ckey).first():
+    existing_canonical_row = db.query(SkillAlias).filter_by(alias_key=ckey).first()
+    if existing_canonical_row:
+        # The typed canonical collides with an existing alias key — adopt that
+        # row's established group identity so "react" merges into "React" rather
+        # than forking a second, lowercased group.
+        canonical = existing_canonical_row.canonical
+    else:
         db.add(SkillAlias(alias_key=ckey, canonical=canonical))
     row = db.query(SkillAlias).filter_by(alias_key=key).first()
     if row:

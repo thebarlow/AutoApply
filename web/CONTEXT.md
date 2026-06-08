@@ -62,6 +62,19 @@ web/
 - **`PUT .../document` is not transactional across DB and disk (by design).** `Document.upsert` commits the structured edit *before* the `.md`/PDF are re-rendered. If rendering then fails, the route returns `500` but the structured doc is **kept** — deliberately, so the user's edits are not lost and they can trim oversized content and re-save. The on-disk PDF may be stale until the next successful save (it self-heals on re-save). Do not "fix" this by restoring the previous JSON on failure — that would discard the user's edit.
 - **`_save_turn_snapshot` silently skips a turn if no `Document` row exists** for the job/doc_type (logs a warning, writes no `.json`). `_restore_best` then ignores that turn. In practice the refine writer commits the row before the loop snapshots it, so this only surfaces under unexpected ordering; the warning print is the debugging hook.
 
+## Known caveats (skill aliases)
+
+- **Renaming a *built-in* alias group leaves a stale self-row.** Seeding creates a self-row per
+  curated canonical (e.g. `javascript -> JavaScript`). Reassigning a member like `js` to a new
+  canonical (`ECMAScript`) does **not** migrate the seeded `javascript` self-row, so `JavaScript`
+  tokens stay in the old group. Merging built-in groups wholesale isn't supported yet; a future
+  fix would reassign all rows sharing the old canonical. User-created groups are unaffected.
+- **`assign` resolves a typed canonical to an existing alias key's group** (so POSTing
+  `canonical:"react"` when `react -> React` exists adopts `React`), preventing accidental
+  lowercase forks. The autocomplete normally feeds real canonicals, so this is a safety net.
+- **`search_aliases` is a full table scan per keystroke.** Fine for a modest alias table; add a
+  `LIKE`/index if users import large synonym sets.
+
 ## API Surface
 
 | Method | Path | Purpose |
@@ -81,6 +94,11 @@ web/
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
 | `GET` | `/api/skill-frequency` | Combined required+preferred skill counts (`skills`) plus `tech_stack`, distinct jobs, across all extracted jobs; no window. Also returns `profile_skills` (active user's skills, normalized) so the UI can flag covered skills. The job aggregation is cached in-process keyed by extracted-job count with a 60s TTL — a re-extraction that doesn't change the count can be up to 60s stale; tests reset `stats._SKILL_CACHE` via an autouse fixture. |
 | `GET` | `/api/skill-frequency/jobs` | Job keys whose extraction data lists a given `skill` (normalized, any field) |
+| `GET` | `/api/skills/aliases` | All alias groups `[{canonical, members}]` |
+| `GET` | `/api/skills/aliases/search` | Canonicals matching `q` (substring over canonical + members) |
+| `POST` | `/api/skills/aliases/assign` | Add/move `skill` into a group `canonical` (creates group if new) |
+| `DELETE` | `/api/skills/aliases/member` | Remove `skill` from its group (`400` if it's the canonical self-row) |
+| `POST/DELETE` | `/api/skills/profile` | Add/remove `skill` on the active profile (case-insensitive dedup) |
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
 | `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
 | `GET/PUT` | `/api/config/{key}` | Config key-value store |
