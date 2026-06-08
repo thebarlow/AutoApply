@@ -24,34 +24,45 @@ html, body {
   margin: 0 0 0.06in 0;
 }
 
-/* Single flowing row (not a real grid): items wrap and pack ~3 per line for the
-   density of the old 3-column look, but render as one continuous, correctly
-   ordered text run so the ATS text layer extracts cleanly (no column scramble). */
+/* 3-column grid: columns align top-to-bottom like real columns. DOM order is
+   preserved (email, phone, location, …) so the ATS text layer extracts in the
+   correct sequence; the grid only affects visual placement. */
+/* 5-track grid: value / leader / value / leader / value. Leaders only sit
+   between items; value tracks are `auto` so columns align across rows and long
+   URLs never overflow. First column is flush-left, last flush-right. */
 .contact-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.04in 0.14in;
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr auto;
+  column-gap: 0.1in;
+  row-gap: 0.05in;
   font-size: 10pt;
   color: #222;
 }
 
-.contact-item {
+.contact-val {
+  display: inline-flex;
+  align-items: center;
   white-space: nowrap;
-}
-
-/* Dotted-leader separator between items; decorative (::after), so the glyph
-   never enters the extracted text layer. */
-.contact-item:not(:last-child)::after {
-  content: " ····";
-  margin-left: 0.14in;
-  letter-spacing: 2px;
-  color: #bbb;
-}
-
-.contact-item span,
-.contact-item a {
   color: #222;
   text-decoration: none;
+}
+
+/* Decorative icon — SVG lives outside the text layer, so ATS extraction sees
+   only the contact value text. Sized to the surrounding text. */
+.contact-icon {
+  width: 0.95em;
+  height: 0.95em;
+  flex: none;
+  margin-right: 0.05in;
+  color: #555;
+}
+
+/* Dotted leader drawn as a border-bottom, not text — purely decorative, so no
+   dot glyphs enter the extracted text layer. */
+.leader {
+  align-self: end;
+  border-bottom: 1.5px dotted #bbb;
+  transform: translateY(-0.05in);
 }
 
 .contact-item a:hover {

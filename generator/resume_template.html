@@ -12,32 +12,29 @@
     <header class="resume-header">
       <h1>{{ name }}</h1>
       <!-- Contact field order is load-bearing for ATS parsing: email, phone, location must come first and in sequence. -->
+      <!-- 3-col grid; dotted leaders sit only *between* items (border-bottom,
+           visual only — no dot glyphs in the extracted text layer). First item
+           in each row is flush-left, last is flush-right. -->
+      {% set icons = {
+        'email':    '<svg class="contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg>',
+        'phone':    '<svg class="contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        'location': '<svg class="contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        'github':   '<svg class="contact-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"/></svg>',
+        'linkedin': '<svg class="contact-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.07 2.07 0 1 1 0-4.14 2.07 2.07 0 0 1 0 4.14zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>',
+        'website':  '<svg class="contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'
+      } %}
+      {% set contacts = [] %}
+      {% if email %}{% set _ = contacts.append({'type': 'email', 'text': email}) %}{% endif %}
+      {% if phone %}{% set _ = contacts.append({'type': 'phone', 'text': phone}) %}{% endif %}
+      {% if location %}{% set _ = contacts.append({'type': 'location', 'text': location}) %}{% endif %}
+      {% if github %}{% set _ = contacts.append({'type': 'github', 'text': github | strip_url, 'href': github}) %}{% endif %}
+      {% if linkedin %}{% set _ = contacts.append({'type': 'linkedin', 'text': linkedin | strip_url, 'href': linkedin}) %}{% endif %}
+      {% if website %}{% set _ = contacts.append({'type': 'website', 'text': website | strip_url, 'href': website}) %}{% endif %}
       <div class="contact-row">
-
-        {% if email %}
-        <div class="contact-item"><span>{{ email }}</span></div>
-        {% endif %}
-
-        {% if phone %}
-        <div class="contact-item"><span>{{ phone }}</span></div>
-        {% endif %}
-
-        {% if location %}
-        <div class="contact-item"><span>{{ location }}</span></div>
-        {% endif %}
-
-        {% if github %}
-        <div class="contact-item"><a href="{{ github }}">{{ github | strip_url }}</a></div>
-        {% endif %}
-
-        {% if linkedin %}
-        <div class="contact-item"><a href="{{ linkedin }}">{{ linkedin | strip_url }}</a></div>
-        {% endif %}
-
-        {% if website %}
-        <div class="contact-item"><a href="{{ website }}">{{ website | strip_url }}</a></div>
-        {% endif %}
-
+        {% for c in contacts %}
+        {% if c.href %}<a class="contact-val" href="{{ c.href }}">{{ icons[c.type] | safe }}<span>{{ c.text }}</span></a>{% else %}<span class="contact-val">{{ icons[c.type] | safe }}<span>{{ c.text }}</span></span>{% endif %}
+        {% if loop.index0 % 3 != 2 and not loop.last %}<span class="leader"></span>{% endif %}
+        {% endfor %}
       </div>
     </header>
     {% endif %}
