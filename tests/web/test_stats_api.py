@@ -236,3 +236,15 @@ def test_skill_frequency_jobs_no_match_returns_empty(client, db_session):
 
     r = client.get("/api/skill-frequency/jobs?skill=Rust")
     assert r.json()["job_keys"] == []
+
+
+def test_skill_frequency_merges_case_variants(client, db_session):
+    _make_extracted_job(db_session, "c1", required="FastAPI")
+    _make_extracted_job(db_session, "c2", required="FASTAPI")
+    db_session.commit()
+
+    r = client.get("/api/skill-frequency")
+    data = r.json()
+    fastapi_rows = [row for row in data["skills"] if row["key"] == "fastapi"]
+    assert len(fastapi_rows) == 1
+    assert fastapi_rows[0]["high"] == 2
