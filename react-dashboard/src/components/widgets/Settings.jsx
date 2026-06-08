@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob } from '../../api'
 import StructuredEditOverlay from './StructuredEditor'
+import SkillChipModal from './SkillChipModal'
 import ProfileDetailView from './ProfileDetail'
 import UserHome from './UserHome'
 import { WarningIcon } from '../shared/JobCard'
@@ -86,6 +87,8 @@ function ExtractionView({ data }) {
   ]
   const asList = (v) => (Array.isArray(v) ? v.filter((x) => x && String(x).trim()) : [])
 
+  const [modalSkill, setModalSkill] = useState(null)
+
   return (
     <div className="flex flex-col gap-3">
       {meta.length > 0 && (
@@ -100,7 +103,14 @@ function ExtractionView({ data }) {
             <p className="text-xs font-semibold text-space-dim mb-1">{label}</p>
             <div className="flex flex-wrap gap-1">
               {items.map((v, i) => (
-                <span key={i} className="inline-block rounded bg-white/10 px-1.5 py-0.5 text-xs text-space-text">{v}</span>
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setModalSkill(v)}
+                  className="inline-block rounded bg-white/10 px-1.5 py-0.5 text-xs text-space-text hover:bg-white/20"
+                >
+                  {v}
+                </button>
               ))}
             </div>
           </div>
@@ -119,6 +129,10 @@ function ExtractionView({ data }) {
           </div>
         )
       })}
+
+      {modalSkill && (
+        <SkillChipModal skill={modalSkill} onClose={() => setModalSkill(null)} onChanged={() => {}} />
+      )}
     </div>
   )
 }
