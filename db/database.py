@@ -97,6 +97,19 @@ class Document(Base):
         return row
 
 
+class SkillAlias(Base):
+    """Global skill synonym map. A group is all rows sharing one ``canonical``.
+
+    ``alias_key`` is the lowercased, trimmed token; ``canonical`` is the display
+    name and the group's identity. Each canonical also has a self-row
+    (``alias_key == canonical.lower()``) so a group is never empty.
+    """
+
+    __tablename__ = "skill_aliases"
+    alias_key = Column(String, primary_key=True)
+    canonical = Column(String, nullable=False)
+
+
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///auto_apply.db")
