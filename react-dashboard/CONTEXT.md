@@ -31,6 +31,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Profile card grid (select / set active profile) | `src/components/widgets/ProfileCards.jsx` |
 | Stats dashboard (charts, job-state counts, time windows) | `src/components/widgets/UserHome.jsx` |
 | Skill alias/own-skill modal (opened from In-Demand legend names + job-description chips) | `src/components/widgets/SkillChipModal.jsx` |
+| Processed-description skill chips (3-state ownership color: green have / amber required-gap / neutral) | `src/components/widgets/Settings.jsx` — `ExtractionView` (fetches `getOwnedSkills`) |
 | Tasks / processing jobs monitor | `src/components/widgets/Settings.jsx` — Tasks tab |
 | Profile editor sections (Identity, Skills, Experience, Education, Projects, Preferences) | `src/components/widgets/ProfileDetail.jsx` |
 | Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |

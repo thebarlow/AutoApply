@@ -39,6 +39,7 @@ Each migration function in `database.py` is idempotent (checks `PRAGMA table_inf
 | `prompt_defaults` | `PromptDefault` | Factory prompt defaults, one row per `type_key`. Seeded from `prompts/defaults/*.md`. | 2 |
 | `prompts` | `Prompt` | Per-profile active prompt slots `(profile_id, type_key)` + per-type `model` override. | 2 |
 | `documents` | `Document` | Structured generated artifact per `(job_key, doc_type)`; `structured_json` is the **source of truth**. Unique on `(job_key, doc_type)`. Helpers: `Document.fetch(db, job_key, doc_type)`, `Document.upsert(db, job_key, doc_type, structured_json)` (upsert commits). | 3a |
+| `skill_aliases` | `SkillAlias` | Global skill synonym map: `alias_key` (PK, lowercased token) → `canonical` (display = group identity). A group = all rows sharing one canonical; each canonical has a self-row. Seeded from `core/skill_analytics._ALIASES` via `seed_skill_aliases`. | — |
 
 ## Prompt-content reseed migrations
 

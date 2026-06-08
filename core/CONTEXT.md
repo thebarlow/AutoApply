@@ -45,10 +45,12 @@ core/
 | LLM client from user profile config | `llm.py` → `get_client_for_profile()` |
 | Single-turn LLM call helper | `llm.py` → `call_llm()` |
 | Session LLM cost tracking | `session_cost.py` |
-| Normalizing a raw skill token to canonical form | `skill_analytics.py` → `normalize_skill()` |
+| Case-folded grouping key for a raw token (alias-aware) | `skill_analytics.py` → `skill_key()` |
+| Normalizing a raw skill token to a canonical display name | `skill_analytics.py` → `normalize_skill()` |
 | Aggregating skills into importance tiers (High/Med/Low) + categories | `skill_analytics.py` → `aggregate_skill_frequency()` |
 | Mapping a skill to its tech category | `skill_analytics.py` → `tech_category()` |
 | Testing if a job lists a skill (any extraction field) | `skill_analytics.py` → `job_has_skill()` |
+| Seeding the `skill_aliases` table from the curated map | `skill_analytics.py` → `seed_alias_pairs()` |
 | Shared utilities | `utils.py` |
 | Pydantic models for structured document artifacts | `schemas.py` |
 | Snapshot profile + join LLM prose to structured data (résumé/cover build) | `document_builder.py` → `build_resume_document()`, `build_cover_document()` |
@@ -73,6 +75,7 @@ See project memory note: the project uses the **OpenAI SDK** with multi-provider
 ## Skill Matching and Hallucination Detection
 
 - Skill matching between user skills and job requirements is **fully delegated to the LLM** — the full user skills list is injected into scoring/generation prompts via `{user.skills}` placeholders; no Python-side filtering occurs.
+- **Separate concern — analytics/UI skill grouping** (`skill_analytics.py`): grouping is case-folded (`FASTAPI`/`FastAPI` collapse) and resolved through an alias map. `skill_key`/`normalize_skill`/`aggregate_skill_frequency`/`job_has_skill` take an optional `aliases` dict; `None` falls back to the built-in `_ALIASES` map. At runtime `web/routers/stats.py` passes a merged map (`_ALIASES` base + DB `skill_aliases` overrides). This drives the In-Demand charts and the description chip ownership coloring — it does **not** affect what the LLM sees.
 - Eval prompts receive `{user.education_degrees}` (via `User.education_degrees`) to supply ground-truth degree data for hallucination detection. Degrees are **excluded** from hallucination penalties — only skills/experience claims are checked.
 
 ## Structured Résumé / Cover Generation

@@ -99,6 +99,7 @@ web/
 | `POST` | `/api/skills/aliases/assign` | Add/move `skill` into a group `canonical` (creates group if new) |
 | `DELETE` | `/api/skills/aliases/member` | Remove `skill` from its group (`400` if it's the canonical self-row) |
 | `POST/DELETE` | `/api/skills/profile` | Add/remove `skill` on the active profile (case-insensitive dedup) |
+| `POST` | `/api/skills/owned` | Given `{skills:[…]}`, return the subset the active profile owns (alias + case aware); echoes input strings |
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
 | `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
 | `GET/PUT` | `/api/config/{key}` | Config key-value store |

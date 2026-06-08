@@ -32,6 +32,11 @@ _(none)_
 
 ## Done
 
+- [x] **Description chip ownership styling** — Processed-description skill chips are colored by a
+  3-state ownership check (`POST /api/skills/owned`, alias + case aware): green = a skill I have,
+  amber = a *required* skill I lack (résumé gap), neutral = other. Also fixed the `SkillChipModal`
+  "A skill I have" toggle (was never given `isOwned` / never refreshed, so it looked dead).
+
 - [x] **Skill aliases + clickable chips** — Global `skill_aliases` table (arbitrary-size synonym
   groups, seeded from the curated `_ALIASES` map); case variants now merge automatically
   (`FASTAPI`/`FastAPI` → one entry). `SkillChipModal` (opened from In-Demand legend names, By-Skill
