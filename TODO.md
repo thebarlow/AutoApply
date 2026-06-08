@@ -5,9 +5,24 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Bugs
 
-_(none)_
+- [ ] **In-Demand Skills charts retain deleted-job skills** — Skill frequency charts don't drop
+  skills belonging to deleted jobs. Fix the counting to exclude deleted jobs and recount the
+  existing stored data.
 
 ## Features
+
+- [ ] **Skill aliases** — Skills need a list of known aliases so equivalents are merged
+  (e.g. `FASTAPI` and `FastAPI` currently count separately). Normalize via an alias map.
+
+- [ ] **Remove Activity chart** — The Activity chart is underwhelming; remove it.
+
+- [ ] **Settings → User tab application stats** — Show "You've applied to {x} jobs" with
+  "applied to {x}" highlighted and clickable; clicking rotates through other stats
+  ("scraped {x}", "made resumes for {x}", …). Above it, a time control: Today / Week / All time.
+
+- [ ] **Clickable skill chips** — Skill chips (In-Demand Skills graph + parsed job descriptions)
+  open a modal where the user can assign an alias or mark the skill as one they have
+  (or remove a marked skill). Overlaps with the Skill aliases item.
 
 - [ ] **Document user feedback** — Let the user give feedback on a generated document (resume/cover
   letter) that feeds back into regeneration.

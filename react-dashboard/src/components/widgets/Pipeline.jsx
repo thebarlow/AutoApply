@@ -5,7 +5,7 @@ import { uploadJob } from '../../api'
 
 const TABS = ['Inbox', 'Archives']
 
-const INBOX_STATES = new Set(['new', 'pending_review'])
+const INBOX_STATES = new Set(['new', 'pending_review', 'ready'])
 const ARCHIVE_STATES = new Set(['applied', 'contact', 'rejected', 'deleted'])
 
 const ARCHIVE_LABELS = { applied: 'Applied', contact: 'In Contact', rejected: 'Rejected', deleted: 'Deleted' }
