@@ -30,3 +30,15 @@ def test_skill_alias_row_roundtrips(db_session):
     db_session.commit()
     row = db_session.query(SkillAlias).filter_by(alias_key="fastapi").one()
     assert row.canonical == "FastAPI"
+
+
+def test_seed_skill_aliases_is_idempotent(db_session):
+    from db.seed import seed_skill_aliases
+    seed_skill_aliases(db_session)
+    first = db_session.query(SkillAlias).count()
+    # Known curated alias maps to its canonical.
+    assert db_session.query(SkillAlias).filter_by(alias_key="js").one().canonical == "JavaScript"
+    # Canonical self-row exists.
+    assert db_session.query(SkillAlias).filter_by(alias_key="javascript").one().canonical == "JavaScript"
+    seed_skill_aliases(db_session)
+    assert db_session.query(SkillAlias).count() == first

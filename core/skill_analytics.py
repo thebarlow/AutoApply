@@ -258,3 +258,15 @@ def aggregate_skill_frequency(jobs: Iterable[object]) -> SkillFrequencyResult:
         )
     ]
     return {"skills": skills, "categories": categories, "total_jobs": total_jobs}
+
+
+def seed_alias_pairs() -> list[tuple[str, str]]:
+    """Return (alias_key, canonical) pairs to seed the skill_aliases table.
+
+    Includes each curated alias plus a self-row for every distinct canonical
+    (so canonicals are themselves matchable and groups are never empty).
+    """
+    pairs = {k: v for k, v in _ALIASES.items()}
+    for canonical in set(_ALIASES.values()):
+        pairs.setdefault(canonical.lower(), canonical)
+    return sorted(pairs.items())
