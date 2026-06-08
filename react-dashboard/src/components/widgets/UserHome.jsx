@@ -289,6 +289,16 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
       </text>
     )
   }
+  const renderSkillTick = ({ x, y, payload }) => (
+    <text
+      x={x} y={y} dy={3} textAnchor="end"
+      fontSize={10} fill="#8888aa"
+      style={{ cursor: 'pointer' }}
+      onClick={() => setModalSkill(payload.value)}
+    >
+      {payload.value}
+    </text>
+  )
   const renderTotalLabel = ({ x, y, width, height, index }) => {
     const row = skillBars[index]
     if (!row || row.skill !== emphasizedSkill) return null
@@ -426,7 +436,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                       </filter>
                     </defs>
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: '#8888aa' }} />
-                    <YAxis type="category" dataKey="skill" width={90} tick={{ fontSize: 10, fill: '#8888aa' }} />
+                    <YAxis type="category" dataKey="skill" width={90} tick={renderSkillTick} />
                     <Tooltip
                       cursor={false}
                       content={({ active, payload }) =>
