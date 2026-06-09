@@ -37,10 +37,10 @@ export function ExperienceDisplay({ value }) {
 
 export function EducationDisplay({ value }) {
   const tail = value.graduated ? ` (${value.graduated})` : ''
+  const degreeField = [value.degree, value.field].filter(Boolean).join(' in ')
   return (
     <p className="text-sm text-space-text">
-      {[`${value.degree} in ${value.field}`.replace(/^ in | in $/g, '').trim(), value.institution]
-        .filter(Boolean).join(', ')}{tail}
+      {[degreeField, value.institution].filter(Boolean).join(', ')}{tail}
     </p>
   )
 }
