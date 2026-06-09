@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills } from '../../api'
-import StructuredEditOverlay from './StructuredEditor'
 import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'
 import ProfileDetailView from './ProfileDetail'
@@ -484,7 +483,6 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   }
 
   const [showEditFields, setShowEditFields] = useState(false)
-  const [editDoc, setEditDoc] = useState(null) // null | 'resume' | 'cover'
   const [expandDoc, setExpandDoc] = useState(null) // null | 'resume' | 'cover'
 
   useEffect(() => {
@@ -568,7 +566,6 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setDeleteError(null)
     setStateChanging(false)
     setShowEditFields(false)
-    setEditDoc(null)
     setExpandDoc(null)
     setFlagging(false)
   }, [job?.job_key])
@@ -833,18 +830,11 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               <button
                 onClick={() => setExpandDoc(contentTab)}
                 disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
-                title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Expand to large view' : 'Generate before expanding'}
-                className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text disabled:opacity-40 disabled:cursor-not-allowed"
+                title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Open document editor' : 'Generate before editing'}
+                aria-label="Edit document"
+                className="px-2 py-1 rounded text-sm transition-colors border border-space-border text-space-dim hover:text-space-text disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Expand
-              </button>
-              <button
-                onClick={() => setEditDoc(contentTab)}
-                disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
-                title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Edit fields and re-render PDF' : 'Generate before editing'}
-                className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Edit
+                ✎
               </button>
               <HelpIcon text="Generates a tailored resume and cover letter for this job, rendered to PDF. Uses more credits than scoring." />
               <GatedButton
@@ -928,21 +918,11 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       {showEditFields && (
         <EditFieldsModal job={job} onClose={() => setShowEditFields(false)} />
       )}
-      {editDoc && (
-        <StructuredEditOverlay
-          job={job}
-          docType={editDoc}
-          onClose={() => setEditDoc(null)}
-          onSaved={() => setArtifactNonce((cur) => ({ ...cur, [editDoc]: cur[editDoc] + 1 }))}
-        />
-      )}
       {expandDoc && (
         <DocumentModal
           job={job}
           docType={expandDoc}
-          cacheKey={expandDoc === 'resume' ? resumeCacheKey : coverCacheKey}
           processing={actionsInFlight.has(`${expandDoc}_refine`) || actionsInFlight.has(`${expandDoc}_eval`)}
-          onEdit={() => { setEditDoc(expandDoc); setExpandDoc(null) }}
           onClose={() => setExpandDoc(null)}
         />
       )}
