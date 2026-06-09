@@ -13,7 +13,6 @@ import core.user  # noqa: F401
 @pytest.fixture
 def db_session():
     import core.job  # noqa: F401
-    import core.user  # noqa: F401
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -58,6 +57,23 @@ def test_get_document_backfills_from_markdown(client, db_session, tmp_path, monk
     assert r.json()["profile_summary"] == "Engineer who ships."
     assert r.json()["header"]["name"] == "Jane Doe"
     assert Document.fetch(db_session, "bf1", "resume") is not None
+
+
+def test_get_document_backfills_cover_from_markdown(client, db_session, tmp_path, monkeypatch):
+    import web.routers.jobs as jobs_mod
+    out_dir = tmp_path
+    monkeypatch.setattr(jobs_mod, "_OUTPUTS_DIR", out_dir, raising=False)
+    (out_dir / "bf3_cover.md").write_text(
+        "---\nname: Jane Doe\n---\nDear Hiring Manager,\n\nI am excited to apply.\n",
+        encoding="utf-8",
+    )
+    _job(db_session, key="bf3")
+    assert Document.fetch(db_session, "bf3", "cover") is None
+
+    r = client.get("/api/jobs/bf3/cover/document")
+    assert r.status_code == 200
+    assert "I am excited to apply." in r.json()["body"]
+    assert Document.fetch(db_session, "bf3", "cover") is not None
 
 
 def test_get_document_404_when_no_row_and_no_markdown(client, db_session, tmp_path, monkeypatch):

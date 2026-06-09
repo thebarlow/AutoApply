@@ -19,6 +19,10 @@ from core.document_assembler import (
     assemble_resume_markdown,
     assemble_cover_markdown,
 )
+from core.document_parser import (
+    reconstruct_resume_document_from_markdown,
+    reconstruct_cover_document_from_markdown,
+)
 from db.database import get_db, Config, Document
 from web.sse import send as _sse_send
 from web import llm_status
@@ -476,10 +480,6 @@ def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
     if row is None:
         md_path = _OUTPUTS_DIR / f"{job_key}_{doc_type}.md"
         if md_path.exists():
-            from core.document_parser import (
-                reconstruct_resume_document_from_markdown,
-                reconstruct_cover_document_from_markdown,
-            )
             md = md_path.read_text(encoding="utf-8")
             doc = (
                 reconstruct_resume_document_from_markdown(md)
