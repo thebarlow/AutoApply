@@ -13,6 +13,7 @@ import re
 
 import yaml
 
+from core.document_assembler import resume_section_order
 from core.schemas import (
     CoverDocument,
     EducationItem,
@@ -96,11 +97,6 @@ def _sections(body: str) -> dict[str, str]:
     return out
 
 
-# Matches: "Title, Company (start – end)" where the dash can be en-dash, em-dash, or hyphen.
-# The assembler emits " – " (space + U+2013 + space).
-_EXP_HEADING = re.compile(
-    r"^(?P<title>.*?),\s*(?P<company>.*?)(?:\s*\((?P<dates>[^)]*)\))?$"
-)
 _DATE_SEP = re.compile(r"\s*[–—-]\s*")
 
 
@@ -121,16 +117,23 @@ def _parse_experience(text: str) -> list[ResumeExperience]:
         if not chunk:
             continue
         head, _, desc = chunk.partition("\n")
-        m = _EXP_HEADING.match(head.strip())
+        head = head.strip()
         title = company = start = end = ""
-        if m:
-            title = (m.group("title") or "").strip()
-            company = (m.group("company") or "").strip()
-            dates = (m.group("dates") or "").strip()
-            if dates:
-                parts = _DATE_SEP.split(dates, maxsplit=1)
-                start = parts[0].strip()
-                end = parts[1].strip() if len(parts) > 1 else ""
+        # Strip trailing (dates) first, then split on FIRST comma so company names
+        # containing commas (e.g. "Smith, Jones & Co") are preserved intact.
+        # Titles do not contain commas; companies can.
+        m_dates = re.search(r"\s*\(([^)]*)\)\s*$", head)
+        dates = m_dates.group(1).strip() if m_dates else ""
+        base = head[:m_dates.start()] if m_dates else head
+        idx = base.find(",")
+        if idx != -1:
+            title, company = base[:idx].strip(), base[idx + 1:].strip()
+        else:
+            title, company = base.strip(), ""
+        if dates:
+            parts = _DATE_SEP.split(dates, maxsplit=1)
+            start = parts[0].strip()
+            end = parts[1].strip() if len(parts) > 1 else ""
         out.append(ResumeExperience(
             title=title, company=company, start=start, end=end, description=desc.strip(),
         ))
@@ -149,7 +152,8 @@ def _parse_projects(text: str) -> list[ResumeProject]:
     out: list[ResumeProject] = []
     for para in [p.strip() for p in text.split("\n\n") if p.strip()]:
         # Assembler emits: **name**: desc
-        m = re.match(r"^\*\*(?P<name>.+?)\*\*:\s*(?P<desc>.*)$", para, re.DOTALL)
+        # No re.DOTALL: assembler emits single-line project entries.
+        m = re.match(r"^\*\*(?P<name>.+?)\*\*:\s*(?P<desc>.*)$", para)
         if m:
             out.append(ResumeProject(name=m.group("name").strip(), description=m.group("desc").strip()))
         else:
@@ -167,6 +171,7 @@ def _parse_skills(text: str) -> list[ResumeSkillGroup]:
         Parsed list of skill groups.
     """
     out: list[ResumeSkillGroup] = []
+    # Each line is a single skill group — one line per group, no wrapping.
     for line in [ln.strip() for ln in text.splitlines() if ln.strip()]:
         # Assembler emits: **category:** item1, item2
         m = re.match(r"^\*\*(?P<cat>.+?):\*\*\s*(?P<items>.*)$", line)
@@ -187,8 +192,6 @@ def reconstruct_resume_document_from_markdown(md: str) -> ResumeDocument:
         A ``ResumeDocument`` populated from the parsed content. Malformed or
         missing sections yield empty/default values rather than raising.
     """
-    from core.document_assembler import resume_section_order
-
     fm, body = _split_frontmatter(md)
     sections = _sections(body)
     doc = ResumeDocument(

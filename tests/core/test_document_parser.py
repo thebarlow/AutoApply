@@ -1,6 +1,18 @@
-from core.schemas import ResumeDocument, ResumeExperience, ResumeProject, ResumeSkillGroup, EducationItem, ResumeHeader
-from core.document_assembler import assemble_resume_markdown
-from core.document_parser import reconstruct_resume_document_from_markdown
+from core.schemas import (
+    CoverDocument,
+    EducationItem,
+    ResumeDocument,
+    ResumeExperience,
+    ResumeHeader,
+    ResumeProject,
+    ResumeSkillGroup,
+    SignOff,
+)
+from core.document_assembler import assemble_cover_markdown, assemble_resume_markdown
+from core.document_parser import (
+    reconstruct_cover_document_from_markdown,
+    reconstruct_resume_document_from_markdown,
+)
 
 
 def _frontmatter():
@@ -56,3 +68,40 @@ def test_reconstruct_empty_input_is_safe():
     out = reconstruct_resume_document_from_markdown("")
     assert isinstance(out, ResumeDocument)
     assert out.profile_summary == "" and out.experience == [] and out.skills == []
+
+
+def test_reconstruct_cover_document_roundtrip():
+    """assemble_cover_markdown + front matter round-trips through reconstruct."""
+    doc = CoverDocument(
+        header=ResumeHeader(name="Jane Doe", email="jane@x.com"),
+        body="Dear Hiring Manager,\n\nI am excited to apply.",
+        signoff=SignOff(name="Jane Doe"),
+    )
+    fm = "---\nname: Jane Doe\nemail: jane@x.com\n---\n"
+    md = fm + assemble_cover_markdown(doc)
+    out = reconstruct_cover_document_from_markdown(md)
+    assert out.header.name == "Jane Doe"
+    assert "excited to apply" in out.body
+    assert out.signoff.name == out.header.name
+
+
+def test_experience_comma_in_company_name():
+    """Company names containing commas must survive a full assemble → reconstruct round-trip."""
+    doc = ResumeDocument(
+        experience=[
+            ResumeExperience(
+                title="Senior Eng",
+                company="Smith, Jones & Co",
+                start="2020",
+                end="2024",
+                description="- Led projects",
+            )
+        ],
+    )
+    md = _frontmatter() + assemble_resume_markdown(doc)
+    out = reconstruct_resume_document_from_markdown(md)
+    assert len(out.experience) == 1
+    e = out.experience[0]
+    assert e.title == "Senior Eng"
+    assert e.company == "Smith, Jones & Co"
+    assert e.start == "2020" and e.end == "2024"
