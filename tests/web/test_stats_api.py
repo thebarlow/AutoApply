@@ -61,24 +61,22 @@ def _make_job(db, key, scraped_at, state="new", resume_gen=None, cover_gen=None)
     return job
 
 
-def test_stats_all_time_returns_bars_and_by_state(client, db_session):
+def test_stats_all_time_returns_totals_and_by_state(client, db_session):
     now = datetime.now(timezone.utc)
-    _make_job(db_session, "j1", now.isoformat(), state="applied",
-              resume_gen=now.isoformat(), cover_gen=now.isoformat())
+    j1 = _make_job(db_session, "j1", now.isoformat(), state="applied",
+                   resume_gen=now.isoformat(), cover_gen=now.isoformat())
+    j1.applied_at = now.isoformat()
     _make_job(db_session, "j2", now.isoformat(), state="new")
     db_session.commit()
 
     r = client.get("/api/stats?window=all_time")
     assert r.status_code == 200
     data = r.json()
-    assert "bars" in data
+    assert "totals" in data
     assert "by_state" in data
-    total_scraped = sum(b["scraped"] for b in data["bars"])
-    assert total_scraped == 2
-    total_resumes = sum(b["resumes"] for b in data["bars"])
-    assert total_resumes == 1
-    total_covers = sum(b["covers"] for b in data["bars"])
-    assert total_covers == 1
+    assert data["totals"]["scraped"] == 2
+    assert data["totals"]["resumes"] == 1
+    assert data["totals"]["applied"] == 1
 
 
 def test_stats_by_state_counts_correctly(client, db_session):
@@ -103,8 +101,7 @@ def test_stats_today_filters_by_day(client, db_session):
 
     r = client.get("/api/stats?window=today")
     data = r.json()
-    total = sum(b["scraped"] for b in data["bars"])
-    assert total == 1
+    assert data["totals"]["scraped"] == 1
 
 
 def test_stats_week_filters_last_7_days(client, db_session):
@@ -117,8 +114,7 @@ def test_stats_week_filters_last_7_days(client, db_session):
 
     r = client.get("/api/stats?window=week")
     data = r.json()
-    total = sum(b["scraped"] for b in data["bars"])
-    assert total == 1
+    assert data["totals"]["scraped"] == 1
 
 
 def test_stats_invalid_window_returns_400(client):
@@ -126,11 +122,11 @@ def test_stats_invalid_window_returns_400(client):
     assert r.status_code == 400
 
 
-def test_stats_empty_db_returns_empty_bars(client):
+def test_stats_empty_db_returns_zero_totals(client):
     r = client.get("/api/stats?window=all_time")
     assert r.status_code == 200
     data = r.json()
-    assert data["bars"] == []
+    assert data["totals"] == {"applied": 0, "scraped": 0, "resumes": 0}
 
 
 def _make_extracted_job(db, key, required="", preferred="", tech_stack="",
