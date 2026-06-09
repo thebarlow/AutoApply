@@ -12,6 +12,17 @@
 
 ## 1. Download & Setup
 
+### New to Git?
+
+`git` is the tool used to download (clone) this project. If you don't have it yet:
+
+1. Download the official installer from **[git-scm.com/downloads](https://git-scm.com/downloads)** and pick your operating system.
+2. Run the installer and accept the defaults — no special options are needed.
+3. Close and reopen your terminal (or Command Prompt) so it picks up the new `git` command.
+4. Confirm it works by running `git --version`; you should see a version number.
+
+Once that prints a version, continue with the clone command below.
+
 ```bash
 git clone https://github.com/thebarlow/AutoApply.git
 cd auto_apply
