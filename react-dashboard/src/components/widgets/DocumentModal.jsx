@@ -11,6 +11,7 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   const [loadError, setLoadError] = useState(null)
 
   const reload = () => {
+    setDoc(null)  // clear stale content while the new doc loads (job/tab switch)
     getDocument(job.job_key, docType)
       .then((d) => { setDoc(d); setLoadError(null) })
       .catch((e) => setLoadError(e?.message || 'Could not load document'))
