@@ -89,6 +89,7 @@ web/
 | `GET` | `/api/jobs/{job_key}/cover` | Serve cover letter PDF |
 | `GET` | `/api/jobs/{job_key}/{doc_type}/document` | Return the stored structured document JSON (`ResumeDocument`/`CoverDocument`) |
 | `PUT` | `/api/jobs/{job_key}/{doc_type}/document` | Upsert an edited structured document; re-assembles `.md` + re-renders PDF |
+| `POST` | `/api/jobs/{job_key}/{doc_type}/feedback` | Accept user section feedback (`{notes:[{section,label,note}]}`); validates document exists (404 if not), drops empty notes (400 if none); spawns `run_user_feedback_refine` background job (reuses refine path, eval-for-score, no restore-best, résumés trigger ATS gate); appends a Refinement-History turn tagged `source="user_feedback"`; returns 202 + job |
 | `POST` | `/api/scraper/stage-job` | Ingest job from browser extension or scraper |
 | `POST` | `/api/scraper/run` | Trigger background run of enabled API scrapers |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |

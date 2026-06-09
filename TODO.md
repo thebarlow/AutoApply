@@ -9,9 +9,6 @@ _(none)_
 
 ## Features
 
-- [ ] **Document user feedback** — Let the user give feedback on a generated document (resume/cover
-  letter) that feeds back into regeneration.
-
 - [ ] **Persistent user memory** — Store durable user directives, e.g. "Never say this",
   "This project is my best portfolio piece". Referenced by the LLM during generation.
 
@@ -84,3 +81,8 @@ _(none)_
   silently emitted 2-page PDFs (page check disabled). Added auto-shrink in `render_pdf` (steps the
   Playwright `page.pdf(scale=)` down to a 0.8 floor until it fits), tightened `resume.css` spacing,
   and re-enabled `max_pages=1` on the edit/refine paths.
+
+- [x] **Document user feedback** — Expand modal (`DocumentModal.jsx`) shows the doc large
+  side-by-side with a section-anchored feedback panel; submitting runs a one-shot refine via
+  `POST /{doc_type}/feedback` → `run_user_feedback_refine` (reuses the refine path, eval-for-score,
+  no restore-best).
