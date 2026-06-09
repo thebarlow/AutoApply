@@ -172,7 +172,7 @@ function ExtractionView({ data }) {
   )
 }
 
-function MarkdownView({ url }) {
+export function MarkdownView({ url }) {
   const [text, setText] = useState(null)
   const [error, setError] = useState(false)
 
@@ -200,7 +200,7 @@ function MarkdownView({ url }) {
 const CONTENT_TABS = ['description', 'resume', 'cover', 'score']
 const CONTENT_TAB_LABELS = { description: 'Description', resume: 'Resume', cover: 'Cover Letter', score: 'Score' }
 
-function SubToggle({ options, value, onChange }) {
+export function SubToggle({ options, value, onChange }) {
   return (
     <div className="flex gap-2">
       {options.map(({ key, label, disabled }) => (
