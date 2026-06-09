@@ -35,6 +35,42 @@ def _run(*args: str, cwd: Path | None = None) -> None:
         sys.exit(result.returncode)
 
 
+def _ensure_pandoc() -> None:
+    """Ensure the pandoc binary is available — required for PDF/DOCX rendering.
+
+    pandoc is not a Python package; it must be installed as a system binary.
+    On Windows we attempt a silent winget install; elsewhere we warn with the
+    platform-appropriate install command rather than failing the whole setup.
+    """
+    if shutil.which("pandoc"):
+        print("[setup] pandoc found.")
+        return
+
+    if sys.platform == "win32" and shutil.which("winget"):
+        print("[setup] pandoc not found. Installing via winget...")
+        result = subprocess.run(
+            [
+                "winget", "install", "--id", "JohnMacFarlane.Pandoc",
+                "--silent", "--accept-package-agreements",
+                "--accept-source-agreements",
+            ]
+        )
+        if result.returncode == 0 and shutil.which("pandoc"):
+            print("[setup] pandoc installed.")
+            return
+        print("[setup] WARNING: winget pandoc install did not complete.")
+        print("  pandoc may need a new terminal to appear on PATH.")
+    else:
+        hint = {
+            "darwin": "brew install pandoc",
+            "linux": "sudo apt install pandoc  (or your distro's package manager)",
+        }.get(sys.platform, "see https://pandoc.org/installing.html")
+        print("\n[setup] WARNING: pandoc not found.")
+        print(f"  Install it with: {hint}")
+
+    print("  PDF and DOCX résumé rendering will fail until pandoc is installed.")
+
+
 def main() -> None:
     if sys.version_info < MIN_PYTHON:
         print(
@@ -74,6 +110,8 @@ def main() -> None:
 
     print("[setup] Installing Playwright browsers...")
     _run(python, "-m", "playwright", "install", "chromium")
+
+    _ensure_pandoc()
 
     print("[setup] Initialising database...")
     _run(python, "-m", "db.init_db")
