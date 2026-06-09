@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { getDocument, submitFeedback } from '../../api'
+import { getDocument, putDocument, submitFeedback } from '../../api'
 import InteractiveResume from './document/InteractiveResume'
 import CoverView from './document/CoverView'
 
@@ -17,6 +17,20 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
       .catch((e) => setLoadError(e?.message || 'Could not load document'))
   }
   useEffect(reload, [job.job_key, docType])
+
+  const SECTION_FIELD = { summary: 'profile_summary', experience: 'experience', education: 'education', project: 'projects', skills: 'skills' }
+
+  const handleSave = async (section, index, newValue) => {
+    if (!doc) return
+    const next = JSON.parse(JSON.stringify(doc))
+    if (section === 'summary') {
+      next.profile_summary = newValue
+    } else {
+      next[SECTION_FIELD[section]][index] = newValue
+    }
+    await putDocument(job.job_key, docType, next)
+    reload()
+  }
 
   const title = docType === 'resume' ? 'Resume' : 'Cover Letter'
 
@@ -35,7 +49,7 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
         <div className="flex-1 overflow-auto p-5">
           {loadError && <p className="text-xs text-red-400">{loadError}</p>}
           {!loadError && !doc && <p className="text-xs text-space-dim">Loading…</p>}
-          {doc && docType === 'resume' && <InteractiveResume doc={doc} />}
+          {doc && docType === 'resume' && <InteractiveResume doc={doc} onSave={handleSave} />}
           {doc && docType === 'cover' && <CoverView doc={doc} />}
         </div>
       </motion.div>
