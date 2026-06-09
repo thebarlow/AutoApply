@@ -35,7 +35,7 @@ export default function DocumentModal({ job, docType, cacheKey, processing, onEd
       .then((doc) => { if (alive) setSections(buildSections(docType, doc)) })
       .catch(() => { if (alive) setSections(buildSections(docType, null)) })
     return () => { alive = false }
-  }, [job.job_key, docType])
+  }, [job.job_key, docType, cacheKey])
 
   const hasNotes = Object.values(notes).some((t) => (t || '').trim())
   const docUrl = (ext) =>

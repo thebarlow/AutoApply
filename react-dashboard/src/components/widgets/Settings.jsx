@@ -941,7 +941,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
           job={job}
           docType={expandDoc}
           cacheKey={expandDoc === 'resume' ? resumeCacheKey : coverCacheKey}
-          processing={actionsInFlight.has(expandDoc)}
+          processing={actionsInFlight.has(`${expandDoc}_refine`) || actionsInFlight.has(`${expandDoc}_eval`)}
           onEdit={() => { setEditDoc(expandDoc); setExpandDoc(null) }}
           onClose={() => setExpandDoc(null)}
         />

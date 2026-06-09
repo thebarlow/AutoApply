@@ -40,6 +40,7 @@ def test_run_user_feedback_refine_keeps_user_version():
 
     user = MagicMock()
     user.resolve_prompt.return_value = "PROMPT"
+    user.resume_refine_pass_score = 0.80
 
     import web.intake_pipeline as ip
     with patch.object(ip, "SessionLocal") as SL, \
@@ -60,6 +61,7 @@ def test_run_user_feedback_refine_keeps_user_version():
     log = json.loads(job.resume_eval_log)
     assert log[-1]["source"] == "user_feedback"
     assert log[-1]["score"] == 0.50
+    assert log[-1]["passed"] is False  # 0.50 < pass_score 0.80
     assert job.resume_eval_score == 0.50  # kept the user-directed result, not 0.95
     ats.assert_called_once_with("k1")
 

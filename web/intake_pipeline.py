@@ -392,6 +392,10 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> 
     """
     from pathlib import Path
 
+    if doc_type not in ("resume", "cover"):
+        print(f"[feedback] {job_key}: invalid doc_type {doc_type!r}", flush=True)
+        return
+
     issues = build_feedback_issues(notes)
     if not issues:
         return
@@ -456,6 +460,7 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> 
             evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
             result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
 
+            pass_score = float(getattr(user, f"{doc_type}_refine_pass_score", 0.80))
             log_field = f"{doc_type}_eval_log"
             eval_log = _json.loads(getattr(job, log_field) or "[]")
             turn = len(eval_log) + 1
@@ -463,7 +468,7 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> 
                 "turn": turn,
                 "score": result["score"],
                 "issues": result["issues"],
-                "passed": False,
+                "passed": result["score"] >= pass_score,
                 "source": "user_feedback",
             })
             setattr(job, f"{doc_type}_eval_score", result["score"])
