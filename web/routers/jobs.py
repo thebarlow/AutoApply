@@ -196,6 +196,16 @@ class FlagUpdate(BaseModel):
     flagged: bool
 
 
+class FeedbackNote(BaseModel):
+    section: str = ""
+    label: str = ""
+    note: str = ""
+
+
+class FeedbackRequest(BaseModel):
+    notes: list[FeedbackNote]
+
+
 @router.patch("/{job_key}/flag")
 def update_job_flag(job_key: str, body: FlagUpdate, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
@@ -353,6 +363,33 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     _emit(job)
     # Spawn background refinement loop if enabled
     _maybe_start_refinement(job_key, "cover", db)
+    return job.serialize()
+
+
+@router.post("/{job_key}/{doc_type}/feedback", status_code=202)
+def submit_document_feedback(
+    job_key: str,
+    doc_type: str,
+    payload: FeedbackRequest,
+    db: Session = Depends(get_db),
+):
+    """Apply user section-anchored feedback to a generated document (one-shot).
+
+    Spawns a background refine using the existing refine path. Returns 202 with
+    the current job; results stream in over SSE as the refine completes.
+    """
+    if doc_type not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="Invalid document type")
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if Document.fetch(db, job_key, doc_type) is None:
+        raise HTTPException(status_code=404, detail=f"No {doc_type} document to refine")
+    notes = [n.model_dump() for n in payload.notes if (n.note or "").strip()]
+    if not notes:
+        raise HTTPException(status_code=400, detail="No feedback provided")
+    from web.intake_pipeline import run_user_feedback_refine
+    _spawn(run_user_feedback_refine, job_key, doc_type, notes)
     return job.serialize()
 
 

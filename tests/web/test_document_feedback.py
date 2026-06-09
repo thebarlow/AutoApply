@@ -1,3 +1,5 @@
+import pytest
+
 from web.intake_pipeline import build_feedback_issues
 
 
@@ -60,3 +62,71 @@ def test_run_user_feedback_refine_keeps_user_version():
     assert log[-1]["score"] == 0.50
     assert job.resume_eval_score == 0.50  # kept the user-directed result, not 0.95
     ats.assert_called_once_with("k1")
+
+
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from db.database import get_db, Base, Document
+from core.job import Job, JobState
+import core.user  # noqa: F401
+
+
+@pytest.fixture
+def db_session():
+    engine = create_engine("sqlite:///:memory:",
+                           connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
+    Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def client(db_session):
+    from web.main import app
+    app.dependency_overrides[get_db] = lambda: db_session
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def _job(db, key="k1"):
+    j = Job(job_key=key, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
+    db.add(j)
+    db.commit()
+    return j
+
+
+def test_feedback_404_no_job(client):
+    r = client.post("/api/jobs/missing/resume/feedback", json={"notes": []})
+    assert r.status_code == 404
+
+
+def test_feedback_404_no_document(client, db_session):
+    _job(db_session)
+    r = client.post("/api/jobs/k1/resume/feedback",
+                    json={"notes": [{"section": "summary", "label": "Profile summary", "note": "punchier"}]})
+    assert r.status_code == 404
+
+
+def test_feedback_400_empty_notes(client, db_session):
+    _job(db_session)
+    Document.upsert(db_session, "k1", "resume", '{"profile_summary":"x"}')
+    r = client.post("/api/jobs/k1/resume/feedback", json={"notes": [{"label": "x", "note": "  "}]})
+    assert r.status_code == 400
+
+
+def test_feedback_202_spawns(client, db_session, monkeypatch):
+    from web.routers import jobs as jobs_router
+    calls = []
+    monkeypatch.setattr(jobs_router, "_spawn", lambda *a: calls.append(a))
+    _job(db_session)
+    Document.upsert(db_session, "k1", "resume", '{"profile_summary":"x"}')
+    r = client.post("/api/jobs/k1/resume/feedback",
+                    json={"notes": [{"section": "summary", "label": "Profile summary", "note": "punchier"}]})
+    assert r.status_code == 202
+    assert calls and calls[0][1] == "k1" and calls[0][2] == "resume"
+    assert calls[0][3] == [{"section": "summary", "label": "Profile summary", "note": "punchier"}]
