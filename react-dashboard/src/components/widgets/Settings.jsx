@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills } from '../../api'
 import StructuredEditOverlay from './StructuredEditor'
+import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'
 import ProfileDetailView from './ProfileDetail'
 import UserHome from './UserHome'
@@ -224,7 +225,7 @@ function TurnEntry({ entry, hue, turnUrl, isLast, showDivider }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold text-space-dim">Turn {entry.turn}</span>
+        <span className="text-xs font-semibold text-space-dim">{entry.source === 'user_feedback' ? 'Your feedback' : `Turn ${entry.turn}`}</span>
         <span style={{ color: `hsl(${hue}, 75%, 55%)` }} className="text-xs font-bold tabular-nums">
           {(entry.score * 10).toFixed(1)}/10
         </span>
@@ -484,6 +485,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
 
   const [showEditFields, setShowEditFields] = useState(false)
   const [editDoc, setEditDoc] = useState(null) // null | 'resume' | 'cover'
+  const [expandDoc, setExpandDoc] = useState(null) // null | 'resume' | 'cover'
 
   useEffect(() => {
     if (!confirmDelete) return
@@ -567,6 +569,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setStateChanging(false)
     setShowEditFields(false)
     setEditDoc(null)
+    setExpandDoc(null)
     setFlagging(false)
   }, [job?.job_key])
 
@@ -828,6 +831,14 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             />
             <div className="flex items-center gap-1">
               <button
+                onClick={() => setExpandDoc(contentTab)}
+                disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
+                title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Expand to large view' : 'Generate before expanding'}
+                className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Expand
+              </button>
+              <button
                 onClick={() => setEditDoc(contentTab)}
                 disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
                 title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Edit fields and re-render PDF' : 'Generate before editing'}
@@ -923,6 +934,16 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
           docType={editDoc}
           onClose={() => setEditDoc(null)}
           onSaved={() => setArtifactNonce((cur) => ({ ...cur, [editDoc]: cur[editDoc] + 1 }))}
+        />
+      )}
+      {expandDoc && (
+        <DocumentModal
+          job={job}
+          docType={expandDoc}
+          cacheKey={expandDoc === 'resume' ? resumeCacheKey : coverCacheKey}
+          processing={actionsInFlight.has(expandDoc)}
+          onEdit={() => { setEditDoc(expandDoc); setExpandDoc(null) }}
+          onClose={() => setExpandDoc(null)}
         />
       )}
     </div>
