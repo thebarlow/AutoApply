@@ -9,6 +9,30 @@ from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
 
 
+def build_feedback_issues(notes: list[dict]) -> list[dict]:
+    """Convert UI section-anchored feedback notes to refine ``issues``.
+
+    Each note is ``{"section", "label", "note"}``. The ``label`` carries the
+    human-readable (and, for résumés, index-bearing) section anchor so the
+    refine prompt can locate the target. Notes with blank text are dropped.
+
+    Args:
+        notes: List of note dicts from the feedback modal.
+
+    Returns:
+        Issue dicts shaped like ``EvalResponse`` issues:
+        ``{"category": "user_feedback", "description": "<label>: <note>"}``.
+    """
+    issues = []
+    for n in notes:
+        text = (n.get("note") or "").strip()
+        if not text:
+            continue
+        label = (n.get("label") or "").strip() or "Document"
+        issues.append({"category": "user_feedback", "description": f"{label}: {text}"})
+    return issues
+
+
 def _emit(job: Job) -> None:
     try:
         _sse_send("job", job.serialize())
