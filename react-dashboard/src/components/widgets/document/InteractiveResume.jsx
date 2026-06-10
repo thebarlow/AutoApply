@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ResumeSection, { ItemRow } from './ResumeSection'
 import {
   ProfileDisplay, ExperienceDisplay, EducationDisplay, ProjectDisplay, SkillsGroupDisplay, itemLabel,
@@ -21,12 +21,24 @@ const FEEDBACK_CLS =
 // Render the structured résumé. `onSave(section, index, newValue)` persists an
 // edit (returns a Promise). `notes`/`setNote` form a controlled per-item feedback
 // store owned by the modal (keyed `${section}:${index}`).
-export default function InteractiveResume({ doc, onSave, notes, setNote }) {
+export default function InteractiveResume({ doc, onSave, notes, setNote, escapeRef }) {
   // active = { section, index } whose popover is open; editing = same shape when in edit mode.
   const [active, setActive] = useState(null)
   const [editing, setEditing] = useState(null)
   const [feedbackFor, setFeedbackFor] = useState(null) // { section, index } showing a feedback box
   const noteKey = (s, i) => `${s}:${i}`
+
+  // Let the modal's Escape handler exit an open editor or feedback box before it
+  // falls back to closing the modal.
+  useEffect(() => {
+    if (!escapeRef) return undefined
+    escapeRef.current = () => {
+      if (editing) { setEditing(null); return true }
+      if (feedbackFor) { setFeedbackFor(null); return true }
+      return false
+    }
+    return () => { if (escapeRef) escapeRef.current = null }
+  }, [escapeRef, editing, feedbackFor])
 
   if (!doc) return null
 

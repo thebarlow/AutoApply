@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { getDocument, putDocument, submitFeedback } from '../../api'
 import InteractiveResume from './document/InteractiveResume'
@@ -15,6 +15,25 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState(null)
   const [coverFeedback, setCoverFeedback] = useState('')
+  // Children (InteractiveResume / CoverView) install a consumer here that exits an
+  // open inline edit or feedback box and returns true; if nothing is open it returns
+  // false and the modal closes instead.
+  const escapeRef = useRef(null)
+
+  // Capture Escape before it reaches the app-level handler (which would deselect the
+  // job and jump to the User view). Escape exits an inner edit/feedback mode first,
+  // and only closes the modal — back to the job details view — when nothing is open.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      if (escapeRef.current && escapeRef.current()) return
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
 
   const setNote = (key, value) => setNotes((n) => ({ ...n, [key]: value }))
   const collected = docType === 'cover'
@@ -79,11 +98,12 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
           {loadError && <p className="text-xs text-red-400">{loadError}</p>}
           {!loadError && !doc && <p className="text-xs text-space-dim">Loading…</p>}
           {doc && docType === 'resume' && (
-            <InteractiveResume doc={doc} onSave={handleSave} notes={notes} setNote={setNote} />
+            <InteractiveResume doc={doc} onSave={handleSave} notes={notes} setNote={setNote} escapeRef={escapeRef} />
           )}
           {doc && docType === 'cover' && (
             <CoverView
               doc={doc}
+              escapeRef={escapeRef}
               onSave={async (body) => {
                 const next = { ...doc, body }
                 await putDocument(job.job_key, 'cover', next)
