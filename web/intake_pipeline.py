@@ -42,9 +42,9 @@ def _emit(job: Job) -> None:
         print(f"[intake_pipeline] SSE emit failed for {job.job_key}: {exc}", flush=True)
 
 
-def _do_score(job: Job, db) -> None:
+def _do_score(job: Job, db, profile_id: int) -> None:
     """Run scoring and persist results."""
-    user = User.load(db)
+    user = User.load(db, profile_id)
     try:
         prompt_content = user.resolve_prompt("scoring")
     except PromptNotConfiguredError as exc:
@@ -61,11 +61,11 @@ def _do_score(job: Job, db) -> None:
     db.commit()
 
 
-def run_pipeline(job_key: str) -> None:
+def run_pipeline(job_key: str, profile_id: int) -> None:
     """Run description extraction then scoring for a newly ingested job."""
     db = SessionLocal()
     try:
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id)
         if job is None:
             return
 
@@ -73,11 +73,11 @@ def run_pipeline(job_key: str) -> None:
         llm_status.start(job_key, "description")
         extraction_ok = False
         try:
-            _do_extract_description(job, db)
+            _do_extract_description(job, db, profile_id)
             extraction_ok = True
         except Exception as exc:
             db.rollback()
-            job = Job.get(job_key, db)
+            job = Job.get(job_key, db, profile_id)
             job.unread_indicator = "error"
             job.last_result_error = str(exc)
             db.commit()
@@ -92,10 +92,10 @@ def run_pipeline(job_key: str) -> None:
         # Step 2: scoring
         llm_status.start(job_key, "score")
         try:
-            _do_score(job, db)
+            _do_score(job, db, profile_id)
         except Exception as exc:
             db.rollback()
-            job = Job.get(job_key, db)
+            job = Job.get(job_key, db, profile_id)
             job.unread_indicator = "error"
             job.last_result_error = str(exc)
             db.commit()
@@ -107,7 +107,7 @@ def run_pipeline(job_key: str) -> None:
         db.close()
 
 
-def _run_doc_refinement(job_key: str, doc_type: str) -> None:
+def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
     """Background refinement loop for a generated document (resume or cover).
 
     Alternates between LLM evaluation and LLM rewriting until the document
@@ -142,7 +142,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
         dest = _OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
         sdb = SessionLocal()
         try:
-            row = Document.fetch(sdb, job_key, doc_type)
+            row = Document.fetch(sdb, job_key, doc_type, profile_id)
             if row is not None:
                 dest.write_text(row.structured_json, encoding="utf-8")
             else:
@@ -164,11 +164,11 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
         structured_json = snap.read_text(encoding="utf-8")
         db2 = SessionLocal()
         try:
-            row = Document.fetch(db2, job_key, doc_type)
+            row = Document.fetch(db2, job_key, doc_type, profile_id)
             if row is not None and row.structured_json == structured_json:
                 return  # best turn already live
-            Document.upsert(db2, job_key, doc_type, structured_json)
-            job2 = Job.get(job_key, db2)
+            Document.upsert(db2, job_key, doc_type, structured_json, profile_id)
+            job2 = Job.get(job_key, db2, profile_id)
             if job2:
                 from core.schemas import ResumeDocument, CoverDocument
                 if doc_type == "resume":
@@ -190,10 +190,10 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
 
     db = SessionLocal()
     try:
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id)
         if job is None:
             return
-        user = User.load(db)
+        user = User.load(db, profile_id)
 
         enabled = getattr(user, f"{doc_type}_refine_enabled", True)
         max_turns = int(getattr(user, f"{doc_type}_refine_max_turns", 3))
@@ -260,7 +260,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
                 )
             except Exception as exc:
                 db.rollback()
-                job = Job.get(job_key, db)
+                job = Job.get(job_key, db, profile_id)
                 job.last_result_error = f"{doc_type.capitalize()} eval turn {turn} failed: {exc}"
                 job.unread_indicator = "error"
                 db.commit()
@@ -293,7 +293,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
                 print(f"[refinement:{doc_type}] {job_key}: turn {turn} rewrite complete", flush=True)
             except Exception as exc:
                 db.rollback()
-                job = Job.get(job_key, db)
+                job = Job.get(job_key, db, profile_id)
                 job.last_result_error = f"{doc_type.capitalize()} refine turn {turn} failed: {exc}"
                 job.unread_indicator = "error"
                 db.commit()
@@ -307,7 +307,7 @@ def _run_doc_refinement(job_key: str, doc_type: str) -> None:
         db.close()
 
 
-def run_ats_gate(job_key: str) -> None:
+def run_ats_gate(job_key: str, profile_id: int) -> None:
     """Run the ATS gate over the current résumé render and persist the report.
 
     Background entry point. Resolves the active profile's client/model, runs both
@@ -318,11 +318,11 @@ def run_ats_gate(job_key: str) -> None:
     llm_status.start(job_key, "ats")
     db = SessionLocal()
     try:
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id)
         if job is None:
             return
         try:
-            user = User.load(db)
+            user = User.load(db, profile_id)
         except RuntimeError as exc:
             print(f"[ats] {job_key}: no profile — {exc}", flush=True)
             return
@@ -353,7 +353,7 @@ def run_ats_gate(job_key: str) -> None:
         llm_status.finish(job_key, "ats")
 
 
-def run_resume_refinement(job_key: str) -> None:
+def run_resume_refinement(job_key: str, profile_id: int) -> None:
     """Run the evaluate→rewrite loop for a generated resume, then the ATS gate.
 
     The gate runs after refinement settles so it scores the final résumé render.
@@ -364,18 +364,18 @@ def run_resume_refinement(job_key: str) -> None:
     surfaces as an unhandled thread exception.
     """
     try:
-        _run_doc_refinement(job_key, "resume")
+        _run_doc_refinement(job_key, "resume", profile_id)
     except Exception as exc:
         print(f"[refinement:resume] {job_key}: refinement failed — {exc}", flush=True)
-    run_ats_gate(job_key)
+    run_ats_gate(job_key, profile_id)
 
 
-def run_cover_refinement(job_key: str) -> None:
+def run_cover_refinement(job_key: str, profile_id: int) -> None:
     """Run the evaluate→rewrite loop for a generated cover letter."""
-    _run_doc_refinement(job_key, "cover")
+    _run_doc_refinement(job_key, "cover", profile_id)
 
 
-def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> None:
+def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], profile_id: int) -> None:
     """Apply user section-anchored feedback as a one-shot refine.
 
     Reuses the existing refine path (patch structured doc → re-derive md →
@@ -410,10 +410,10 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> 
 
     db = SessionLocal()
     try:
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id)
         if job is None:
             return
-        user = User.load(db)
+        user = User.load(db, profile_id)
 
         try:
             refine_prompt = user.resolve_prompt(refine_key)
@@ -441,7 +441,7 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> 
             _emit(job)
         except Exception as exc:
             db.rollback()
-            job = Job.get(job_key, db)
+            job = Job.get(job_key, db, profile_id)
             job.last_result_error = f"{doc_type.capitalize()} feedback refine failed: {exc}"
             job.unread_indicator = "error"
             db.commit()
@@ -486,4 +486,4 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> 
         db.close()
 
     if doc_type == "resume":
-        run_ats_gate(job_key)
+        run_ats_gate(job_key, profile_id)

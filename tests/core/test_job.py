@@ -47,7 +47,7 @@ def test_job_save_batch_inserts_new_jobs(db_session):
     from core.job import Job
     scraped = [_make_scraped(job_key="r_1", url="https://x.com/1"),
                _make_scraped(job_key="r_2", url="https://x.com/2")]
-    count = Job.save_batch(scraped, db_session)
+    count = Job.save_batch(scraped, db_session, profile_id=1)
     assert count == 2
     assert db_session.query(Job).count() == 2
 
@@ -55,30 +55,32 @@ def test_job_save_batch_inserts_new_jobs(db_session):
 def test_job_save_batch_skips_duplicates(db_session):
     from core.job import Job
     scraped = [_make_scraped(job_key="r_1", url="https://x.com/1")]
-    Job.save_batch(scraped, db_session)
-    count = Job.save_batch(scraped, db_session)
+    Job.save_batch(scraped, db_session, profile_id=1)
+    count = Job.save_batch(scraped, db_session, profile_id=1)
     assert count == 0
     assert db_session.query(Job).count() == 1
 
 
 def test_job_get_returns_job(db_session):
     from core.job import Job
-    db_session.add(Job.from_scraped(_make_scraped()))
+    job = Job.from_scraped(_make_scraped())
+    job.profile_id = 1
+    db_session.add(job)
     db_session.commit()
-    job = Job.get("remotive_1", db_session)
+    job = Job.get("remotive_1", db_session, profile_id=1)
     assert job is not None
     assert job.title == "SWE"
 
 
 def test_job_get_returns_none_when_missing(db_session):
     from core.job import Job
-    assert Job.get("missing", db_session) is None
+    assert Job.get("missing", db_session, profile_id=1) is None
 
 
 def test_job_get_or_raise_raises_when_missing(db_session):
     from core.job import Job
     with pytest.raises(ValueError, match="not found"):
-        Job.get_or_raise("missing", db_session)
+        Job.get_or_raise("missing", db_session, profile_id=1)
 
 
 def test_job_set_state(db_session):
@@ -740,7 +742,7 @@ def test_generate_resume_md_writes_document_and_markdown(db_session, tmp_path, m
     db_session.commit()
     user = User.load(db_session)
 
-    job = Job(job_key="k1", source="x", title="SWE", company="Acme", url="http://x/1")
+    job = Job(job_key="k1", source="x", title="SWE", company="Acme", url="http://x/1", profile_id=1)
     db_session.add(job)
     db_session.commit()
 
@@ -755,7 +757,7 @@ def test_generate_resume_md_writes_document_and_markdown(db_session, tmp_path, m
 
     job.generate_resume_md(user, prompt, client=object(), model="m", db=db_session)
 
-    row = Document.fetch(db_session, "k1", "resume")
+    row = Document.fetch(db_session, "k1", "resume", profile_id=1)
     assert row is not None
     doc = json.loads(row.structured_json)
     assert doc["profile_summary"] == "Ships software."
@@ -781,14 +783,14 @@ def test_generate_cover_md_writes_document(db_session, tmp_path, monkeypatch):
     })))
     db_session.commit()
     user = User.load(db_session)
-    job = Job(job_key="k2", source="x", title="SWE", company="Acme", url="http://x/2")
+    job = Job(job_key="k2", source="x", title="SWE", company="Acme", url="http://x/2", profile_id=1)
     db_session.add(job)
     db_session.commit()
 
     monkeypatch.setattr(job_mod, "call_llm", lambda *a, **k: "Dear team, I am great.", raising=False)
     job.generate_cover_md(user, "Write a letter.", client=object(), model="m", db=db_session)
 
-    row = Document.fetch(db_session, "k2", "cover")
+    row = Document.fetch(db_session, "k2", "cover", profile_id=1)
     assert row is not None
     doc = json.loads(row.structured_json)
     assert doc["body"] == "Dear team, I am great."

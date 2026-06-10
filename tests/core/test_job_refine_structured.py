@@ -43,14 +43,14 @@ def test_resume_refine_patches_structured_doc(db, tmp_path, monkeypatch):
                             "projects": [{"ref": 0, "description": "new P0"}],
                             "skills": [],
                         }))
-    job = Job(job_key="k1", source="x", title="t", company="Acme", url="u", state="new")
+    job = Job(job_key="k1", source="x", title="t", company="Acme", url="u", state="new", profile_id=1)
     db.add(job); db.commit()
-    Document.upsert(db, "k1", "resume", _resume_doc().model_dump_json())
+    Document.upsert(db, "k1", "resume", _resume_doc().model_dump_json(), profile_id=1)
 
     job._refine_doc_md("resume", object(), "ref {critique}", None, "m",
                        [{"category": "c", "description": "d"}], db)
 
-    stored = ResumeDocument.model_validate_json(Document.fetch(db, "k1", "resume").structured_json)
+    stored = ResumeDocument.model_validate_json(Document.fetch(db, "k1", "resume", profile_id=1).structured_json)
     assert stored.profile_summary == "new"
     assert stored.experience[0].description == "new A"
     assert stored.experience[0].company == "Acme"
@@ -62,13 +62,14 @@ def test_resume_refine_patches_structured_doc(db, tmp_path, monkeypatch):
 def test_cover_refine_rewrites_body(db, tmp_path, monkeypatch):
     monkeypatch.setattr(jobmod, "_OUTPUTS_DIR", tmp_path)
     monkeypatch.setattr(jobmod, "call_llm", lambda *a, **k: "Dear hiring team, new body.")
-    job = Job(job_key="k2", source="x", title="t", company="Acme", url="u", state="new")
+    job = Job(job_key="k2", source="x", title="t", company="Acme", url="u", state="new", profile_id=1)
     db.add(job); db.commit()
     Document.upsert(db, "k2", "cover",
-                    CoverDocument(header=ResumeHeader(name="Jane Doe"), body="old body").model_dump_json())
+                    CoverDocument(header=ResumeHeader(name="Jane Doe"), body="old body").model_dump_json(),
+                    profile_id=1)
 
     job._refine_doc_md("cover", object(), "ref {critique}", None, "m", [], db)
 
-    stored = CoverDocument.model_validate_json(Document.fetch(db, "k2", "cover").structured_json)
+    stored = CoverDocument.model_validate_json(Document.fetch(db, "k2", "cover", profile_id=1).structured_json)
     assert "new body" in stored.body
     assert stored.header.name == "Jane Doe"

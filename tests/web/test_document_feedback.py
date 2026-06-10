@@ -50,7 +50,7 @@ def test_run_user_feedback_refine_keeps_user_version():
          patch.object(ip, "run_ats_gate") as ats, \
          patch.object(ip, "_emit"):
         SL.return_value = MagicMock()
-        ip.run_user_feedback_refine("k1", "resume", notes)
+        ip.run_user_feedback_refine("k1", "resume", notes, 1)
 
     # refine called with our built issues
     args, kwargs = refine_fn.call_args
@@ -63,7 +63,7 @@ def test_run_user_feedback_refine_keeps_user_version():
     assert log[-1]["score"] == 0.50
     assert log[-1]["passed"] is False  # 0.50 < pass_score 0.80
     assert job.resume_eval_score == 0.50  # kept the user-directed result, not 0.95
-    ats.assert_called_once_with("k1")
+    ats.assert_called_once_with("k1", 1)
 
 
 from fastapi.testclient import TestClient

@@ -11,6 +11,7 @@ from core.schemas import AtsReport
 from core.user import User
 from db.database import get_db
 from web.sse import send as _sse_send
+from web.tenancy import current_profile_id
 
 router = APIRouter()
 
@@ -55,8 +56,12 @@ async def tray_ws(websocket: WebSocket):
 
 
 @router.post("/api/jobs/{job_key}/confirm-applied")
-def confirm_applied(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def confirm_applied(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     # Trust the stored ATS report (produced automatically after generation/refine).
@@ -77,8 +82,12 @@ def confirm_applied(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.post("/api/jobs/{job_key}/apply")
-async def apply_job(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+async def apply_job(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
