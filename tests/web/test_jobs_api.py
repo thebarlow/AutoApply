@@ -11,6 +11,7 @@ from db.database import Base
 from core.job import Job, JobState
 import core.user  # noqa: F401 — register User with Base.metadata
 from web.main import app
+from web.tenancy import current_profile_id
 
 
 @pytest.fixture
@@ -33,6 +34,7 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -49,6 +51,7 @@ def _make_job(
 ) -> Job:
     job = Job(
         job_key=job_key,
+        profile_id=1,
         source="indeed",
         title="Software Engineer",
         company="Acme Corp",
@@ -253,7 +256,7 @@ def test_score_job_endpoint(client, db_session, monkeypatch):
     fake_user.prompt_scoring_model = ""
     fake_user.resolve_prompt.return_value = "Score this job."
 
-    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db: fake_user))
+    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db, profile_id=None: fake_user))
     monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
     resp = client.post("/api/jobs/job_score/score")
@@ -307,7 +310,7 @@ def test_generate_resume_endpoint(client, db_session, monkeypatch):
 
     _make_job(db_session, "job_resume")
 
-    def mock_do_generate_resume(job, db):
+    def mock_do_generate_resume(job, db, profile_id):
         job.resume_path = f"/outputs/{job.job_key}_resume.pdf"
         job.state = "generated"
         db.commit()
@@ -331,7 +334,7 @@ def test_generate_cover_endpoint(client, db_session, monkeypatch):
 
     _make_job(db_session, "job_cover", resume_path="/outputs/job_cover_resume.pdf")
 
-    def mock_do_generate_cover(job, db):
+    def mock_do_generate_cover(job, db, profile_id):
         job.cover_path = f"/outputs/{job.job_key}_cover.pdf"
         db.commit()
 
@@ -400,7 +403,7 @@ def test_extract_description_stores_result(client, db_session, monkeypatch):
     fake_user.prompt_extraction_model = ""
     fake_user.resolve_prompt.return_value = "Extract: {description}"
 
-    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db: fake_user))
+    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db, profile_id=None: fake_user))
     monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
     def mock_llm_call(client, model, prompt):
@@ -442,7 +445,7 @@ def test_extract_description_endpoint_delegates_to_helper(client, db_session, mo
 
     called = {}
 
-    def fake_helper(j, db):
+    def fake_helper(j, db, profile_id):
         called["job_key"] = j.job_key
 
     monkeypatch.setattr("web.routers.jobs._do_extract_description", fake_helper)
@@ -464,7 +467,7 @@ def test_extract_description_llm_failure_returns_500(client, db_session, monkeyp
     fake_user.prompt_extraction_model = ""
     fake_user.resolve_prompt.return_value = "Extract: {description}"
 
-    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db: fake_user))
+    monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db, profile_id=None: fake_user))
     monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
     def raise_error(c, m, p):
@@ -487,7 +490,7 @@ def test_do_extract_description_parses_salary(db_session, monkeypatch):
     mock_user = MagicMock()
     mock_user.resolve_prompt.return_value = "extract this"
     mock_user.prompt_extraction_model = "gpt-4"
-    monkeypatch.setattr("web.routers.jobs.User.load", lambda db: mock_user)
+    monkeypatch.setattr("web.routers.jobs.User.load", lambda db, profile_id=None: mock_user)
     monkeypatch.setattr(
         "web.routers.jobs.get_client_for_profile",
         lambda user, model: (MagicMock(), "gpt-4"),
@@ -497,7 +500,7 @@ def test_do_extract_description_parses_salary(db_session, monkeypatch):
         lambda client, model, prompt: '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[],"salary_min":80000,"salary_max":120000}',
     )
 
-    _do_extract_description(job, db_session)
+    _do_extract_description(job, db_session, 1)
 
     db_session.refresh(job)
     assert job.ext_salary_min == 80000.0
@@ -514,7 +517,7 @@ def test_do_extract_description_handles_null_salary(db_session, monkeypatch):
     mock_user = MagicMock()
     mock_user.resolve_prompt.return_value = "extract this"
     mock_user.prompt_extraction_model = "gpt-4"
-    monkeypatch.setattr("web.routers.jobs.User.load", lambda db: mock_user)
+    monkeypatch.setattr("web.routers.jobs.User.load", lambda db, profile_id=None: mock_user)
     monkeypatch.setattr(
         "web.routers.jobs.get_client_for_profile",
         lambda user, model: (MagicMock(), "gpt-4"),
@@ -524,7 +527,7 @@ def test_do_extract_description_handles_null_salary(db_session, monkeypatch):
         lambda client, model, prompt: '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[]}',
     )
 
-    _do_extract_description(job, db_session)
+    _do_extract_description(job, db_session, 1)
 
     db_session.refresh(job)
     assert job.ext_salary_min is None

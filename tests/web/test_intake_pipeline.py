@@ -28,7 +28,9 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     from web.main import app
+    from web.tenancy import current_profile_id
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -116,7 +118,7 @@ def test_serve_doc_turn_markdown_route(client, db_session, tmp_path, monkeypatch
     from core.schemas import ResumeDocument, ResumeExperience
     monkeypatch.setattr(jobs_router, "_GENERATOR_OUTPUTS", tmp_path)
 
-    job = Job(job_key="rt1", source="x", title="t", company="Acme",
+    job = Job(job_key="rt1", profile_id=1, source="x", title="t", company="Acme",
               url="u/rt1", state=JobState.NEW.value)
     db_session.add(job)
     db_session.commit()

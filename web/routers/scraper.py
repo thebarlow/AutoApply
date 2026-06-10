@@ -15,6 +15,7 @@ from core.job import Job
 from scraper.runner import run_scraper
 from web.sse import send as _sse_send
 from web.intake_pipeline import run_pipeline
+from web.tenancy import current_profile_id
 
 router = APIRouter(prefix="/api/scraper")
 
@@ -35,24 +36,27 @@ def _broadcast(event: str, data: Any) -> None:
     _sse_send(event, data)
 
 
-def _run_in_background(source_ids: list[str]) -> None:
+def _run_in_background(source_ids: list[str], profile_id: int) -> None:
     db = SessionLocal()
     try:
         sources = [_SOURCES[sid]() for sid in source_ids]
-        new_jobs = run_scraper(db, sources)
+        new_jobs = run_scraper(db, sources, profile_id)
         for job in new_jobs:
             job.intake()
             try:
                 _broadcast("job", job.serialize())
             except Exception as exc:
                 print(f"[scraper] broadcast failed for {job.job_key}: {exc}", flush=True)
-            run_pipeline(job.job_key)
+            run_pipeline(job.job_key, profile_id)
     finally:
         db.close()
 
 
 @router.post("/run")
-def trigger_scrape(db: Session = Depends(get_db)) -> dict[str, Any]:
+def trigger_scrape(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
     source_ids = _get_enabled_source_ids(db)
 
     if not source_ids:
@@ -61,7 +65,7 @@ def trigger_scrape(db: Session = Depends(get_db)) -> dict[str, Any]:
             detail="No enabled sources configured. Set 'scraper_sources' in the config table.",
         )
 
-    t = threading.Thread(target=_run_in_background, args=(source_ids,), daemon=True)
+    t = threading.Thread(target=_run_in_background, args=(source_ids, profile_id), daemon=True)
     t.start()
     return {"status": "started", "sources": source_ids}
 
@@ -81,7 +85,11 @@ class StageJobRequest(BaseModel):
 
 
 @router.post("/stage-job")
-def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str, str]:
+def stage_job(
+    body: StageJobRequest,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, str]:
     """Stage a single job submitted by the browser extension.
 
     Accepts a job payload and persists it if not already present (deduped by URL).
@@ -89,6 +97,7 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
     Args:
         body: Job data from the browser extension.
         db: SQLAlchemy session.
+        profile_id: Owning tenant's profile id.
 
     Returns:
         Dict with 'status' ('staged' or 'duplicate') and 'job_key'.
@@ -106,7 +115,7 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
         remote=body.remote,
         posted_at=body.posted_at,
     )
-    inserted_jobs = Job.save_batch_returning([scraped], db)
+    inserted_jobs = Job.save_batch_returning([scraped], db, profile_id)
     status = "staged" if inserted_jobs else "duplicate"
     for job in inserted_jobs:
         job.intake()
@@ -114,5 +123,5 @@ def stage_job(body: StageJobRequest, db: Session = Depends(get_db)) -> dict[str,
             _sse_send("job", job.serialize())
         except Exception as exc:
             print(f"[stage_job] broadcast failed for {job.job_key}: {exc}", flush=True)
-        threading.Thread(target=run_pipeline, args=(job.job_key,), daemon=True).start()
+        threading.Thread(target=run_pipeline, args=(job.job_key, profile_id), daemon=True).start()
     return {"status": status, "job_key": body.job_key}

@@ -26,13 +26,15 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     from web.main import app
+    from web.tenancy import current_profile_id
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
 
 def _job(db, key="k1"):
-    j = Job(job_key=key, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
+    j = Job(job_key=key, profile_id=1, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
     db.add(j)
     db.commit()
     return j
@@ -64,7 +66,7 @@ def test_put_document_persists_and_returns(client, db_session, monkeypatch):
     assert r.status_code == 200
     assert r.json()["profile_summary"] == "hi"
     assert r.json()["section_order"][0] == "Profile"        # recomputed
-    row = Document.fetch(db_session, "k1", "resume")
+    row = Document.fetch(db_session, "k1", "resume", profile_id=1)
     assert row is not None and '"hi"' in row.structured_json
 
 
@@ -99,5 +101,5 @@ def test_put_cover_document_persists(client, db_session, monkeypatch):
     r = client.put("/api/jobs/kc/cover/document", json=payload)
     assert r.status_code == 200
     assert r.json()["body"] == "Cover body text."
-    row = Document.fetch(db_session, "kc", "cover")
+    row = Document.fetch(db_session, "kc", "cover", profile_id=1)
     assert row is not None and "Cover body text." in row.structured_json

@@ -32,7 +32,9 @@ def db_session():
 
 @pytest.fixture
 def client(db_session):
+    from web.tenancy import current_profile_id
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -117,10 +119,10 @@ def test_scraper_run_background_calls_intake_on_new_jobs(db_session, monkeypatch
     # Run _run_in_background directly (synchronously) using a real DB session
     with patch.object(Job, "intake", fake_intake), \
          patch.object(scraper_router, "run_scraper",
-                      return_value=Job.save_batch_returning(fake_scraped, db_session)), \
+                      return_value=Job.save_batch_returning(fake_scraped, db_session, 1)), \
          patch.object(scraper_router, "_broadcast", return_value=None), \
          patch.object(scraper_router, "SessionLocal", return_value=db_session):
-        scraper_router._run_in_background(["remotive"])
+        scraper_router._run_in_background(["remotive"], 1)
 
     assert "r_bg_1" in intake_called
 
@@ -131,7 +133,7 @@ def test_stage_job_triggers_pipeline(monkeypatch):
 
     pipeline_calls = []
 
-    with patch("web.routers.scraper.run_pipeline", side_effect=lambda jk: pipeline_calls.append(jk)) as mock_pipe, \
+    with patch("web.routers.scraper.run_pipeline", side_effect=lambda jk, profile_id: pipeline_calls.append((jk, profile_id))) as mock_pipe, \
          patch("web.routers.scraper.Job") as MockJob, \
          patch("web.routers.scraper._sse_send"):
 
@@ -141,15 +143,20 @@ def test_stage_job_triggers_pipeline(monkeypatch):
 
         from fastapi.testclient import TestClient
         from web.main import app
+        from web.tenancy import current_profile_id
+        app.dependency_overrides[current_profile_id] = lambda: 1
         c = TestClient(app)
-        resp = c.post("/api/scraper/stage-job", json={
-            "source": "linkedin",
-            "job_key": "test-key-1",
-            "title": "Engineer",
-            "company": "Acme",
-            "url": "https://example.com/job/1",
-            "description": "Do stuff.",
-        })
+        try:
+            resp = c.post("/api/scraper/stage-job", json={
+                "source": "linkedin",
+                "job_key": "test-key-1",
+                "title": "Engineer",
+                "company": "Acme",
+                "url": "https://example.com/job/1",
+                "description": "Do stuff.",
+            })
+        finally:
+            app.dependency_overrides.pop(current_profile_id, None)
 
     assert resp.status_code == 200
-    mock_pipe.assert_called_once_with("test-key-1")
+    mock_pipe.assert_called_once_with("test-key-1", 1)

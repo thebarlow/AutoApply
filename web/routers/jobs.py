@@ -25,6 +25,7 @@ from core.document_parser import (
 )
 from db.database import get_db, Config, Document
 from web.sse import send as _sse_send
+from web.tenancy import current_profile_id, scoped
 from web import llm_status
 
 def _spawn(target, *args) -> None:
@@ -121,11 +122,11 @@ def _emit(job: Job) -> None:
     _sse_send("job", job.serialize())
 
 
-def _maybe_start_refinement(job_key: str, doc_type: str, db: Session) -> None:
+def _maybe_start_refinement(job_key: str, doc_type: str, db: Session, profile_id: int) -> None:
     """Spawn a background refinement thread if the user profile has it enabled."""
     import threading
     try:
-        user = User.load(db)
+        user = User.load(db, profile_id=profile_id)
     except RuntimeError:
         return
     enabled = getattr(user, f"{doc_type}_refine_enabled", True)
@@ -134,32 +135,37 @@ def _maybe_start_refinement(job_key: str, doc_type: str, db: Session) -> None:
         return
     if doc_type == "resume":
         from web.intake_pipeline import run_resume_refinement
-        threading.Thread(target=run_resume_refinement, args=(job_key,), daemon=True).start()
+        threading.Thread(target=run_resume_refinement, args=(job_key, profile_id), daemon=True).start()
     else:
         from web.intake_pipeline import run_cover_refinement
-        threading.Thread(target=run_cover_refinement, args=(job_key,), daemon=True).start()
+        threading.Thread(target=run_cover_refinement, args=(job_key, profile_id), daemon=True).start()
 
 
 @router.get("")
-def get_jobs(db: Session = Depends(get_db)):
-    jobs = db.query(Job).order_by(Job.final_score.desc()).all()
+def get_jobs(db: Session = Depends(get_db), profile_id: int = Depends(current_profile_id)):
+    jobs = scoped(db, Job, profile_id).order_by(Job.final_score.desc()).all()
     return [j.serialize() for j in jobs]
 
 
 @router.get("/{job_key}")
-def get_job(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def get_job(job_key: str, db: Session = Depends(get_db), profile_id: int = Depends(current_profile_id)):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job.serialize()
 
 
 @router.patch("/{job_key}/state")
-def update_job_state(job_key: str, body: StateUpdate, db: Session = Depends(get_db)):
+def update_job_state(
+    job_key: str,
+    body: StateUpdate,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
     if body.state not in _VALID_STATES:
         raise HTTPException(status_code=400, detail=f"Invalid state: {body.state!r}")
 
-    job = Job.get(job_key, db)
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -180,8 +186,13 @@ class JobFieldsUpdate(BaseModel):
 
 
 @router.patch("/{job_key}/fields")
-def update_job_fields(job_key: str, body: JobFieldsUpdate, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def update_job_fields(
+    job_key: str,
+    body: JobFieldsUpdate,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     data = body.model_dump(exclude_unset=True)
@@ -212,8 +223,13 @@ class FeedbackRequest(BaseModel):
 
 
 @router.patch("/{job_key}/flag")
-def update_job_flag(job_key: str, body: FlagUpdate, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def update_job_flag(
+    job_key: str,
+    body: FlagUpdate,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     job.flagged = body.flagged
@@ -233,12 +249,16 @@ def _load_score_config(db: Session) -> dict:
 
 
 @router.post("/{job_key}/score")
-def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def score_job_endpoint(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    user = User.load(db)
+    user = User.load(db, profile_id=profile_id)
     try:
         prompt_content = user.resolve_prompt("scoring")
     except PromptNotConfiguredError as exc:
@@ -260,7 +280,7 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise
     except Exception as exc:
         db.rollback()
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id=profile_id)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
@@ -274,9 +294,9 @@ def score_job_endpoint(job_key: str, db: Session = Depends(get_db)):
     return job.serialize()
 
 
-def _do_generate_resume(job: Job, db: Session) -> None:
+def _do_generate_resume(job: Job, db: Session, profile_id: int) -> None:
     """Resolve active resume prompt and generate MD + PDF for job."""
-    user = User.load(db)
+    user = User.load(db, profile_id=profile_id)
     try:
         prompt_content = user.resolve_prompt("resume")
     except PromptNotConfiguredError as exc:
@@ -289,9 +309,9 @@ def _do_generate_resume(job: Job, db: Session) -> None:
     job.generate_resume_pdf(_RESUME_TEMPLATE, db)
 
 
-def _do_generate_cover(job: Job, db: Session) -> None:
+def _do_generate_cover(job: Job, db: Session, profile_id: int) -> None:
     """Resolve active cover prompt and generate MD + PDF for job."""
-    user = User.load(db)
+    user = User.load(db, profile_id=profile_id)
     try:
         prompt_content = user.resolve_prompt("cover")
     except PromptNotConfiguredError as exc:
@@ -305,13 +325,17 @@ def _do_generate_cover(job: Job, db: Session) -> None:
 
 
 @router.post("/{job_key}/generate/resume")
-def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def generate_resume_endpoint(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     llm_status.start(job_key, "resume")
     try:
-        _do_generate_resume(job, db)
+        _do_generate_resume(job, db, profile_id)
         _add_pending_review(job, "resume")
         job.unread_indicator = "ok"
         job.last_result_error = None
@@ -320,7 +344,7 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise
     except Exception as exc:
         db.rollback()
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id=profile_id)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
@@ -335,18 +359,22 @@ def generate_resume_endpoint(job_key: str, db: Session = Depends(get_db)):
     # enabled) followed by the ATS gate. When refinement is off/0 turns the
     # refine step is a no-op and the gate still runs right after generation.
     from web.intake_pipeline import run_resume_refinement
-    _spawn(run_resume_refinement, job_key)
+    _spawn(run_resume_refinement, job_key, profile_id)
     return job.serialize()
 
 
 @router.post("/{job_key}/generate/cover")
-def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def generate_cover_endpoint(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     llm_status.start(job_key, "cover")
     try:
-        _do_generate_cover(job, db)
+        _do_generate_cover(job, db, profile_id)
         _add_pending_review(job, "cover")
         job.unread_indicator = "ok"
         job.last_result_error = None
@@ -355,7 +383,7 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
         raise
     except Exception as exc:
         db.rollback()
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id=profile_id)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
@@ -367,7 +395,7 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     db.refresh(job)
     _emit(job)
     # Spawn background refinement loop if enabled
-    _maybe_start_refinement(job_key, "cover", db)
+    _maybe_start_refinement(job_key, "cover", db, profile_id)
     return job.serialize()
 
 
@@ -377,6 +405,7 @@ def submit_document_feedback(
     doc_type: str,
     payload: FeedbackRequest,
     db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
 ):
     """Apply user section-anchored feedback to a generated document (one-shot).
 
@@ -385,25 +414,25 @@ def submit_document_feedback(
     """
     if doc_type not in ("resume", "cover"):
         raise HTTPException(status_code=400, detail="Invalid document type")
-    job = Job.get(job_key, db)
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     # The refine mutates and re-persists the structured doc, so it needs a row to
     # patch. Backfill-and-persist from the on-disk .md when the job was only ever
     # viewed (parse-on-read leaves no row); 404 only when there's nothing to refine.
-    if not _ensure_document_row(db, job_key, doc_type):
+    if not _ensure_document_row(db, job_key, doc_type, profile_id):
         raise HTTPException(status_code=404, detail=f"No {doc_type} document to refine")
     notes = [n.model_dump() for n in payload.notes if (n.note or "").strip()]
     if not notes:
         raise HTTPException(status_code=400, detail="No feedback provided")
     from web.intake_pipeline import run_user_feedback_refine
-    _spawn(run_user_feedback_refine, job_key, doc_type, notes)
+    _spawn(run_user_feedback_refine, job_key, doc_type, notes, profile_id)
     return job.serialize()
 
 
 @router.get("/{job_key}/resume")
-def serve_resume(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def serve_resume(job_key: str, db: Session = Depends(get_db), profile_id: int = Depends(current_profile_id)):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     if not job.resume_path:
@@ -415,8 +444,8 @@ def serve_resume(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{job_key}/cover")
-def serve_cover(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def serve_cover(job_key: str, db: Session = Depends(get_db), profile_id: int = Depends(current_profile_id)):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     if not job.cover_path:
@@ -428,8 +457,8 @@ def serve_cover(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{job_key}/resume/markdown", response_class=PlainTextResponse)
-def serve_resume_markdown(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def serve_resume_markdown(job_key: str, db: Session = Depends(get_db), profile_id: int = Depends(current_profile_id)):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
@@ -439,8 +468,8 @@ def serve_resume_markdown(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{job_key}/cover/markdown", response_class=PlainTextResponse)
-def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def serve_cover_markdown(job_key: str, db: Session = Depends(get_db), profile_id: int = Depends(current_profile_id)):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
@@ -450,10 +479,16 @@ def serve_cover_markdown(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{job_key}/{doc_type}/turn/{n}/markdown", response_class=PlainTextResponse)
-def serve_doc_turn_markdown(job_key: str, doc_type: str, n: int, db: Session = Depends(get_db)):
+def serve_doc_turn_markdown(
+    job_key: str,
+    doc_type: str,
+    n: int,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
     if doc_type not in ("resume", "cover"):
         raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
-    job = Job.get(job_key, db)
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
@@ -472,7 +507,7 @@ def _doc_model(doc_type: str) -> type[ResumeDocument] | type[CoverDocument]:
     return ResumeDocument if doc_type == "resume" else CoverDocument
 
 
-def _ensure_document_row(db: Session, job_key: str, doc_type: str) -> bool:
+def _ensure_document_row(db: Session, job_key: str, doc_type: str, profile_id: int) -> bool:
     """Ensure a structured ``documents`` row exists, persisting one from the on-disk
     ``.md`` if it's missing (the inverse of ``get_document``'s parse-on-read).
 
@@ -482,7 +517,7 @@ def _ensure_document_row(db: Session, job_key: str, doc_type: str) -> bool:
     Returns:
         True if a row exists afterward; False if there was nothing to reconstruct.
     """
-    if Document.fetch(db, job_key, doc_type) is not None:
+    if Document.fetch(db, job_key, doc_type, profile_id=profile_id) is not None:
         return True
     md_path = _OUTPUTS_DIR / f"{job_key}_{doc_type}.md"
     if not md_path.exists():
@@ -493,18 +528,23 @@ def _ensure_document_row(db: Session, job_key: str, doc_type: str) -> bool:
         if doc_type == "resume"
         else reconstruct_cover_document_from_markdown(md)
     )
-    Document.upsert(db, job_key, doc_type, doc.model_dump_json())
+    Document.upsert(db, job_key, doc_type, doc.model_dump_json(), profile_id=profile_id)
     return True
 
 
 @router.get("/{job_key}/{doc_type}/document")
-def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
+def get_document(
+    job_key: str,
+    doc_type: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
     if doc_type not in ("resume", "cover"):
         raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
     # Explicit job-existence check mirrors put_document: distinguishes "job missing" (404) from "document missing" (404 below).
-    if Job.get(job_key, db) is None:
+    if Job.get(job_key, db, profile_id=profile_id) is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    row = Document.fetch(db, job_key, doc_type)
+    row = Document.fetch(db, job_key, doc_type, profile_id=profile_id)
     if row is None:
         # No structured row: reconstruct from the on-disk .md on every read rather
         # than persisting. Persisting would let a best-effort (lossy) parse shadow
@@ -529,10 +569,11 @@ def put_document(
     doc_type: str,
     payload: dict = Body(...),
     db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
 ):
     if doc_type not in ("resume", "cover"):
         raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
-    job = Job.get(job_key, db)
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -544,7 +585,7 @@ def put_document(
     if doc_type == "resume":
         doc.section_order = resume_section_order(doc)
 
-    Document.upsert(db, job_key, doc_type, doc.model_dump_json())
+    Document.upsert(db, job_key, doc_type, doc.model_dump_json(), profile_id=profile_id)
 
     try:
         if doc_type == "resume":
@@ -562,13 +603,13 @@ def put_document(
     # report; re-run the gate in the background so the stored report stays fresh.
     if doc_type == "resume":
         from web.intake_pipeline import run_ats_gate
-        _spawn(run_ats_gate, job_key)
+        _spawn(run_ats_gate, job_key, profile_id)
     return doc.model_dump()
 
 
-def _do_extract_description(job: Job, db: Session) -> None:
+def _do_extract_description(job: Job, db: Session, profile_id: int) -> None:
     """Run description extraction LLM call and persist structured fields."""
-    user = User.load(db)
+    user = User.load(db, profile_id=profile_id)
     try:
         prompt_content = user.resolve_prompt("extraction")
     except PromptNotConfiguredError as exc:
@@ -609,19 +650,23 @@ def _do_extract_description(job: Job, db: Session) -> None:
 
 
 @router.post("/{job_key}/description/extract")
-def extract_description(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def extract_description(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
     llm_status.start(job_key, "description")
     try:
-        _do_extract_description(job, db)
+        _do_extract_description(job, db, profile_id)
     except HTTPException:
         raise
     except Exception as exc:
         db.rollback()
-        job = Job.get(job_key, db)
+        job = Job.get(job_key, db, profile_id=profile_id)
         job.unread_indicator = "error"
         job.last_result_error = str(exc)
         db.commit()
@@ -636,8 +681,12 @@ def extract_description(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{job_key}/seen")
-def mark_job_seen(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def mark_job_seen(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     job.unread_indicator = None
@@ -650,10 +699,15 @@ def mark_job_seen(job_key: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{job_key}/seen/{action}")
-def mark_job_action_seen(job_key: str, action: str, db: Session = Depends(get_db)):
+def mark_job_action_seen(
+    job_key: str,
+    action: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
     if action not in _REVIEW_ACTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid action: {action!r}")
-    job = Job.get(job_key, db)
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     now_empty = _remove_pending_review(job, action)
@@ -674,8 +728,12 @@ def mark_job_action_seen(job_key: str, action: str, db: Session = Depends(get_db
 
 
 @router.delete("/{job_key}")
-def delete_job(job_key: str, db: Session = Depends(get_db)):
-    job = Job.get(job_key, db)
+def delete_job(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     job.state = JobState.DELETED.value

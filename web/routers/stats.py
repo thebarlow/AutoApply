@@ -11,7 +11,7 @@ from core.job import Job
 from core.skill_analytics import aggregate_skill_frequency, job_has_skill
 from core.user import User
 from db.database import get_db, SkillAlias
-from web.tenancy import current_profile_id
+from web.tenancy import current_profile_id, scoped
 
 router = APIRouter(prefix="/api")
 
@@ -50,6 +50,7 @@ _ALL_STATES = ["new", "pending_review", "ready", "applied", "contact", "rejected
 def get_stats(
     window: str = Query(...),
     db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
 ) -> dict:
     if window not in _VALID_WINDOWS:
         raise HTTPException(
@@ -68,12 +69,12 @@ def get_stats(
     cutoff_iso = cutoff.isoformat() if cutoff else None
 
     # by_state: pipeline snapshot, not window-filtered
-    by_state = {s: db.query(Job).filter(Job.state == s).count() for s in _ALL_STATES}
+    by_state = {s: scoped(db, Job, profile_id).filter(Job.state == s).count() for s in _ALL_STATES}
 
     # totals: window-filtered counts driving the User-tab stat counter. Each
     # metric counts jobs whose corresponding timestamp falls within the window.
     def _count(column) -> int:
-        q = db.query(Job).filter(column.isnot(None))
+        q = scoped(db, Job, profile_id).filter(column.isnot(None))
         if cutoff_iso:
             q = q.filter(column >= cutoff_iso)
         return q.count()
@@ -112,7 +113,7 @@ def get_skill_frequency(
     # rows signed under N+1 (and cached wrong) on READ COMMITTED backends.
     alias_sig = db.query(SkillAlias).filter_by(profile_id=profile_id).count()
     aliases = _load_aliases(db, profile_id)
-    sig = (db.query(Job).filter(extracted_filter).count(), alias_sig)
+    sig = (scoped(db, Job, profile_id).filter(extracted_filter).count(), alias_sig)
     now = time.monotonic()
     cached = _SKILL_CACHE["result"]
     if (
@@ -122,7 +123,7 @@ def get_skill_frequency(
     ):
         agg = cached
     else:
-        jobs = db.query(Job).filter(extracted_filter).all()
+        jobs = scoped(db, Job, profile_id).filter(extracted_filter).all()
         # Treat empty strings as "no extraction" too (DB may store "" not NULL).
         extracted = [
             j
@@ -143,7 +144,7 @@ def get_skill_frequency(
     key_to_display = {row["key"]: row["skill"] for row in agg["skills"]}
     profile_skills: list[str] = []
     try:
-        user = User.load(db)
+        user = User.load(db, profile_id=profile_id)
         seen: set[str] = set()
         for raw in getattr(user, "skills", []) or []:
             pk = skill_key(raw, aliases)
@@ -171,7 +172,7 @@ def get_jobs_for_skill(
     Matching is normalized, so raw tokens like "py" or "k8s" match.
     """
     jobs = (
-        db.query(Job)
+        scoped(db, Job, profile_id)
         .filter(
             Job.state != "deleted",
             or_(
