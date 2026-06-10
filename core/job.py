@@ -186,6 +186,7 @@ class Job(Base):
 
     # ── Scrape data ────────────────────────────────────────────────────────────
     id = Column(Integer, primary_key=True)
+    profile_id = Column(Integer, nullable=True, index=True)  # Task 9 → NOT NULL
     job_key = Column(String, unique=True, nullable=False)
     source = Column(String, nullable=False)
     title = Column(String)

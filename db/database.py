@@ -64,6 +64,7 @@ class Document(Base):
     )
 
     id = Column(Integer, primary_key=True)
+    profile_id = Column(Integer, nullable=True, index=True)  # Task 9 → NOT NULL
     job_key = Column(String, nullable=False)
     doc_type = Column(String, nullable=False)  # "resume" | "cover"
     structured_json = Column(Text, nullable=False, default="{}")
@@ -106,6 +107,7 @@ class SkillAlias(Base):
     """
 
     __tablename__ = "skill_aliases"
+    profile_id = Column(Integer, nullable=True, index=True)  # Task 9 → composite PK
     alias_key = Column(String, primary_key=True)
     canonical = Column(String, nullable=False)
 
@@ -405,6 +407,16 @@ def _migrate_resume_eval_prompt_v2() -> None:
         db.close()
 
 
+def _migrate_tenant_columns() -> None:
+    """Add profile_id column to jobs, documents, and skill_aliases if missing."""
+    with engine.connect() as conn:
+        for table in ("jobs", "documents", "skill_aliases"):
+            existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()]
+            if "profile_id" not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN profile_id INTEGER"))
+        conn.commit()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
@@ -420,6 +432,7 @@ def init_db() -> None:
     _migrate_resume_eval_columns()
     _migrate_resume_docx_column()
     _migrate_ats_report_columns()
+    _migrate_tenant_columns()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db, seed_skill_aliases
     db = SessionLocal()
     try:

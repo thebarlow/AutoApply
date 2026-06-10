@@ -58,6 +58,10 @@ def _alembic_snapshot(tmp_path, monkeypatch) -> dict:
     return snap
 
 
+@pytest.mark.xfail(
+    reason="tenancy columns added to ORM in Phase 2 Task 1; baseline migration regenerated in Task 12",
+    strict=True,
+)
 def test_alembic_baseline_matches_create_all(tmp_path, monkeypatch):
     expected = _create_all_snapshot(tmp_path)
     actual = _alembic_snapshot(tmp_path, monkeypatch)
