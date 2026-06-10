@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect
@@ -58,10 +57,6 @@ def _alembic_snapshot(tmp_path, monkeypatch) -> dict:
     return snap
 
 
-@pytest.mark.xfail(
-    reason="tenancy columns added to ORM in Phase 2 Task 1; baseline migration regenerated in Task 12",
-    strict=True,
-)
 def test_alembic_baseline_matches_create_all(tmp_path, monkeypatch):
     expected = _create_all_snapshot(tmp_path)
     actual = _alembic_snapshot(tmp_path, monkeypatch)
