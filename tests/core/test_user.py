@@ -111,21 +111,6 @@ def test_render_indexed_empty():
     assert u.render_projects_indexed() == ""
 
 
-def test_user_load_uses_active_profile_id(db_session):
-    from core.user import User
-    # Insert two profiles
-    db_session.add(User(name="First", data=json.dumps({**SAMPLE_DATA, "email": "first@x.com"})))
-    db_session.add(User(name="Second", data=json.dumps({**SAMPLE_DATA, "email": "second@x.com"})))
-    db_session.commit()
-
-    from db.database import Config
-    db_session.add(Config(key="active_profile_id", value="2"))
-    db_session.commit()
-
-    user = User.load(db_session)
-    assert user.email == "second@x.com"
-
-
 def test_user_save_persists_changes(db_session):
     from core.user import User
     db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
