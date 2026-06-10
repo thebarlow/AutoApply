@@ -25,6 +25,8 @@ Read the target directory's `CONTEXT.md` before making changes there.
 | LLM client construction, model resolution | `core/llm.py` | Read `core/CONTEXT.md` first |
 | Pydantic schemas (LLM response + stored document models) | `core/schemas.py` | `parse_llm_json`; `ResumeGeneration`, `ResumeDocument`/`CoverDocument` |
 | Build/assemble structured documents (snapshot, patch, render to MD) | `core/document_builder.py`, `core/document_assembler.py` | Read `core/CONTEXT.md` first |
+| Reconstruct a structured document from rendered Markdown (inverse of assembler) | `core/document_parser.py` | Read `core/CONTEXT.md` first; tolerates legacy LLM markdown; used to backfill missing `documents` rows |
+| Interactive document modal + section/item editing & feedback | `react-dashboard/src/components/widgets/DocumentModal.jsx` + `react-dashboard/src/components/widgets/document/` | Read `react-dashboard/CONTEXT.md`; pencil (✎) button on Resume/Cover toolbar; feedback → `POST /{doc_type}/feedback` → `run_user_feedback_refine` in `web/intake_pipeline.py` |
 | Skill normalization, case-folded grouping, alias map, frequency aggregation | `core/skill_analytics.py` | No-LLM; alias-aware (`aliases` param, falls back to built-in `_ALIASES`); seeds the `skill_aliases` table. API surface in `web/routers/skills.py` (alias groups, profile skills, ownership) |
 | HTML/CSS PDF templates (Jinja2 + pandoc → Chromium) | `generator/` | Has `CONTEXT.md`; outputs go to `generator/outputs/` |
 | LLM prompt templates (scoring, resume, cover, extraction, resume_parse) | `prompts/` | DB-backed; `prompts/defaults/` is seed-only. Has `CONTEXT.md` |
