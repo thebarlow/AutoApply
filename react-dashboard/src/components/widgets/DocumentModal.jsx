@@ -4,6 +4,8 @@ import { getDocument, putDocument, submitFeedback } from '../../api'
 import InteractiveResume from './document/InteractiveResume'
 import CoverView from './document/CoverView'
 
+const SECTION_FIELD = { summary: 'profile_summary', experience: 'experience', education: 'education', project: 'projects', skills: 'skills' }
+
 // Modal that renders the structured document as an interactive surface.
 // Phase 1: read-only render + hover. Edit and feedback wired in later phases.
 export default function DocumentModal({ job, docType, processing, onClose }) {
@@ -18,8 +20,6 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   }
   useEffect(reload, [job.job_key, docType])
 
-  const SECTION_FIELD = { summary: 'profile_summary', experience: 'experience', education: 'education', project: 'projects', skills: 'skills' }
-
   const handleSave = async (section, index, newValue) => {
     if (!doc) return
     const next = JSON.parse(JSON.stringify(doc))
@@ -28,8 +28,14 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
     } else {
       next[SECTION_FIELD[section]][index] = newValue
     }
-    await putDocument(job.job_key, docType, next)
-    reload()
+    try {
+      await putDocument(job.job_key, docType, next)
+      setLoadError(null)
+      reload()
+    } catch (e) {
+      setLoadError(e?.message || 'Failed to save changes')
+      throw e
+    }
   }
 
   const title = docType === 'resume' ? 'Resume' : 'Cover Letter'

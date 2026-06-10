@@ -37,9 +37,13 @@ export default function InteractiveResume({ doc, onSave, onAddFeedback }) {
           value={value}
           onCancel={() => setEditing(null)}
           onCommit={async (newValue) => {
-            await onSave(section, index, newValue)
-            setEditing(null)
-            setActive(null)
+            try {
+              await onSave(section, index, newValue)
+              setEditing(null)
+              setActive(null)
+            } catch {
+              // Save failed — keep the editor open so the user doesn't lose their edit.
+            }
           }}
         />
       )
