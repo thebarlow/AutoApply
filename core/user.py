@@ -158,39 +158,30 @@ class User(Base):
 
     @classmethod
     def load(cls, db: Session, profile_id: Optional[int] = None) -> "User":
-        """Load the active user profile from the database.
+        """Load a user profile by id.
 
-        Checks the active_profile_id config key first. Falls back to the first row.
+        With no profile_id, returns the first row (legacy/seed usage). When
+        profile_id is given it is authoritative: a missing id raises rather
+        than silently falling back to another tenant's row.
 
         Args:
             db: SQLAlchemy session.
-            profile_id: Optional explicit profile ID. Overrides active_profile_id config.
+            profile_id: Optional explicit profile ID, resolved by the tenancy seam.
 
         Returns:
             Hydrated User instance.
 
         Raises:
-            RuntimeError: If no profile exists in the database.
+            RuntimeError: If the requested (or any) profile does not exist.
         """
-        from db.database import Config
-
-        row: Optional[User] = None
-
         if profile_id is not None:
             row = db.query(cls).filter_by(id=profile_id).first()
+            if row is None:
+                raise RuntimeError(f"No user profile with id={profile_id}.")
         else:
-            active_raw = db.query(Config).filter_by(key="active_profile_id").first()
-            if active_raw and active_raw.value:
-                try:
-                    row = db.query(cls).filter_by(id=int(active_raw.value)).first()
-                except (ValueError, TypeError):
-                    pass
-
-        if row is None:
             row = db.query(cls).first()
-
-        if row is None:
-            raise RuntimeError("No user profile found. Add one via /config.")
+            if row is None:
+                raise RuntimeError("No user profile found. Add one via /config.")
 
         migrated = row._hydrate()  # always False post prompts-to-DB; branch kept for future migration hooks
         from db.database import Prompt
