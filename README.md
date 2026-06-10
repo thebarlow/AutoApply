@@ -12,6 +12,10 @@
 
 ## 1. Download & Setup
 
+### Requirements
+
+- **Python 3.10+** must be installed ([python.org/downloads](https://www.python.org/downloads/)). The server, tray app, and scrapers all run on Python.
+
 ### New to Git?
 
 `git` is the tool used to download (clone) this project. If you don't have it yet:
