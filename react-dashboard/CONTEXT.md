@@ -24,8 +24,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Pipeline tabs (Inbox / Processing / Outbound / Archives) | `src/components/widgets/Pipeline.jsx` |
 | Tab job-state filters | `src/components/widgets/Pipeline.jsx` — `TABS` config |
 | Job detail preview (Description / Resume / Cover sub-tabs) | `src/components/widgets/Settings.jsx` — Preview tab section |
-| Structured per-section document form editor (overlay) | `src/components/widgets/StructuredEditor.jsx` — loads via `getDocument`, saves via `putDocument` |
-| Expand modal (large doc view + section-anchored regeneration feedback) | `src/components/widgets/DocumentModal.jsx` |
+| Interactive document modal (hover-highlight, inline edit, per-item feedback) | `src/components/widgets/DocumentModal.jsx` + `src/components/widgets/document/` (`InteractiveResume`, `ResumeSection`, `items`, `ItemPopover`, `ItemEditor`, `CoverView`, `highlight.css`) — opened by the single pencil (✎) button on the Resume/Cover toolbar; `StructuredEditor.jsx` is retired |
 | Process / Generate / Regenerate / Apply buttons | `src/components/widgets/Settings.jsx` — Preview tab |
 | Action buttons gating / prerequisite enforcement | `src/components/shared/GatedButton.jsx` |
 | User profile list, active profile selector, Create Profile modal | `src/components/widgets/Settings.jsx` — User tab |
@@ -68,12 +67,12 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Preview tab has three sub-tabs driven by local `previewTab` state
 - `CreateProfile` inline modal lives here, not in ProfileDetail
 - AnimatePresence handles slide transitions between User list and ProfileDetail
-- Document editing now uses the structured `StructuredEditor` overlay; the raw-Markdown editing overlay (`DocumentEditOverlay`) is retired. `MarkdownView` remains as a read-only derived preview.
-- Resume/Cover toolbar (Settings Preview tab) now has an **Expand** button next to Edit; opens the `DocumentModal`
+- Document editing is now handled entirely by the interactive `DocumentModal` (the `StructuredEditor` overlay and raw-Markdown overlay are retired). `MarkdownView` remains as a read-only derived preview.
+- Resume/Cover toolbar (Settings Preview tab) now has a single pencil (✎) button (Edit/Expand removed); it opens the `DocumentModal` for hover-highlight / inline-edit / per-item feedback
 - `SubToggle` and `MarkdownView` are now exported and reused by `DocumentModal`
 
 ### DocumentModal.jsx
-- Large document view shown side-by-side with a section-anchored feedback panel
+- Interactive document view backed by `document/` widgets: `InteractiveResume` → `ResumeSection` → `items` (hover-highlight per item, `ItemPopover`/`ItemEditor` for inline edit + per-item feedback), `CoverView` for cover letters; styling in `highlight.css`
 - Submitting feedback runs a one-shot refine via `POST /{doc_type}/feedback`
 - `TurnEntry` labels user-feedback turns "Your feedback"
 

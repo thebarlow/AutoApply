@@ -23,6 +23,13 @@ _(none)_
 
 ## Done
 
+- [x] **Interactive document modal** — The Resume/Cover toolbar's single pencil (✎) button (Edit/Expand
+  removed) opens `DocumentModal`, backed by `widgets/document/` (`InteractiveResume`, `ResumeSection`,
+  `items`, `ItemPopover`, `ItemEditor`, `CoverView`, `highlight.css`): hover-highlight per item, inline
+  editing, and per-item/cover feedback → one-shot regenerate via `POST /{doc_type}/feedback`. Retired the
+  `StructuredEditor` overlay. Also fixed `GET /{job_key}/{doc_type}/document` to backfill a missing
+  `documents` row by reconstructing from the on-disk `.md` (`core/document_parser`) before returning 404.
+
 - [x] **Settings → User tab application stats** — Rotating counter in `UserHome.jsx`: "You've
   applied to {x} jobs" with the verb+count highlighted/clickable, cycling Applied → Scraped →
   Resumes (`STAT_METRICS`). Today/Week/All-time control filters counts via new `totals` field on
