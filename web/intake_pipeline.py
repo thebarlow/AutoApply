@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json as _json
+
 from db.database import SessionLocal
 from core.job import Job
 from web.sse import send as _sse_send
@@ -7,6 +9,30 @@ from web import llm_status
 from web.routers.jobs import _do_extract_description, _load_score_config
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
+
+
+def build_feedback_issues(notes: list[dict]) -> list[dict]:
+    """Convert UI section-anchored feedback notes to refine ``issues``.
+
+    Each note is ``{"section", "label", "note"}``. The ``label`` carries the
+    human-readable (and, for résumés, index-bearing) section anchor so the
+    refine prompt can locate the target. Notes with blank text are dropped.
+
+    Args:
+        notes: List of note dicts from the feedback modal.
+
+    Returns:
+        Issue dicts shaped like ``EvalResponse`` issues:
+        ``{"category": "user_feedback", "description": "<label>: <note>"}``.
+    """
+    issues = []
+    for n in notes:
+        text = (n.get("note") or "").strip()
+        if not text:
+            continue
+        label = (n.get("label") or "").strip() or "Document"
+        issues.append({"category": "user_feedback", "description": f"{label}: {text}"})
+    return issues
 
 
 def _emit(job: Job) -> None:
@@ -347,3 +373,117 @@ def run_resume_refinement(job_key: str) -> None:
 def run_cover_refinement(job_key: str) -> None:
     """Run the evaluate→rewrite loop for a generated cover letter."""
     _run_doc_refinement(job_key, "cover")
+
+
+def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict]) -> None:
+    """Apply user section-anchored feedback as a one-shot refine.
+
+    Reuses the existing refine path (patch structured doc → re-derive md →
+    re-render PDF). Then runs eval once for an informational score and appends a
+    turn tagged ``source="user_feedback"``. Unlike the auto loop it does NOT
+    restore a prior best turn — the user-directed result is always kept. Résumé
+    runs trigger the ATS gate afterward. Runs in a daemon thread; failures are
+    logged, never raised.
+
+    Args:
+        job_key: Unique job identifier.
+        doc_type: "resume" or "cover".
+        notes: Feedback notes from the modal (``{section,label,note}``).
+    """
+    from pathlib import Path
+
+    if doc_type not in ("resume", "cover"):
+        print(f"[feedback] {job_key}: invalid doc_type {doc_type!r}", flush=True)
+        return
+
+    issues = build_feedback_issues(notes)
+    if not issues:
+        return
+
+    _GEN_DIR = Path(__file__).parent.parent / "generator"
+    template_path = {
+        "resume": _GEN_DIR / "resume_template.html",
+        "cover": _GEN_DIR / "cover_template.html",
+    }[doc_type]
+    refine_key = f"{doc_type}_refine"
+    eval_key = f"{doc_type}_eval"
+
+    db = SessionLocal()
+    try:
+        job = Job.get(job_key, db)
+        if job is None:
+            return
+        user = User.load(db)
+
+        try:
+            refine_prompt = user.resolve_prompt(refine_key)
+        except PromptNotConfiguredError as exc:
+            print(f"[feedback:{doc_type}] {job_key}: refine prompt not configured — {exc}", flush=True)
+            return
+
+        refine_model = getattr(user, f"prompt_{refine_key}_model", "") or ""
+        try:
+            refine_client, resolved_refine_model = get_client_for_profile(user, refine_model)
+        except RuntimeError as exc:
+            print(f"[feedback:{doc_type}] {job_key}: LLM client error — {exc}", flush=True)
+            return
+
+        # Step A: refine with user-authored issues
+        llm_status.start(job_key, f"{doc_type}_refine")
+        try:
+            refine_fn = getattr(job, f"refine_{doc_type}_md")
+            refine_fn(
+                user, refine_prompt, refine_client, resolved_refine_model,
+                db, issues, template_path,
+            )
+            db.commit()
+            db.refresh(job)
+            _emit(job)
+        except Exception as exc:
+            db.rollback()
+            job = Job.get(job_key, db)
+            job.last_result_error = f"{doc_type.capitalize()} feedback refine failed: {exc}"
+            job.unread_indicator = "error"
+            db.commit()
+            _emit(job)
+            print(f"[feedback:{doc_type}] {job_key}: refine failed — {exc}", flush=True)
+            return
+        finally:
+            llm_status.finish(job_key, f"{doc_type}_refine")
+
+        # Step B: eval once for an informational score (non-fatal; no restore-best)
+        llm_status.start(job_key, f"{doc_type}_eval")
+        try:
+            eval_prompt = user.resolve_prompt(eval_key)
+            eval_model = getattr(user, f"prompt_{eval_key}_model", "") or ""
+            eval_client, resolved_eval_model = get_client_for_profile(user, eval_model)
+            evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
+            result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
+
+            pass_score = float(getattr(user, f"{doc_type}_refine_pass_score", 0.80))
+            log_field = f"{doc_type}_eval_log"
+            eval_log = _json.loads(getattr(job, log_field) or "[]")
+            turn = len(eval_log) + 1
+            eval_log.append({
+                "turn": turn,
+                "score": result["score"],
+                "issues": result["issues"],
+                "passed": result["score"] >= pass_score,
+                "source": "user_feedback",
+            })
+            setattr(job, f"{doc_type}_eval_score", result["score"])
+            setattr(job, f"{doc_type}_eval_turns", turn)
+            setattr(job, log_field, _json.dumps(eval_log))
+            db.commit()
+            db.refresh(job)
+            _emit(job)
+        except Exception as exc:
+            db.rollback()
+            print(f"[feedback:{doc_type}] {job_key}: post-feedback eval failed (non-fatal) — {exc}", flush=True)
+        finally:
+            llm_status.finish(job_key, f"{doc_type}_eval")
+    finally:
+        db.close()
+
+    if doc_type == "resume":
+        run_ats_gate(job_key)

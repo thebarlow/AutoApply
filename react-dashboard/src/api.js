@@ -234,6 +234,13 @@ export const putDocument = (jobKey, docType, doc) =>
     body: JSON.stringify(doc),
   })
 
+export const submitFeedback = (jobKey, docType, notes) =>
+  _fetch(`/api/jobs/${jobKey}/${docType}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  })
+
 export const flagJob = (jobKey, flagged) =>
   _fetch(`/api/jobs/${jobKey}/flag`, {
     method: 'PATCH',

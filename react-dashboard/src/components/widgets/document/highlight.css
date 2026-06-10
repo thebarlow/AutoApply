@@ -1,0 +1,10 @@
+.doc-section {
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: background-color 120ms ease;
+}
+.doc-section.hl { background-color: rgba(250, 204, 21, 0.08); }      /* section tint */
+.doc-section-title { font-weight: 700; border-radius: 4px; padding: 0 4px; transition: background-color 120ms ease; }
+.doc-section.hl .doc-section-title { background-color: rgba(250, 204, 21, 0.28); }  /* title strongest */
+.doc-item { border-radius: 6px; padding: 4px 6px; cursor: pointer; transition: background-color 120ms ease; }
+.doc-item.hl { background-color: rgba(250, 204, 21, 0.20); }        /* focused item emphasis */

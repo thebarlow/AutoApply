@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills } from '../../api'
-import StructuredEditOverlay from './StructuredEditor'
+import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'
 import ProfileDetailView from './ProfileDetail'
 import UserHome from './UserHome'
@@ -172,7 +172,7 @@ function ExtractionView({ data }) {
   )
 }
 
-function MarkdownView({ url }) {
+export function MarkdownView({ url }) {
   const [text, setText] = useState(null)
   const [error, setError] = useState(false)
 
@@ -200,7 +200,7 @@ function MarkdownView({ url }) {
 const CONTENT_TABS = ['description', 'resume', 'cover', 'score']
 const CONTENT_TAB_LABELS = { description: 'Description', resume: 'Resume', cover: 'Cover Letter', score: 'Score' }
 
-function SubToggle({ options, value, onChange }) {
+export function SubToggle({ options, value, onChange }) {
   return (
     <div className="flex gap-2">
       {options.map(({ key, label, disabled }) => (
@@ -224,7 +224,7 @@ function TurnEntry({ entry, hue, turnUrl, isLast, showDivider }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold text-space-dim">Turn {entry.turn}</span>
+        <span className="text-xs font-semibold text-space-dim">{entry.source === 'user_feedback' ? 'Your feedback' : `Turn ${entry.turn}`}</span>
         <span style={{ color: `hsl(${hue}, 75%, 55%)` }} className="text-xs font-bold tabular-nums">
           {(entry.score * 10).toFixed(1)}/10
         </span>
@@ -483,7 +483,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   }
 
   const [showEditFields, setShowEditFields] = useState(false)
-  const [editDoc, setEditDoc] = useState(null) // null | 'resume' | 'cover'
+  const [expandDoc, setExpandDoc] = useState(null) // null | 'resume' | 'cover'
 
   useEffect(() => {
     if (!confirmDelete) return
@@ -520,8 +520,14 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   useEffect(() => {
     const prev = prevInFlight.current
     const bumps = {}
-    for (const k of ['resume', 'cover']) {
-      if (prev.has(k) && !actionsInFlight.has(k)) bumps[k] = true
+    // Generation keys ('resume'/'cover') and feedback/refine keys
+    // ('resume_refine', 'resume_eval', 'cover_refine', 'cover_eval') all bump
+    // the nonce for their doc type on present->absent so the PDF/MD preview
+    // refreshes after generation OR a feedback-triggered regeneration.
+    for (const k of prev) {
+      if (actionsInFlight.has(k)) continue // still running
+      const doc = k === 'resume' || k === 'cover' ? k : k.replace(/_(refine|eval)$/, '')
+      if (doc === 'resume' || doc === 'cover') bumps[doc] = true
     }
     prevInFlight.current = new Set(actionsInFlight)
     if (Object.keys(bumps).length > 0) {
@@ -566,7 +572,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     setDeleteError(null)
     setStateChanging(false)
     setShowEditFields(false)
-    setEditDoc(null)
+    setExpandDoc(null)
     setFlagging(false)
   }, [job?.job_key])
 
@@ -828,12 +834,13 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             />
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setEditDoc(contentTab)}
+                onClick={() => setExpandDoc(contentTab)}
                 disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
-                title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Edit fields and re-render PDF' : 'Generate before editing'}
-                className="px-3 py-1 rounded text-xs font-semibold transition-colors border border-space-border text-space-dim hover:text-space-text disabled:opacity-40 disabled:cursor-not-allowed"
+                title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Open document editor' : 'Generate before editing'}
+                aria-label="Edit document"
+                className="px-2 py-1 rounded text-sm transition-colors border border-space-border text-space-dim hover:text-space-text disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Edit
+                ✎
               </button>
               <HelpIcon text="Generates a tailored resume and cover letter for this job, rendered to PDF. Uses more credits than scoring." />
               <GatedButton
@@ -917,12 +924,12 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       {showEditFields && (
         <EditFieldsModal job={job} onClose={() => setShowEditFields(false)} />
       )}
-      {editDoc && (
-        <StructuredEditOverlay
+      {expandDoc && (
+        <DocumentModal
           job={job}
-          docType={editDoc}
-          onClose={() => setEditDoc(null)}
-          onSaved={() => setArtifactNonce((cur) => ({ ...cur, [editDoc]: cur[editDoc] + 1 }))}
+          docType={expandDoc}
+          processing={actionsInFlight.has(`${expandDoc}_refine`) || actionsInFlight.has(`${expandDoc}_eval`)}
+          onClose={() => setExpandDoc(null)}
         />
       )}
     </div>

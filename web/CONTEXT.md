@@ -54,7 +54,7 @@ web/
 - **Generation is synchronous** — resume/cover generation blocks the request 30–60s while Claude + pandoc run. Acceptable for single-user local use.
 - **SSE for real-time updates** — `sse.py` broadcasts job state changes; `App.jsx` subscribes via `EventSource`.
 - **`llm_status.py`** tracks in-progress LLM calls (start/finish) so the UI can show spinners without polling.
-- **Structured document editing (Phase 3b)** — `GET /api/jobs/{job_key}/{doc_type}/document` returns the stored structured JSON; `PUT` validates the body against a Pydantic `ResumeDocument`/`CoverDocument`, upserts the `Document` row, re-assembles the `.md`, and re-renders the PDF. Errors: `400` invalid `doc_type` or validation failure, `404` missing job or document, `500` render failure after the document was persisted. The old raw-Markdown editor bridge (`PUT .../markdown` and helpers `_put_document_markdown_sync` / `_read_body_text`) was retired.
+- **Structured document editing (Phase 3b)** — `GET /api/jobs/{job_key}/{doc_type}/document` returns the stored structured JSON; `PUT` validates the body against a Pydantic `ResumeDocument`/`CoverDocument`, upserts the `Document` row, re-assembles the `.md`, and re-renders the PDF. Errors: `400` invalid `doc_type` or validation failure, `404` missing job or document, `500` render failure after the document was persisted. `GET .../document` self-heals a missing `documents` row by reconstructing it from the on-disk `.md` (`core/document_parser`) before falling through to `404`. The old raw-Markdown editor bridge (`PUT .../markdown` and helpers `_put_document_markdown_sync` / `_read_body_text`) was retired.
 - **Per-turn refinement snapshots** are written as structured JSON `{job_key}_{doc_type}_turn_{n}.json` in `generator/outputs/`. `GET /api/jobs/{job_key}/{doc_type}/turn/{n}/markdown` assembles Markdown on the fly from that JSON (`422` on schema mismatch).
 
 ## Known caveats (Phase 3b)
@@ -87,8 +87,9 @@ web/
 | `POST` | `/api/jobs/{job_key}/generate/cover` | Generate cover letter MD + PDF |
 | `GET` | `/api/jobs/{job_key}/resume` | Serve resume PDF |
 | `GET` | `/api/jobs/{job_key}/cover` | Serve cover letter PDF |
-| `GET` | `/api/jobs/{job_key}/{doc_type}/document` | Return the stored structured document JSON (`ResumeDocument`/`CoverDocument`) |
+| `GET` | `/api/jobs/{job_key}/{doc_type}/document` | Return the stored structured document JSON (`ResumeDocument`/`CoverDocument`); if the `documents` row is missing, backfills it by reconstructing from the on-disk `.md` (via `core/document_parser`) before returning 404 |
 | `PUT` | `/api/jobs/{job_key}/{doc_type}/document` | Upsert an edited structured document; re-assembles `.md` + re-renders PDF |
+| `POST` | `/api/jobs/{job_key}/{doc_type}/feedback` | Accept user section feedback (`{notes:[{section,label,note}]}`); validates document exists (404 if not), drops empty notes (400 if none); spawns `run_user_feedback_refine` background job (reuses refine path, eval-for-score, no restore-best, résumés trigger ATS gate); appends a Refinement-History turn tagged `source="user_feedback"`; returns 202 + job |
 | `POST` | `/api/scraper/stage-job` | Ingest job from browser extension or scraper |
 | `POST` | `/api/scraper/run` | Trigger background run of enabled API scrapers |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |

@@ -15,8 +15,11 @@ core/
 ├── schemas.py           # Pydantic models for structured résumé/cover generation (ResumeDocument, CoverDocument, ResumeGeneration, sub-models)
 ├── document_builder.py  # Snapshots profile data at generation time and joins LLM prose to structured profile data
 ├── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
+├── document_parser.py    # Inverse of document_assembler — reconstructs a structured document from its rendered Markdown
 └── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ```
+
+**Known limitation:** Backfill via `document_parser.py` is lossy for fields the assembler does not render. Notably `ResumeProject.url` is absent from the rendered Markdown (and the PDF), so reconstructed projects come back with `url=""`.
 
 **Note:** `core/scorer.py` and `core/profile_parser.py` were deleted — stale `.pyc` files remain in `__pycache__/` and can be ignored. Scoring logic moved into `job.py`.
 
@@ -56,6 +59,7 @@ core/
 | Snapshot profile + join LLM prose to structured data (résumé/cover build) | `document_builder.py` → `build_resume_document()`, `build_cover_document()` |
 | Apply a prose-only keyed patch to a stored `ResumeDocument` (refine path) | `document_builder.py` → `apply_resume_patch()` |
 | Render a structured document to canonical Markdown | `document_assembler.py` → `assemble_resume_markdown()`, `assemble_cover_markdown()` |
+| Reconstruct a structured document from rendered Markdown (inverse of the assembler) | `document_parser.py` → `reconstruct_resume_document_from_markdown()`, `reconstruct_cover_document_from_markdown()` |
 | Structured (JSON) LLM call with strict-JSON hardening + one retry | `job.py` → `_llm_json_with_retry()` |
 | ATS parseability gate (mechanical hard-block + LLM advisory) | `ats_gate.py` → `run_gate()` / `Job.run_ats_check()` |
 | Mechanical ATS checks (contact, sections, skills, glyph-junk, text-layer) | `ats_gate.py` → `check_mechanical()` |

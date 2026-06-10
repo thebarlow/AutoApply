@@ -19,6 +19,10 @@ from core.document_assembler import (
     assemble_resume_markdown,
     assemble_cover_markdown,
 )
+from core.document_parser import (
+    reconstruct_resume_document_from_markdown,
+    reconstruct_cover_document_from_markdown,
+)
 from db.database import get_db, Config, Document
 from web.sse import send as _sse_send
 from web import llm_status
@@ -35,6 +39,7 @@ def _spawn(target, *args) -> None:
 
 _GENERATOR_DIR = Path(__file__).parent.parent.parent / "generator"
 _GENERATOR_OUTPUTS = _GENERATOR_DIR / "outputs"
+_OUTPUTS_DIR = _GENERATOR_OUTPUTS  # alias used by backfill logic (tests monkeypatch this name)
 _RESUME_TEMPLATE = _GENERATOR_DIR / "resume_template.html"
 _COVER_TEMPLATE = _GENERATOR_DIR / "cover_template.html"
 
@@ -194,6 +199,16 @@ def update_job_fields(job_key: str, body: JobFieldsUpdate, db: Session = Depends
 
 class FlagUpdate(BaseModel):
     flagged: bool
+
+
+class FeedbackNote(BaseModel):
+    section: str = ""
+    label: str = ""
+    note: str = ""
+
+
+class FeedbackRequest(BaseModel):
+    notes: list[FeedbackNote]
 
 
 @router.patch("/{job_key}/flag")
@@ -356,6 +371,33 @@ def generate_cover_endpoint(job_key: str, db: Session = Depends(get_db)):
     return job.serialize()
 
 
+@router.post("/{job_key}/{doc_type}/feedback", status_code=202)
+def submit_document_feedback(
+    job_key: str,
+    doc_type: str,
+    payload: FeedbackRequest,
+    db: Session = Depends(get_db),
+):
+    """Apply user section-anchored feedback to a generated document (one-shot).
+
+    Spawns a background refine using the existing refine path. Returns 202 with
+    the current job; results stream in over SSE as the refine completes.
+    """
+    if doc_type not in ("resume", "cover"):
+        raise HTTPException(status_code=400, detail="Invalid document type")
+    job = Job.get(job_key, db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if Document.fetch(db, job_key, doc_type) is None:
+        raise HTTPException(status_code=404, detail=f"No {doc_type} document to refine")
+    notes = [n.model_dump() for n in payload.notes if (n.note or "").strip()]
+    if not notes:
+        raise HTTPException(status_code=400, detail="No feedback provided")
+    from web.intake_pipeline import run_user_feedback_refine
+    _spawn(run_user_feedback_refine, job_key, doc_type, notes)
+    return job.serialize()
+
+
 @router.get("/{job_key}/resume")
 def serve_resume(job_key: str, db: Session = Depends(get_db)):
     job = Job.get(job_key, db)
@@ -436,6 +478,17 @@ def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     row = Document.fetch(db, job_key, doc_type)
     if row is None:
+        md_path = _OUTPUTS_DIR / f"{job_key}_{doc_type}.md"
+        if md_path.exists():
+            md = md_path.read_text(encoding="utf-8")
+            doc = (
+                reconstruct_resume_document_from_markdown(md)
+                if doc_type == "resume"
+                else reconstruct_cover_document_from_markdown(md)
+            )
+            structured_json = doc.model_dump_json()
+            Document.upsert(db, job_key, doc_type, structured_json)
+            return _json.loads(structured_json)
         raise HTTPException(status_code=404, detail="Document not found")
     return _json.loads(row.structured_json)
 
