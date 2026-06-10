@@ -9,6 +9,28 @@ _(none)_
 
 ## Features
 
+### Hosting / SaaS conversion
+
+- [ ] **Multi-tenancy rework** — Convert the single-user local app to a multi-tenant system.
+  SQLite → Postgres (with Alembic migrations, replacing `init_db.py`); add `profile_id` to every
+  tenant-scoped table (`jobs`, `documents`, per-tenant `config`, skill aliases) and filter every
+  query in `core/` + `web/routers/` by the active tenant via a `current_profile_id` seam; decouple
+  the tray app into an optional local client that authenticates to the hosted API with a token.
+  Design: `docs/superpowers/specs/2026-06-10-multi-tenancy-rework-design.md`. **Gates everything
+  below — do this first.**
+
+- [ ] **Auth** — Per-user identity filling the `current_profile_id` seam. Use a managed provider
+  (Clerk / Auth0 / Supabase Auth) rather than hand-rolling; gives OAuth, sessions, password reset,
+  email verification. Depends on multi-tenancy.
+
+- [ ] **Hosting (PaaS)** — Deploy API + React dashboard to Railway or Render with managed Postgres
+  and env-var secrets; push-to-deploy. Tray app stays local. Depends on multi-tenancy + auth.
+
+- [ ] **Usage-credit payments** — Credit ledger table (grants/debits/balance per tenant); meter LLM
+  call sites in `core/job.py` (score/generate/refine cost credits); Stripe Checkout for credit-pack
+  purchases + webhooks to grant credits; enforce by blocking generation at zero balance. Depends on
+  hosting + auth. Ledger design needs its own brainstorm pass.
+
 - [ ] **Improve the document feedback system.**
   _Current system:_ In `DocumentModal`, the user attaches free-text notes to individual items
   (profile/experience/education/project/skills) or to whole sections, plus a cover-letter feedback
