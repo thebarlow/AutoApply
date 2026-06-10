@@ -56,7 +56,13 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
           {loadError && <p className="text-xs text-red-400">{loadError}</p>}
           {!loadError && !doc && <p className="text-xs text-space-dim">Loading…</p>}
           {doc && docType === 'resume' && <InteractiveResume doc={doc} onSave={handleSave} />}
-          {doc && docType === 'cover' && <CoverView doc={doc} />}
+          {doc && docType === 'cover' && (
+            <CoverView doc={doc} onSave={async (body) => {
+              const next = { ...doc, body }
+              await putDocument(job.job_key, 'cover', next)
+              reload()
+            }} />
+          )}
         </div>
       </motion.div>
     </div>
