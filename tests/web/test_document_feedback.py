@@ -50,7 +50,7 @@ def test_run_user_feedback_refine_keeps_user_version():
          patch.object(ip, "run_ats_gate") as ats, \
          patch.object(ip, "_emit"):
         SL.return_value = MagicMock()
-        ip.run_user_feedback_refine("k1", "resume", notes)
+        ip.run_user_feedback_refine("k1", "resume", notes, 1)
 
     # refine called with our built issues
     args, kwargs = refine_fn.call_args
@@ -63,7 +63,7 @@ def test_run_user_feedback_refine_keeps_user_version():
     assert log[-1]["score"] == 0.50
     assert log[-1]["passed"] is False  # 0.50 < pass_score 0.80
     assert job.resume_eval_score == 0.50  # kept the user-directed result, not 0.95
-    ats.assert_called_once_with("k1")
+    ats.assert_called_once_with("k1", 1)
 
 
 from fastapi.testclient import TestClient
@@ -90,13 +90,15 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     from web.main import app
+    from web.tenancy import current_profile_id
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
 
 def _job(db, key="k1"):
-    j = Job(job_key=key, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
+    j = Job(job_key=key, profile_id=1, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
     db.add(j)
     db.commit()
     return j
@@ -128,19 +130,19 @@ def test_feedback_backfills_row_from_markdown(client, db_session, tmp_path, monk
         "---\nname: Jane Doe\n---\n## Profile\n\nEngineer who ships.\n", encoding="utf-8",
     )
     _job(db_session)
-    assert Document.fetch(db_session, "k1", "resume") is None
+    assert Document.fetch(db_session, "k1", "resume", profile_id=1) is None
 
     r = client.post("/api/jobs/k1/resume/feedback",
                     json={"notes": [{"section": "summary", "label": "Profile summary", "note": "punchier"}]})
     assert r.status_code == 202
     # Row was persisted and the refine was spawned.
-    assert Document.fetch(db_session, "k1", "resume") is not None
+    assert Document.fetch(db_session, "k1", "resume", profile_id=1) is not None
     assert calls and calls[0][1] == "k1" and calls[0][2] == "resume"
 
 
 def test_feedback_400_empty_notes(client, db_session):
     _job(db_session)
-    Document.upsert(db_session, "k1", "resume", '{"profile_summary":"x"}')
+    Document.upsert(db_session, "k1", "resume", '{"profile_summary":"x"}', profile_id=1)
     r = client.post("/api/jobs/k1/resume/feedback", json={"notes": [{"label": "x", "note": "  "}]})
     assert r.status_code == 400
 
@@ -150,7 +152,7 @@ def test_feedback_202_spawns(client, db_session, monkeypatch):
     calls = []
     monkeypatch.setattr(jobs_router, "_spawn", lambda *a: calls.append(a))
     _job(db_session)
-    Document.upsert(db_session, "k1", "resume", '{"profile_summary":"x"}')
+    Document.upsert(db_session, "k1", "resume", '{"profile_summary":"x"}', profile_id=1)
     r = client.post("/api/jobs/k1/resume/feedback",
                     json={"notes": [{"section": "summary", "label": "Profile summary", "note": "punchier"}]})
     assert r.status_code == 202

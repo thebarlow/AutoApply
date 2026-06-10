@@ -2,6 +2,12 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from core.user import User
+from db.database import Base
+from db.events import register_tenant_guard
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -46,3 +52,24 @@ def disable_background_spawns(monkeypatch):
     import web.routers.jobs as _jobs_mod
 
     monkeypatch.setattr(_jobs_mod, "_spawn", lambda *a, **k: None)
+
+
+@pytest.fixture
+def tenant_db():
+    """In-memory DB with the tenant guard installed."""
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    register_tenant_guard()
+    db = sessionmaker(bind=engine)()
+    yield db
+    db.close()
+
+
+@pytest.fixture
+def seed_tenant(tenant_db):
+    """Factory: create a tenant (User row) and return its profile_id."""
+    def _make(profile_id: int, name: str = "T") -> int:
+        tenant_db.add(User(id=profile_id, name=name, data="{}"))
+        tenant_db.commit()
+        return profile_id
+    return _make

@@ -201,7 +201,7 @@ class TestRefineResumeMd:
         db = sessionmaker(bind=engine)()
         try:
             job = Job(job_key="no_doc", source="x", title="t",
-                      company="Acme", url="u", state="new")
+                      company="Acme", url="u", state="new", profile_id=1)
             db.add(job)
             db.commit()
             with pytest.raises(FileNotFoundError):

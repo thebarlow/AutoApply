@@ -253,16 +253,19 @@ def seed_latex_templates(db: Session) -> None:
         db.commit()
 
 
-def seed_skill_aliases(db: Session) -> None:
-    """Insert curated skill aliases that are not already present (idempotent)."""
+def seed_skill_aliases(db: Session, profile_id: int = 1) -> None:
+    """Insert curated skill aliases for ``profile_id`` that aren't already present (idempotent)."""
     from db.database import SkillAlias
     from core.skill_analytics import seed_alias_pairs
 
-    existing = {row.alias_key for row in db.query(SkillAlias).all()}
+    existing = {
+        row.alias_key
+        for row in db.query(SkillAlias).filter_by(profile_id=profile_id).all()
+    }
     added = False
     for alias_key, canonical in seed_alias_pairs():
         if alias_key not in existing:
-            db.add(SkillAlias(alias_key=alias_key, canonical=canonical))
+            db.add(SkillAlias(profile_id=profile_id, alias_key=alias_key, canonical=canonical))
             added = True
     if added:
         db.commit()

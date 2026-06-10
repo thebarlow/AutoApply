@@ -6,17 +6,21 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from core.job import Job
 from web import llm_status
+from web.tenancy import current_profile_id, scoped
 
 router = APIRouter(prefix="/api")
 
 
 @router.get("/llm-status")
-def get_llm_status(db: Session = Depends(get_db)) -> dict:
+def get_llm_status(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict:
     job_keys = llm_status.snapshot()
     actions = llm_status.action_snapshot()
 
     jobs = (
-        db.query(Job).filter(Job.job_key.in_(job_keys)).all()
+        scoped(db, Job, profile_id).filter(Job.job_key.in_(job_keys)).all()
         if job_keys else []
     )
     display = {j.job_key: {"title": j.title or "", "company": j.company or ""} for j in jobs}

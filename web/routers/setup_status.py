@@ -31,7 +31,7 @@ def _has_parsed_resume(db: Session) -> bool:
     Checks for structured data in skills, work_history, education, or projects.
     """
     # Get active profile (same logic as config.py)
-    active_raw = db.query(Config).filter_by(key="active_profile_id").first()
+    active_raw = db.query(Config).filter_by(key="dev_tenant_id").first()
     row: User | None = None
 
     if active_raw and active_raw.value:

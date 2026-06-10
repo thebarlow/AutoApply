@@ -58,12 +58,13 @@ def load_max_jobs(db: Session) -> int:
     return 50
 
 
-def run_scraper(db: Session, sources: list[JobSource]) -> list[Job]:
+def run_scraper(db: Session, sources: list[JobSource], profile_id: int) -> list[Job]:
     """Fetch jobs from all sources and persist new ones.
 
     Args:
         db: SQLAlchemy session.
         sources: List of JobSource instances to fetch from.
+        profile_id: Owning tenant's profile id.
 
     Returns:
         List of newly inserted Job objects.
@@ -80,6 +81,6 @@ def run_scraper(db: Session, sources: list[JobSource]) -> list[Job]:
         except Exception as e:
             warnings.warn(f"[scraper] {source.source_id} failed: {e}")
 
-    new_jobs = Job.save_batch_returning(all_scraped, db)
+    new_jobs = Job.save_batch_returning(all_scraped, db, profile_id)
     print(f"[scraper] saved {len(new_jobs)} new jobs (skipped {len(all_scraped) - len(new_jobs)} duplicates)")
     return new_jobs

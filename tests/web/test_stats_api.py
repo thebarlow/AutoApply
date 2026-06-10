@@ -41,7 +41,9 @@ def db_session():
 
 @pytest.fixture
 def client(db_session):
+    from web.tenancy import current_profile_id
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -49,6 +51,7 @@ def client(db_session):
 def _make_job(db, key, scraped_at, state="new", resume_gen=None, cover_gen=None):
     job = Job(
         job_key=key,
+        profile_id=1,
         source="test",
         url=f"https://example.com/{key}",
         state=state,
@@ -133,6 +136,7 @@ def _make_extracted_job(db, key, required="", preferred="", tech_stack="",
                         seniority=""):
     job = Job(
         job_key=key,
+        profile_id=1,
         source="test",
         url=f"https://example.com/{key}",
         state="new",

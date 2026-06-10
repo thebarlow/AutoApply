@@ -60,30 +60,32 @@ class Document(Base):
 
     __tablename__ = "documents"
     __table_args__ = (
-        UniqueConstraint("job_key", "doc_type", name="uq_documents_job_type"),
+        UniqueConstraint("profile_id", "job_key", "doc_type", name="uq_documents_profile_job_type"),
     )
 
     id = Column(Integer, primary_key=True)
+    profile_id = Column(Integer, nullable=False, index=True)
     job_key = Column(String, nullable=False)
     doc_type = Column(String, nullable=False)  # "resume" | "cover"
     structured_json = Column(Text, nullable=False, default="{}")
     created_at = Column(String)
 
     @classmethod
-    def fetch(cls, db: "Session", job_key: str, doc_type: str) -> "Document | None":
-        """Return the stored document for (job_key, doc_type), or None."""
+    def fetch(cls, db: "Session", job_key: str, doc_type: str, profile_id: int) -> "Document | None":
+        """Return the stored document for (profile_id, job_key, doc_type), or None."""
         return (
             db.query(cls)
-            .filter_by(job_key=job_key, doc_type=doc_type)
+            .filter_by(profile_id=profile_id, job_key=job_key, doc_type=doc_type)
             .first()
         )
 
     @classmethod
-    def upsert(cls, db: "Session", job_key: str, doc_type: str, structured_json: str) -> "Document":
-        """Insert or replace the document for (job_key, doc_type) and commit."""
-        row = cls.fetch(db, job_key, doc_type)
+    def upsert(cls, db: "Session", job_key: str, doc_type: str, structured_json: str, profile_id: int) -> "Document":
+        """Insert or replace the document for (profile_id, job_key, doc_type) and commit."""
+        row = cls.fetch(db, job_key, doc_type, profile_id=profile_id)
         if row is None:
             row = cls(
+                profile_id=profile_id,
                 job_key=job_key,
                 doc_type=doc_type,
                 structured_json=structured_json,
@@ -106,6 +108,7 @@ class SkillAlias(Base):
     """
 
     __tablename__ = "skill_aliases"
+    profile_id = Column(Integer, primary_key=True)
     alias_key = Column(String, primary_key=True)
     canonical = Column(String, nullable=False)
 
@@ -405,11 +408,32 @@ def _migrate_resume_eval_prompt_v2() -> None:
         db.close()
 
 
+def _migrate_tenant_columns() -> None:
+    """Add profile_id column to jobs, documents, and skill_aliases if missing.
+
+    Pre-existing ``skill_aliases`` rows are backfilled to the dev tenant (1) so
+    ``seed_skill_aliases`` (which now scopes its idempotency check by
+    profile_id) doesn't try to re-insert duplicates of rows that predate the
+    profile_id column.
+    """
+    with engine.connect() as conn:
+        for table in ("jobs", "documents", "skill_aliases"):
+            existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()]
+            if "profile_id" not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN profile_id INTEGER"))
+        # Backfill any NULL profile_id (rows predating the column, or added by
+        # the ALTER above) to the dev tenant so seeding/scoped queries work.
+        conn.execute(text("UPDATE skill_aliases SET profile_id = 1 WHERE profile_id IS NULL"))
+        conn.commit()
+
+
 def init_db() -> None:
     """Create all tables, run schema migrations, and seed default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
     import core.user  # noqa: F401 — registers User with Base.metadata
     Base.metadata.create_all(bind=engine)
+    from db.events import register_tenant_guard
+    register_tenant_guard()
     _migrate_profile_name()
     _migrate_legacy_config()
     _migrate_ext_columns()
@@ -420,6 +444,7 @@ def init_db() -> None:
     _migrate_resume_eval_columns()
     _migrate_resume_docx_column()
     _migrate_ats_report_columns()
+    _migrate_tenant_columns()
     from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db, seed_skill_aliases
     db = SessionLocal()
     try:

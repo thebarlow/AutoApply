@@ -560,7 +560,7 @@ class ActiveProfileBody(BaseModel):
 @router.get("/api/config/profiles")
 def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
     rows = db.query(User).all()
-    active_raw = _get(db, "active_profile_id")
+    active_raw = _get(db, "dev_tenant_id")
     active_id = int(active_raw) if active_raw else None
     profiles = []
     for r in rows:
@@ -598,7 +598,7 @@ def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -
     row = db.query(User).filter_by(id=body.active_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
-    _set(db, "active_profile_id", str(body.active_id))
+    _set(db, "dev_tenant_id", str(body.active_id))
     return {"active_id": body.active_id}
 
 
@@ -617,7 +617,7 @@ def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
 
     Returns all False if no active profile or profile row missing.
     """
-    active_raw = _get(db, "active_profile_id")
+    active_raw = _get(db, "dev_tenant_id")
     row: Optional[User] = None
     if active_raw:
         try:
@@ -693,13 +693,13 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
         raise HTTPException(status_code=404, detail="Profile not found")
     data = json.loads(row.data)
     db.delete(row)
-    active_raw = _get(db, "active_profile_id")
+    active_raw = _get(db, "dev_tenant_id")
     if active_raw and int(active_raw) == profile_id:
-        cfg = db.query(Config).filter_by(key="active_profile_id").first()
+        cfg = db.query(Config).filter_by(key="dev_tenant_id").first()
         if cfg:
             cfg.value = ""
         else:
-            db.add(Config(key="active_profile_id", value=""))
+            db.add(Config(key="dev_tenant_id", value=""))
     db.commit()
     env = _read_env()
     if env.pop(f"LLM_KEY_PROFILE_{profile_id}", None) is not None:

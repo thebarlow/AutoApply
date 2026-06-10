@@ -75,3 +75,13 @@ files and are slated for removal in a later phase).
 The running app and the test suite still build schema via `create_all`/`init_db` in
 Phase 1; cutover to `alembic upgrade head` at startup happens with the Postgres data
 port in a later phase.
+
+### Tenant scoping (Phase 2)
+
+Every tenant-owned table (`jobs`, `documents`, `skill_aliases`) carries
+`profile_id` (= `user_profile.id`). **Rule:** never `db.query(Job/Document/SkillAlias)`
+directly — read through `web.tenancy.scoped(db, Model, profile_id)`; writes set
+`profile_id`. Routers inject `current_profile_id` (dev stub → `Config['dev_tenant_id']`,
+default 1) and pass it down into `core/`. A `before_flush` guard (`db/events.py`)
+fails any tenant insert missing `profile_id`. Phase 3 ports existing SQLite data into
+tenant `profile_id=1` and cuts startup over to `alembic upgrade head`.

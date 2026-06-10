@@ -39,7 +39,7 @@ def test_run_ats_check_passes_on_clean_pdf(db_session, tmp_path, monkeypatch):
         header=ResumeHeader(name="Jane Doe", email="jane@x.com", phone="555-1212", location="NYC"),
         section_order=["experience"],
     )
-    Document.upsert(db_session, "job1", "resume", doc.model_dump_json())
+    Document.upsert(db_session, "job1", "resume", doc.model_dump_json(), profile_id=1)
     (tmp_path / "job1_resume.pdf").write_bytes(b"%PDF-1.4 fake")
 
     clean_text = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\n"
@@ -48,6 +48,7 @@ def test_run_ats_check_passes_on_clean_pdf(db_session, tmp_path, monkeypatch):
 
     job = Job.__new__(Job)
     job.job_key = "job1"
+    job.profile_id = 1
     job.ext_required_skills = ""
     job.ext_preferred_skills = ""
 

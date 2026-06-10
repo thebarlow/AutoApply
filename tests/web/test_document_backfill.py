@@ -29,13 +29,15 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     from web.main import app
+    from web.tenancy import current_profile_id
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
 
 def _job(db, key="bf1"):
-    j = Job(job_key=key, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
+    j = Job(job_key=key, profile_id=1, source="x", title="t", company="Acme", url=f"u/{key}", state=JobState.NEW.value)
     db.add(j)
     db.commit()
     return j
@@ -50,7 +52,7 @@ def test_get_document_backfills_from_markdown(client, db_session, tmp_path, monk
         encoding="utf-8",
     )
     _job(db_session)
-    assert Document.fetch(db_session, "bf1", "resume") is None
+    assert Document.fetch(db_session, "bf1", "resume", profile_id=1) is None
 
     r = client.get("/api/jobs/bf1/resume/document")
     assert r.status_code == 200
@@ -58,7 +60,7 @@ def test_get_document_backfills_from_markdown(client, db_session, tmp_path, monk
     assert r.json()["header"]["name"] == "Jane Doe"
     # Parse-on-read: reconstruction must NOT persist a row (the .md stays the source
     # of truth; a row is created only on edit/regenerate).
-    assert Document.fetch(db_session, "bf1", "resume") is None
+    assert Document.fetch(db_session, "bf1", "resume", profile_id=1) is None
 
 
 def test_get_document_backfills_cover_from_markdown(client, db_session, tmp_path, monkeypatch):
@@ -70,13 +72,13 @@ def test_get_document_backfills_cover_from_markdown(client, db_session, tmp_path
         encoding="utf-8",
     )
     _job(db_session, key="bf3")
-    assert Document.fetch(db_session, "bf3", "cover") is None
+    assert Document.fetch(db_session, "bf3", "cover", profile_id=1) is None
 
     r = client.get("/api/jobs/bf3/cover/document")
     assert r.status_code == 200
     assert "I am excited to apply." in r.json()["body"]
     # Parse-on-read: no row persisted.
-    assert Document.fetch(db_session, "bf3", "cover") is None
+    assert Document.fetch(db_session, "bf3", "cover", profile_id=1) is None
 
 
 def test_get_document_404_when_no_row_and_no_markdown(client, db_session, tmp_path, monkeypatch):

@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import Boolean, Column, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Session
 
 from db.database import Base, Document
@@ -169,6 +169,10 @@ class Job(Base):
 
     __tablename__ = "jobs"
     __allow_unmapped__ = True
+    __table_args__ = (
+        UniqueConstraint("profile_id", "job_key", name="uq_jobs_profile_job_key"),
+        UniqueConstraint("profile_id", "url", name="uq_jobs_profile_url"),
+    )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "Job":
         """Ensure SQLAlchemy instance state is initialized when using __new__ directly.
@@ -186,7 +190,8 @@ class Job(Base):
 
     # ── Scrape data ────────────────────────────────────────────────────────────
     id = Column(Integer, primary_key=True)
-    job_key = Column(String, unique=True, nullable=False)
+    profile_id = Column(Integer, nullable=False, index=True)
+    job_key = Column(String, nullable=False)
     source = Column(String, nullable=False)
     title = Column(String)
     company = Column(String)
@@ -194,7 +199,7 @@ class Job(Base):
     salary = Column(String)
     remote = Column(Boolean)
     description = Column(Text)
-    url = Column(String, unique=True, nullable=False)
+    url = Column(String, nullable=False)
     posted_at = Column(String)
     scraped_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     state = Column(String, nullable=False, default="new")
@@ -272,32 +277,49 @@ class Job(Base):
         )
 
     @classmethod
-    def save_batch(cls, scraped_jobs: list[Any], db: Session) -> int:
+    def from_scraped_for(cls, scraped: Any, profile_id: int) -> "Job":
+        """Like from_scraped but stamps the owning tenant.
+
+        Args:
+            scraped: A ScrapedJob dataclass instance.
+            profile_id: Owning tenant's profile id.
+
+        Returns:
+            Unsaved Job instance with profile_id set.
+        """
+        job = cls.from_scraped(scraped)
+        job.profile_id = profile_id
+        return job
+
+    @classmethod
+    def save_batch(cls, scraped_jobs: list[Any], db: Session, profile_id: int) -> int:
         """Persist a list of ScrapedJob objects, skipping URL duplicates.
 
         Args:
             scraped_jobs: List of ScrapedJob instances from a scraper source.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             Number of newly inserted jobs.
         """
         count = 0
         for scraped in scraped_jobs:
-            if db.query(cls).filter_by(url=scraped.url).first():
+            if db.query(cls).filter_by(url=scraped.url, profile_id=profile_id).first():
                 continue
-            db.add(cls.from_scraped(scraped))
+            db.add(cls.from_scraped_for(scraped, profile_id))
             count += 1
         db.commit()
         return count
 
     @classmethod
-    def save_batch_returning(cls, scraped_jobs: list[Any], db: Session) -> list["Job"]:
+    def save_batch_returning(cls, scraped_jobs: list[Any], db: Session, profile_id: int) -> list["Job"]:
         """Persist new (non-duplicate) jobs and return the inserted Job objects.
 
         Args:
             scraped_jobs: List of ScrapedJob instances from a scraper source.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             List of newly inserted Job instances.
@@ -307,13 +329,13 @@ class Job(Base):
         urls = {s.url for s in scraped_jobs}
         existing_urls = {
             row[0]
-            for row in db.query(cls.url).filter(cls.url.in_(urls)).all()
+            for row in db.query(cls.url).filter(cls.url.in_(urls), cls.profile_id == profile_id).all()
         }
         new_jobs: list["Job"] = []
         for scraped in scraped_jobs:
             if scraped.url in existing_urls:
                 continue
-            job = cls.from_scraped(scraped)
+            job = cls.from_scraped_for(scraped, profile_id)
             db.add(job)
             new_jobs.append(job)
         db.commit()
@@ -322,25 +344,27 @@ class Job(Base):
         return new_jobs
 
     @classmethod
-    def get(cls, job_key: str, db: Session) -> Optional["Job"]:
-        """Fetch a single job by job_key.
+    def get(cls, job_key: str, db: Session, profile_id: int) -> Optional["Job"]:
+        """Fetch a single job by job_key, scoped to a tenant.
 
         Args:
             job_key: Unique job identifier.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             Job instance, or None if not found.
         """
-        return db.query(cls).filter_by(job_key=job_key).first()
+        return db.query(cls).filter_by(job_key=job_key, profile_id=profile_id).first()
 
     @classmethod
-    def get_or_raise(cls, job_key: str, db: Session) -> "Job":
+    def get_or_raise(cls, job_key: str, db: Session, profile_id: int) -> "Job":
         """Fetch a single job by job_key, raising if not found.
 
         Args:
             job_key: Unique job identifier.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             Job instance.
@@ -348,17 +372,18 @@ class Job(Base):
         Raises:
             ValueError: If no job with that key exists.
         """
-        job = cls.get(job_key, db)
+        job = cls.get(job_key, db, profile_id)
         if job is None:
             raise ValueError(f"Job '{job_key}' not found")
         return job
 
     @classmethod
-    def all_inbox(cls, db: Session) -> list["Job"]:
+    def list_for_review(cls, db: Session, profile_id: int) -> list["Job"]:
         """Return all jobs awaiting review (new or pending_review) ordered by final_score descending.
 
         Args:
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             List of Job instances in NEW or PENDING_REVIEW state.
@@ -366,6 +391,7 @@ class Job(Base):
         return (
             db.query(cls)
             .filter(cls.state.in_([JobState.NEW.value, JobState.PENDING_REVIEW.value]))
+            .filter(cls.profile_id == profile_id)
             .order_by(cls.final_score.desc())
             .all()
         )
@@ -573,7 +599,7 @@ class Job(Base):
         """
         from core.document_builder import apply_resume_patch
 
-        row = Document.fetch(db, self.job_key, doc_type)
+        row = Document.fetch(db, self.job_key, doc_type, profile_id=self.profile_id)
         if row is None:
             raise FileNotFoundError(
                 f"No structured {doc_type} document found for {self.job_key}"
@@ -602,7 +628,7 @@ class Job(Base):
                 max_tokens=32768, empty_msg="Resume refine returned empty content",
             )
             patched = apply_resume_patch(doc, generation)
-            Document.upsert(db, self.job_key, "resume", patched.model_dump_json())
+            Document.upsert(db, self.job_key, "resume", patched.model_dump_json(), profile_id=self.profile_id)
             self.write_resume_markdown(patched)
         else:
             doc = CoverDocument.model_validate_json(row.structured_json)
@@ -612,7 +638,7 @@ class Job(Base):
             if not (content or "").strip():
                 raise RuntimeError("Cover refine returned empty content")
             doc.body = (content or "").strip()
-            Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+            Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
             self.write_cover_markdown(doc)
 
     def refine_resume_md(
@@ -758,7 +784,7 @@ class Job(Base):
             llm_status.start(job_key)
             try:
                 print(f"[intake] {job_key}: extraction started", flush=True)
-                thread_job = thread_db.query(Job).filter_by(job_key=job_key).first()
+                thread_job = thread_db.query(Job).filter_by(job_key=job_key, profile_id=self.profile_id).first()
                 if thread_job is None:
                     print(f"[intake] {job_key}: job not found in thread session", flush=True)
                     return
@@ -858,7 +884,7 @@ class Job(Base):
             ),
         )
         doc = build_resume_document(user, generation, db)
-        Document.upsert(db, self.job_key, "resume", doc.model_dump_json())
+        Document.upsert(db, self.job_key, "resume", doc.model_dump_json(), profile_id=self.profile_id)
         self.write_resume_markdown(doc)
 
     def generate_cover_md(
@@ -889,7 +915,7 @@ class Job(Base):
                 "Try a non-reasoning model or a shorter prompt."
             )
         doc = build_cover_document(user, content.strip(), db)
-        Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+        Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
         self.write_cover_markdown(doc)
 
     def write_resume_markdown(self, doc: "ResumeDocument") -> None:
@@ -969,7 +995,7 @@ class Job(Base):
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
         if not pdf_path.exists():
             raise FileNotFoundError(f"Resume PDF not found: {pdf_path}")
-        row = Document.fetch(db, self.job_key, "resume")
+        row = Document.fetch(db, self.job_key, "resume", profile_id=self.profile_id)
         if row is None:
             raise FileNotFoundError(f"No structured resume document for {self.job_key}")
         doc = ResumeDocument.model_validate_json(row.structured_json)
@@ -1168,7 +1194,7 @@ class Job(Base):
         the contact/education captured at generation time, not the live profile.
         """
         from core.user import User
-        row = Document.fetch(db, self.job_key, doc_type)
+        row = Document.fetch(db, self.job_key, doc_type, profile_id=self.profile_id)
         if row is not None:
             model = ResumeDocument if doc_type == "resume" else CoverDocument
             stored = model.model_validate_json(row.structured_json)

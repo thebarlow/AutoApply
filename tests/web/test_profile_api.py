@@ -115,7 +115,7 @@ def test_put_active_sets_config(client, db_session):
     resp = client.put("/api/config/profiles/active", json={"active_id": row.id})
     assert resp.status_code == 200
 
-    cfg = db_session.query(Config).filter_by(key="active_profile_id").first()
+    cfg = db_session.query(Config).filter_by(key="dev_tenant_id").first()
     assert cfg is not None
     assert int(cfg.value) == row.id
 

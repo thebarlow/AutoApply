@@ -43,6 +43,7 @@ def _warm_lazy_imports() -> None:
 
 def _purge_deleted_jobs() -> None:
     """Permanently remove any jobs left in state='deleted' from a prior session."""
+    # global purge across tenants — startup maintenance, not request-scoped
     from db.database import SessionLocal
     from core.job import Job
     db = SessionLocal()

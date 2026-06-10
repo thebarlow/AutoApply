@@ -28,7 +28,9 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     from web.main import app
+    from web.tenancy import current_profile_id
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[current_profile_id] = lambda: 1
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -48,13 +50,13 @@ def test_run_pipeline_calls_extraction_then_scoring(monkeypatch):
 
     with patch("web.intake_pipeline.SessionLocal", return_value=mock_db), \
          patch("web.intake_pipeline.Job") as MockJob, \
-         patch("web.intake_pipeline._do_extract_description", side_effect=lambda j, db: calls.append("extract")), \
-         patch("web.intake_pipeline._do_score", side_effect=lambda j, db: calls.append("score")), \
+         patch("web.intake_pipeline._do_extract_description", side_effect=lambda j, db, p: calls.append("extract")), \
+         patch("web.intake_pipeline._do_score", side_effect=lambda j, db, p: calls.append("score")), \
          patch("web.intake_pipeline.llm_status"), \
          patch("web.intake_pipeline._emit"):
 
         MockJob.get.return_value = mock_job
-        run_pipeline("abc123")
+        run_pipeline("abc123", 1)
 
     assert calls == ["extract", "score"]
 
@@ -69,12 +71,12 @@ def test_run_pipeline_skips_scoring_if_extraction_fails(monkeypatch):
     with patch("web.intake_pipeline.SessionLocal", return_value=mock_db), \
          patch("web.intake_pipeline.Job") as MockJob, \
          patch("web.intake_pipeline._do_extract_description", side_effect=RuntimeError("boom")), \
-         patch("web.intake_pipeline._do_score", side_effect=lambda j, db: calls.append("score")), \
+         patch("web.intake_pipeline._do_score", side_effect=lambda j, db, p: calls.append("score")), \
          patch("web.intake_pipeline.llm_status"), \
          patch("web.intake_pipeline._emit"):
 
         MockJob.get.return_value = mock_job
-        run_pipeline("abc123")
+        run_pipeline("abc123", 1)
 
     assert calls == []
 
@@ -91,7 +93,7 @@ def test_run_pipeline_closes_db_session_on_error(monkeypatch):
          patch("web.intake_pipeline._emit"):
 
         MockJob.get.return_value = _make_db_job()
-        run_pipeline("abc123")
+        run_pipeline("abc123", 1)
 
     mock_db.close.assert_called_once()
 
@@ -116,7 +118,7 @@ def test_serve_doc_turn_markdown_route(client, db_session, tmp_path, monkeypatch
     from core.schemas import ResumeDocument, ResumeExperience
     monkeypatch.setattr(jobs_router, "_GENERATOR_OUTPUTS", tmp_path)
 
-    job = Job(job_key="rt1", source="x", title="t", company="Acme",
+    job = Job(job_key="rt1", profile_id=1, source="x", title="t", company="Acme",
               url="u/rt1", state=JobState.NEW.value)
     db_session.add(job)
     db_session.commit()
