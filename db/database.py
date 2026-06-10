@@ -114,7 +114,19 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///auto_apply.db")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+def make_connect_args(url: str) -> dict:
+    """Return driver connect args appropriate to the database dialect.
+
+    ``check_same_thread`` is a SQLite-only pragma; passing it to other drivers
+    (e.g. psycopg/Postgres) raises. Return it only for SQLite URLs.
+    """
+    if url.startswith("sqlite"):
+        return {"check_same_thread": False}
+    return {}
+
+
+engine = create_engine(DATABASE_URL, connect_args=make_connect_args(DATABASE_URL))
 SessionLocal = sessionmaker(bind=engine)
 
 
