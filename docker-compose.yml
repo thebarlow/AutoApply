@@ -1,0 +1,22 @@
+# Local development Postgres for the multi-tenancy rework.
+# Usage: docker compose up -d   (then set DATABASE_URL in .env to match)
+services:
+  db:
+    image: postgres:16
+    container_name: auto_apply_pg
+    environment:
+      POSTGRES_USER: auto_apply
+      POSTGRES_PASSWORD: auto_apply
+      POSTGRES_DB: auto_apply
+    ports:
+      - "5432:5432"
+    volumes:
+      - auto_apply_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auto_apply"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  auto_apply_pgdata:
