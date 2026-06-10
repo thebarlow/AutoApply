@@ -24,6 +24,7 @@ export default function Docs() {
   const [loading, setLoading] = useState(false);
   const [contentMap, setContentMap] = useState({});
   const pendingScrollRef = useRef(null);
+  const hashResolvedRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/docs")
@@ -60,6 +61,27 @@ export default function Docs() {
         setLoading(false);
       });
   }, [active]);
+
+  // Resolve a URL hash (e.g. /docs#installing-the-browser-extension) once doc
+  // contents are loaded: pick the doc containing that heading and scroll to it.
+  useEffect(() => {
+    if (hashResolvedRef.current) return;
+    const id = window.location.hash.replace(/^#/, "");
+    if (!id) { hashResolvedRef.current = true; return; }
+    const match = docs.find((d) =>
+      contentMap[d.filename] && extractH1s(contentMap[d.filename]).some((h) => h.id === id)
+    );
+    if (!match) return;
+    hashResolvedRef.current = true;
+    if (active?.filename === match.filename) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      else pendingScrollRef.current = id;
+    } else {
+      pendingScrollRef.current = id;
+      setActive(match);
+    }
+  }, [docs, contentMap]);
 
   useEffect(() => {
     if (!pendingScrollRef.current || loading) return;

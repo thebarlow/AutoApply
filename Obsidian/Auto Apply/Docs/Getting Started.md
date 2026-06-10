@@ -38,6 +38,18 @@ This service uses a custom browser extension to scrape jobs from the LinkedIn jo
 # Generating your Documents
 Once your job is scraped, our servers automatically begin processing the raw job description into something more structured. You can see this process happening in real time in the inbox widget of the dashboard. 
 
+## Manually Uploading a Job
+The browser extension is the easiest way to add jobs, but you can also enter one by hand — useful for postings that aren't on LinkedIn or that the extension can't reach.
+
+Click the **+ Upload** button at the top of the Inbox widget to open the upload form. Fill in the fields:
+
+- **Title** *(required)* — the job title.
+- **Description** *(required)* — paste the full job description. This is what the LLM tailors your documents to, so include as much detail as you can.
+- **Company**, **Location**, **Salary** — optional context that improves scoring and generation.
+- **Job URL** — optional link back to the original posting; also used to detect duplicates. Uploading a URL that already exists is rejected as a duplicate.
+
+Click **Upload** and the job lands in your Inbox, where it's processed exactly like a scraped job.
+
 Select a Job Card in your Inbox to interact with it. It will appear on the right of your screen in the Preview tab. If you do not see it, you probably need to exit out of your User Profile settings. They use the same widget.
 
 The Job Card Preview view has a row of tabs for 

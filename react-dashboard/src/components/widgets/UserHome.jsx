@@ -319,20 +319,14 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => onSelect(activeProfile.id)}
-          className="flex flex-col text-left hover:opacity-80 transition-opacity min-w-0"
-        >
-          <span className="text-xs text-space-dim uppercase tracking-widest mb-0.5">Welcome back</span>
-          <span className="text-lg font-semibold text-space-text truncate">{displayName}</span>
-        </button>
-        <div className="self-stretch w-px bg-space-border ml-auto" />
+      <div className="flex flex-col items-center gap-2">
+        <span className="text-xs text-space-dim uppercase tracking-widest">Welcome back</span>
         <button
           onClick={() => setShowSwitchUser(true)}
-          className="text-sm text-space-dim hover:text-purple-400 transition-colors shrink-0"
+          title="Switch user"
+          className="max-w-full truncate px-4 py-1.5 rounded-lg border border-space-border text-lg font-semibold text-purple-300 hover:text-purple-200 hover:border-purple-500 transition-colors"
         >
-          Switch User
+          {displayName}
         </button>
       </div>
 

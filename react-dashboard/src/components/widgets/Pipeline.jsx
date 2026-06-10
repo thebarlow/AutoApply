@@ -31,7 +31,7 @@ function InboxEmpty() {
     <div className="text-center py-12 text-space-dim">
       <p className="mb-2">No jobs to see here!</p>
       <a
-        href="/docs"
+        href="/docs#installing-the-browser-extension"
         className="text-purple-400 hover:underline"
       >
         How to upload jobs →
