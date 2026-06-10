@@ -98,10 +98,53 @@ def _sections(body: str) -> dict[str, str]:
 
 
 _DATE_SEP = re.compile(r"\s*[–—-]\s*")
+# A line that starts a new experience entry: either a '### ' heading (assembler
+# format) or a standalone fully-bold line (legacy LLM format wraps each entry's
+# heading in ** ** instead of using ###). Hard-break trailing spaces are tolerated.
+_EXP_HEADING_HASH = re.compile(r"^###\s+(?P<head>.+?)\s*$")
+_EXP_HEADING_BOLD = re.compile(r"^\*\*(?P<head>.+?)\*\*\s*$")
+
+
+def _parse_experience_heading(head: str) -> tuple[str, str, str, str]:
+    """Split an experience heading into (title, company, start, end).
+
+    Handles both the canonical assembler format ``Title, Company (dates)`` and the
+    legacy ``Title at Company (dates)`` form. Surrounding bold markers are stripped.
+    The title/company split prefers the first comma (titles don't contain commas,
+    companies can); falling back to the first `` at `` token when no comma exists.
+    """
+    head = head.strip()
+    # Strip surrounding bold markers, e.g. "**Instructor at Mathnasium (2023)**".
+    bold = re.match(r"^\*\*(.+?)\*\*$", head)
+    if bold:
+        head = bold.group(1).strip()
+    m_dates = re.search(r"\s*\(([^)]*)\)\s*$", head)
+    dates = m_dates.group(1).strip() if m_dates else ""
+    base = head[: m_dates.start()] if m_dates else head
+    base = base.strip()
+    idx = base.find(",")
+    if idx != -1:
+        title, company = base[:idx].strip(), base[idx + 1:].strip()
+    else:
+        at = re.search(r"\s+at\s+", base)
+        if at:
+            title, company = base[: at.start()].strip(), base[at.end():].strip()
+        else:
+            title, company = base, ""
+    start = end = ""
+    if dates:
+        parts = _DATE_SEP.split(dates, maxsplit=1)
+        start = parts[0].strip()
+        end = parts[1].strip() if len(parts) > 1 else ""
+    return title, company, start, end
 
 
 def _parse_experience(text: str) -> list[ResumeExperience]:
     """Parse the Experience section body into a list of ResumeExperience entries.
+
+    Each entry begins at a heading line — either ``### ...`` or a standalone bold
+    line — and runs until the next heading. This tolerates the legacy LLM format
+    where only the first entry used ``###`` and the rest used bold-only headings.
 
     Args:
         text: The raw text content of the Experience section (below ``## Experience``).
@@ -110,38 +153,37 @@ def _parse_experience(text: str) -> list[ResumeExperience]:
         Parsed list of experience entries.
     """
     out: list[ResumeExperience] = []
-    # Split on '### ' headings.
-    chunks = re.split(r"(?m)^###\s+", text)
-    for chunk in chunks:
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        head, _, desc = chunk.partition("\n")
-        head = head.strip()
-        title = company = start = end = ""
-        # Strip trailing (dates) first, then split on FIRST comma so company names
-        # containing commas (e.g. "Smith, Jones & Co") are preserved intact.
-        # Titles do not contain commas; companies can.
-        m_dates = re.search(r"\s*\(([^)]*)\)\s*$", head)
-        dates = m_dates.group(1).strip() if m_dates else ""
-        base = head[:m_dates.start()] if m_dates else head
-        idx = base.find(",")
-        if idx != -1:
-            title, company = base[:idx].strip(), base[idx + 1:].strip()
-        else:
-            title, company = base.strip(), ""
-        if dates:
-            parts = _DATE_SEP.split(dates, maxsplit=1)
-            start = parts[0].strip()
-            end = parts[1].strip() if len(parts) > 1 else ""
+    cur_head: str | None = None
+    desc_lines: list[str] = []
+
+    def flush() -> None:
+        if cur_head is None:
+            return
+        title, company, start, end = _parse_experience_heading(cur_head)
         out.append(ResumeExperience(
-            title=title, company=company, start=start, end=end, description=desc.strip(),
+            title=title, company=company, start=start, end=end,
+            description="\n".join(desc_lines).strip(),
         ))
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        m = _EXP_HEADING_HASH.match(stripped) or _EXP_HEADING_BOLD.match(stripped)
+        if m:
+            flush()
+            cur_head = m.group("head").strip()
+            desc_lines = []
+        elif cur_head is not None:
+            desc_lines.append(line)
+    flush()
     return out
 
 
 def _parse_projects(text: str) -> list[ResumeProject]:
     """Parse the Projects section body into a list of ResumeProject entries.
+
+    Each project is a single line. Both the canonical ``**Name**: desc`` and the
+    legacy ``**Name:** desc`` (colon inside the bold) forms are accepted; trailing
+    hard-break spaces are ignored. Lines with no bold name become description-only.
 
     Args:
         text: The raw text content of the Projects section.
@@ -150,14 +192,14 @@ def _parse_projects(text: str) -> list[ResumeProject]:
         Parsed list of project entries.
     """
     out: list[ResumeProject] = []
-    for para in [p.strip() for p in text.split("\n\n") if p.strip()]:
-        # Assembler emits: **name**: desc
-        # No re.DOTALL: assembler emits single-line project entries.
-        m = re.match(r"^\*\*(?P<name>.+?)\*\*:\s*(?P<desc>.*)$", para)
+    for line in [ln.strip() for ln in text.splitlines() if ln.strip()]:
+        # Try colon-inside-bold first (**Name:** desc), then colon-outside (**Name**: desc).
+        m = (re.match(r"^\*\*(?P<name>.+?):\*\*\s*(?P<desc>.*)$", line)
+             or re.match(r"^\*\*(?P<name>.+?)\*\*:?\s*(?P<desc>.*)$", line))
         if m:
             out.append(ResumeProject(name=m.group("name").strip(), description=m.group("desc").strip()))
         else:
-            out.append(ResumeProject(name="", description=para))
+            out.append(ResumeProject(name="", description=line))
     return out
 
 
