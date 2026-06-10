@@ -15,6 +15,9 @@ const DISPLAY = {
   skills: SkillsGroupDisplay,
 }
 
+const FEEDBACK_CLS =
+  'w-full text-xs rounded bg-[#0a0a1a] border border-space-border text-space-text p-2 focus:border-purple-500 outline-none'
+
 // Render the structured résumé. `onSave(section, index, newValue)` persists an
 // edit (returns a Promise). `notes`/`setNote` form a controlled per-item feedback
 // store owned by the modal (keyed `${section}:${index}`).
@@ -52,32 +55,69 @@ export default function InteractiveResume({ doc, onSave, notes, setNote }) {
       )
     }
     const key = noteKey(section, index)
+    const feedbackOpen = feedbackFor && feedbackFor.section === section && feedbackFor.index === index
     return (
       <div className="flex flex-col gap-1">
-        <ItemRow onClick={() => setActive(isActive(section, index) ? null : { section, index })}>
-          <Display value={value} />
-        </ItemRow>
-        {isActive(section, index) && (
-          <ItemPopover
-            onEdit={() => {
-              if (feedbackFor && feedbackFor.section === section && feedbackFor.index === index) setFeedbackFor(null)
-              setEditing({ section, index })
-            }}
-            onFeedback={() => { setFeedbackFor({ section, index }); setActive(null) }}
-            onClose={() => setActive(null)}
-          />
-        )}
-        {(feedbackFor && feedbackFor.section === section && feedbackFor.index === index) || notes[key] ? (
+        {/* Popover sits to the RIGHT of the item, not below it. */}
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <ItemRow onClick={() => setActive(isActive(section, index) ? null : { section, index })}>
+              <Display value={value} />
+            </ItemRow>
+          </div>
+          {isActive(section, index) && (
+            <ItemPopover
+              onEdit={() => {
+                if (feedbackOpen) setFeedbackFor(null)
+                setEditing({ section, index })
+              }}
+              onFeedback={() => { setFeedbackFor({ section, index }); setActive(null) }}
+              onClose={() => setActive(null)}
+            />
+          )}
+        </div>
+        {feedbackOpen || notes[key] ? (
           <textarea
             rows={2}
-            autoFocus={!!(feedbackFor && feedbackFor.section === section && feedbackFor.index === index)}
+            autoFocus={!!feedbackOpen}
             placeholder="Feedback for regeneration…"
             value={notes[key]?.note || ''}
             onChange={(e) => setNote(key, { section, label: itemLabel(section, index, value), note: e.target.value })}
-            className="w-full text-xs rounded bg-[#0a0a1a] border border-space-border text-space-text p-2 focus:border-purple-500 outline-none"
+            className={FEEDBACK_CLS}
           />
         ) : null}
       </div>
+    )
+  }
+
+  // A section whose title is clickable for section-level (Feedback-only) notes.
+  const renderSection = (sectionKey, title, children) => {
+    const skey = noteKey(sectionKey, 'section')
+    const sActive = isActive(sectionKey, 'section')
+    const sFeedbackOpen = feedbackFor && feedbackFor.section === sectionKey && feedbackFor.index === 'section'
+    return (
+      <ResumeSection
+        title={title}
+        onTitleClick={() => setActive(sActive ? null : { section: sectionKey, index: 'section' })}
+        titlePopover={sActive ? (
+          <ItemPopover
+            onFeedback={() => { setFeedbackFor({ section: sectionKey, index: 'section' }); setActive(null) }}
+            onClose={() => setActive(null)}
+          />
+        ) : null}
+        feedbackBox={sFeedbackOpen || notes[skey] ? (
+          <textarea
+            rows={2}
+            autoFocus={!!sFeedbackOpen}
+            placeholder={`Feedback for the whole ${title} section…`}
+            value={notes[skey]?.note || ''}
+            onChange={(e) => setNote(skey, { section: sectionKey, label: `${title} section`, note: e.target.value })}
+            className={`${FEEDBACK_CLS} mb-2`}
+          />
+        ) : null}
+      >
+        {children}
+      </ResumeSection>
     )
   }
 
@@ -86,25 +126,17 @@ export default function InteractiveResume({ doc, onSave, notes, setNote }) {
       {doc.profile_summary ? (
         <ResumeSection title="Profile">{renderItem('summary', 0, doc.profile_summary)}</ResumeSection>
       ) : null}
-      {doc.experience?.length ? (
-        <ResumeSection title="Experience">
-          {doc.experience.map((e, i) => <div key={i}>{renderItem('experience', i, e)}</div>)}
-        </ResumeSection>
+      {doc.experience?.length ? renderSection('experience', 'Experience',
+        doc.experience.map((e, i) => <div key={i}>{renderItem('experience', i, e)}</div>)
       ) : null}
-      {doc.education?.length ? (
-        <ResumeSection title="Education">
-          {doc.education.map((ed, i) => <div key={i}>{renderItem('education', i, ed)}</div>)}
-        </ResumeSection>
+      {doc.education?.length ? renderSection('education', 'Education',
+        doc.education.map((ed, i) => <div key={i}>{renderItem('education', i, ed)}</div>)
       ) : null}
-      {doc.projects?.length ? (
-        <ResumeSection title="Projects">
-          {doc.projects.map((p, i) => <div key={i}>{renderItem('project', i, p)}</div>)}
-        </ResumeSection>
+      {doc.projects?.length ? renderSection('project', 'Projects',
+        doc.projects.map((p, i) => <div key={i}>{renderItem('project', i, p)}</div>)
       ) : null}
-      {doc.skills?.length ? (
-        <ResumeSection title="Skills">
-          {doc.skills.map((g, i) => <div key={i}>{renderItem('skills', i, g)}</div>)}
-        </ResumeSection>
+      {doc.skills?.length ? renderSection('skills', 'Skills',
+        doc.skills.map((g, i) => <div key={i}>{renderItem('skills', i, g)}</div>)
       ) : null}
     </div>
   )
