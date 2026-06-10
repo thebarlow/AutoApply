@@ -71,20 +71,21 @@ class Document(Base):
     created_at = Column(String)
 
     @classmethod
-    def fetch(cls, db: "Session", job_key: str, doc_type: str) -> "Document | None":
-        """Return the stored document for (job_key, doc_type), or None."""
+    def fetch(cls, db: "Session", job_key: str, doc_type: str, profile_id: int) -> "Document | None":
+        """Return the stored document for (profile_id, job_key, doc_type), or None."""
         return (
             db.query(cls)
-            .filter_by(job_key=job_key, doc_type=doc_type)
+            .filter_by(profile_id=profile_id, job_key=job_key, doc_type=doc_type)
             .first()
         )
 
     @classmethod
-    def upsert(cls, db: "Session", job_key: str, doc_type: str, structured_json: str) -> "Document":
-        """Insert or replace the document for (job_key, doc_type) and commit."""
-        row = cls.fetch(db, job_key, doc_type)
+    def upsert(cls, db: "Session", job_key: str, doc_type: str, structured_json: str, profile_id: int) -> "Document":
+        """Insert or replace the document for (profile_id, job_key, doc_type) and commit."""
+        row = cls.fetch(db, job_key, doc_type, profile_id=profile_id)
         if row is None:
             row = cls(
+                profile_id=profile_id,
                 job_key=job_key,
                 doc_type=doc_type,
                 structured_json=structured_json,

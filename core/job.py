@@ -595,7 +595,7 @@ class Job(Base):
         """
         from core.document_builder import apply_resume_patch
 
-        row = Document.fetch(db, self.job_key, doc_type)
+        row = Document.fetch(db, self.job_key, doc_type, profile_id=self.profile_id)
         if row is None:
             raise FileNotFoundError(
                 f"No structured {doc_type} document found for {self.job_key}"
@@ -624,7 +624,7 @@ class Job(Base):
                 max_tokens=32768, empty_msg="Resume refine returned empty content",
             )
             patched = apply_resume_patch(doc, generation)
-            Document.upsert(db, self.job_key, "resume", patched.model_dump_json())
+            Document.upsert(db, self.job_key, "resume", patched.model_dump_json(), profile_id=self.profile_id)
             self.write_resume_markdown(patched)
         else:
             doc = CoverDocument.model_validate_json(row.structured_json)
@@ -634,7 +634,7 @@ class Job(Base):
             if not (content or "").strip():
                 raise RuntimeError("Cover refine returned empty content")
             doc.body = (content or "").strip()
-            Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+            Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
             self.write_cover_markdown(doc)
 
     def refine_resume_md(
@@ -880,7 +880,7 @@ class Job(Base):
             ),
         )
         doc = build_resume_document(user, generation, db)
-        Document.upsert(db, self.job_key, "resume", doc.model_dump_json())
+        Document.upsert(db, self.job_key, "resume", doc.model_dump_json(), profile_id=self.profile_id)
         self.write_resume_markdown(doc)
 
     def generate_cover_md(
@@ -911,7 +911,7 @@ class Job(Base):
                 "Try a non-reasoning model or a shorter prompt."
             )
         doc = build_cover_document(user, content.strip(), db)
-        Document.upsert(db, self.job_key, "cover", doc.model_dump_json())
+        Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
         self.write_cover_markdown(doc)
 
     def write_resume_markdown(self, doc: "ResumeDocument") -> None:
@@ -991,7 +991,7 @@ class Job(Base):
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
         if not pdf_path.exists():
             raise FileNotFoundError(f"Resume PDF not found: {pdf_path}")
-        row = Document.fetch(db, self.job_key, "resume")
+        row = Document.fetch(db, self.job_key, "resume", profile_id=self.profile_id)
         if row is None:
             raise FileNotFoundError(f"No structured resume document for {self.job_key}")
         doc = ResumeDocument.model_validate_json(row.structured_json)
@@ -1190,7 +1190,7 @@ class Job(Base):
         the contact/education captured at generation time, not the live profile.
         """
         from core.user import User
-        row = Document.fetch(db, self.job_key, doc_type)
+        row = Document.fetch(db, self.job_key, doc_type, profile_id=self.profile_id)
         if row is not None:
             model = ResumeDocument if doc_type == "resume" else CoverDocument
             stored = model.model_validate_json(row.structured_json)
