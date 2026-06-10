@@ -60,11 +60,11 @@ class Document(Base):
 
     __tablename__ = "documents"
     __table_args__ = (
-        UniqueConstraint("job_key", "doc_type", name="uq_documents_job_type"),
+        UniqueConstraint("profile_id", "job_key", "doc_type", name="uq_documents_profile_job_type"),
     )
 
     id = Column(Integer, primary_key=True)
-    profile_id = Column(Integer, nullable=True, index=True)  # Task 9 → NOT NULL
+    profile_id = Column(Integer, nullable=False, index=True)
     job_key = Column(String, nullable=False)
     doc_type = Column(String, nullable=False)  # "resume" | "cover"
     structured_json = Column(Text, nullable=False, default="{}")
@@ -108,7 +108,7 @@ class SkillAlias(Base):
     """
 
     __tablename__ = "skill_aliases"
-    profile_id = Column(Integer, nullable=True, index=True)  # Task 9 → composite PK
+    profile_id = Column(Integer, primary_key=True)
     alias_key = Column(String, primary_key=True)
     canonical = Column(String, nullable=False)
 

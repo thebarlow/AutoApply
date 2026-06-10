@@ -37,7 +37,7 @@ def _make_scraped(**kwargs):
 def test_job_from_scraped_sets_fields():
     from core.job import Job
     scraped = _make_scraped()
-    job = Job.from_scraped(scraped)
+    job = Job.from_scraped_for(scraped, profile_id=1)
     assert job.job_key == "remotive_1"
     assert job.company == "Acme"
     assert job.state == "new"
@@ -63,7 +63,7 @@ def test_job_save_batch_skips_duplicates(db_session):
 
 def test_job_get_returns_job(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     job.profile_id = 1
     db_session.add(job)
     db_session.commit()
@@ -85,7 +85,7 @@ def test_job_get_or_raise_raises_when_missing(db_session):
 
 def test_job_set_state(db_session):
     from core.job import Job, JobState
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     db_session.add(job)
     db_session.commit()
     job.set_state(JobState.APPLIED, db_session)
@@ -94,7 +94,7 @@ def test_job_set_state(db_session):
 
 def test_job_mark_applied_sets_applied_at(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     db_session.add(job)
     db_session.commit()
     job.mark_applied(db_session)
@@ -105,7 +105,7 @@ def test_job_mark_applied_sets_applied_at(db_session):
 
 def test_job_serialize_returns_dict(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     job.desirability_score = 0.8
     job.fit_score = 0.7
     job.final_score = 0.75
@@ -123,7 +123,7 @@ def test_build_score_prompt_contains_job_and_user(db_session):
     from core.job import Job
     from core.user import User, _PROMPTS_DEFAULTS_DIR
     _DEFAULT_SCORE_PROMPT = (_PROMPTS_DEFAULTS_DIR / "scoring.md").read_text(encoding="utf-8")
-    job = Job.from_scraped(_make_scraped(title="Python Dev", company="Acme"))
+    job = Job.from_scraped_for(_make_scraped(title="Python Dev", company="Acme"), profile_id=1)
     db_session.add(job)
     db_session.commit()
 
@@ -152,7 +152,7 @@ def test_build_score_prompt_uses_custom_template(db_session):
     from core.user import User
     import json as _json
 
-    job = Job.from_scraped(_make_scraped(title="ML Engineer", company="OpenCo"))
+    job = Job.from_scraped_for(_make_scraped(title="ML Engineer", company="OpenCo"), profile_id=1)
     db_session.add(job)
     data = {
         "first_name": "Ada", "last_name": "L", "name": "Ada L",
@@ -176,7 +176,7 @@ def test_score_populates_scores(db_session):
     from unittest.mock import MagicMock
     import json as _json
 
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     db_session.add(job)
     data = {
         "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
@@ -211,7 +211,7 @@ def test_score_populates_scores(db_session):
 
 def test_build_description_prompt_substitutes_fields(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped(title="Python Dev", description="Needs Python."))
+    job = Job.from_scraped_for(_make_scraped(title="Python Dev", description="Needs Python."), profile_id=1)
     db_session.add(job)
     db_session.commit()
     prompt = job.build_description_prompt("Title: {job.title}\nDesc: {job.description}")
@@ -226,7 +226,7 @@ def test_extract_description_populates_ext_columns(db_session):
     from unittest.mock import MagicMock, patch
     import json as _json
 
-    job = Job.from_scraped(_make_scraped(description="Needs Python and FastAPI."))
+    job = Job.from_scraped_for(_make_scraped(description="Needs Python and FastAPI."), profile_id=1)
     db_session.add(job)
 
     data = {
@@ -278,7 +278,7 @@ def test_extract_description_skips_if_already_populated(db_session):
     from core.job import Job
     from unittest.mock import patch
 
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     job.ext_seniority = "Senior"
     db_session.add(job)
     db_session.commit()
@@ -295,7 +295,7 @@ def test_build_resume_prompt_substitutes_job_and_user(db_session):
     from core.user import User
     import json as _json
 
-    job = Job.from_scraped(_make_scraped(title="Python Dev"))
+    job = Job.from_scraped_for(_make_scraped(title="Python Dev"), profile_id=1)
     db_session.add(job)
     data = {
         "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
@@ -315,7 +315,7 @@ def test_build_resume_prompt_substitutes_job_and_user(db_session):
 
 def test_serialize_extraction_none_when_no_ext_fields(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     db_session.add(job)
     db_session.commit()
     result = job.serialize()
@@ -325,7 +325,7 @@ def test_serialize_extraction_none_when_no_ext_fields(db_session):
 
 def test_serialize_extraction_populated_when_ext_fields_set(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     job.ext_seniority = "Mid"
     job.ext_required_skills = "Python, FastAPI, Docker"
     job.ext_tech_stack = "Python, PostgreSQL"
@@ -346,12 +346,12 @@ def test_serialize_extraction_populated_when_ext_fields_set(db_session):
 def test_list_for_review_returns_only_new_and_pending_review(db_session):
     from core.job import Job, JobState
     profile_id = 1
-    new_job = Job.from_scraped(_make_scraped(job_key="r_new", url="https://x.com/new"))
+    new_job = Job.from_scraped_for(_make_scraped(job_key="r_new", url="https://x.com/new"), profile_id=1)
     new_job.profile_id = profile_id
-    pending_job = Job.from_scraped(_make_scraped(job_key="r_pending", url="https://x.com/pending"))
+    pending_job = Job.from_scraped_for(_make_scraped(job_key="r_pending", url="https://x.com/pending"), profile_id=1)
     pending_job.state = JobState.PENDING_REVIEW.value
     pending_job.profile_id = profile_id
-    ready_job = Job.from_scraped(_make_scraped(job_key="r_ready", url="https://x.com/ready"))
+    ready_job = Job.from_scraped_for(_make_scraped(job_key="r_ready", url="https://x.com/ready"), profile_id=1)
     ready_job.state = JobState.READY.value
     ready_job.profile_id = profile_id
     db_session.add_all([new_job, pending_job, ready_job])
@@ -370,7 +370,7 @@ def test_generate_resume_md_writes_file(db_session, tmp_path):
     from unittest.mock import MagicMock, patch
     import json as _json
 
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     db_session.add(job)
     data = {
         "first_name": "Matt", "last_name": "Barlow", "name": "Matt Barlow",
@@ -412,7 +412,7 @@ def test_intake_spawns_background_thread_and_calls_extract(db_session):
     from unittest.mock import patch
     from core.job import Job
 
-    job = Job.from_scraped(_make_scraped(job_key="r_intake", url="https://x.com/intake"))
+    job = Job.from_scraped_for(_make_scraped(job_key="r_intake", url="https://x.com/intake"), profile_id=1)
     db_session.add(job)
     db_session.commit()
     db_session.refresh(job)
@@ -451,6 +451,7 @@ def test_job_has_ext_salary_columns(db_session):
         state=JobState.NEW.value,
         ext_salary_min=80000.0,
         ext_salary_max=100000.0,
+        profile_id=1,
     )
     db_session.add(job)
     db_session.commit()
@@ -470,6 +471,7 @@ def test_serialize_includes_salary_and_applied_at(db_session):
         ext_salary_min=70000.0,
         ext_salary_max=90000.0,
         applied_at="2026-05-01T12:00:00+00:00",
+        profile_id=1,
     )
     db_session.add(job)
     db_session.commit()
@@ -506,7 +508,7 @@ def test_evaluate_resume_md_returns_score_and_issues(db_session, tmp_path, monke
     import core.job as job_mod
     from core.job import Job
     monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
-    job = Job.from_scraped(_make_scraped(job_key="ev_1"))
+    job = Job.from_scraped_for(_make_scraped(job_key="ev_1"), profile_id=1)
     db_session.add(job)
     db_session.commit()
     (tmp_path / "ev_1_resume.md").write_text(
@@ -556,6 +558,7 @@ def test_resume_generated_at_set_on_generate_pdf(db_session, tmp_path):
         source="test",
         url="https://example.com/1",
         state="new",
+        profile_id=1,
     )
     db_session.add(job)
     db_session.commit()
@@ -598,7 +601,7 @@ class _FakeClient:
 
 def test_score_populates_fields(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     db_session.add(job)
     db_session.commit()
     content = (
@@ -622,7 +625,7 @@ def test_score_populates_fields(db_session):
 
 def test_score_raises_on_bad_json(db_session):
     from core.job import Job
-    job = Job.from_scraped(_make_scraped())
+    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
     db_session.add(job)
     db_session.commit()
     client = _FakeClient("not json at all")
@@ -638,7 +641,7 @@ def test_extract_description_maps_fields(db_session, monkeypatch):
     import core.user as user_mod
     import core.llm as llm_mod
 
-    job = Job.from_scraped(_make_scraped(job_key="ex_1"))
+    job = Job.from_scraped_for(_make_scraped(job_key="ex_1"), profile_id=1)
     db_session.add(job)
     db_session.commit()
 
@@ -673,7 +676,7 @@ def test_extract_description_coerces_salary(db_session, monkeypatch):
     import core.user as user_mod
     import core.llm as llm_mod
 
-    job = Job.from_scraped(_make_scraped(job_key="ex_sal"))
+    job = Job.from_scraped_for(_make_scraped(job_key="ex_sal"), profile_id=1)
     db_session.add(job)
     db_session.commit()
 
@@ -711,6 +714,7 @@ def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):
         source="test",
         url="https://example.com/2",
         state="new",
+        profile_id=1,
     )
     db_session.add(job)
     db_session.commit()
@@ -812,7 +816,7 @@ def test_render_meta_uses_snapshot_not_live_profile(db_session, tmp_path, monkey
     })))
     db_session.commit()
     user = User.load(db_session)
-    job = Job(job_key="k3", source="x", title="SWE", company="Acme", url="http://x/3")
+    job = Job(job_key="k3", source="x", title="SWE", company="Acme", url="http://x/3", profile_id=1)
     db_session.add(job)
     db_session.commit()
     monkeypatch.setattr(job_mod, "call_llm", lambda *a, **k: "Body.", raising=False)

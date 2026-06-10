@@ -1,5 +1,4 @@
 """Skill aliases are per-tenant."""
-import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -14,7 +13,6 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
-@pytest.mark.xfail(reason="composite PK on (profile_id, alias_key) lands in Task 9", strict=True)
 def test_alias_lookup_is_tenant_scoped():
     db = _session()
     db.add_all([

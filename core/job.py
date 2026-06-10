@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import Boolean, Column, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Session
 
 from db.database import Base, Document
@@ -169,6 +169,10 @@ class Job(Base):
 
     __tablename__ = "jobs"
     __allow_unmapped__ = True
+    __table_args__ = (
+        UniqueConstraint("profile_id", "job_key", name="uq_jobs_profile_job_key"),
+        UniqueConstraint("profile_id", "url", name="uq_jobs_profile_url"),
+    )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "Job":
         """Ensure SQLAlchemy instance state is initialized when using __new__ directly.
@@ -186,8 +190,8 @@ class Job(Base):
 
     # ── Scrape data ────────────────────────────────────────────────────────────
     id = Column(Integer, primary_key=True)
-    profile_id = Column(Integer, nullable=True, index=True)  # Task 9 → NOT NULL
-    job_key = Column(String, unique=True, nullable=False)
+    profile_id = Column(Integer, nullable=False, index=True)
+    job_key = Column(String, nullable=False)
     source = Column(String, nullable=False)
     title = Column(String)
     company = Column(String)
@@ -195,7 +199,7 @@ class Job(Base):
     salary = Column(String)
     remote = Column(Boolean)
     description = Column(Text)
-    url = Column(String, unique=True, nullable=False)
+    url = Column(String, nullable=False)
     posted_at = Column(String)
     scraped_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     state = Column(String, nullable=False, default="new")

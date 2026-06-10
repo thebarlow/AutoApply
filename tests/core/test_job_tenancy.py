@@ -1,5 +1,4 @@
 """Job core methods must scope by profile_id."""
-import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -26,7 +25,6 @@ def test_get_scopes_to_tenant():
     assert Job.get("k", db, profile_id=2) is None
 
 
-@pytest.mark.xfail(reason="composite unique lands in Task 9", strict=True)
 def test_two_tenants_can_share_a_job_key():
     db = _session()
     _add(db, "k", "http://x1", 1)

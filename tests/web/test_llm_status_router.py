@@ -40,7 +40,7 @@ def test_llm_status_empty(client):
 
 def test_llm_status_in_flight_includes_display_info(client, db_session):
     from web import llm_status
-    job = Job(job_key="abc123", source="test", url="https://example.com/jobs/abc123", title="Backend Engineer", company="Acme Corp", state="pending", description="x")
+    job = Job(job_key="abc123", source="test", url="https://example.com/jobs/abc123", title="Backend Engineer", company="Acme Corp", state="pending", description="x", profile_id=1)
     db_session.add(job)
     db_session.commit()
 

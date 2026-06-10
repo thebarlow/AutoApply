@@ -24,3 +24,21 @@ def test_documents_has_profile_id():
 
 def test_skill_aliases_has_profile_id():
     assert "profile_id" in _cols("skill_aliases")
+
+
+def _uniques(table: str) -> set[frozenset]:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    u = {frozenset(uc["column_names"]) for uc in inspect(engine).get_unique_constraints(table)}
+    engine.dispose()
+    return u
+
+
+def test_jobs_composite_uniques():
+    u = _uniques("jobs")
+    assert frozenset({"profile_id", "job_key"}) in u
+    assert frozenset({"profile_id", "url"}) in u
+
+
+def test_documents_composite_unique():
+    assert frozenset({"profile_id", "job_key", "doc_type"}) in _uniques("documents")

@@ -30,7 +30,7 @@ def db_session():
 
 
 def test_skill_alias_row_roundtrips(db_session):
-    db_session.add(SkillAlias(alias_key="fastapi", canonical="FastAPI"))
+    db_session.add(SkillAlias(profile_id=1, alias_key="fastapi", canonical="FastAPI"))
     db_session.commit()
     row = db_session.query(SkillAlias).filter_by(alias_key="fastapi").one()
     assert row.canonical == "FastAPI"
