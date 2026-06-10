@@ -560,7 +560,7 @@ class ActiveProfileBody(BaseModel):
 @router.get("/api/config/profiles")
 def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
     rows = db.query(User).all()
-    active_raw = _get(db, "active_profile_id")
+    active_raw = _get(db, "dev_tenant_id")
     active_id = int(active_raw) if active_raw else None
     profiles = []
     for r in rows:
@@ -617,7 +617,7 @@ def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
 
     Returns all False if no active profile or profile row missing.
     """
-    active_raw = _get(db, "active_profile_id")
+    active_raw = _get(db, "dev_tenant_id")
     row: Optional[User] = None
     if active_raw:
         try:
