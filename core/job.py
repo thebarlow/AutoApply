@@ -273,32 +273,49 @@ class Job(Base):
         )
 
     @classmethod
-    def save_batch(cls, scraped_jobs: list[Any], db: Session) -> int:
+    def from_scraped_for(cls, scraped: Any, profile_id: int) -> "Job":
+        """Like from_scraped but stamps the owning tenant.
+
+        Args:
+            scraped: A ScrapedJob dataclass instance.
+            profile_id: Owning tenant's profile id.
+
+        Returns:
+            Unsaved Job instance with profile_id set.
+        """
+        job = cls.from_scraped(scraped)
+        job.profile_id = profile_id
+        return job
+
+    @classmethod
+    def save_batch(cls, scraped_jobs: list[Any], db: Session, profile_id: int) -> int:
         """Persist a list of ScrapedJob objects, skipping URL duplicates.
 
         Args:
             scraped_jobs: List of ScrapedJob instances from a scraper source.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             Number of newly inserted jobs.
         """
         count = 0
         for scraped in scraped_jobs:
-            if db.query(cls).filter_by(url=scraped.url).first():
+            if db.query(cls).filter_by(url=scraped.url, profile_id=profile_id).first():
                 continue
-            db.add(cls.from_scraped(scraped))
+            db.add(cls.from_scraped_for(scraped, profile_id))
             count += 1
         db.commit()
         return count
 
     @classmethod
-    def save_batch_returning(cls, scraped_jobs: list[Any], db: Session) -> list["Job"]:
+    def save_batch_returning(cls, scraped_jobs: list[Any], db: Session, profile_id: int) -> list["Job"]:
         """Persist new (non-duplicate) jobs and return the inserted Job objects.
 
         Args:
             scraped_jobs: List of ScrapedJob instances from a scraper source.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             List of newly inserted Job instances.
@@ -308,13 +325,13 @@ class Job(Base):
         urls = {s.url for s in scraped_jobs}
         existing_urls = {
             row[0]
-            for row in db.query(cls.url).filter(cls.url.in_(urls)).all()
+            for row in db.query(cls.url).filter(cls.url.in_(urls), cls.profile_id == profile_id).all()
         }
         new_jobs: list["Job"] = []
         for scraped in scraped_jobs:
             if scraped.url in existing_urls:
                 continue
-            job = cls.from_scraped(scraped)
+            job = cls.from_scraped_for(scraped, profile_id)
             db.add(job)
             new_jobs.append(job)
         db.commit()
@@ -323,25 +340,27 @@ class Job(Base):
         return new_jobs
 
     @classmethod
-    def get(cls, job_key: str, db: Session) -> Optional["Job"]:
-        """Fetch a single job by job_key.
+    def get(cls, job_key: str, db: Session, profile_id: int) -> Optional["Job"]:
+        """Fetch a single job by job_key, scoped to a tenant.
 
         Args:
             job_key: Unique job identifier.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             Job instance, or None if not found.
         """
-        return db.query(cls).filter_by(job_key=job_key).first()
+        return db.query(cls).filter_by(job_key=job_key, profile_id=profile_id).first()
 
     @classmethod
-    def get_or_raise(cls, job_key: str, db: Session) -> "Job":
+    def get_or_raise(cls, job_key: str, db: Session, profile_id: int) -> "Job":
         """Fetch a single job by job_key, raising if not found.
 
         Args:
             job_key: Unique job identifier.
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             Job instance.
@@ -349,17 +368,18 @@ class Job(Base):
         Raises:
             ValueError: If no job with that key exists.
         """
-        job = cls.get(job_key, db)
+        job = cls.get(job_key, db, profile_id)
         if job is None:
             raise ValueError(f"Job '{job_key}' not found")
         return job
 
     @classmethod
-    def all_inbox(cls, db: Session) -> list["Job"]:
+    def all_inbox(cls, db: Session, profile_id: int) -> list["Job"]:
         """Return all jobs awaiting review (new or pending_review) ordered by final_score descending.
 
         Args:
             db: SQLAlchemy session.
+            profile_id: Owning tenant's profile id.
 
         Returns:
             List of Job instances in NEW or PENDING_REVIEW state.
@@ -367,9 +387,15 @@ class Job(Base):
         return (
             db.query(cls)
             .filter(cls.state.in_([JobState.NEW.value, JobState.PENDING_REVIEW.value]))
+            .filter(cls.profile_id == profile_id)
             .order_by(cls.final_score.desc())
             .all()
         )
+
+    @classmethod
+    def list_for_review(cls, db: Session, profile_id: int) -> list["Job"]:
+        """Alias for all_inbox — return jobs awaiting review for a tenant."""
+        return cls.all_inbox(db, profile_id)
 
     def set_state(self, state: JobState, db: Session) -> None:
         """Set the job's pipeline state and commit.
@@ -759,7 +785,7 @@ class Job(Base):
             llm_status.start(job_key)
             try:
                 print(f"[intake] {job_key}: extraction started", flush=True)
-                thread_job = thread_db.query(Job).filter_by(job_key=job_key).first()
+                thread_job = thread_db.query(Job).filter_by(job_key=job_key, profile_id=self.profile_id).first()
                 if thread_job is None:
                     print(f"[intake] {job_key}: job not found in thread session", flush=True)
                     return
