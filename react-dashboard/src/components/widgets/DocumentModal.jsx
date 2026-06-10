@@ -11,6 +11,26 @@ const SECTION_FIELD = { summary: 'profile_summary', experience: 'experience', ed
 export default function DocumentModal({ job, docType, processing, onClose }) {
   const [doc, setDoc] = useState(null)
   const [loadError, setLoadError] = useState(null)
+  const [notes, setNotes] = useState({})       // key -> { section, label, note }
+  const [submitting, setSubmitting] = useState(false)
+  const [actionError, setActionError] = useState(null)
+
+  const setNote = (key, value) => setNotes((n) => ({ ...n, [key]: value }))
+  const collected = Object.values(notes).filter((n) => (n.note || '').trim())
+
+  const submitNotes = async () => {
+    if (!collected.length) return
+    setSubmitting(true); setActionError(null)
+    try {
+      await submitFeedback(job.job_key, docType, collected.map((n) => ({
+        section: n.section, label: n.label, note: n.note.trim(),
+      })))
+      onClose()
+    } catch (e) {
+      setActionError(e?.message || 'Failed to submit feedback')
+      setSubmitting(false)
+    }
+  }
 
   const reload = () => {
     setDoc(null)  // clear stale content while the new doc loads (job/tab switch)
@@ -55,7 +75,9 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
         <div className="flex-1 overflow-auto p-5">
           {loadError && <p className="text-xs text-red-400">{loadError}</p>}
           {!loadError && !doc && <p className="text-xs text-space-dim">Loading…</p>}
-          {doc && docType === 'resume' && <InteractiveResume doc={doc} onSave={handleSave} />}
+          {doc && docType === 'resume' && (
+            <InteractiveResume doc={doc} onSave={handleSave} notes={notes} setNote={setNote} />
+          )}
           {doc && docType === 'cover' && (
             <CoverView doc={doc} onSave={async (body) => {
               const next = { ...doc, body }
@@ -63,6 +85,17 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
               reload()
             }} />
           )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-space-border flex items-center justify-between gap-3">
+          {actionError ? <span className="text-xs text-red-400 break-words">{actionError}</span> : <span />}
+          <button
+            onClick={submitNotes}
+            disabled={submitting || processing || !collected.length}
+            className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+          >
+            {submitting ? 'Submitting…' : processing ? 'Processing…' : `Regenerate with feedback${collected.length ? ` (${collected.length})` : ''}`}
+          </button>
         </div>
       </motion.div>
     </div>

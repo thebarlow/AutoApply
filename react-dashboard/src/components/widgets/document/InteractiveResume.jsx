@@ -16,12 +16,14 @@ const DISPLAY = {
 }
 
 // Render the structured résumé. `onSave(section, index, newValue)` persists an
-// edit (returns a Promise). `onAddFeedback(section, index, value)` opens feedback
-// for an item (Phase 3; may be undefined in Phase 2).
-export default function InteractiveResume({ doc, onSave, onAddFeedback }) {
+// edit (returns a Promise). `notes`/`setNote` form a controlled per-item feedback
+// store owned by the modal (keyed `${section}:${index}`).
+export default function InteractiveResume({ doc, onSave, notes, setNote }) {
   // active = { section, index } whose popover is open; editing = same shape when in edit mode.
   const [active, setActive] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [feedbackFor, setFeedbackFor] = useState(null) // { section, index } showing a feedback box
+  const noteKey = (s, i) => `${s}:${i}`
 
   if (!doc) return null
 
@@ -48,6 +50,7 @@ export default function InteractiveResume({ doc, onSave, onAddFeedback }) {
         />
       )
     }
+    const key = noteKey(section, index)
     return (
       <div className="flex flex-col gap-1">
         <ItemRow onClick={() => setActive(isActive(section, index) ? null : { section, index })}>
@@ -56,10 +59,20 @@ export default function InteractiveResume({ doc, onSave, onAddFeedback }) {
         {isActive(section, index) && (
           <ItemPopover
             onEdit={() => setEditing({ section, index })}
-            onFeedback={() => { onAddFeedback && onAddFeedback(section, index, value, itemLabel(section, index, value)); setActive(null) }}
+            onFeedback={() => { setFeedbackFor({ section, index }); setActive(null) }}
             onClose={() => setActive(null)}
           />
         )}
+        {(feedbackFor && feedbackFor.section === section && feedbackFor.index === index) || notes[key] ? (
+          <textarea
+            rows={2}
+            autoFocus
+            placeholder="Feedback for regeneration…"
+            value={notes[key]?.note || ''}
+            onChange={(e) => setNote(key, { section, label: itemLabel(section, index, value), note: e.target.value })}
+            className="w-full text-xs rounded bg-[#0a0a1a] border border-space-border text-space-text p-2 focus:border-purple-500 outline-none"
+          />
+        ) : null}
       </div>
     )
   }
