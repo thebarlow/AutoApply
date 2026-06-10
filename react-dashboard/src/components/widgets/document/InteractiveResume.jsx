@@ -43,6 +43,7 @@ export default function InteractiveResume({ doc, onSave, notes, setNote }) {
               await onSave(section, index, newValue)
               setEditing(null)
               setActive(null)
+              setFeedbackFor((f) => (f && f.section === section && f.index === index ? null : f))
             } catch {
               // Save failed — keep the editor open so the user doesn't lose their edit.
             }
@@ -58,7 +59,10 @@ export default function InteractiveResume({ doc, onSave, notes, setNote }) {
         </ItemRow>
         {isActive(section, index) && (
           <ItemPopover
-            onEdit={() => setEditing({ section, index })}
+            onEdit={() => {
+              if (feedbackFor && feedbackFor.section === section && feedbackFor.index === index) setFeedbackFor(null)
+              setEditing({ section, index })
+            }}
             onFeedback={() => { setFeedbackFor({ section, index }); setActive(null) }}
             onClose={() => setActive(null)}
           />
@@ -66,7 +70,7 @@ export default function InteractiveResume({ doc, onSave, notes, setNote }) {
         {(feedbackFor && feedbackFor.section === section && feedbackFor.index === index) || notes[key] ? (
           <textarea
             rows={2}
-            autoFocus
+            autoFocus={!!(feedbackFor && feedbackFor.section === section && feedbackFor.index === index)}
             placeholder="Feedback for regeneration…"
             value={notes[key]?.note || ''}
             onChange={(e) => setNote(key, { section, label: itemLabel(section, index, value), note: e.target.value })}
