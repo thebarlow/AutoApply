@@ -11,6 +11,7 @@ from core.job import Job
 from core.skill_analytics import aggregate_skill_frequency, job_has_skill
 from core.user import User
 from db.database import get_db, SkillAlias
+from web.tenancy import current_profile_id
 
 router = APIRouter(prefix="/api")
 
@@ -22,14 +23,14 @@ _SKILL_CACHE: dict = {"sig": None, "ts": 0.0, "result": None}
 _SKILL_CACHE_TTL = 60.0
 
 
-def _load_aliases(db: Session) -> dict[str, str] | None:
-    """Merged alias map: built-in _ALIASES plus DB overrides.
+def _load_aliases(db: Session, profile_id: int) -> dict[str, str] | None:
+    """Merged alias map: built-in _ALIASES plus this tenant's DB overrides.
 
     Returns None if the alias table is empty (signals callers to use _ALIASES
     directly, which is the same result but avoids an unnecessary dict copy).
     """
     from core.skill_analytics import _ALIASES
-    rows = db.query(SkillAlias).all()
+    rows = db.query(SkillAlias).filter_by(profile_id=profile_id).all()
     if not rows:
         return None
     merged = dict(_ALIASES)
@@ -87,7 +88,9 @@ def get_stats(
 
 
 @router.get("/skill-frequency")
-def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
+def get_skill_frequency(
+    db: Session = Depends(get_db), profile_id: int = Depends(current_profile_id)
+) -> dict:
     """Skill frequency across all jobs that have extraction data.
 
     Not window-filtered. A job counts as extracted when it has any extraction
@@ -107,8 +110,8 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
 
     # Count before loading so a concurrent alias insert can't yield a map with N
     # rows signed under N+1 (and cached wrong) on READ COMMITTED backends.
-    alias_sig = db.query(SkillAlias).count()
-    aliases = _load_aliases(db)
+    alias_sig = db.query(SkillAlias).filter_by(profile_id=profile_id).count()
+    aliases = _load_aliases(db, profile_id)
     sig = (db.query(Job).filter(extracted_filter).count(), alias_sig)
     now = time.monotonic()
     cached = _SKILL_CACHE["result"]
@@ -160,6 +163,7 @@ def get_skill_frequency(db: Session = Depends(get_db)) -> dict:
 def get_jobs_for_skill(
     skill: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
 ) -> dict:
     """Job keys for all jobs whose extraction data lists the given skill.
 
@@ -181,6 +185,6 @@ def get_jobs_for_skill(
         )
         .all()
     )
-    aliases = _load_aliases(db)
+    aliases = _load_aliases(db, profile_id)
     keys = [j.job_key for j in jobs if job_has_skill(j, skill, aliases)]
     return {"job_keys": keys}

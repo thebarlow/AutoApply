@@ -409,12 +409,21 @@ def _migrate_resume_eval_prompt_v2() -> None:
 
 
 def _migrate_tenant_columns() -> None:
-    """Add profile_id column to jobs, documents, and skill_aliases if missing."""
+    """Add profile_id column to jobs, documents, and skill_aliases if missing.
+
+    Pre-existing ``skill_aliases`` rows are backfilled to the dev tenant (1) so
+    ``seed_skill_aliases`` (which now scopes its idempotency check by
+    profile_id) doesn't try to re-insert duplicates of rows that predate the
+    profile_id column.
+    """
     with engine.connect() as conn:
         for table in ("jobs", "documents", "skill_aliases"):
             existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()]
             if "profile_id" not in existing:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN profile_id INTEGER"))
+        # Backfill any NULL profile_id (rows predating the column, or added by
+        # the ALTER above) to the dev tenant so seeding/scoped queries work.
+        conn.execute(text("UPDATE skill_aliases SET profile_id = 1 WHERE profile_id IS NULL"))
         conn.commit()
 
 
