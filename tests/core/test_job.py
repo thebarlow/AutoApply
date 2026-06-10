@@ -341,16 +341,20 @@ def test_serialize_extraction_populated_when_ext_fields_set(db_session):
     assert ext["preferred_skills"] == ["Kubernetes", "Go"]
 
 
-def test_all_inbox_returns_only_new_and_pending_review(db_session):
+def test_list_for_review_returns_only_new_and_pending_review(db_session):
     from core.job import Job, JobState
+    profile_id = 1
     new_job = Job.from_scraped(_make_scraped(job_key="r_new", url="https://x.com/new"))
+    new_job.profile_id = profile_id
     pending_job = Job.from_scraped(_make_scraped(job_key="r_pending", url="https://x.com/pending"))
     pending_job.state = JobState.PENDING_REVIEW.value
+    pending_job.profile_id = profile_id
     ready_job = Job.from_scraped(_make_scraped(job_key="r_ready", url="https://x.com/ready"))
     ready_job.state = JobState.READY.value
+    ready_job.profile_id = profile_id
     db_session.add_all([new_job, pending_job, ready_job])
     db_session.commit()
-    results = Job.all_inbox(db_session)
+    results = Job.list_for_review(db_session, profile_id=profile_id)
     keys = {j.job_key for j in results}
     assert "r_new" in keys
     assert "r_pending" in keys

@@ -374,7 +374,7 @@ class Job(Base):
         return job
 
     @classmethod
-    def all_inbox(cls, db: Session, profile_id: int) -> list["Job"]:
+    def list_for_review(cls, db: Session, profile_id: int) -> list["Job"]:
         """Return all jobs awaiting review (new or pending_review) ordered by final_score descending.
 
         Args:
@@ -391,11 +391,6 @@ class Job(Base):
             .order_by(cls.final_score.desc())
             .all()
         )
-
-    @classmethod
-    def list_for_review(cls, db: Session, profile_id: int) -> list["Job"]:
-        """Alias for all_inbox — return jobs awaiting review for a tenant."""
-        return cls.all_inbox(db, profile_id)
 
     def set_state(self, state: JobState, db: Session) -> None:
         """Set the job's pipeline state and commit.
