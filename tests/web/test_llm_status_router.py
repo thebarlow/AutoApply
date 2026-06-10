@@ -56,3 +56,35 @@ def test_llm_status_in_flight_includes_display_info(client, db_session):
         assert "score" in entry["actions"]
     finally:
         llm_status.finish("abc123", "score")
+
+
+def test_llm_status_does_not_leak_other_tenants_jobs(client, db_session):
+    from web import llm_status
+    from web.tenancy import current_profile_id
+
+    job1 = Job(job_key="job-t1", source="test", url="https://example.com/jobs/job-t1", title="Tenant1 Title", company="Tenant1 Co", state="pending", description="x", profile_id=1)
+    job2 = Job(job_key="job-t2", source="test", url="https://example.com/jobs/job-t2", title="Tenant2 Title", company="Tenant2 Co", state="pending", description="x", profile_id=2)
+    db_session.add_all([job1, job2])
+    db_session.commit()
+
+    llm_status.start("job-t1", "score")
+    llm_status.start("job-t2", "score")
+    app.dependency_overrides[current_profile_id] = lambda: 1
+    try:
+        resp = client.get("/api/llm-status")
+        data = resp.json()
+
+        entries = {e["job_key"]: e for e in data["in_flight"]}
+        assert "job-t1" in entries
+        assert entries["job-t1"]["title"] == "Tenant1 Title"
+        assert entries["job-t1"]["company"] == "Tenant1 Co"
+
+        # Tenant 2's job is still in "processing"/"in_flight" by job_key,
+        # but its title/company must NOT be leaked to tenant 1.
+        assert "job-t2" in entries
+        assert entries["job-t2"]["title"] == "job-t2"
+        assert entries["job-t2"]["company"] == ""
+    finally:
+        app.dependency_overrides.pop(current_profile_id, None)
+        llm_status.finish("job-t1", "score")
+        llm_status.finish("job-t2", "score")
