@@ -9,6 +9,20 @@ _(none)_
 
 ## Features
 
+- [ ] **Improve the document feedback system.**
+  _Current system:_ In `DocumentModal`, the user attaches free-text notes to individual items
+  (profile/experience/education/project/skills) or to whole sections, plus a cover-letter feedback
+  box. Submitting batches the notes to `POST /{doc_type}/feedback`; each note becomes a
+  `{category:"user_feedback", description:"<label>: <note>"}` issue (`build_feedback_issues`) and is
+  fed to the **existing refine prompt** as a one-shot `run_user_feedback_refine` (refine → eval-for-score,
+  no restore-best; résumés trigger the ATS gate). It reuses the auto-refine machinery wholesale — there
+  is no feedback-specific prompt, no preview/diff of the proposed change, no per-note accept/reject, and
+  no conversation/history of prior feedback.
+  _Possible improvements:_ a dedicated feedback-refine prompt that's better at localized edits; show a
+  diff/preview before committing; per-note apply/skip; multi-turn feedback (let the user iterate without
+  re-opening); surface which notes the model actually addressed; and richer anchors than a text label
+  (the LLM currently locates the target only from the `label` string).
+
 - [ ] **Persistent user memory** — Store durable user directives, e.g. "Never say this",
   "This project is my best portfolio piece". Referenced by the LLM during generation.
 
@@ -22,6 +36,15 @@ _(none)_
   "Hands-on experience with LLMs and generative AI" → "LLMs, generative AI".
 
 ## Done
+
+- [x] **Document modal polish + backfill correctness** — Parser now handles legacy LLM résumé
+  markdown (experiences split on `### ` or bold-only headings; one-line `**Name:**` projects), fixing
+  experiences/projects collapsing into a single item. `GET .../document` switched to **parse-on-read**
+  (reconstruct from `.md` without persisting) so a lossy parse can't shadow the source; `POST .../feedback`
+  backfills+persists a row first (`_ensure_document_row`) since the refine mutates it. Frontend: Enter-to-save
+  + dirty-gated **Save** button in `ItemEditor` (Shift+Enter = newline), Edit/Feedback popover moved to the
+  right of the item, **section-level feedback** on section titles, and capture-phase **Escape** handling
+  (exits inline edit/feedback first, then closes the modal back to job details — no longer jumps to the User view).
 
 - [x] **Interactive document modal** — The Resume/Cover toolbar's single pencil (✎) button (Edit/Expand
   removed) opens `DocumentModal`, backed by `widgets/document/` (`InteractiveResume`, `ResumeSection`,

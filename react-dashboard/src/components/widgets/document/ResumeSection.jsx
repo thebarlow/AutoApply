@@ -1,8 +1,9 @@
 import { useState } from 'react'
 
 // A résumé section: a hover-tinted container with a title and item rows.
-// `items` is [{ key, node }]; each item row manages its own focused-hover state.
-export default function ResumeSection({ title, children }) {
+// The title is clickable (`onTitleClick`) to open `titlePopover` (rendered to its
+// right) for section-level feedback; `feedbackBox` renders below the title.
+export default function ResumeSection({ title, onTitleClick, titlePopover, feedbackBox, children }) {
   const [hover, setHover] = useState(false)
   return (
     <section
@@ -10,9 +11,17 @@ export default function ResumeSection({ title, children }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div className="doc-section-title text-xs uppercase tracking-widest text-space-dim mb-2 inline-block">
-        {title}
+      <div className="flex items-center gap-2 mb-2">
+        <div
+          className={`doc-section-title text-xs uppercase tracking-widest text-space-dim inline-block${onTitleClick ? ' cursor-pointer' : ''}`}
+          onClick={onTitleClick}
+          title={onTitleClick ? 'Section feedback' : undefined}
+        >
+          {title}
+        </div>
+        {titlePopover}
       </div>
+      {feedbackBox}
       <div className="flex flex-col gap-2">{children}</div>
     </section>
   )

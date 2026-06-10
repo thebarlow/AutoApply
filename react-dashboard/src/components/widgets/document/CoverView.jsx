@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 
 // Cover-letter view: click the body to edit it; saves on click-out via onSave(body).
-export default function CoverView({ doc, onSave, feedback, setFeedback }) {
+export default function CoverView({ doc, onSave, feedback, setFeedback, escapeRef }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const ref = useRef(null)
 
   useEffect(() => { setDraft(doc?.body || '') }, [doc])
+
+  // Let the modal's Escape handler discard an in-progress body edit before it
+  // falls back to closing the modal.
+  useEffect(() => {
+    if (!escapeRef) return undefined
+    escapeRef.current = () => {
+      if (editing) { setDraft(doc?.body || ''); setEditing(false); return true }
+      return false
+    }
+    return () => { if (escapeRef) escapeRef.current = null }
+  }, [escapeRef, editing, doc])
 
   if (!doc) return null
 

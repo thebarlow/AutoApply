@@ -85,6 +85,50 @@ def test_reconstruct_cover_document_roundtrip():
     assert out.signoff.name == out.header.name
 
 
+def test_parse_legacy_experience_bold_and_hash_headings():
+    """Legacy LLM markdown mixes a leading ### heading with bold-only headings for
+    later entries, and uses ' at ' as the title/company separator with dates inline.
+    Each heading must become a separate experience item."""
+    body = (
+        "## Experience\n\n"
+        "### **Instructor at Mathnasium (Jan 2023–Jan 2024)**\n\n"
+        "- Managed simultaneous instruction for multiple students.\n"
+        "- Communicated complex concepts clearly.\n\n"
+        "**Desktop Support at Columbia College IT (2018–2021)**  \n"
+        "- Maintained accurate documentation of technical issues.\n"
+        "- Resolved hardware and software issues.\n\n"
+        "**Research Assistant at Lehigh University (2017)**  \n"
+        "- Designed and deployed Python models.\n"
+    )
+    out = reconstruct_resume_document_from_markdown(body)
+    assert len(out.experience) == 3
+    titles = [e.title for e in out.experience]
+    companies = [e.company for e in out.experience]
+    assert titles == ["Instructor", "Desktop Support", "Research Assistant"]
+    assert companies == ["Mathnasium", "Columbia College IT", "Lehigh University"]
+    assert out.experience[0].start == "Jan 2023" and out.experience[0].end == "Jan 2024"
+    assert out.experience[2].start == "2017" and out.experience[2].end == ""
+    assert "Managed simultaneous instruction" in out.experience[0].description
+    assert "**" not in out.experience[0].title  # bold markers stripped
+
+
+def test_parse_legacy_projects_single_lines():
+    """Legacy projects are one-per-line (hard-break separated) with the colon
+    inside the bold (**Name:** desc), not blank-line-separated blocks."""
+    body = (
+        "## Projects\n\n"
+        "**MansaMusa Trading Dashboard:** Production-grade trading platform.  \n"
+        "**Arbitrage Engine:** Async cross-market arbitrage engine.  \n"
+        "**AutoApply:** End-to-end job application automation pipeline.\n"
+    )
+    out = reconstruct_resume_document_from_markdown(body)
+    assert len(out.projects) == 3
+    assert out.projects[0].name == "MansaMusa Trading Dashboard"
+    assert out.projects[0].description == "Production-grade trading platform."
+    assert out.projects[1].name == "Arbitrage Engine"
+    assert out.projects[2].name == "AutoApply"
+
+
 def test_experience_comma_in_company_name():
     """Company names containing commas must survive a full assemble → reconstruct round-trip."""
     doc = ResumeDocument(

@@ -73,7 +73,11 @@ Two-panel layout split 3:2 in a 5-column grid:
 
 ### DocumentModal.jsx
 - Interactive document view backed by `document/` widgets: `InteractiveResume` → `ResumeSection` → `items` (hover-highlight per item, `ItemPopover`/`ItemEditor` for inline edit + per-item feedback), `CoverView` for cover letters; styling in `highlight.css`
+- Clicking an item opens the `ItemPopover` (Edit | Feedback) **to the right** of the item. `ItemEditor` commits on the **Save** button (disabled until edited), on **Enter** (Shift+Enter = newline in textareas), or on click-out
+- **Section-level feedback:** clicking a section title (Experience/Education/Projects/Skills) opens a Feedback-only popover + a whole-section note box; section notes submit alongside item notes
+- Feedback is a controlled `notes` store on the modal keyed `section:index` (or `section:section`); `collected` gathers non-empty notes for the footer "Regenerate with feedback (N)" button
 - Submitting feedback runs a one-shot refine via `POST /{doc_type}/feedback`
+- **Escape handling:** a capture-phase listener keeps Escape inside the modal — it exits an open inline edit/feedback first (via a shared `escapeRef` consumer set by `InteractiveResume`/`CoverView`), and only closes the modal (back to job details, *not* the app-level "deselect → User view" handler in `App.jsx`) when nothing is open
 - `TurnEntry` labels user-feedback turns "Your feedback"
 
 ### ProfileCards.jsx

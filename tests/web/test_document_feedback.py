@@ -107,11 +107,35 @@ def test_feedback_404_no_job(client):
     assert r.status_code == 404
 
 
-def test_feedback_404_no_document(client, db_session):
+def test_feedback_404_no_document(client, db_session, tmp_path, monkeypatch):
+    # No row and no on-disk .md to backfill from → nothing to refine.
+    import web.routers.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "_OUTPUTS_DIR", tmp_path, raising=False)
     _job(db_session)
     r = client.post("/api/jobs/k1/resume/feedback",
                     json={"notes": [{"section": "summary", "label": "Profile summary", "note": "punchier"}]})
     assert r.status_code == 404
+
+
+def test_feedback_backfills_row_from_markdown(client, db_session, tmp_path, monkeypatch):
+    """A job that was only viewed (no row) but has an on-disk .md should have a row
+    backfilled+persisted so the spawned refine has a structured base to patch."""
+    import web.routers.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "_OUTPUTS_DIR", tmp_path, raising=False)
+    calls = []
+    monkeypatch.setattr(jobs_mod, "_spawn", lambda *a: calls.append(a))
+    (tmp_path / "k1_resume.md").write_text(
+        "---\nname: Jane Doe\n---\n## Profile\n\nEngineer who ships.\n", encoding="utf-8",
+    )
+    _job(db_session)
+    assert Document.fetch(db_session, "k1", "resume") is None
+
+    r = client.post("/api/jobs/k1/resume/feedback",
+                    json={"notes": [{"section": "summary", "label": "Profile summary", "note": "punchier"}]})
+    assert r.status_code == 202
+    # Row was persisted and the refine was spawned.
+    assert Document.fetch(db_session, "k1", "resume") is not None
+    assert calls and calls[0][1] == "k1" and calls[0][2] == "resume"
 
 
 def test_feedback_400_empty_notes(client, db_session):

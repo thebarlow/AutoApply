@@ -388,7 +388,10 @@ def submit_document_feedback(
     job = Job.get(job_key, db)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if Document.fetch(db, job_key, doc_type) is None:
+    # The refine mutates and re-persists the structured doc, so it needs a row to
+    # patch. Backfill-and-persist from the on-disk .md when the job was only ever
+    # viewed (parse-on-read leaves no row); 404 only when there's nothing to refine.
+    if not _ensure_document_row(db, job_key, doc_type):
         raise HTTPException(status_code=404, detail=f"No {doc_type} document to refine")
     notes = [n.model_dump() for n in payload.notes if (n.note or "").strip()]
     if not notes:
@@ -469,6 +472,31 @@ def _doc_model(doc_type: str) -> type[ResumeDocument] | type[CoverDocument]:
     return ResumeDocument if doc_type == "resume" else CoverDocument
 
 
+def _ensure_document_row(db: Session, job_key: str, doc_type: str) -> bool:
+    """Ensure a structured ``documents`` row exists, persisting one from the on-disk
+    ``.md`` if it's missing (the inverse of ``get_document``'s parse-on-read).
+
+    Used before a refine, which needs a row to patch and re-persist. Unlike
+    ``get_document`` this intentionally writes the row.
+
+    Returns:
+        True if a row exists afterward; False if there was nothing to reconstruct.
+    """
+    if Document.fetch(db, job_key, doc_type) is not None:
+        return True
+    md_path = _OUTPUTS_DIR / f"{job_key}_{doc_type}.md"
+    if not md_path.exists():
+        return False
+    md = md_path.read_text(encoding="utf-8")
+    doc = (
+        reconstruct_resume_document_from_markdown(md)
+        if doc_type == "resume"
+        else reconstruct_cover_document_from_markdown(md)
+    )
+    Document.upsert(db, job_key, doc_type, doc.model_dump_json())
+    return True
+
+
 @router.get("/{job_key}/{doc_type}/document")
 def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
     if doc_type not in ("resume", "cover"):
@@ -478,6 +506,10 @@ def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     row = Document.fetch(db, job_key, doc_type)
     if row is None:
+        # No structured row: reconstruct from the on-disk .md on every read rather
+        # than persisting. Persisting would let a best-effort (lossy) parse shadow
+        # the authoritative .md and freeze it against later parser improvements; a
+        # real row is created only when the user edits (PUT) or regenerates.
         md_path = _OUTPUTS_DIR / f"{job_key}_{doc_type}.md"
         if md_path.exists():
             md = md_path.read_text(encoding="utf-8")
@@ -486,9 +518,7 @@ def get_document(job_key: str, doc_type: str, db: Session = Depends(get_db)):
                 if doc_type == "resume"
                 else reconstruct_cover_document_from_markdown(md)
             )
-            structured_json = doc.model_dump_json()
-            Document.upsert(db, job_key, doc_type, structured_json)
-            return _json.loads(structured_json)
+            return _json.loads(doc.model_dump_json())
         raise HTTPException(status_code=404, detail="Document not found")
     return _json.loads(row.structured_json)
 
