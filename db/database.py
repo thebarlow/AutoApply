@@ -432,6 +432,8 @@ def init_db() -> None:
     import core.job   # noqa: F401 — registers Job with Base.metadata
     import core.user  # noqa: F401 — registers User with Base.metadata
     Base.metadata.create_all(bind=engine)
+    from db.events import register_tenant_guard
+    register_tenant_guard()
     _migrate_profile_name()
     _migrate_legacy_config()
     _migrate_ext_columns()
