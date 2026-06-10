@@ -53,3 +53,25 @@ These overwrite prompt **content** (not schema) once, gated by a `config` flag, 
 | `_seed_ats_parse_prompt` | — | Seeds the `ats_parse` `PromptDefault` row on first `init_db` run (used by the ATS semantic layer). |
 
 All are called from `init_db` and are idempotent (return early once the gate flag is set).
+
+## Alembic migrations (Phase 1+)
+
+Schema changes are managed by Alembic (`alembic/`), not the legacy hand-written
+`_migrate_*` functions in `db/database.py` (those remain only to upgrade old SQLite
+files and are slated for removal in a later phase).
+
+- Migrations live in `alembic/versions/`. `alembic/env.py` targets `Base.metadata`
+  and reads `DATABASE_URL`.
+- Local Postgres: `docker compose up -d`, then set
+  `DATABASE_URL=postgresql+psycopg://auto_apply:auto_apply@localhost:5432/auto_apply`.
+- Apply migrations: `python -m alembic upgrade head`.
+- Create a migration after model changes:
+  `python -m alembic revision --autogenerate -m "<message>"` (review the generated
+  script before committing).
+- **Parity gate:** `tests/db/test_alembic_parity.py` asserts the Alembic-built schema
+  matches `Base.metadata.create_all`. It must stay green — if it fails after a model
+  change, regenerate/adjust the migration.
+
+The running app and the test suite still build schema via `create_all`/`init_db` in
+Phase 1; cutover to `alembic upgrade head` at startup happens with the Postgres data
+port in a later phase.
