@@ -520,8 +520,14 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   useEffect(() => {
     const prev = prevInFlight.current
     const bumps = {}
-    for (const k of ['resume', 'cover']) {
-      if (prev.has(k) && !actionsInFlight.has(k)) bumps[k] = true
+    // Generation keys ('resume'/'cover') and feedback/refine keys
+    // ('resume_refine', 'resume_eval', 'cover_refine', 'cover_eval') all bump
+    // the nonce for their doc type on present->absent so the PDF/MD preview
+    // refreshes after generation OR a feedback-triggered regeneration.
+    for (const k of prev) {
+      if (actionsInFlight.has(k)) continue // still running
+      const doc = k === 'resume' || k === 'cover' ? k : k.replace(/_(refine|eval)$/, '')
+      if (doc === 'resume' || doc === 'cover') bumps[doc] = true
     }
     prevInFlight.current = new Set(actionsInFlight)
     if (Object.keys(bumps).length > 0) {

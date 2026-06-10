@@ -6,8 +6,8 @@ import CoverView from './document/CoverView'
 
 const SECTION_FIELD = { summary: 'profile_summary', experience: 'experience', education: 'education', project: 'projects', skills: 'skills' }
 
-// Modal that renders the structured document as an interactive surface.
-// Phase 1: read-only render + hover. Edit and feedback wired in later phases.
+// Renders the structured document as an interactive surface: hover-highlight,
+// inline edit (PUT), and per-item/cover feedback (regenerate).
 export default function DocumentModal({ job, docType, processing, onClose }) {
   const [doc, setDoc] = useState(null)
   const [loadError, setLoadError] = useState(null)

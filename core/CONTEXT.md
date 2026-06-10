@@ -19,6 +19,8 @@ core/
 └── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ```
 
+**Known limitation:** Backfill via `document_parser.py` is lossy for fields the assembler does not render. Notably `ResumeProject.url` is absent from the rendered Markdown (and the PDF), so reconstructed projects come back with `url=""`.
+
 **Note:** `core/scorer.py` and `core/profile_parser.py` were deleted — stale `.pyc` files remain in `__pycache__/` and can be ignored. Scoring logic moved into `job.py`.
 
 ## Routing Rules
