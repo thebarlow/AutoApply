@@ -14,9 +14,12 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   const [notes, setNotes] = useState({})       // key -> { section, label, note }
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState(null)
+  const [coverFeedback, setCoverFeedback] = useState('')
 
   const setNote = (key, value) => setNotes((n) => ({ ...n, [key]: value }))
-  const collected = Object.values(notes).filter((n) => (n.note || '').trim())
+  const collected = docType === 'cover'
+    ? (coverFeedback.trim() ? [{ section: 'body', label: 'Letter body', note: coverFeedback.trim() }] : [])
+    : Object.values(notes).filter((n) => (n.note || '').trim())
 
   const submitNotes = async () => {
     if (!collected.length) return
@@ -79,11 +82,16 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
             <InteractiveResume doc={doc} onSave={handleSave} notes={notes} setNote={setNote} />
           )}
           {doc && docType === 'cover' && (
-            <CoverView doc={doc} onSave={async (body) => {
-              const next = { ...doc, body }
-              await putDocument(job.job_key, 'cover', next)
-              reload()
-            }} />
+            <CoverView
+              doc={doc}
+              onSave={async (body) => {
+                const next = { ...doc, body }
+                await putDocument(job.job_key, 'cover', next)
+                reload()
+              }}
+              feedback={coverFeedback}
+              setFeedback={setCoverFeedback}
+            />
           )}
         </div>
 
