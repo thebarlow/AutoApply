@@ -149,8 +149,6 @@ def test_user_from_markdown_returns_profile_dict(db_session):
 
     u = User(name="Matt", data=json.dumps({
         **SAMPLE_DATA,
-        "llm_provider_type": "openai",
-        "llm_model": "gpt-4o",
     }))
     db_session.add(u)
     db_session.commit()
@@ -267,7 +265,7 @@ def test_from_markdown_uses_custom_system_prompt(db_session):
     import json as _json
     import unittest.mock as mock
 
-    data = {**SAMPLE_DATA, "llm_provider_type": "openai", "llm_model": "gpt-4o"}
+    data = {**SAMPLE_DATA}
     u = User(name="Matt", data=_json.dumps(data))
     db_session.add(u)
     db_session.commit()

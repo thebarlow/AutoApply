@@ -107,8 +107,6 @@ class User(Base):
         self.resume_path = raw.get("resume_path", "")
         self.md_path = raw.get("md_path", "")
         self.website = raw.get("website", "")
-        self.llm_provider_type = raw.get("llm_provider_type", "")
-        self.llm_model = raw.get("llm_model", "")
 
         # Initialize model attrs for all 9 prompt types (populated from DB rows in load()).
         from db.seed import PROMPT_TYPE_KEYS  # deferred: db.seed imports core.user
@@ -145,8 +143,6 @@ class User(Base):
             "resume_path": self.resume_path,
             "md_path": self.md_path,
             "website": self.website,
-            "llm_provider_type": self.llm_provider_type,
-            "llm_model": self.llm_model,
         }
         d["resume_refine_enabled"] = self.resume_refine_enabled
         d["resume_refine_max_turns"] = self.resume_refine_max_turns
