@@ -128,3 +128,44 @@ A four-phase initiative moved the pipeline from free-form text toward typed, DB-
 - DB writes inside `Job` methods use the caller-supplied session; callers own commit/rollback (except `Document.upsert`, which commits).
 - The `documents` table is the source of truth; `.md` and PDF are derived artifacts and are never hand-edited.
 - Structured résumé generate/refine route through `_llm_json_with_retry`; `_refine_doc_md` uses `max_tokens=32768` to avoid truncation.
+
+## Deployment (Railway, single-user instance)
+
+The app deploys as one Railway service built from the repo-root `Dockerfile`
+(multi-stage: Node builds the React SPA, Python runtime adds pandoc + Playwright
+Chromium and runs `uvicorn web.main:app --host 0.0.0.0 --port $PORT`).
+
+**Database:** Railway-managed Postgres. `DATABASE_URL` is auto-normalized to the
+psycopg3 driver (`db.database._normalize_db_url`). Schema is created/upgraded on
+startup by `init_db()` → `alembic upgrade head`; a fresh Postgres self-migrates
+on first boot. (To port existing local SQLite data, run
+`scripts/port_sqlite_to_pg.py` separately — not part of normal deploy.)
+
+**Access:** instance-wide HTTP Basic gate (`web/auth_gate.py`), enabled when
+`BASIC_AUTH_USER` + `BASIC_AUTH_PASSWORD` are set. `GET /health` is exempt for
+the platform healthcheck. This is NOT per-tenant auth — the tenant seam still
+resolves to tenant 1.
+
+**Persistent files:** a Railway volume mounted at `/data` with `DATA_DIR=/data`.
+Generated documents and uploaded resumes (via `core/paths.py`) live under it.
+
+**Secrets / config:** all via Railway environment variables. Runtime `.env`
+key-writing is disabled when `APP_ENV=production`.
+
+**Required environment variables:**
+
+| Var | Value |
+|---|---|
+| `DATABASE_URL` | Railway Postgres URL |
+| `LLM_PROVIDER_TYPE` | `openrouter` \| `anthropic` \| `openai` \| `gemini` |
+| `LLM_API_KEY` | platform LLM key |
+| `LLM_DEFAULT_MODEL` | default model id |
+| `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | dashboard login |
+| `DATA_DIR` | `/data` |
+| `APP_ENV` | `production` |
+| `PORT` | provided by Railway |
+
+**Railway service settings:** build from Dockerfile; healthcheck path `/health`;
+attach a volume at `/data`.
+
+**Not deployed:** the tray app and browser extension remain local clients.
