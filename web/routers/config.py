@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import tempfile
 import uuid
@@ -297,6 +298,13 @@ def _read_env() -> dict[str, str]:
 
 
 def _write_env(env: dict[str, str]) -> None:
+    # In hosted mode the filesystem is ephemeral and secrets come from the
+    # platform's environment, so runtime .env writes are disabled.
+    if os.getenv("APP_ENV") == "production":
+        raise HTTPException(
+            status_code=400,
+            detail="API keys are managed via environment variables in hosted mode.",
+        )
     lines = [f"{k}={v}" for k, v in env.items()]
     _ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
