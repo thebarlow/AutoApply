@@ -27,7 +27,7 @@ from web.routers import shutdown as shutdown_router
 from web.routers import stats as stats_router
 from web.routers import skills as skills_router
 from web.auth import routes as auth_routes
-from web.auth_gate import BasicAuthMiddleware
+from web.auth.middleware import AuthGateMiddleware
 
 
 def _timed(label: str, fn):
@@ -80,7 +80,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redoc_url=None)
 # SessionMiddleware is registered LAST in this block on purpose: Starlette runs
 # the most-recently-added middleware outermost, so the session is populated on
-# the request scope before the auth gate (added in a later task) inspects it.
+# the request scope before AuthGateMiddleware inspects it.
+app.add_middleware(AuthGateMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET", "dev-insecure-session-secret"),
