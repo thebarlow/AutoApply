@@ -13,7 +13,7 @@ from sqlalchemy import engine_from_config, pool
 import core.job  # noqa: F401
 import core.user  # noqa: F401
 import db.database  # noqa: F401
-from db.database import Base, make_connect_args
+from db.database import Base, make_connect_args, _normalize_db_url
 
 load_dotenv()
 
@@ -25,8 +25,13 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    """Resolve the URL from DATABASE_URL, mirroring db.database."""
-    return os.getenv("DATABASE_URL", "sqlite:///auto_apply.db")
+    """Resolve the URL from DATABASE_URL, mirroring db.database.
+
+    Applies the same psycopg3 driver normalization as the runtime engine so
+    Alembic migrations don't fall back to psycopg2 on a bare ``postgresql://``
+    URL (e.g. Railway's managed Postgres).
+    """
+    return _normalize_db_url(os.getenv("DATABASE_URL", "sqlite:///auto_apply.db"))
 
 
 def run_migrations_offline() -> None:
