@@ -24,8 +24,7 @@ from core.llm import call_llm
 from core.document_builder import build_resume_document, build_cover_document
 from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
 from core.utils import render_pdf
-
-_OUTPUTS_DIR = Path(__file__).parent.parent / "generator" / "outputs"
+from core.paths import OUTPUTS_DIR as _OUTPUTS_DIR
 
 # Appended to every structured (JSON) LLM call. Small/fast models (e.g. DeepSeek
 # Flash, Haiku) sometimes break a markdown `description` out of its JSON string,

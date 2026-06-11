@@ -18,11 +18,9 @@ from db.database import Config, FieldHelp
 from core.user import User, PromptNotConfiguredError
 from core.job import Job
 from core.utils import render_pdf
+from core.paths import PROFILES_DIR as _PROFILES_DIR
 
 router = APIRouter()
-
-
-_PROFILES_DIR = Path(__file__).parent.parent.parent / "profiles"
 
 
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
