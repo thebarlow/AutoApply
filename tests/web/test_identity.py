@@ -125,3 +125,33 @@ def test_second_admin_gets_fresh_profile(db, monkeypatch):
     a2 = resolve_or_provision_account(db, _claims(email="owner2@x.com", subject="o2"))
     assert a1.profile_id == 1
     assert a2.profile_id != 1
+
+
+def test_concurrent_provision_race_recovers(db, monkeypatch):
+    """If a concurrent login wins the provisioning race, the loser's commit hits
+    a unique-constraint violation; resolve must roll back and return the existing
+    account rather than raising IntegrityError."""
+    import web.auth.identity as identity_mod
+    from db.database import Account
+
+    monkeypatch.setenv("ALLOWED_EMAILS", "new@x.com")
+    _seed_prompt_defaults(db)
+
+    # Simulate the winner having already created the account+identity.
+    db.add(User(id=2, name="New User", data="{}"))
+    db.add(Account(id=1, email="new@x.com", is_admin=False, profile_id=2, created_at="t"))
+    db.flush()
+    from db.database import Identity
+    db.add(Identity(account_id=1, provider="google", provider_subject="s1", created_at="t"))
+    db.commit()
+
+    # Force the inner path to behave as if it raced and failed on commit.
+    def boom(_db, _claims):
+        raise IntegrityError("dup", None, Exception())
+
+    from sqlalchemy.exc import IntegrityError
+    monkeypatch.setattr(identity_mod, "_resolve_or_provision", boom)
+
+    acct = resolve_or_provision_account(db, _claims())
+    assert acct.id == 1
+    assert acct.profile_id == 2

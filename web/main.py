@@ -77,6 +77,23 @@ async def lifespan(app: FastAPI):
     t.join(timeout=5)
 
 
+_DEV_SESSION_SECRET = "dev-insecure-session-secret"
+
+
+def _session_secret() -> str:
+    """Resolve the session-signing secret, refusing the insecure dev default in
+    production. A weak/known secret lets anyone forge a session cookie and bypass
+    auth entirely, so fail fast at startup rather than ship a guessable key."""
+    secret = os.getenv("SESSION_SECRET")
+    if os.getenv("APP_ENV") == "production":
+        if not secret or secret == _DEV_SESSION_SECRET:
+            raise RuntimeError(
+                "SESSION_SECRET must be set to a strong random value in production"
+            )
+        return secret
+    return secret or _DEV_SESSION_SECRET
+
+
 app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redoc_url=None)
 # SessionMiddleware is registered LAST in this block on purpose: Starlette runs
 # the most-recently-added middleware outermost, so the session is populated on
@@ -84,7 +101,7 @@ app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redo
 app.add_middleware(AuthGateMiddleware)
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "dev-insecure-session-secret"),
+    secret_key=_session_secret(),
     https_only=os.getenv("APP_ENV") == "production",
     same_site="lax",
 )

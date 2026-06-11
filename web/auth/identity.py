@@ -11,6 +11,7 @@ import dataclasses
 import os
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.user import User
@@ -49,7 +50,34 @@ def resolve_or_provision_account(db: Session, claims: Claims) -> Account:
     """Map an OAuth claim set to an Account, provisioning on first sight.
 
     Raises BetaAccessDenied for unverified emails or non-allowlisted non-admins.
+
+    If two concurrent logins for the same new identity race, the loser hits a
+    unique-constraint violation; we roll back and re-resolve, returning the
+    account the winner just created.
     """
+    try:
+        return _resolve_or_provision(db, claims)
+    except IntegrityError:
+        db.rollback()
+        return _resolve_existing_or_raise(db, claims)
+
+
+def _resolve_existing_or_raise(db: Session, claims: Claims) -> Account:
+    """Re-read after a concurrent-write rollback; the winner's rows now exist."""
+    ident = (
+        db.query(Identity)
+        .filter_by(provider=claims.provider, provider_subject=claims.subject)
+        .first()
+    )
+    if ident is not None:
+        return db.query(Account).filter_by(id=ident.account_id).first()
+    acct = db.query(Account).filter_by(email=claims.email.lower()).first()
+    if acct is not None:
+        return acct
+    raise BetaAccessDenied(claims.email)  # defensive: should not happen
+
+
+def _resolve_or_provision(db: Session, claims: Claims) -> Account:
     if not claims.email or not claims.email_verified:
         raise BetaAccessDenied("email not verified")
 
