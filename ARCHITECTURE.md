@@ -129,7 +129,7 @@ A four-phase initiative moved the pipeline from free-form text toward typed, DB-
 - The `documents` table is the source of truth; `.md` and PDF are derived artifacts and are never hand-edited.
 - Structured résumé generate/refine route through `_llm_json_with_retry`; `_refine_doc_md` uses `max_tokens=32768` to avoid truncation.
 
-## Deployment (Railway, single-user instance)
+## Deployment (Railway)
 
 The app deploys as one Railway service built from the repo-root `Dockerfile`
 (multi-stage: Node builds the React SPA, Python runtime adds pandoc + Playwright
@@ -141,10 +141,15 @@ startup by `init_db()` → `alembic upgrade head`; a fresh Postgres self-migrate
 on first boot. (To port existing local SQLite data, run
 `scripts/port_sqlite_to_pg.py` separately — not part of normal deploy.)
 
-**Access:** instance-wide HTTP Basic gate (`web/auth_gate.py`), enabled when
-`BASIC_AUTH_USER` + `BASIC_AUTH_PASSWORD` are set. `GET /health` is exempt for
-the platform healthcheck. This is NOT per-tenant auth — the tenant seam still
-resolves to tenant 1.
+**Access:** Google/GitHub OAuth (`web/auth/`). Sessions are signed cookies
+(`SESSION_SECRET`). The tenancy seam (`web.tenancy.current_profile_id`) resolves
+the logged-in account's profile in production. A pure-ASGI gate
+(`web/auth/middleware.py`) 401s unauthenticated `/api/*` requests; the SPA shell
+loads unauthenticated and shows a login screen when `/api/me` returns 401.
+Access is invite-gated by `ALLOWED_EMAILS`; `ADMIN_EMAILS` bypass it and the
+first admin login claims the existing `profile_id=1`. `GET /health` is exempt
+for the platform healthcheck. Provider redirect URIs to register:
+`https://autoapply.matthewbarlow.me/auth/callback/google` and `…/github`.
 
 **Persistent files:** a Railway volume mounted at `/data` with `DATA_DIR=/data`.
 Generated documents and uploaded resumes (via `core/paths.py`) live under it.
@@ -160,7 +165,11 @@ key-writing is disabled when `APP_ENV=production`.
 | `LLM_PROVIDER_TYPE` | `openrouter` \| `anthropic` \| `openai` \| `gemini` |
 | `LLM_API_KEY` | platform LLM key |
 | `LLM_DEFAULT_MODEL` | default model id |
-| `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | dashboard login |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth app creds |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app creds |
+| `SESSION_SECRET` | random secret for signed session cookies |
+| `ALLOWED_EMAILS` | comma-separated beta allowlist |
+| `ADMIN_EMAILS` | comma-separated admin/owner emails |
 | `DATA_DIR` | `/data` |
 | `APP_ENV` | `production` |
 | `PORT` | provided by Railway |
@@ -172,18 +181,17 @@ attach a volume at `/data`.
 
 ## Roadmap: SaaS conversion (planned — not yet built)
 
-The deployment above is a single-user, password-gated instance. The app is being
-converted to a multi-user SaaS in four sequenced sub-projects, each with its own
-spec → plan → implementation cycle (designs under `docs/superpowers/`, status in
-`TODO.md`). The multi-tenancy foundation is already in place (see "Tenant
-scoping" in `db/CONTEXT.md`); these layer on top:
+The app is being converted to a multi-user SaaS in four sequenced sub-projects,
+each with its own spec → plan → implementation cycle (designs under
+`docs/superpowers/`, status in `TODO.md`). The multi-tenancy foundation is
+already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
 
-1. **Auth & Identity** *(spec + plan written, not executed)* — Google/GitHub
-   OAuth via Authlib + Starlette signed-cookie sessions. Adds `account` +
-   `identity` tables (one account = one `user_profile`/tenant, linked by verified
-   email). Swaps `web.tenancy.current_profile_id` to resolve the logged-in
-   account's profile in production; a pure-ASGI gate on `/api/*` replaces the
-   HTTP Basic gate; access is invite-gated by an email allowlist.
+1. **Auth & Identity** *(implemented)* — Google/GitHub OAuth via Authlib +
+   Starlette signed-cookie sessions. Adds `account` + `identity` tables (one
+   account = one `user_profile`/tenant, linked by verified email).
+   `web.tenancy.current_profile_id` resolves the logged-in account's profile in
+   production; a pure-ASGI gate on `/api/*` (`web/auth/middleware.py`) replaced
+   the HTTP Basic gate; access is invite-gated by `ALLOWED_EMAILS`.
    Spec: `docs/superpowers/specs/2026-06-11-auth-identity-design.md`.
 2. **Credits & Metering** — per-tenant credit balance + ledger; the `core/job.py`
    LLM call sites debit credits; generation blocks at zero balance.
