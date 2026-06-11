@@ -81,5 +81,13 @@ Every tenant-owned table (`jobs`, `documents`, `skill_aliases`) carries
 directly — read through `web.tenancy.scoped(db, Model, profile_id)`; writes set
 `profile_id`. Routers inject `current_profile_id` (dev stub → `Config['dev_tenant_id']`,
 default 1) and pass it down into `core/`. A `before_flush` guard (`db/events.py`)
-fails any tenant insert missing `profile_id`. Phase 3 ports existing SQLite data into
-tenant `profile_id=1` and cuts startup over to `alembic upgrade head`.
+fails any tenant insert missing `profile_id`. Phase 3 (DONE) ported existing SQLite
+data into tenant `profile_id=1` and cut startup over to `alembic upgrade head`.
+
+**Planned (Auth sub-project — spec+plan written, NOT built):** two new non-tenant-guarded
+tables — `account` (one per login identity, 1:1 → `user_profile` via `profile_id`,
+`is_admin`) and `identity` (`(provider, provider_subject)` → `account`) — added by an
+Alembic migration chained onto head `bdf3f4523095`. On first OAuth login a profile is
+provisioned (seeded prompts + skill aliases) and the `current_profile_id` dev stub is
+swapped to resolve the session's account in production. See
+`docs/superpowers/plans/2026-06-11-auth-identity.md`.

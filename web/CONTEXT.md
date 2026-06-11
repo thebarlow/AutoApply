@@ -50,6 +50,7 @@ web/
 
 ## Key Design Notes
 
+- **Access control today** — the hosted instance is gated by `web/auth_gate.py` (instance-wide HTTP Basic, no-op locally; `/health` exempt). Tenant resolution is the `web/tenancy.py` `current_profile_id` dev stub (→ `Config['dev_tenant_id']`, default 1). **Planned (Auth sub-project, spec+plan written, NOT built):** a `web/auth/` package (Authlib Google/GitHub OAuth + cookie sessions, `account`/`identity` tables, `/api/me`) that swaps the seam to the logged-in user in production and replaces the Basic gate with a pure-ASGI `/api/*` gate. See `docs/superpowers/plans/2026-06-11-auth-identity.md` and `TODO.md`.
 - **Score/generate are in `core/job.py`** — `routers/jobs.py` resolves the LLM client, prompt content, and template paths, then delegates to `job.score()`, `job.generate_resume_md/pdf()`, `job.generate_cover_md/pdf()`.
 - **Generation is synchronous** — resume/cover generation blocks the request 30–60s while Claude + pandoc run. Acceptable for single-user local use.
 - **SSE for real-time updates** — `sse.py` broadcasts job state changes; `App.jsx` subscribes via `EventSource`.

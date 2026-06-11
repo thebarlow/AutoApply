@@ -169,3 +169,25 @@ key-writing is disabled when `APP_ENV=production`.
 attach a volume at `/data`.
 
 **Not deployed:** the tray app and browser extension remain local clients.
+
+## Roadmap: SaaS conversion (planned — not yet built)
+
+The deployment above is a single-user, password-gated instance. The app is being
+converted to a multi-user SaaS in four sequenced sub-projects, each with its own
+spec → plan → implementation cycle (designs under `docs/superpowers/`, status in
+`TODO.md`). The multi-tenancy foundation is already in place (see "Tenant
+scoping" in `db/CONTEXT.md`); these layer on top:
+
+1. **Auth & Identity** *(spec + plan written, not executed)* — Google/GitHub
+   OAuth via Authlib + Starlette signed-cookie sessions. Adds `account` +
+   `identity` tables (one account = one `user_profile`/tenant, linked by verified
+   email). Swaps `web.tenancy.current_profile_id` to resolve the logged-in
+   account's profile in production; a pure-ASGI gate on `/api/*` replaces the
+   HTTP Basic gate; access is invite-gated by an email allowlist.
+   Spec: `docs/superpowers/specs/2026-06-11-auth-identity-design.md`.
+2. **Credits & Metering** — per-tenant credit balance + ledger; the `core/job.py`
+   LLM call sites debit credits; generation blocks at zero balance.
+3. **Payments** — Stripe Checkout for credit packs + webhook → credit grants.
+4. **Onboarding UX rework** — drop the API-key step, surface credits/buy flow,
+   and close the job-ingestion gap (the unhooked browser extension means hosted
+   users currently have no way to add jobs).

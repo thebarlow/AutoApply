@@ -43,6 +43,12 @@ start.bat
 
 Starts the FastAPI server (uvicorn, port 8080) in a separate console window and launches the PyQt6 tray app in the foreground.
 
+## Deployment & SaaS Roadmap
+
+The app is **deployed and live** at `https://autoapply.matthewbarlow.me` (Railway: Dockerfile build, managed Postgres, `/data` volume, alembic-on-startup). See `ARCHITECTURE.md` → "Deployment". The hosted instance is currently gated by a single-user HTTP Basic password.
+
+Multi-tenancy is **done** (`profile_id` everywhere via the `current_profile_id` seam + `scoped()` + a `before_flush` tenant guard; the platform owns the LLM key via env). The app is being converted to a multi-user SaaS in four sequenced sub-projects — **Auth → Credits → Payments → Onboarding** — each with its own spec → plan → impl cycle. Sub-project 1 (Auth & Identity: Authlib Google/GitHub OAuth + cookie sessions, swapping the seam to the logged-in user) has a written spec + plan but is **not yet built**. Full roadmap, status, and design pointers live in `TODO.md` → "Hosting / SaaS conversion". When working on hosted/multi-user/auth/credits/payments features, read `TODO.md` and the relevant `docs/superpowers/specs|plans/*` first.
+
 ## Working in Subdirectories
 
 - Before working in any subdirectory, read its `CONTEXT.md` if one exists.
