@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+node_modules
+react-dashboard/node_modules
+react-dashboard/dist
+auto_apply.db
+auto_apply.db-shm
+auto_apply.db-wal
+.env
+docs/
+generator/outputs/
+profiles/
+tests/
