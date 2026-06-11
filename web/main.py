@@ -24,6 +24,7 @@ from web.routers import session_cost_router
 from web.routers import shutdown as shutdown_router
 from web.routers import stats as stats_router
 from web.routers import skills as skills_router
+from web.auth_gate import BasicAuthMiddleware
 
 
 def _timed(label: str, fn):
@@ -74,6 +75,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redoc_url=None)
+app.add_middleware(BasicAuthMiddleware)
 
 _STATIC = Path(__file__).parent / "static"
 _DIST = Path(__file__).parent.parent / "react-dashboard" / "dist"
@@ -123,6 +125,11 @@ def setup_page():
 @app.get("/help")
 def help_page():
     return FileResponse(Path(__file__).parent.parent / "docs" / "index.html")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.get("/{full_path:path}")
