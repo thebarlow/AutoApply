@@ -56,39 +56,6 @@ def _call_llm_for_extraction(client, model: str, prompt: str) -> str:
     return content.strip()
 
 
-def _cfg_val(db: Session, key: str) -> str:
-    row = db.query(Config).filter_by(key=key).first()
-    return row.value if row else ""
-
-
-def _resolve_template(db: Session, template_name: str) -> Path:
-    """Return Path for a named LaTeX template; raises HTTP 400 if not found."""
-    if not template_name:
-        raise HTTPException(
-            status_code=400,
-            detail="No LaTeX template assigned to this prompt. Set one under Config → Scaffolding.",
-        )
-    templates = _json.loads(_cfg_val(db, "latex_templates") or "[]")
-    match = next((t for t in templates if t["name"] == template_name), None)
-    if not match:
-        raise HTTPException(status_code=400, detail=f"LaTeX template '{template_name}' not found.")
-    p = Path(match["path"])
-    if not p.exists():
-        raise HTTPException(status_code=400, detail=f"LaTeX template file missing on disk: {p}")
-    return p
-
-
-def _get_default_template_name(db: Session) -> str:
-    """Return the first configured LaTeX template name; raises HTTP 400 if none."""
-    templates = _json.loads(_cfg_val(db, "latex_templates") or "[]")
-    if not templates:
-        raise HTTPException(
-            status_code=400,
-            detail="No LaTeX template configured. Upload one under Config.",
-        )
-    return templates[0]["name"]
-
-
 router = APIRouter(prefix="/api/jobs")
 
 

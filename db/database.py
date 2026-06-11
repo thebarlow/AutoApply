@@ -445,12 +445,11 @@ def init_db() -> None:
     _migrate_resume_docx_column()
     _migrate_ats_report_columns()
     _migrate_tenant_columns()
-    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db, seed_skill_aliases
+    from db.seed import seed_field_help, seed_user_profile_field_help, seed_prompt_defaults, migrate_file_prompts_to_db, seed_skill_aliases
     db = SessionLocal()
     try:
         seed_field_help(db)
         seed_user_profile_field_help(db)
-        seed_latex_templates(db)
         seed_prompt_defaults(db)
         seed_skill_aliases(db)
         migrate_file_prompts_to_db(db)
