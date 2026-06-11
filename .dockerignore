@@ -11,6 +11,8 @@ auto_apply.db
 auto_apply.db-shm
 auto_apply.db-wal
 .env
+.env.*
+!.env.example
 docs/
 generator/outputs/
 profiles/
