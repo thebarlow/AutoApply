@@ -6,10 +6,12 @@ later Auth spec swaps it to read a session/JWT without changing any call site.
 """
 from __future__ import annotations
 
-from fastapi import Depends
+import os
+
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from db.database import Config, get_db
+from db.database import Account, Config, get_db
 
 # Seed/dev tenant. Never 0 (falsy — would break `if profile_id:` guards).
 DEFAULT_TENANT_ID = 1
@@ -26,12 +28,21 @@ def get_dev_tenant_id(db: Session) -> int:
     return DEFAULT_TENANT_ID
 
 
-def current_profile_id(db: Session = Depends(get_db)) -> int:
+def current_profile_id(request: Request, db: Session = Depends(get_db)) -> int:
     """FastAPI dependency: the active tenant for this request.
 
-    DEV STUB — returns the configured dev tenant. The Auth spec replaces this
-    body with real session/JWT resolution; no call site changes.
+    In production the tenant is the logged-in account's profile (session-backed).
+    Outside production the dev stub returns the configured dev tenant so local
+    dev and the test suite need no login.
     """
+    if os.getenv("APP_ENV") == "production":
+        account_id = request.session.get("account_id")
+        if not account_id:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        acct = db.query(Account).filter_by(id=account_id).first()
+        if acct is None:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        return acct.profile_id
     return get_dev_tenant_id(db)
 
 

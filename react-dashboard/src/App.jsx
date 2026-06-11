@@ -6,10 +6,12 @@ import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
 import Wizard from './components/Onboarding/Wizard'
 import Docs from './components/Docs'
-import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen } from './api'
+import LoginScreen from './components/LoginScreen'
+import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
 
 export default function App() {
+  const [me, setMe] = useState(undefined) // undefined=loading, null=logged out
   const [jobs, setJobs] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
   const [skillFilter, setSkillFilter] = useState(null) // { skill: string, jobKeys: Set<string> } | null
@@ -31,6 +33,10 @@ export default function App() {
     setTimeout(() => dismissToast(id), 8000)
   }, [dismissToast])
   const showWizard = prereqs.loaded && prereqs.isFirstRun && !wizardSkipped
+
+  useEffect(() => {
+    getMe().then(setMe).catch(() => setMe(null))
+  }, [])
 
   const refetchPromptStatus = useCallback(() => {
     getActivePromptStatus().then(setPromptStatus).catch(() => setPromptStatus({}))
@@ -159,6 +165,13 @@ export default function App() {
       markJobSeen(job.job_key).catch(() => {})
     }
   }, [])
+
+  if (me === undefined) return null
+
+  if (me === null) {
+    const betaClosed = new URLSearchParams(window.location.search).get('beta') === 'closed'
+    return <LoginScreen betaClosed={betaClosed} />
+  }
 
   return (
     <Routes>

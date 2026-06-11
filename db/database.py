@@ -4,7 +4,16 @@ import os
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from sqlalchemy import Column, Integer, String, Text, UniqueConstraint, create_engine
+from sqlalchemy import (
+    Boolean,
+    Column,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -111,6 +120,33 @@ class SkillAlias(Base):
     profile_id = Column(Integer, primary_key=True)
     alias_key = Column(String, primary_key=True)
     canonical = Column(String, nullable=False)
+
+
+class Account(Base):
+    """A login identity owner. One account maps 1:1 to a tenant (user_profile)."""
+
+    __tablename__ = "account"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, nullable=False, unique=True)
+    is_admin = Column(Boolean, nullable=False, default=False)
+    profile_id = Column(Integer, ForeignKey("user_profile.id"), nullable=False, unique=True)
+    created_at = Column(String, nullable=False)
+
+
+class Identity(Base):
+    """An OAuth identity (provider + subject) attached to an Account."""
+
+    __tablename__ = "identity"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_subject", name="uq_identity_provider_subject"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    account_id = Column(Integer, ForeignKey("account.id"), nullable=False)
+    provider = Column(String, nullable=False)
+    provider_subject = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
 
 
 load_dotenv()

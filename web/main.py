@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -8,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from db.database import init_db
 from web.routers import jobs
@@ -24,7 +26,8 @@ from web.routers import session_cost_router
 from web.routers import shutdown as shutdown_router
 from web.routers import stats as stats_router
 from web.routers import skills as skills_router
-from web.auth_gate import BasicAuthMiddleware
+from web.auth import routes as auth_routes
+from web.auth.middleware import AuthGateMiddleware
 
 
 def _timed(label: str, fn):
@@ -74,8 +77,34 @@ async def lifespan(app: FastAPI):
     t.join(timeout=5)
 
 
+_DEV_SESSION_SECRET = "dev-insecure-session-secret"
+
+
+def _session_secret() -> str:
+    """Resolve the session-signing secret, refusing the insecure dev default in
+    production. A weak/known secret lets anyone forge a session cookie and bypass
+    auth entirely, so fail fast at startup rather than ship a guessable key."""
+    secret = os.getenv("SESSION_SECRET")
+    if os.getenv("APP_ENV") == "production":
+        if not secret or secret == _DEV_SESSION_SECRET:
+            raise RuntimeError(
+                "SESSION_SECRET must be set to a strong random value in production"
+            )
+        return secret
+    return secret or _DEV_SESSION_SECRET
+
+
 app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redoc_url=None)
-app.add_middleware(BasicAuthMiddleware)
+# SessionMiddleware is registered LAST in this block on purpose: Starlette runs
+# the most-recently-added middleware outermost, so the session is populated on
+# the request scope before AuthGateMiddleware inspects it.
+app.add_middleware(AuthGateMiddleware)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_session_secret(),
+    https_only=os.getenv("APP_ENV") == "production",
+    same_site="lax",
+)
 
 _STATIC = Path(__file__).parent / "static"
 _DIST = Path(__file__).parent.parent / "react-dashboard" / "dist"
@@ -94,6 +123,7 @@ app.include_router(session_cost_router.router)
 app.include_router(shutdown_router.router)
 app.include_router(stats_router.router)
 app.include_router(skills_router.router)
+app.include_router(auth_routes.router)
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
