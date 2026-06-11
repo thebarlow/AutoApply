@@ -51,3 +51,24 @@ def test_rejects_wrong_credentials():
 def test_health_exempt_even_when_enabled():
     client = TestClient(_app("admin", "pw"))
     assert client.get("/health").status_code == 200
+
+
+def test_streaming_response_passes_through(monkeypatch):
+    from starlette.responses import StreamingResponse
+
+    app = FastAPI()
+    app.add_middleware(BasicAuthMiddleware, username="admin", password="pw")
+
+    @app.get("/stream")
+    def stream():
+        def gen():
+            yield "a"
+            yield "b"
+            yield "c"
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    client = TestClient(app)
+    r = client.get("/stream", headers=_basic("admin", "pw"))
+    assert r.status_code == 200
+    assert r.text == "abc"
+    assert r.headers["content-type"].startswith("text/event-stream")
