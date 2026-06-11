@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -8,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from db.database import init_db
 from web.routers import jobs
@@ -75,7 +77,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redoc_url=None)
-app.add_middleware(BasicAuthMiddleware)
+# SessionMiddleware is registered LAST in this block on purpose: Starlette runs
+# the most-recently-added middleware outermost, so the session is populated on
+# the request scope before the auth gate (added in a later task) inspects it.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET", "dev-insecure-session-secret"),
+    https_only=os.getenv("APP_ENV") == "production",
+    same_site="lax",
+)
 
 _STATIC = Path(__file__).parent / "static"
 _DIST = Path(__file__).parent.parent / "react-dashboard" / "dist"
