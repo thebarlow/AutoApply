@@ -26,6 +26,7 @@ from web.routers import session_cost_router
 from web.routers import shutdown as shutdown_router
 from web.routers import stats as stats_router
 from web.routers import skills as skills_router
+from web.auth import routes as auth_routes
 from web.auth_gate import BasicAuthMiddleware
 
 
@@ -104,6 +105,7 @@ app.include_router(session_cost_router.router)
 app.include_router(shutdown_router.router)
 app.include_router(stats_router.router)
 app.include_router(skills_router.router)
+app.include_router(auth_routes.router)
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
