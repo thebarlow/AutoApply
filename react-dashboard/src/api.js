@@ -247,3 +247,13 @@ export const flagJob = (jobKey, flagged) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ flagged }),
   })
+
+export async function getMe() {
+  const res = await fetch('/api/me')
+  if (res.status === 401) return null
+  if (!res.ok) throw new Error(`GET /api/me → ${res.status}`)
+  return res.json()
+}
+
+export const logout = () =>
+  fetch('/auth/logout', { method: 'POST' }).then(() => { window.location.href = '/' })

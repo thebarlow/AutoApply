@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { logout } from "../api";
 
 export default function Navbar() {
   const [sessionCost, setSessionCost] = useState(0);
@@ -126,6 +127,15 @@ export default function Navbar() {
         >
           Help
         </a>
+
+        {/* Logout */}
+        <button
+          onClick={logout}
+          className="text-sm text-space-dim hover:text-purple-400 transition-colors bg-transparent border-0 p-0 cursor-pointer"
+          aria-label="Logout"
+        >
+          Logout
+        </button>
 
         {/* Power button */}
         <div className="relative" ref={shutdownRef}>
