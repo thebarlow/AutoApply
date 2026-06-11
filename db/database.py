@@ -115,7 +115,22 @@ class SkillAlias(Base):
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///auto_apply.db")
+
+def _normalize_db_url(url: str) -> str:
+    """Ensure a bare ``postgresql://`` URL uses the psycopg3 driver.
+
+    Railway and many hosts expose ``postgresql://…``; SQLAlchemy needs
+    ``postgresql+psycopg://…`` to select psycopg3. URLs that already name a
+    driver (``postgresql+psycopg``, ``postgresql+psycopg2``) and non-Postgres
+    URLs (e.g. SQLite) are returned unchanged.
+    """
+    prefix = "postgresql://"
+    if url.startswith(prefix):
+        return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+DATABASE_URL = _normalize_db_url(os.getenv("DATABASE_URL", "sqlite:///auto_apply.db"))
 
 
 def make_connect_args(url: str) -> dict:
