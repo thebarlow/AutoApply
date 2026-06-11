@@ -4,7 +4,7 @@ import sys
 from sqlalchemy.exc import OperationalError
 
 from db.database import init_db, SessionLocal
-from db.seed import seed_default_config, seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_skill_aliases
+from db.seed import seed_default_config, seed_field_help, seed_user_profile_field_help, seed_skill_aliases
 
 if __name__ == "__main__":
     try:
@@ -21,7 +21,6 @@ if __name__ == "__main__":
         seed_default_config(db)
         seed_field_help(db)
         seed_user_profile_field_help(db)
-        seed_latex_templates(db)
         seed_skill_aliases(db)
         print("Database initialised and default config seeded.")
     except OperationalError as e:

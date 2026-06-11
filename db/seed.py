@@ -8,26 +8,12 @@ from sqlalchemy.orm import Session
 
 from db.database import Config, FieldHelp
 
-_GENERATOR_DIR = Path(__file__).parent.parent / "generator"
 _PROMPTS_DEFAULTS_DIR = Path(__file__).parent.parent / "prompts" / "defaults"
 
 PROMPT_TYPE_KEYS = (
     "scoring", "resume", "cover", "extraction", "resume_parse",
     "resume_eval", "resume_refine", "cover_eval", "cover_refine",
 )
-
-DEFAULT_LATEX_TEMPLATES = [
-    {
-        "id": "default-resume",
-        "name": "Default Resume",
-        "path": str((_GENERATOR_DIR / "resume_template.html").resolve()),
-    },
-    {
-        "id": "default-cover",
-        "name": "Default Cover Letter",
-        "path": str((_GENERATOR_DIR / "cover_template.html").resolve()),
-    },
-]
 
 DEFAULT_CONFIG: dict[str, str] = {
     "w1": "0.5",
@@ -233,24 +219,6 @@ def migrate_file_prompts_to_db(db: Session) -> None:
                 content=content, model=model, updated_at=now,
             ))
     db.commit()
-
-
-def seed_latex_templates(db: Session) -> None:
-    """Register default LaTeX templates if not already present."""
-    row = db.query(Config).filter_by(key="latex_templates").first()
-    existing: list[dict] = json.loads(row.value) if row else []
-    existing_ids = {t["id"] for t in existing}
-    added = False
-    for tpl in DEFAULT_LATEX_TEMPLATES:
-        if tpl["id"] not in existing_ids and Path(tpl["path"]).exists():
-            existing.append(tpl)
-            added = True
-    if added:
-        if row:
-            row.value = json.dumps(existing)
-        else:
-            db.add(Config(key="latex_templates", value=json.dumps(existing)))
-        db.commit()
 
 
 def seed_skill_aliases(db: Session, profile_id: int = 1) -> None:

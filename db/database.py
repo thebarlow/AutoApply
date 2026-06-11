@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from sqlalchemy import Column, Integer, String, Text, UniqueConstraint, create_engine, text
+from sqlalchemy import Column, Integer, String, Text, UniqueConstraint, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -133,332 +133,42 @@ engine = create_engine(DATABASE_URL, connect_args=make_connect_args(DATABASE_URL
 SessionLocal = sessionmaker(bind=engine)
 
 
-def _migrate_profile_name() -> None:
-    """Add name column to user_profile table if it does not exist."""
-    with engine.connect() as conn:
-        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(user_profile)")).fetchall()]
-        if "name" not in cols:
-            conn.execute(text("ALTER TABLE user_profile ADD COLUMN name TEXT DEFAULT 'Default'"))
-            conn.commit()
-
-
-def _migrate_legacy_config() -> None:
-    """One-time migration: port old llm_providers and template paths into the new schema."""
-    import json
-    import uuid
-
-    _LLM_BASE_URLS = {
-        "openrouter": "https://openrouter.ai/api/v1",
-        "anthropic": "https://api.anthropic.com/v1",
-        "openai": "https://api.openai.com/v1",
-        "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
-    }
-    _BASE_URL_TO_TYPE = {v: k for k, v in _LLM_BASE_URLS.items()}
-
-    db = SessionLocal()
-    try:
-        def _get(key: str) -> str:
-            row = db.query(Config).filter_by(key=key).first()
-            return row.value if row else ""
-
-        def _set(key: str, value: str) -> None:
-            row = db.query(Config).filter_by(key=key).first()
-            if row:
-                row.value = value
-            else:
-                db.add(Config(key=key, value=value))
-            db.commit()
-
-        # --- LLM providers ---
-        named_raw = _get("named_providers")
-        named = json.loads(named_raw) if named_raw else []
-        if not named:
-            old_raw = _get("llm_providers")
-            old_providers = json.loads(old_raw) if old_raw else []
-            if old_providers:
-                migrated = []
-                for p in old_providers:
-                    provider_type = _BASE_URL_TO_TYPE.get(p.get("base_url", ""), "openrouter")
-                    migrated.append({
-                        "id": uuid.uuid4().hex,
-                        "name": p.get("name", provider_type),
-                        "provider_type": provider_type,
-                    })
-                _set("named_providers", json.dumps(migrated))
-                print(f"[migration] Ported {len(migrated)} LLM provider(s) to named_providers.")
-
-        # --- LaTeX template paths ---
-        latex_raw = _get("latex_templates")
-        latex = json.loads(latex_raw) if latex_raw else []
-        if not latex:
-            entries = []
-            for key, label in (("resume_template_path", "Resume"), ("cover_template_path", "Cover Letter")):
-                path = _get(key)
-                if path:
-                    entries.append({"id": uuid.uuid4().hex, "name": label, "path": path})
-            if entries:
-                _set("latex_templates", json.dumps(entries))
-                print(f"[migration] Ported {len(entries)} LaTeX template path(s) to latex_templates.")
-    finally:
-        db.close()
-
-
-def _migrate_ext_columns() -> None:
-    """Add ext_* extraction columns to the jobs table if they do not exist."""
-    ext_columns = [
-        "ext_seniority", "ext_role_type", "ext_domain", "ext_work_arrangement",
-        "ext_employment_type", "ext_required_skills", "ext_preferred_skills",
-        "ext_tech_stack", "ext_key_responsibilities", "ext_company_signals",
-    ]
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        for col in ext_columns:
-            if col not in existing:
-                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} TEXT"))
-        conn.commit()
-
-
-def _migrate_unread_indicator_columns() -> None:
-    """Add unread_indicator + last_result_error columns to jobs table if missing."""
-    new_cols = [("unread_indicator", "TEXT"), ("last_result_error", "TEXT")]
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        for col, typ in new_cols:
-            if col not in existing:
-                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {typ}"))
-        conn.commit()
-
-
-def _migrate_pending_review_actions() -> None:
-    """Add pending_review_actions column (JSON list of action names)."""
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        if "pending_review_actions" not in existing:
-            conn.execute(text("ALTER TABLE jobs ADD COLUMN pending_review_actions TEXT"))
-        conn.commit()
-
-
-def _migrate_generated_at_columns() -> None:
-    """Add resume_generated_at and cover_generated_at columns to jobs table if missing."""
-    new_cols = [("resume_generated_at", "TEXT"), ("cover_generated_at", "TEXT")]
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        for col, typ in new_cols:
-            if col not in existing:
-                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {typ}"))
-        conn.commit()
-
-
-def _migrate_flagged_column() -> None:
-    """Add flagged column to jobs table if it does not exist."""
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        if "flagged" not in existing:
-            conn.execute(text("ALTER TABLE jobs ADD COLUMN flagged BOOLEAN NOT NULL DEFAULT 0"))
-        conn.commit()
-
-
-def _migrate_resume_eval_columns() -> None:
-    """Add resume/cover eval columns for the refinement loop."""
-    new_cols = [
-        ("resume_eval_score", "REAL"),
-        ("resume_eval_turns", "INTEGER"),
-        ("resume_eval_log", "TEXT"),
-        ("cover_eval_score", "REAL"),
-        ("cover_eval_turns", "INTEGER"),
-        ("cover_eval_log", "TEXT"),
-    ]
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        for col, typ in new_cols:
-            if col not in existing:
-                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {typ}"))
-        conn.commit()
-
-
-def _migrate_resume_docx_column() -> None:
-    """Add resume_docx_path column to jobs table if missing."""
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        if "resume_docx_path" not in existing:
-            conn.execute(text("ALTER TABLE jobs ADD COLUMN resume_docx_path TEXT"))
-        conn.commit()
-
-
-def _migrate_ats_report_columns() -> None:
-    """Add the ATS-gate report columns to jobs table if missing."""
-    cols = {
-        "ats_passed": "BOOLEAN",
-        "ats_score": "REAL",
-        "ats_report_json": "TEXT",
-        "ats_checked_at": "TEXT",
-    }
-    with engine.connect() as conn:
-        existing = [r[1] for r in conn.execute(text("PRAGMA table_info(jobs)")).fetchall()]
-        for name, sqltype in cols.items():
-            if name not in existing:
-                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {name} {sqltype}"))
-        conn.commit()
-
-
-def _migrate_resume_prompt_v2() -> None:
-    """Force the résumé default + all profile résumé prompts to the Phase 3a contract.
-
-    Runs once (gated by Config key ``resume_prompt_v2``). Overwrites custom
-    résumé prompt edits — required because the old free-form prompt no longer
-    parses under the structured ResumeGeneration contract.
-    """
-    from pathlib import Path
-
-    db = SessionLocal()
-    try:
-        flag = db.query(Config).filter_by(key="resume_prompt_v2").first()
-        if flag and flag.value == "1":
-            return
-        new_content = (
-            Path(__file__).parent.parent / "prompts" / "defaults" / "resume.md"
-        ).read_text(encoding="utf-8")
-
-        default = db.query(PromptDefault).filter_by(type_key="resume").first()
-        if default is None:
-            db.add(PromptDefault(type_key="resume", content=new_content))
-        else:
-            default.content = new_content
-        for row in db.query(Prompt).filter_by(type_key="resume").all():
-            row.content = new_content
-
-        if flag is None:
-            db.add(Config(key="resume_prompt_v2", value="1"))
-        else:
-            flag.value = "1"
-        db.commit()
-    finally:
-        db.close()
-
-
-def _migrate_resume_refine_prompt_v2() -> None:
-    """Force the résumé-refine default + profile prompts to the Phase 3b contract.
-
-    Runs once (gated by Config key ``resume_refine_prompt_v2``). Overwrites
-    custom edits — required because the old free-form refine prompt no longer
-    parses under the structured keyed-patch contract.
-    """
-    from pathlib import Path
-
-    db = SessionLocal()
-    try:
-        flag = db.query(Config).filter_by(key="resume_refine_prompt_v2").first()
-        if flag and flag.value == "1":
-            return
-        new_content = (
-            Path(__file__).parent.parent / "prompts" / "defaults" / "resume_refine.md"
-        ).read_text(encoding="utf-8")
-
-        default = db.query(PromptDefault).filter_by(type_key="resume_refine").first()
-        if default is None:
-            db.add(PromptDefault(type_key="resume_refine", content=new_content))
-        else:
-            default.content = new_content
-        for row in db.query(Prompt).filter_by(type_key="resume_refine").all():
-            row.content = new_content
-
-        if flag is None:
-            db.add(Config(key="resume_refine_prompt_v2", value="1"))
-        else:
-            flag.value = "1"
-        db.commit()
-    finally:
-        db.close()
-
-
-def _migrate_resume_eval_prompt_v2() -> None:
-    """Force the résumé-eval default + profile prompts to the present-and-relevant
-    skill-coverage contract.
-
-    Runs once (gated by Config key ``resume_eval_prompt_v2``). Overwrites custom
-    edits so the eval loop enforces that skills the candidate has and the job
-    wants survive generation into the résumé (mirrors the ATS gate's
-    present_skill_dropped intersection one step earlier).
-    """
-    from pathlib import Path
-
-    db = SessionLocal()
-    try:
-        flag = db.query(Config).filter_by(key="resume_eval_prompt_v2").first()
-        if flag and flag.value == "1":
-            return
-        new_content = (
-            Path(__file__).parent.parent / "prompts" / "defaults" / "resume_eval.md"
-        ).read_text(encoding="utf-8")
-
-        default = db.query(PromptDefault).filter_by(type_key="resume_eval").first()
-        if default is None:
-            db.add(PromptDefault(type_key="resume_eval", content=new_content))
-        else:
-            default.content = new_content
-        for row in db.query(Prompt).filter_by(type_key="resume_eval").all():
-            row.content = new_content
-
-        if flag is None:
-            db.add(Config(key="resume_eval_prompt_v2", value="1"))
-        else:
-            flag.value = "1"
-        db.commit()
-    finally:
-        db.close()
-
-
-def _migrate_tenant_columns() -> None:
-    """Add profile_id column to jobs, documents, and skill_aliases if missing.
-
-    Pre-existing ``skill_aliases`` rows are backfilled to the dev tenant (1) so
-    ``seed_skill_aliases`` (which now scopes its idempotency check by
-    profile_id) doesn't try to re-insert duplicates of rows that predate the
-    profile_id column.
-    """
-    with engine.connect() as conn:
-        for table in ("jobs", "documents", "skill_aliases"):
-            existing = [r[1] for r in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()]
-            if "profile_id" not in existing:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN profile_id INTEGER"))
-        # Backfill any NULL profile_id (rows predating the column, or added by
-        # the ALTER above) to the dev tenant so seeding/scoped queries work.
-        conn.execute(text("UPDATE skill_aliases SET profile_id = 1 WHERE profile_id IS NULL"))
-        conn.commit()
-
-
 def init_db() -> None:
-    """Create all tables, run schema migrations, and seed default data."""
+    """Bring the schema to head via Alembic, then seed idempotent default data."""
     import core.job   # noqa: F401 — registers Job with Base.metadata
     import core.user  # noqa: F401 — registers User with Base.metadata
-    Base.metadata.create_all(bind=engine)
+
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+
+    alembic_cfg = AlembicConfig(str(Path(__file__).parent.parent / "alembic.ini"))
+    # Make script_location absolute so upgrade works regardless of CWD.
+    alembic_cfg.set_main_option(
+        "script_location", str(Path(__file__).parent.parent / "alembic")
+    )
+    command.upgrade(alembic_cfg, "head")
+
     from db.events import register_tenant_guard
     register_tenant_guard()
-    _migrate_profile_name()
-    _migrate_legacy_config()
-    _migrate_ext_columns()
-    _migrate_unread_indicator_columns()
-    _migrate_pending_review_actions()
-    _migrate_generated_at_columns()
-    _migrate_flagged_column()
-    _migrate_resume_eval_columns()
-    _migrate_resume_docx_column()
-    _migrate_ats_report_columns()
-    _migrate_tenant_columns()
-    from db.seed import seed_field_help, seed_user_profile_field_help, seed_latex_templates, seed_prompt_defaults, migrate_file_prompts_to_db, seed_skill_aliases
+
+    from db.seed import (
+        seed_field_help,
+        seed_user_profile_field_help,
+        seed_prompt_defaults,
+        migrate_file_prompts_to_db,
+        seed_skill_aliases,
+    )
     db = SessionLocal()
     try:
         seed_field_help(db)
         seed_user_profile_field_help(db)
-        seed_latex_templates(db)
         seed_prompt_defaults(db)
         seed_skill_aliases(db)
         migrate_file_prompts_to_db(db)
     finally:
         db.close()
-    _migrate_resume_prompt_v2()
-    _migrate_resume_refine_prompt_v2()
-    _migrate_resume_eval_prompt_v2()
     _seed_ats_parse_prompt()
 
 

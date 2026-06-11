@@ -2,21 +2,21 @@
 
 ## Schema Management
 
-SQLAlchemy's `create_all` only creates tables that don't already exist — it does **not** add new columns to existing tables. When a new column is added to a model, the live `auto_apply.db` must be migrated manually:
+**Startup is Alembic-only (Phase 3).** `init_db()` runs `alembic upgrade head` to
+bring the schema current, then runs the idempotent seeders. `create_all` and the
+hand-rolled `_migrate_*` functions have been **retired from the production path**.
+Add schema changes by autogenerating a new Alembic migration (see below), never by
+hand-writing `ALTER TABLE` in `database.py`.
 
-```bash
-python -c "
-import sqlite3
-conn = sqlite3.connect('auto_apply.db')
-conn.execute('ALTER TABLE jobs ADD COLUMN <column_name> <TYPE>')
-conn.commit()
-conn.close()
-"
-```
+The **test suite still uses `create_all`** (each test builds an in-memory SQLite via
+`Base.metadata.create_all` and overrides `get_db`) for speed — it does not run Alembic.
+`tests/db/test_alembic_parity.py` gates that the two schemas stay identical.
 
-### Migration history
+### Migration history (retired)
 
-Each migration function in `database.py` is idempotent (checks `PRAGMA table_info` before altering).
+The table below records the columns that the now-deleted `_migrate_*` functions used to
+add. These are all folded into the Alembic baseline (`3433821457fb`); the functions no
+longer exist.
 
 | Column(s) | Table | Type | Migration fn |
 |-----------|-------|------|--------------|
@@ -41,24 +41,22 @@ Each migration function in `database.py` is idempotent (checks `PRAGMA table_inf
 | `documents` | `Document` | Structured generated artifact per `(job_key, doc_type)`; `structured_json` is the **source of truth**. Unique on `(job_key, doc_type)`. Helpers: `Document.fetch(db, job_key, doc_type)`, `Document.upsert(db, job_key, doc_type, structured_json)` (upsert commits). | 3a |
 | `skill_aliases` | `SkillAlias` | Global skill synonym map: `alias_key` (PK, lowercased token) → `canonical` (display = group identity). A group = all rows sharing one canonical; each canonical has a self-row. Seeded from `core/skill_analytics._ALIASES` via `seed_skill_aliases`. | — |
 
-## Prompt-content reseed migrations
+## Prompt seeding at startup
 
-These overwrite prompt **content** (not schema) once, gated by a `config` flag, because the new prompt contract is incompatible with the old text:
+`init_db` runs these idempotent seeders after `alembic upgrade head`. Fresh DBs get the
+correct prompt content directly from the seeders, so the old one-time `_migrate_resume_*_v2`
+content-forcing migrations have been retired (the already-ported dev DB ran them once).
 
-| Migration fn | Gate (`config` key) | Effect |
-|---|---|---|
-| `migrate_file_prompts_to_db` (`db/seed.py`) | — | One-time import of legacy file-based prompts into the `prompts` table. |
-| `_migrate_resume_prompt_v2` | `resume_prompt_v2` | Force-reseeds the résumé **generation** prompt to the `ResumeGeneration` JSON contract (Phase 3a). |
-| `_migrate_resume_refine_prompt_v2` | `resume_refine_prompt_v2` | Force-reseeds the résumé **refine** prompt to the keyed-patch contract (Phase 3b). |
-| `_seed_ats_parse_prompt` | — | Seeds the `ats_parse` `PromptDefault` row on first `init_db` run (used by the ATS semantic layer). |
-
-All are called from `init_db` and are idempotent (return early once the gate flag is set).
+| Seeder | Effect |
+|---|---|
+| `seed_prompt_defaults` (`db/seed.py`) | Seeds `prompt_defaults` rows from `prompts/defaults/*.md`. |
+| `migrate_file_prompts_to_db` (`db/seed.py`) | One-time import of legacy file-based prompts into the `prompts` table. |
+| `_seed_ats_parse_prompt` (`db/database.py`) | Seeds the `ats_parse` `PromptDefault` row (used by the ATS semantic layer). |
 
 ## Alembic migrations (Phase 1+)
 
-Schema changes are managed by Alembic (`alembic/`), not the legacy hand-written
-`_migrate_*` functions in `db/database.py` (those remain only to upgrade old SQLite
-files and are slated for removal in a later phase).
+Schema changes are managed exclusively by Alembic (`alembic/`). The legacy hand-written
+`_migrate_*` functions in `db/database.py` have been removed (Phase 3).
 
 - Migrations live in `alembic/versions/`. `alembic/env.py` targets `Base.metadata`
   and reads `DATABASE_URL`.
@@ -72,9 +70,9 @@ files and are slated for removal in a later phase).
   matches `Base.metadata.create_all`. It must stay green — if it fails after a model
   change, regenerate/adjust the migration.
 
-The running app and the test suite still build schema via `create_all`/`init_db` in
-Phase 1; cutover to `alembic upgrade head` at startup happens with the Postgres data
-port in a later phase.
+The running app boots via `alembic upgrade head` inside `init_db` (Phase 3). The test
+suite still builds schema via `create_all` for in-memory speed; the parity gate keeps
+the two in sync.
 
 ### Tenant scoping (Phase 2)
 
