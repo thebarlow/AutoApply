@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from sqlalchemy import (
     Boolean,
     Column,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -132,6 +133,8 @@ class Account(Base):
     is_admin = Column(Boolean, nullable=False, default=False)
     profile_id = Column(Integer, ForeignKey("user_profile.id"), nullable=False, unique=True)
     created_at = Column(String, nullable=False)
+    credit_balance = Column(Integer, nullable=False, default=0)
+    credit_rate = Column(Float, nullable=False, default=1.5)
 
 
 class Identity(Base):
@@ -146,6 +149,27 @@ class Identity(Base):
     account_id = Column(Integer, ForeignKey("account.id"), nullable=False)
     provider = Column(String, nullable=False)
     provider_subject = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+
+
+class CreditLedger(Base):
+    """Append-only credit ledger: the reconcilable source of truth for balances.
+
+    One row per grant or debit. Never updated or deleted. ``account.credit_balance``
+    is a cached denormalization kept in step via the same transaction.
+    """
+
+    __tablename__ = "credit_ledger"
+
+    id = Column(Integer, primary_key=True)
+    profile_id = Column(Integer, nullable=False, index=True)
+    delta = Column(Integer, nullable=False)            # +grant / -debit
+    reason = Column(String, nullable=False)            # signup_grant|admin_grant|debit|adjustment
+    action = Column(String, nullable=True)             # debits: score|generate|refine|eval|extract
+    job_key = Column(String, nullable=True)
+    raw_cost_usd = Column(Float, nullable=True)
+    meta = Column(Text, nullable=True)                 # JSON: model, tokens, calls
+    created_by = Column(Integer, nullable=True)        # account id for admin grants
     created_at = Column(String, nullable=False)
 
 
