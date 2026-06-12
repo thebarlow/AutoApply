@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from core.credits import default_rate, grant_credits, signup_grant_amount
 from core.user import User
 from db.database import Account, Identity
 
@@ -109,7 +110,10 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
 
 def _provision_account(db: Session, *, email: str, is_admin: bool, claims: Claims) -> Account:
     profile_id = _profile_for_new_account(db, is_admin)
-    acct = Account(email=email, is_admin=is_admin, profile_id=profile_id, created_at=_now())
+    acct = Account(
+        email=email, is_admin=is_admin, profile_id=profile_id, created_at=_now(),
+        credit_rate=0.0 if is_admin else default_rate(),
+    )
     db.add(acct)
     db.flush()
     db.add(Identity(
@@ -117,6 +121,7 @@ def _provision_account(db: Session, *, email: str, is_admin: bool, claims: Claim
         provider_subject=claims.subject, created_at=_now(),
     ))
     db.commit()
+    grant_credits(db, profile_id, signup_grant_amount(), reason="signup_grant")
     return acct
 
 

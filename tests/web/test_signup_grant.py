@@ -1,0 +1,44 @@
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from db.database import Base, Account, CreditLedger
+from core.user import User
+import web.auth.identity as identity
+
+
+def _db():
+    eng = create_engine("sqlite://")
+    Base.metadata.create_all(eng)
+    db = sessionmaker(bind=eng)()
+    db.add(User(id=1, name="T", data="{}"))
+    db.commit()
+    return db
+
+
+def test_provision_account_grants_signup_credits(monkeypatch):
+    db = _db()
+    monkeypatch.setenv("CREDIT_SIGNUP_GRANT", "100")
+    claims = identity.Claims(
+        provider="google", subject="sub-1", email="new@x.c", email_verified=True
+    )
+    acct = identity._provision_account(db, email="new@x.c", is_admin=False, claims=claims)
+
+    assert acct.credit_balance == 100
+    grant = (
+        db.query(CreditLedger)
+        .filter_by(reason="signup_grant", profile_id=acct.profile_id)
+        .first()
+    )
+    assert grant is not None and grant.delta == 100
+
+
+def test_provision_account_admin_gets_zero_rate(monkeypatch):
+    db = _db()
+    monkeypatch.setenv("CREDIT_SIGNUP_GRANT", "100")
+    claims = identity.Claims(
+        provider="google", subject="sub-2", email="admin@x.c", email_verified=True
+    )
+    acct = identity._provision_account(db, email="admin@x.c", is_admin=True, claims=claims)
+
+    assert acct.credit_rate == 0.0
+    assert acct.credit_balance == 100
