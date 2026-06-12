@@ -34,4 +34,7 @@ COPY --from=web-build /app/react-dashboard/dist ./react-dashboard/dist
 
 EXPOSE 8080
 # Shell form so ${PORT} (provided by Railway) expands; defaults to 8080 locally.
-CMD uvicorn web.main:app --host 0.0.0.0 --port ${PORT:-8080}
+# --proxy-headers + --forwarded-allow-ips=* make uvicorn trust Railway's
+# X-Forwarded-Proto, so request.url_for() builds https:// callback URLs (else the
+# OAuth redirect_uri is http:// and Google/GitHub reject it as a mismatch).
+CMD uvicorn web.main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips="*"
