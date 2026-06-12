@@ -40,8 +40,9 @@ longer exist.
 | `prompts` | `Prompt` | Per-profile active prompt slots `(profile_id, type_key)` + per-type `model` override. | 2 |
 | `documents` | `Document` | Structured generated artifact per `(job_key, doc_type)`; `structured_json` is the **source of truth**. Unique on `(job_key, doc_type)`. Helpers: `Document.fetch(db, job_key, doc_type)`, `Document.upsert(db, job_key, doc_type, structured_json)` (upsert commits). | 3a |
 | `skill_aliases` | `SkillAlias` | Global skill synonym map: `alias_key` (PK, lowercased token) → `canonical` (display = group identity). A group = all rows sharing one canonical; each canonical has a self-row. Seeded from `core/skill_analytics._ALIASES` via `seed_skill_aliases`. | — |
-| `account` | `Account` | Login-identity owner, 1:1 → `user_profile` (unique `profile_id`); unique `email`; `is_admin`. Not tenant-guarded. | Auth |
+| `account` | `Account` | Login-identity owner, 1:1 → `user_profile` (unique `profile_id`); unique `email`; `is_admin`; `credit_balance` (cached running total); `credit_rate` (per-account tier multiplier). Not tenant-guarded. | Auth / Credits |
 | `identity` | `Identity` | OAuth `(provider, provider_subject)` (unique together) → `account`. Many identities per account (link-by-verified-email). Not tenant-guarded. | Auth |
+| `credit_ledger` | `CreditLedger` | Append-only credit history: `profile_id, delta, reason, action, job_key, raw_cost_usd, meta, created_by, created_at`. Source of truth for `account.credit_balance`. Not tenant-guarded (keyed by `profile_id` but not in `_TENANT_TABLES`). | Credits |
 
 ## Prompt seeding at startup
 
@@ -102,3 +103,21 @@ provisions a profile (seeded prompts + skill aliases) for a new email; the **fir
 admin login claims the existing `profile_id=1`**. In production `current_profile_id`
 resolves the session account's profile (the dev stub still applies locally / in
 tests). Auth logic + flow live in `web/` — see `web/CONTEXT.md` → "Access control".
+
+### Credits tables (Credits & Metering sub-project — DONE)
+
+Added by Alembic migration `85e2c6aab4f8_add_credits.py` (chained onto
+`5285bd395643`; **current head**):
+- `account.credit_balance` (INTEGER, cached running total) and
+  `account.credit_rate` (FLOAT, per-account tier multiplier — `0` = free/
+  ungated dev tier).
+- `credit_ledger` (`CreditLedger`) — one row per grant/debit; `delta` is
+  signed (positive = grant, negative = debit). `reason` is `signup_grant` |
+  `admin_grant` | `debit`; `action`/`job_key`/`raw_cost_usd`/`meta` are
+  populated for debit rows by `core/metering.meter_action`.
+
+`reconcile_balance(db, profile_id)` (`core/credits.py`) recomputes
+`account.credit_balance` from `SUM(credit_ledger.delta)` if drift is
+suspected — there's no scheduled job for this yet, it's a manual repair tool.
+See `core/CONTEXT.md` → "Credits & Metering" for the conversion formula and
+gating logic.

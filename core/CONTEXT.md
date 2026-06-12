@@ -16,7 +16,9 @@ core/
 ├── document_builder.py  # Snapshots profile data at generation time and joins LLM prose to structured profile data
 ├── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
 ├── document_parser.py    # Inverse of document_assembler — reconstructs a structured document from rendered Markdown (canonical AND legacy LLM formats)
-└── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
+├── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
+├── credits.py           # Credit ledger: conversion formula, grant/debit/reconcile, env tier helpers
+└── metering.py          # meter_action context manager: per-action gate + debit settle around LLM calls
 ```
 
 `document_parser.py` parses both the canonical `document_assembler` output and the older free-form LLM markdown (experience entries split on `### ` **or** bold-only headings, `Title at Company`/`Title, Company` separators, one-line `**Name:**`/`**Name**:` projects).
@@ -66,6 +68,8 @@ core/
 | ATS parseability gate (mechanical hard-block + LLM advisory) | `ats_gate.py` → `run_gate()` / `Job.run_ats_check()` |
 | Mechanical ATS checks (contact, sections, skills, glyph-junk, text-layer) | `ats_gate.py` → `check_mechanical()` |
 | Semantic ATS roundtrip check (LLM re-parse of extracted text) | `ats_gate.py` → `check_roundtrip()` |
+| Credit conversion, grants, debits, reconciliation | `credits.py` → `to_credits()`, `grant_credits()`, `debit_for_action()`, `reconcile_balance()` |
+| Per-action credit gate + debit settle around LLM calls | `metering.py` → `meter_action()` |
 
 ## LLM Integration
 
@@ -76,7 +80,7 @@ See project memory note: the project uses the **OpenAI SDK** with multi-provider
 2. **Named provider** (`get_client_for_named_provider`) — looks up a named entry from `named_providers` config; API key from env `LLM_KEY_{ID}`.
 3. **User profile** (`get_client_for_profile`) — uses `user.llm_provider_type` / `user.llm_model`; API key from env `LLM_KEY_PROFILE_{user.id}`.
 
-`call_llm` accumulates spend via `session_cost.add_cost(usage.cost)` on every response.
+`call_llm` accumulates spend via `session_cost.add_cost(usage.cost)` on every response, and also calls `metering.record_call(usage.cost, model, prompt_tokens, completion_tokens)` — a no-op unless an action meter is open (see "Credits & Metering" below).
 
 ## Skill Matching and Hallucination Detection
 
@@ -151,6 +155,45 @@ Two-layer gate that validates the rendered résumé PDF before the application i
 - Advances state to `applied` only when the stored report passed and is current.
 
 The `ats_parse` prompt used by the semantic layer is a DB-seeded `PromptDefault` (type key `"ats_parse"`). It is **not** in `PROMPT_TYPE_KEYS` — it is seeded directly by `init_db` and is not exposed for per-profile override.
+
+## Credits & Metering (`core/credits.py`, `core/metering.py`)
+
+`credits.py` holds the conversion formula and ledger operations:
+`to_credits(raw_cost_usd, rate) = round(raw_cost_usd * rate * 1000)` (1000
+credits = $1). `grant_credits`/`debit_for_action` insert a `CreditLedger` row
+and update the cached `Account.credit_balance` in the same transaction.
+`reconcile_balance` recomputes the cached balance from `SUM(credit_ledger.delta)`.
+Env helpers: `default_rate()` (`CREDIT_DEFAULT_RATE`, default 1.5),
+`signup_grant_amount()` (`CREDIT_SIGNUP_GRANT`, default 100), `credit_floor()`
+(`CREDIT_FLOOR`, default 10). **All of `grant_credits`/`debit_for_action`/
+`reconcile_balance` are no-ops (return `None`) when `get_account_for_profile`
+finds no `Account` row** — i.e. local/dev/tray/test runs that have no
+authenticated account are unaffected.
+
+`metering.py` provides `meter_action(db, profile_id, *, action, job_key,
+floor)`, the single chokepoint that wraps each billable `Job` method call from
+`web/`:
+- **Gate** — if the account is metered (`Account` exists and `credit_rate >
+  0`) and `credit_balance < floor`, raises `InsufficientCredits` before the
+  body runs.
+- **Record** — opens a `ContextVar` accumulator; every `call_llm` call inside
+  the `with` block appends its cost via `record_call(cost, model,
+  prompt_tokens, completion_tokens)`.
+- **Settle** — in a `finally` (never masks the body's exception), sums the
+  recorded costs and inserts **one** debit `CreditLedger` row via
+  `debit_for_action`. If settling itself fails, it's logged and rolled back
+  rather than raised — `reconcile_balance` is the manual repair path.
+- Unmetered accounts (no `Account` row, or `credit_rate == 0` — the developer
+  tier) run the body ungated and record nothing.
+
+`web/routers/jobs.py` and `web/intake_pipeline.py` wrap score, generate
+(resume/cover), eval, and refine in `meter_action`.
+
+**Known limitation:** `_call_llm_for_extraction` (used by
+`Job.extract_description` / `_do_extract_description`) does not go through
+`call_llm`, so it never calls `record_call`. The extract action's floor gate
+still works (gating happens before the body runs), but its debit always sums
+to 0 — extraction is effectively free in v1.
 
 ## Key Invariants
 

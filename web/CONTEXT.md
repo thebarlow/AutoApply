@@ -25,6 +25,7 @@ web/
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
+    ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, GET /api/admin/system-balance; require_admin dependency
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
     ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
     ├── shutdown.py          # POST /api/shutdown (graceful or immediate server exit)
@@ -43,6 +44,7 @@ web/
 | Skill frequency across extracted jobs | `routers/stats.py` (delegates to `core/skill_analytics.py`) |
 | Skill alias groups + marking profile skills | `routers/skills.py` (invalidates `stats.py` skill cache on mutation) |
 | Session LLM cost tracking | `routers/session_cost_router.py` |
+| Credit balance / history, admin grants, system balance | `routers/credits.py` |
 | Server shutdown (immediate or wait for LLM) | `routers/shutdown.py` |
 | LLM provider/model/key config | `routers/config.py` |
 | Prompt template get/set per profile | `routers/prompts.py` |
@@ -66,6 +68,9 @@ web/
 - **Structured document editing (Phase 3b)** — `GET /api/jobs/{job_key}/{doc_type}/document` returns the stored structured JSON; `PUT` validates the body against a Pydantic `ResumeDocument`/`CoverDocument`, upserts the `Document` row, re-assembles the `.md`, and re-renders the PDF. Errors: `400` invalid `doc_type` or validation failure, `404` missing job or document, `500` render failure after the document was persisted. The old raw-Markdown editor bridge (`PUT .../markdown` and helpers `_put_document_markdown_sync` / `_read_body_text`) was retired.
 - **Parse-on-read backfill (not persisted).** When `GET .../document` finds no `documents` row, it reconstructs the document from the on-disk `.md` (`core/document_parser`) and returns it **without persisting** — the `.md` stays authoritative and parser improvements always apply. A row is created only by a write: `PUT .../document` (edit) or a feedback refine. `POST .../feedback` must mutate+re-persist a structured doc, so it calls `_ensure_document_row` to backfill **and persist** a row from the `.md` first; it `404`s only when there's neither a row nor a `.md`.
 - **Per-turn refinement snapshots** are written as structured JSON `{job_key}_{doc_type}_turn_{n}.json` in `generator/outputs/`. `GET /api/jobs/{job_key}/{doc_type}/turn/{n}/markdown` assembles Markdown on the fly from that JSON (`422` on schema mismatch).
+- **Credits & Metering (sub-project 2 — DONE)** — `routers/credits.py`: `GET /api/credits` returns the caller's `{balance, rate, recent[]}` (last 20 ledger rows; `{balance:0, rate:0.0, recent:[]}` if no `Account` row). `require_admin` (a FastAPI dependency) resolves the account for `current_profile_id` and 403s unless `is_admin`; gates `POST /api/admin/credits/grant` (target by `profile_id` or `email`, `reason="admin_grant"` — the same `grant_credits` call a future Stripe webhook will reuse) and `GET /api/admin/system-balance` (reads the platform OpenRouter key's remaining balance via `LLM_API_KEY`, 502 on upstream failure, 503 if unset). `core.credits.InsufficientCredits` is registered in `web/main.py` as an exception handler returning **HTTP 402** `{error:"insufficient_credits", balance, floor}` — raised by `meter_action` (see `core/CONTEXT.md` → "Credits & Metering") when an account's balance is below `CREDIT_FLOOR`.
+  - **Metered endpoints**: `POST /{job_key}/score`, `POST /{job_key}/generate/resume`, `POST /{job_key}/generate/cover` (`routers/jobs.py`); the intake-pipeline score/eval/refine steps (`intake_pipeline.py`); and `_do_extract_description` (extraction — gated but its debit is always 0, see `core/CONTEXT.md` limitation). All wrap the LLM call in `meter_action(db, profile_id, action=..., job_key=...)`.
+  - Frontend: `CreditBalance.jsx` (navbar + User tab) shows balance/rate; a global 402 interceptor shows an "out of credits" toast and the navbar refetches. Admin-only system-balance panel reads `/api/admin/system-balance`. Known caveat: the balance does **not** auto-refresh after a successful metered action (those are SSE-driven, not request/response) — it can lag until the next load or a 402.
 
 ## Known caveats (Phase 3b)
 
@@ -112,6 +117,9 @@ web/
 | `POST/DELETE` | `/api/skills/profile` | Add/remove `skill` on the active profile (case-insensitive dedup) |
 | `POST` | `/api/skills/owned` | Given `{skills:[…]}`, return the subset the active profile owns (alias + case aware); echoes input strings |
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
+| `GET` | `/api/credits` | Caller's `{balance, rate, recent[]}` (last 20 ledger rows) |
+| `POST` | `/api/admin/credits/grant` | Admin-only; grant credits to a profile by `profile_id` or `email`, reason `admin_grant` |
+| `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key |
 | `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
 | `GET/PUT` | `/api/config/{key}` | Config key-value store |
 | `GET/PUT` | `/api/prompts/...` | Prompt templates per profile |
