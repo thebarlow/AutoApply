@@ -47,6 +47,13 @@ cycle. Foundation done; building up the stack: **Auth → Credits → Payments �
   currently have NO way to get jobs in — needs a manual add/paste path (or hosted scraping). Depends
   on Auth + Credits + Payments.
 
+- [ ] **Public landing / marketing page.** Non-whitelisted users currently hit the auth gate or an
+  empty app with no explanation. Build a public (unauthenticated) landing page that explains what
+  AutoApply is, who it's for, and what it does (scrape → tailor résumé/cover → apply), so visitors
+  without access can understand the product even before they can use it. Include a clear call-to-action
+  (sign in / request access) and set expectations about the invite-gated beta. Should render for
+  logged-out users while the dashboard stays behind auth.
+
 - [ ] **Improve the document feedback system.**
   _Current system:_ In `DocumentModal`, the user attaches free-text notes to individual items
   (profile/experience/education/project/skills) or to whole sections, plus a cover-letter feedback
