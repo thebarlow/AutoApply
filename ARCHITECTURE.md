@@ -133,7 +133,12 @@ A four-phase initiative moved the pipeline from free-form text toward typed, DB-
 
 The app deploys as one Railway service built from the repo-root `Dockerfile`
 (multi-stage: Node builds the React SPA, Python runtime adds pandoc + Playwright
-Chromium and runs `uvicorn web.main:app --host 0.0.0.0 --port $PORT`).
+Chromium and runs `uvicorn web.main:app --host 0.0.0.0 --port $PORT
+--proxy-headers --forwarded-allow-ips="*"`). The proxy flags are required: behind
+Railway's TLS-terminating proxy they let uvicorn trust `X-Forwarded-Proto: https`
+so `request.url_for()` builds **https** OAuth callback URLs — without them the
+callback goes out as `http://…` and Google/GitHub reject it as
+`redirect_uri_mismatch`.
 
 **Database:** Railway-managed Postgres. `DATABASE_URL` is auto-normalized to the
 psycopg3 driver (`db.database._normalize_db_url`). Schema is created/upgraded on

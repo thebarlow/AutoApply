@@ -6,11 +6,16 @@ FastAPI backend. Serves the REST API on port 8080. The frontend (React) is a sep
 
 ```
 web/
-├── main.py                  # FastAPI app; includes all routers
+├── main.py                  # FastAPI app; includes all routers; registers AuthGate + Session middleware
+├── tenancy.py               # current_profile_id seam (session in prod / dev stub otherwise) + scoped()
 ├── sse.py                   # Server-Sent Events helpers (job update broadcasts)
 ├── llm_status.py            # In-memory tracker for active LLM jobs (keyed by job_key+action)
 ├── intake_pipeline.py       # Post-ingest pipeline (score + generate) run per new job
 ├── static/images/           # Favicon and apple-touch-icon (served by FastAPI)
+├── auth/
+│   ├── identity.py          # Pure logic: Claims, resolve_or_provision_account, beta gate, provisioning
+│   ├── routes.py            # Google/GitHub OAuth login/callback/logout + GET /api/me; _fetch_claims (provider I/O)
+│   └── middleware.py        # Pure-ASGI prod gate: 401s unauthenticated /api/* (SSE-safe)
 └── routers/
     ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
     ├── scraper.py           # POST /api/scraper/stage-job (browser ext) + POST /api/scraper/run (API scrapers)
@@ -47,10 +52,13 @@ web/
 | Tray app job card data | `routers/tray.py` |
 | Real-time job update stream | `routers/events.py` |
 | Documentation content for Docs page | `routers/docs_router.py` |
+| OAuth login/callback/logout, `/api/me`, identity provisioning | `auth/routes.py` + `auth/identity.py` |
+| Production `/api/*` access gate | `auth/middleware.py` |
 
 ## Key Design Notes
 
-- **Access control today** — the hosted instance is gated by `web/auth_gate.py` (instance-wide HTTP Basic, no-op locally; `/health` exempt). Tenant resolution is the `web/tenancy.py` `current_profile_id` dev stub (→ `Config['dev_tenant_id']`, default 1). **Planned (Auth sub-project, spec+plan written, NOT built):** a `web/auth/` package (Authlib Google/GitHub OAuth + cookie sessions, `account`/`identity` tables, `/api/me`) that swaps the seam to the logged-in user in production and replaces the Basic gate with a pure-ASGI `/api/*` gate. See `docs/superpowers/plans/2026-06-11-auth-identity.md` and `TODO.md`.
+- **Access control (Auth sub-project — DONE & live)** — the hosted instance uses **Google/GitHub OAuth** (`web/auth/`, Authlib + Starlette signed-cookie sessions). Flow: `GET /auth/login/{provider}` → provider → `GET /auth/callback/{provider}` calls `_fetch_claims` (the only provider-I/O function, mocked in tests) → `resolve_or_provision_account` (returning user → existing account; new provider on a known verified email → linked identity; new email → provisioned `account`+`user_profile` with seeded prompts/aliases). Beta-gated by `ALLOWED_EMAILS`; `ADMIN_EMAILS` bypass it and the **first admin login claims the existing `profile_id=1`** (carries over current data). Session holds `account_id`; `GET /api/me` returns `{email,is_admin,profile_name}` or 401. `web/auth/middleware.py` (pure ASGI, so the `/api/events` SSE stream isn't buffered) 401s unauthenticated `/api/*` **in production only** — `/health`, `/auth/*`, the SPA shell, and static assets pass so an unauthenticated browser can load the login screen. `web/tenancy.py` `current_profile_id` resolves the session account's profile in production, else the dev stub (→ `Config['dev_tenant_id']`, default 1) so local dev + tests need no login. Middleware order in `main.py`: `SessionMiddleware` is registered **last** (outermost) so `scope["session"]` is populated before the gate runs. The old `web/auth_gate.py` HTTP Basic gate was deleted.
+  - **Prod requirements:** `SESSION_SECRET` (the app **refuses to boot** in production if unset or left as the dev default — see `_session_secret()` in `main.py`), `GOOGLE_/GITHUB_CLIENT_ID/SECRET`, `ALLOWED_EMAILS`, `ADMIN_EMAILS`. Uvicorn must run with `--proxy-headers --forwarded-allow-ips="*"` (in the Dockerfile CMD) so Railway's `X-Forwarded-Proto: https` is trusted and `request.url_for()` builds **https** OAuth callback URLs — otherwise providers reject `http://` callbacks as `redirect_uri_mismatch`.
 - **Score/generate are in `core/job.py`** — `routers/jobs.py` resolves the LLM client, prompt content, and template paths, then delegates to `job.score()`, `job.generate_resume_md/pdf()`, `job.generate_cover_md/pdf()`.
 - **Generation is synchronous** — resume/cover generation blocks the request 30–60s while Claude + pandoc run. Acceptable for single-user local use.
 - **SSE for real-time updates** — `sse.py` broadcasts job state changes; `App.jsx` subscribes via `EventSource`.
@@ -111,6 +119,10 @@ web/
 | `GET` | `/api/llm/status` | Active LLM task status |
 | `GET` | `/api/setup/status` | Onboarding completeness check |
 | `GET` | `/api/events` | SSE stream for job updates |
+| `GET` | `/auth/login/{provider}` | Start OAuth (`google`/`github`); 404 for unknown provider |
+| `GET` | `/auth/callback/{provider}` | OAuth callback; provisions/resolves account, sets session, redirects `/` (or `/?beta=closed`, `/?auth_error=1`) |
+| `POST` | `/auth/logout` | Clear the session |
+| `GET` | `/api/me` | Logged-in identity `{email,is_admin,profile_name}`; 401 if no session |
 
 ## Known Issues
 
