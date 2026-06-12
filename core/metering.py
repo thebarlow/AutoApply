@@ -8,6 +8,7 @@ no-op so local/dev/tray runs are unaffected.
 """
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -19,6 +20,8 @@ from core.credits import (
     debit_for_action,
     get_account_for_profile,
 )
+
+logger = logging.getLogger(__name__)
 
 _meter: ContextVar[list | None] = ContextVar("_meter", default=None)
 
@@ -67,5 +70,12 @@ def meter_action(db: Session, profile_id: int, *, action: str,
             meta = {"calls": len(calls), "models": [c["model"] for c in calls],
                     "prompt_tokens": sum(c["prompt_tokens"] for c in calls),
                     "completion_tokens": sum(c["completion_tokens"] for c in calls)}
-            debit_for_action(db, profile_id, action=action, job_key=job_key,
-                             raw_cost_usd=total, meta=meta)
+            try:
+                debit_for_action(db, profile_id, action=action, job_key=job_key,
+                                 raw_cost_usd=total, meta=meta)
+            except Exception:
+                # Never let a settle failure mask the action's own outcome.
+                # Roll back the half-applied debit; balance can be repaired via
+                # reconcile_balance from the ledger later.
+                logger.exception("credit settle failed for action=%s job=%s", action, job_key)
+                db.rollback()

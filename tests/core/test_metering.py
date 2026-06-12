@@ -52,3 +52,17 @@ def test_settles_cost_even_when_action_raises():
 
 def test_record_call_outside_meter_is_noop():
     metering.record_call(0.01, "m", 1, 1)  # must not raise
+
+
+def test_settle_failure_does_not_mask_body_error(monkeypatch):
+    db = _db_with_account(rate=1.5, balance=100)
+    import core.metering as m
+
+    def _boom_debit(*a, **k):
+        raise RuntimeError("settle exploded")
+
+    monkeypatch.setattr(m, "debit_for_action", _boom_debit)
+    with pytest.raises(ValueError, match="body boom"):
+        with m.meter_action(db, 1, action="generate", job_key="j1", floor=10):
+            m.record_call(0.0046, "modelA", 100, 50)
+            raise ValueError("body boom")
