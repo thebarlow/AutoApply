@@ -7,6 +7,7 @@ import os
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db.database import Account, CreditLedger, get_db
@@ -57,7 +58,9 @@ def admin_grant(body: GrantRequest, db: Session = Depends(get_db),
                 admin: Account = Depends(require_admin)):
     target_pid = body.profile_id
     if target_pid is None and body.email:
-        tgt = db.query(Account).filter_by(email=body.email).first()
+        tgt = (db.query(Account)
+               .filter(func.lower(Account.email) == body.email.strip().lower())
+               .first())
         if tgt is None:
             raise HTTPException(status_code=404, detail="account not found")
         target_pid = tgt.profile_id
