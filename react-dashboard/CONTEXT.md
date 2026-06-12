@@ -19,6 +19,9 @@ Two-panel layout split 3:2 in a 5-column grid:
 | What you want to change | File |
 |---|---|
 | Top navbar (branding, credits, help button) | `src/components/Navbar.jsx` |
+| Credit balance display (navbar + User tab panel) | `src/components/widgets/CreditBalance.jsx` — fetches `/api/credits`; refetches on `auto-apply:credits-stale` event; `variant` prop: `nav`/`panel` |
+| Admin dev system-balance panel (OpenRouter balance) | `src/components/widgets/UserHome.jsx` — `SystemBalancePanel` (gated on `/api/me` `is_admin`; GETs `/api/admin/system-balance`) |
+| Out-of-credits (HTTP 402) global signal | `src/api.js` — `_fetch` dispatches `auto-apply:credits-error` + `auto-apply:credits-stale`; toasted in `src/App.jsx` |
 | Grid layout or viewport sizing | `src/components/Dashboard.jsx` |
 | Job card appearance (title, company, status icon, doc badges) | `src/components/shared/JobCard.jsx` |
 | Pipeline tabs (Inbox / Processing / Outbound / Archives) | `src/components/widgets/Pipeline.jsx` |

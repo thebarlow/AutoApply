@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { logout } from "../api";
+import CreditBalance from "./widgets/CreditBalance";
 
 export default function Navbar() {
   const [sessionCost, setSessionCost] = useState(0);
@@ -90,6 +91,9 @@ export default function Navbar() {
       </Link>
 
       <div className="flex items-center gap-4">
+        {/* Credit balance */}
+        <CreditBalance variant="nav" />
+
         {/* Session Cost */}
         <div className="relative" ref={costRef}>
           <button

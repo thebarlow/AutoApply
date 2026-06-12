@@ -2,7 +2,19 @@ const BASE = ''
 
 async function _fetch(url, options) {
   const res = await fetch(BASE + url, options)
-  if (!res.ok) throw new Error(`${options?.method ?? 'GET'} ${url} → ${res.status}`)
+  if (!res.ok) {
+    // Out-of-credits: surface a non-silent, app-wide signal (App.jsx toasts it)
+    // and prompt a balance refresh. Still throw so callers' catch paths run.
+    if (res.status === 402) {
+      let body = null
+      try { body = await res.clone().json() } catch { /* non-JSON body */ }
+      if (body?.error === 'insufficient_credits') {
+        window.dispatchEvent(new CustomEvent('auto-apply:credits-error', { detail: body }))
+        window.dispatchEvent(new Event('auto-apply:credits-stale'))
+      }
+    }
+    throw new Error(`${options?.method ?? 'GET'} ${url} → ${res.status}`)
+  }
   if (res.status === 204) return null
   const ct = res.headers.get('content-type')
   return ct && ct.includes('application/json') ? res.json() : null
@@ -254,6 +266,10 @@ export async function getMe() {
   if (!res.ok) throw new Error(`GET /api/me → ${res.status}`)
   return res.json()
 }
+
+export const getCredits = () => _fetch('/api/credits')
+
+export const getSystemBalance = () => _fetch('/api/admin/system-balance')
 
 export const logout = () =>
   fetch('/auth/logout', { method: 'POST' }).then(() => { window.location.href = '/' })

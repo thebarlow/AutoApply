@@ -614,10 +614,18 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       const res = await fetch(urlMap[tab], { method: 'POST' })
       if (!res.ok) {
         let detail = `Request failed (${res.status})`
+        let body = null
         try {
-          const body = await res.json()
+          body = await res.json()
           if (body?.detail) detail = body.detail
         } catch { /* non-JSON body */ }
+        // Out-of-credits: surface the app-wide signal (toast + balance refresh)
+        // since this path bypasses api.js's _fetch 402 handler.
+        if (res.status === 402 && body?.error === 'insufficient_credits') {
+          window.dispatchEvent(new CustomEvent('auto-apply:credits-error', { detail: body }))
+          window.dispatchEvent(new Event('auto-apply:credits-stale'))
+          detail = "You're out of credits — contact the admin to top up."
+        }
         setActionError(detail)
       }
     } catch (e) {

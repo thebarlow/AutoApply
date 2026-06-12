@@ -3,9 +3,49 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, Sector, LabelList,
 } from 'recharts'
-import { getProfiles, getStats, getSkillFrequency, getJobsForSkill } from '../../api'
+import { getProfiles, getStats, getSkillFrequency, getJobsForSkill, getMe, getSystemBalance } from '../../api'
 import ProfileCards from './ProfileCards'
 import SkillChipModal from './SkillChipModal'
+import CreditBalance from './CreditBalance'
+
+// Dev-only panel: shows the OpenRouter balance ("money in the system").
+// Rendered only for admin accounts; hidden entirely otherwise.
+function SystemBalancePanel() {
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [remaining, setRemaining] = useState(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    getMe()
+      .then((me) => {
+        if (cancelled || !me?.is_admin) return
+        setIsAdmin(true)
+        getSystemBalance()
+          .then((d) => { if (!cancelled) setRemaining(d.remaining) })
+          .catch(() => { if (!cancelled) setError(true) })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  if (!isAdmin) return null
+
+  const text = error
+    ? 'unavailable'
+    : remaining == null
+    ? '…'
+    : `$${Number(remaining).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-purple-500/30 bg-purple-500/5">
+      <span className="text-xs uppercase tracking-widest text-space-dim" title="OpenRouter balance — money in the system (admin only)">
+        System Balance
+      </span>
+      <span className="text-sm font-mono text-purple-300">{text}</span>
+    </div>
+  )
+}
 
 const WINDOWS = [
   { key: 'today', label: 'Today' },
@@ -328,6 +368,11 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
         >
           {displayName}
         </button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <CreditBalance variant="panel" />
+        <SystemBalancePanel />
       </div>
 
       <div className="flex gap-1.5">
