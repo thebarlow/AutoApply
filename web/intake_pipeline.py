@@ -9,6 +9,7 @@ from web import llm_status
 from web.routers.jobs import _do_extract_description, _load_score_config
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
+from core.metering import meter_action
 
 
 def build_feedback_issues(notes: list[dict]) -> list[dict]:
@@ -55,7 +56,8 @@ def _do_score(job: Job, db, profile_id: int) -> None:
         raise
 
     config = _load_score_config(db)
-    job.score(user, config, client, model, db, prompt_content)
+    with meter_action(db, profile_id, action="score", job_key=job.job_key):
+        job.score(user, config, client, model, db, prompt_content)
     job.unread_indicator = "ok"
     job.last_result_error = None
     db.commit()
@@ -236,7 +238,8 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
             try:
                 print(f"[refinement:{doc_type}] {job_key}: turn {turn} evaluating", flush=True)
                 evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
-                result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
+                with meter_action(db, profile_id, action="eval", job_key=job.job_key):
+                    result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
                 passed = result["score"] >= pass_score
                 eval_log.append({
                     "turn": turn,
@@ -283,10 +286,11 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
             try:
                 print(f"[refinement:{doc_type}] {job_key}: turn {turn} rewriting", flush=True)
                 refine_fn = getattr(job, f"refine_{doc_type}_md")
-                refine_fn(
-                    user, refine_prompt, refine_client, resolved_refine_model,
-                    db, result["issues"], template_path,
-                )
+                with meter_action(db, profile_id, action="refine", job_key=job.job_key):
+                    refine_fn(
+                        user, refine_prompt, refine_client, resolved_refine_model,
+                        db, result["issues"], template_path,
+                    )
                 db.commit()
                 db.refresh(job)
                 _emit(job)
@@ -432,10 +436,11 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
         llm_status.start(job_key, f"{doc_type}_refine")
         try:
             refine_fn = getattr(job, f"refine_{doc_type}_md")
-            refine_fn(
-                user, refine_prompt, refine_client, resolved_refine_model,
-                db, issues, template_path,
-            )
+            with meter_action(db, profile_id, action="refine", job_key=job.job_key):
+                refine_fn(
+                    user, refine_prompt, refine_client, resolved_refine_model,
+                    db, issues, template_path,
+                )
             db.commit()
             db.refresh(job)
             _emit(job)
@@ -458,7 +463,8 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
             eval_model = getattr(user, f"prompt_{eval_key}_model", "") or ""
             eval_client, resolved_eval_model = get_client_for_profile(user, eval_model)
             evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
-            result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
+            with meter_action(db, profile_id, action="eval", job_key=job.job_key):
+                result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
 
             pass_score = float(getattr(user, f"{doc_type}_refine_pass_score", 0.80))
             log_field = f"{doc_type}_eval_log"
