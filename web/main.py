@@ -26,7 +26,10 @@ from web.routers import session_cost_router
 from web.routers import shutdown as shutdown_router
 from web.routers import stats as stats_router
 from web.routers import skills as skills_router
+from web.routers import credits as credits_router
 from web.auth import routes as auth_routes
+from core.credits import InsufficientCredits
+from fastapi.responses import JSONResponse
 from web.auth.middleware import AuthGateMiddleware
 
 
@@ -123,7 +126,15 @@ app.include_router(session_cost_router.router)
 app.include_router(shutdown_router.router)
 app.include_router(stats_router.router)
 app.include_router(skills_router.router)
+app.include_router(credits_router.router)
 app.include_router(auth_routes.router)
+
+
+@app.exception_handler(InsufficientCredits)
+async def _insufficient_credits_handler(request, exc: InsufficientCredits):
+    return JSONResponse(status_code=402,
+                        content={"error": "insufficient_credits",
+                                 "balance": exc.balance, "floor": exc.floor})
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

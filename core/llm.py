@@ -80,7 +80,14 @@ def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> st
     )
     usage = getattr(response, "usage", None)
     if usage is not None:
-        session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
+        cost = float(getattr(usage, "cost", None) or 0.0)
+        session_cost.add_cost(cost)
+        from core import metering
+        metering.record_call(
+            cost, model,
+            int(getattr(usage, "prompt_tokens", 0) or 0),
+            int(getattr(usage, "completion_tokens", 0) or 0),
+        )
     choice = response.choices[0]
     content = choice.message.content
     if not content:

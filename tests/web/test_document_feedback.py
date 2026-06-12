@@ -47,6 +47,7 @@ def test_run_user_feedback_refine_keeps_user_version():
          patch.object(ip.Job, "get", return_value=job), \
          patch.object(ip.User, "load", return_value=user), \
          patch.object(ip, "get_client_for_profile", return_value=("client", "model")), \
+         patch("core.metering.get_account_for_profile", return_value=None), \
          patch.object(ip, "run_ats_gate") as ats, \
          patch.object(ip, "_emit"):
         SL.return_value = MagicMock()

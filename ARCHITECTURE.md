@@ -122,6 +122,45 @@ A four-phase initiative moved the pipeline from free-form text toward typed, DB-
 - **JSON-output hardening.** Because small/fast models occasionally emit invalid JSON (a markdown value breaking out of its string), the structured résumé generate/refine calls go through `core/job.py` `_llm_json_with_retry`, which appends a strict-JSON instruction and retries once with a corrective nudge on a parse failure.
 - **ATS gate + apply hard-block.** `core/ats_gate.py` adds a two-layer ATS parseability check over the rendered résumé PDF: a deterministic mechanical layer (contact order, section presence, required-skill survival, glyph-junk, text-layer) that hard-blocks on any critical issue, and an LLM-powered semantic roundtrip check (advisory). `POST /api/jobs/{key}/confirm-applied` (`web/routers/tray.py`) runs the gate at apply time, returning HTTP 409 on a critical failure and HTTP 422 if artifacts are missing. A DOCX résumé export (via pandoc, résumé-only) is also produced as an alternate artifact and stored as `resume_docx_path` on the job row. The résumé HTML template (`generator/master.css`) received a single-column flex-wrap fix to the header so the contact line renders correctly in both PDF and DOCX export.
 
+## Credits & Metering
+
+A cost-backed credit system gates LLM-driven actions per tenant. The
+`credit_ledger` table (append-only: `profile_id, delta, reason, action,
+job_key, raw_cost_usd, meta, created_by, created_at`) is the **source of
+truth**; `account.credit_balance` is a cached running total kept in sync with
+each ledger insert, and `account.credit_rate` is a per-account tier
+multiplier. Conversion: `to_credits(raw_cost_usd, rate) = round(raw_cost_usd *
+rate * 1000)` (1000 credits = $1).
+
+**Metering chokepoint.** `core/metering.py` `meter_action(db, profile_id, *,
+action, job_key, floor)` wraps a billable action (score/generate/eval/refine).
+On entry it gates: if `credit_balance < floor`, it raises
+`InsufficientCredits` before the action runs (`web/main.py` maps this to HTTP
+402 `{error:"insufficient_credits", balance, floor}`). It then opens a
+per-action accumulator; every `call_llm` invocation inside the action
+(`core/llm.py`) records its real `usage.cost` into that accumulator via
+`record_call`. On exit (success or error) it settles **one** debit ledger row
+from the summed cost. Accounts with no `Account` row (local/dev/tray/tests) or
+`credit_rate == 0` (the developer tier) run ungated and are never debited.
+
+**Grants.** New accounts receive a signup grant (`CREDIT_SIGNUP_GRANT`,
+default 100 = $0.10) at provisioning (`web/auth/identity.py`
+`_provision_account`), reason `signup_grant`; admin accounts get
+`credit_rate = 0.0` (free/ungated dev tier), others get `CREDIT_DEFAULT_RATE`
+(default 1.5, friends-and-family). `POST /api/admin/credits/grant`
+(`web/routers/credits.py`, admin-only) grants credits by profile_id or email
+with reason `admin_grant` — the same call a future Stripe webhook (sub-project
+3, Payments) will reuse for purchased credit packs.
+
+**Tiers** (env-configured, set per account manually — no admin UI yet):
+developer `0` (free), friends-and-family `1.5` (default), standard customer
+`10.0`. `CREDIT_FLOOR` (default 10) is the balance floor checked by the gate.
+
+**Known limitation:** the extraction LLM call
+(`_call_llm_for_extraction`) doesn't route through `call_llm`, so its cost
+isn't recorded into the meter — the extract action's floor gate works, but its
+debit always settles to 0. Extraction is effectively free in v1.
+
 ## Key Invariants
 
 - `Job` LLM methods receive an already-constructed client + model string; they do not read config themselves.
@@ -198,9 +237,12 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
    production; a pure-ASGI gate on `/api/*` (`web/auth/middleware.py`) replaced
    the HTTP Basic gate; access is invite-gated by `ALLOWED_EMAILS`.
    Spec: `docs/superpowers/specs/2026-06-11-auth-identity-design.md`.
-2. **Credits & Metering** — per-tenant credit balance + ledger; the `core/job.py`
-   LLM call sites debit credits; generation blocks at zero balance.
-3. **Payments** — Stripe Checkout for credit packs + webhook → credit grants.
+2. **Credits & Metering** *(implemented)* — per-tenant `credit_ledger` +
+   cached `account.credit_balance`/`credit_rate`; `meter_action` gates and
+   debits score/generate/eval/refine/extract; `GET /api/credits` +
+   admin grant/system-balance endpoints. See "Credits & Metering" above.
+3. **Payments** — Stripe Checkout for credit packs + webhook → credit grants
+   (reuses `grant_credits`/`admin_grant`'s code path).
 4. **Onboarding UX rework** — drop the API-key step, surface credits/buy flow,
    and close the job-ingestion gap (the unhooked browser extension means hosted
    users currently have no way to add jobs).

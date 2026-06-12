@@ -24,6 +24,8 @@ from core.document_parser import (
     reconstruct_cover_document_from_markdown,
 )
 from db.database import get_db, Config, Document
+from core.metering import meter_action
+from core.credits import InsufficientCredits
 from web.sse import send as _sse_send
 from web.tenancy import current_profile_id, scoped
 from web import llm_status
@@ -238,12 +240,13 @@ def score_job_endpoint(
     config = _load_score_config(db)
     llm_status.start(job_key, "score")
     try:
-        job.score(user, config, client, model, db, prompt_content)
+        with meter_action(db, profile_id, action="score", job_key=job.job_key):
+            job.score(user, config, client, model, db, prompt_content)
         _add_pending_review(job, "score")
         job.unread_indicator = "ok"
         job.last_result_error = None
         db.commit()
-    except HTTPException:
+    except (HTTPException, InsufficientCredits):
         raise
     except Exception as exc:
         db.rollback()
@@ -272,7 +275,8 @@ def _do_generate_resume(job: Job, db: Session, profile_id: int) -> None:
         client, model = get_client_for_profile(user, user.prompt_resume_model)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    job.generate_resume_md(user, prompt_content, client, model, db)
+    with meter_action(db, profile_id, action="generate", job_key=job.job_key):
+        job.generate_resume_md(user, prompt_content, client, model, db)
     job.generate_resume_pdf(_RESUME_TEMPLATE, db)
 
 
@@ -287,7 +291,8 @@ def _do_generate_cover(job: Job, db: Session, profile_id: int) -> None:
         client, model = get_client_for_profile(user, user.prompt_cover_model)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    job.generate_cover_md(user, prompt_content, client, model, db)
+    with meter_action(db, profile_id, action="generate", job_key=job.job_key):
+        job.generate_cover_md(user, prompt_content, client, model, db)
     job.generate_cover_pdf(_COVER_TEMPLATE, db)
 
 
@@ -307,7 +312,7 @@ def generate_resume_endpoint(
         job.unread_indicator = "ok"
         job.last_result_error = None
         db.commit()
-    except HTTPException:
+    except (HTTPException, InsufficientCredits):
         raise
     except Exception as exc:
         db.rollback()
@@ -346,7 +351,7 @@ def generate_cover_endpoint(
         job.unread_indicator = "ok"
         job.last_result_error = None
         db.commit()
-    except HTTPException:
+    except (HTTPException, InsufficientCredits):
         raise
     except Exception as exc:
         db.rollback()
@@ -587,10 +592,11 @@ def _do_extract_description(job: Job, db: Session, profile_id: int) -> None:
         raise HTTPException(status_code=400, detail=str(exc))
 
     actual_prompt = job.build_description_prompt(prompt_content)
-    try:
-        raw = _call_llm_for_extraction(client, model, actual_prompt)
-    except Exception as exc:
-        raise RuntimeError(f"Description extraction failed: {exc}") from exc
+    with meter_action(db, profile_id, action="extract", job_key=job.job_key):
+        try:
+            raw = _call_llm_for_extraction(client, model, actual_prompt)
+        except Exception as exc:
+            raise RuntimeError(f"Description extraction failed: {exc}") from exc
     try:
         data = _json.loads(raw)
     except (_json.JSONDecodeError, TypeError):
@@ -629,7 +635,7 @@ def extract_description(
     llm_status.start(job_key, "description")
     try:
         _do_extract_description(job, db, profile_id)
-    except HTTPException:
+    except (HTTPException, InsufficientCredits):
         raise
     except Exception as exc:
         db.rollback()

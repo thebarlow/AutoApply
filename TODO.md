@@ -33,13 +33,9 @@ cycle. Foundation done; building up the stack: **Auth → Credits → Payments �
   seam to read the session in prod; pure-ASGI gate on `/api/*` replaces the Basic gate; email-allowlist
   beta (`ALLOWED_EMAILS`); `ADMIN_EMAILS` bypass + first admin claims `profile_id=1`. **Gates 2–4.**
 
-- [ ] **(2) Credits & Metering** — needs its own brainstorm/spec. Per-tenant credit balance + ledger
-  (grants/debits); meter the LLM call sites in `core/job.py` (score/generate/refine/eval debit
-  credits); block generation at zero balance with a clear UI signal. Admin (from sub-project 1) can
-  grant credits. Depends on Auth.
-
 - [ ] **(3) Payments** — needs its own brainstorm/spec. Stripe Checkout for credit-pack purchases +
-  webhook → grant credits into the ledger. Depends on Auth + Credits.
+  webhook → grant credits into the ledger (reuses `grant_credits`/the `admin_grant` code path). Now
+  unblocked — Auth and Credits are both done.
 
 - [ ] **(4) Onboarding UX rework** — needs its own brainstorm/spec. Drop the API-key step (platform
   owns the key now); surface credit balance + buy flow; gate features on credits. **Also must solve
@@ -81,6 +77,21 @@ cycle. Foundation done; building up the stack: **Auth → Credits → Payments �
   "Hands-on experience with LLMs and generative AI" → "LLMs, generative AI".
 
 ## Done
+
+- [x] **(2) Credits & Metering** — DONE (2026-06-12). Cost-backed credit ledger
+  (`credit_ledger`, append-only source of truth) + cached `account.credit_balance`/`credit_rate`
+  (Alembic `85e2c6aab4f8`). `core/metering.meter_action` gates score/generate/eval/refine/extract on
+  the tenant's balance (`InsufficientCredits` → HTTP 402), meters real LLM cost via `call_llm` →
+  `record_call`, and settles one debit row per action; `core/credits.to_credits` converts
+  `raw_cost_usd * rate * 1000` (1000 credits = $1). New accounts get a signup grant
+  (`CREDIT_SIGNUP_GRANT`, default 100); tiers (`credit_rate`): developer 0 (free), friends-and-family
+  1.5 (default), standard 10.0 — set manually, no admin UI yet. `GET /api/credits` +
+  `POST /api/admin/credits/grant` + `GET /api/admin/system-balance` (`web/routers/credits.py`);
+  `CreditBalance.jsx` navbar/User-tab widget + global 402 "out of credits" toast. Known limitations:
+  extraction's debit always settles to 0 (its LLM call bypasses `call_llm`, effectively free in v1);
+  the navbar balance doesn't auto-refresh after a successful action (SSE-driven, lags until next
+  load/402). See `ARCHITECTURE.md` → "Credits & Metering", `core/CONTEXT.md`, `web/CONTEXT.md`.
+  **Unblocks (3) Payments.**
 
 - [x] **Document modal polish + backfill correctness** — Parser now handles legacy LLM résumé
   markdown (experiences split on `### ` or bold-only headings; one-line `**Name:**` projects), fixing
