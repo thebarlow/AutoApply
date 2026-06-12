@@ -1,6 +1,7 @@
 """Credit balance, admin grants, and the dev system-balance view."""
 from __future__ import annotations
 
+import logging
 import os
 
 import httpx
@@ -13,6 +14,8 @@ from core.credits import grant_credits
 from web.tenancy import current_profile_id
 
 router = APIRouter(prefix="/api", tags=["credits"])
+
+logger = logging.getLogger(__name__)
 
 
 def require_admin(request: Request, db: Session = Depends(get_db),
@@ -82,5 +85,6 @@ def system_balance(admin: Account = Depends(require_admin)):
         total = float(data.get("total_credits", 0))
         used = float(data.get("total_usage", 0))
         return {"total": total, "used": used, "remaining": total - used}
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"openrouter error: {exc}")
+    except httpx.HTTPError:
+        logger.exception("system-balance: OpenRouter request failed")
+        raise HTTPException(status_code=502, detail="failed to reach OpenRouter")
