@@ -269,6 +269,17 @@ export async function getMe() {
 
 export const getCredits = () => _fetch('/api/credits')
 
+export const getPacks = () => _fetch('/api/payments/packs')
+
+export const getPurchaseHistory = () => _fetch('/api/payments/history')
+
+export const startCheckout = (priceId) =>
+  _fetch('/api/payments/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ price_id: priceId }),
+  })
+
 export const getSystemBalance = () => _fetch('/api/admin/system-balance')
 
 export const logout = () =>
