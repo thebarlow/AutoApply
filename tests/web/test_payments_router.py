@@ -63,3 +63,21 @@ def test_checkout_creates_session_and_pending_row(client, monkeypatch):
     row = db.query(Purchase).filter_by(stripe_session_id="cs_1").one()
     assert row.status == "pending" and row.credits == 5000 and row.profile_id == 7
     assert db.query(Account).filter_by(profile_id=7).one().stripe_customer_id == "cus_123"
+
+
+def test_history_lists_profile_purchases(client):
+    c, db, _mp = client
+    from db.database import Purchase
+    import datetime as dt
+    db.add(Purchase(profile_id=7, stripe_session_id="cs_h", price_id="price_a",
+                    credits=5000, amount_usd=5.0, status="completed",
+                    created_at=dt.datetime.now(dt.timezone.utc).isoformat()))
+    db.add(Purchase(profile_id=99, stripe_session_id="cs_other", price_id="price_a",
+                    credits=5000, amount_usd=5.0, status="completed",
+                    created_at=dt.datetime.now(dt.timezone.utc).isoformat()))
+    db.commit()
+    r = c.get("/api/payments/history")
+    assert r.status_code == 200
+    rows = r.json()
+    assert [x["stripe_session_id"] for x in rows] == ["cs_h"]
+    assert rows[0]["credits"] == 5000 and rows[0]["status"] == "completed"

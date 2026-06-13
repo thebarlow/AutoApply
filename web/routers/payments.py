@@ -77,6 +77,17 @@ def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db),
     return {"url": session.url}
 
 
+@router.get("/history")
+def history(db: Session = Depends(get_db),
+            profile_id: int = Depends(current_profile_id)):
+    """Recent purchases for the current tenant, newest first."""
+    rows = (db.query(Purchase).filter_by(profile_id=profile_id)
+            .order_by(Purchase.id.desc()).limit(50).all())
+    return [{"stripe_session_id": r.stripe_session_id, "credits": r.credits,
+             "amount_usd": r.amount_usd, "status": r.status,
+             "created_at": r.created_at} for r in rows]
+
+
 @router.post("/webhook")
 async def webhook(request: Request, db: Session = Depends(get_db)):
     """Stripe webhook: fulfill a completed checkout by granting credits (idempotent)."""
