@@ -161,6 +161,45 @@ developer `0` (free), friends-and-family `1.5` (default), standard customer
 isn't recorded into the meter — the extract action's floor gate works, but its
 debit always settles to 0. Extraction is effectively free in v1.
 
+## Payments
+
+Stripe Checkout sells credit packs via server-side redirect (no client-side
+Stripe.js). `core/payments.py` `load_packs()`/`credits_for_price()` parse the
+`STRIPE_PACKS` env var (JSON map `price_id -> credits`); pricing rule is 1000
+credits = $1 (default packs: $5/5000, $15/15000, $40/40000).
+`core/stripe_client.py` thinly wraps the `stripe` SDK (v15.2.1):
+`create_customer`, `create_checkout_session`, `retrieve_price`,
+`construct_event` — all reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`
+from env lazily.
+
+**Schema:** the `purchase` table (`db/database.py`, Alembic `aa01payments01`)
+records `profile_id, stripe_session_id [unique], stripe_event_id [unique,
+idempotency key], price_id, credits, amount_usd, status (pending|completed),
+created_at`; `account.stripe_customer_id` caches the Stripe customer per
+tenant (created on first buy).
+
+**Routes (`web/routers/payments.py`, `/api/payments/*`):**
+- `GET /packs` — configured packs with live price/currency from Stripe.
+- `POST /checkout` (auth-gated) — creates the Stripe customer if needed,
+  records a `pending` `Purchase`, and returns the Checkout session URL.
+- `POST /webhook` — Stripe callback, signature-verified
+  (`stripe_client.construct_event`); on `checkout.session.completed`, marks
+  the matching `Purchase` `completed` and grants credits via
+  `core.credits.grant_credits(reason="purchase")`. Idempotent on
+  `stripe_event_id` (duplicate deliveries are no-ops).
+- `GET /history` — the caller's recent purchases.
+
+The webhook is unauthenticated by design (Stripe can't present a session
+cookie) — `web/auth/middleware.py` adds `/api/payments/webhook` to
+`_EXEMPT_PATHS`, relying entirely on signature verification for security.
+
+**New env vars:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`STRIPE_PACKS` (JSON map `price_id -> credits`), `APP_BASE_URL` (base URL for
+Checkout success/cancel redirects).
+
+**Known limitation:** refunds are not handled — a Stripe refund does not
+claw back granted credits; reversal is admin-manual only.
+
 ## Key Invariants
 
 - `Job` LLM methods receive an already-constructed client + model string; they do not read config themselves.
@@ -241,8 +280,8 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
    cached `account.credit_balance`/`credit_rate`; `meter_action` gates and
    debits score/generate/eval/refine/extract; `GET /api/credits` +
    admin grant/system-balance endpoints. See "Credits & Metering" above.
-3. **Payments** — Stripe Checkout for credit packs + webhook → credit grants
-   (reuses `grant_credits`/`admin_grant`'s code path).
+3. **Payments** *(implemented)* — Stripe Checkout for credit packs + webhook →
+   credit grants via `grant_credits(reason="purchase")`. See "Payments" above.
 4. **Onboarding UX rework** — drop the API-key step, surface credits/buy flow,
    and close the job-ingestion gap (the unhooked browser extension means hosted
    users currently have no way to add jobs).

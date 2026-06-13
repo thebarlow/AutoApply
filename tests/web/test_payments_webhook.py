@@ -41,7 +41,7 @@ def test_webhook_grants_credits_and_completes(client):
     c, db, mp = client
     mp.setattr(payments_router.stripe_client, "construct_event",
                lambda payload, sig: _event("cs_1"))
-    r = c.post("/api/payments/webhook", data=b"{}",
+    r = c.post("/api/payments/webhook", content=b"{}",
                headers={"stripe-signature": "x"})
     assert r.status_code == 200
     assert db.query(Account).filter_by(profile_id=7).one().credit_balance == 5000
@@ -53,8 +53,8 @@ def test_webhook_idempotent_on_event_id(client):
     c, db, mp = client
     mp.setattr(payments_router.stripe_client, "construct_event",
                lambda payload, sig: _event("cs_1", "evt_1"))
-    c.post("/api/payments/webhook", data=b"{}", headers={"stripe-signature": "x"})
-    c.post("/api/payments/webhook", data=b"{}", headers={"stripe-signature": "x"})
+    c.post("/api/payments/webhook", content=b"{}", headers={"stripe-signature": "x"})
+    c.post("/api/payments/webhook", content=b"{}", headers={"stripe-signature": "x"})
     assert db.query(CreditLedger).filter_by(reason="purchase").count() == 1
     assert db.query(Account).filter_by(profile_id=7).one().credit_balance == 5000
 
@@ -64,5 +64,5 @@ def test_webhook_bad_signature_400(client):
     def _raise(payload, sig):
         raise ValueError("bad sig")
     mp.setattr(payments_router.stripe_client, "construct_event", _raise)
-    r = c.post("/api/payments/webhook", data=b"{}", headers={"stripe-signature": "x"})
+    r = c.post("/api/payments/webhook", content=b"{}", headers={"stripe-signature": "x"})
     assert r.status_code == 400

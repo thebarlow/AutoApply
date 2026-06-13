@@ -18,7 +18,9 @@ core/
 ├── document_parser.py    # Inverse of document_assembler — reconstructs a structured document from rendered Markdown (canonical AND legacy LLM formats)
 ├── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ├── credits.py           # Credit ledger: conversion formula, grant/debit/reconcile, env tier helpers
-└── metering.py          # meter_action context manager: per-action gate + debit settle around LLM calls
+├── metering.py          # meter_action context manager: per-action gate + debit settle around LLM calls
+├── payments.py          # STRIPE_PACKS env config: load_packs()/credits_for_price() (no Stripe SDK calls)
+└── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, retrieve_price, construct_event
 ```
 
 `document_parser.py` parses both the canonical `document_assembler` output and the older free-form LLM markdown (experience entries split on `### ` **or** bold-only headings, `Title at Company`/`Title, Company` separators, one-line `**Name:**`/`**Name**:` projects).
@@ -70,6 +72,8 @@ core/
 | Semantic ATS roundtrip check (LLM re-parse of extracted text) | `ats_gate.py` → `check_roundtrip()` |
 | Credit conversion, grants, debits, reconciliation | `credits.py` → `to_credits()`, `grant_credits()`, `debit_for_action()`, `reconcile_balance()` |
 | Per-action credit gate + debit settle around LLM calls | `metering.py` → `meter_action()` |
+| Credit-pack env config (`STRIPE_PACKS` -> price_id/credits map) | `payments.py` → `load_packs()`, `credits_for_price()` |
+| Stripe SDK calls (customer, Checkout session, price lookup, webhook signature verification) | `stripe_client.py` → `create_customer()`, `create_checkout_session()`, `retrieve_price()`, `construct_event()` |
 
 ## LLM Integration
 
@@ -194,6 +198,19 @@ floor)`, the single chokepoint that wraps each billable `Job` method call from
 `call_llm`, so it never calls `record_call`. The extract action's floor gate
 still works (gating happens before the body runs), but its debit always sums
 to 0 — extraction is effectively free in v1.
+
+## Payments (`core/payments.py`, `core/stripe_client.py`)
+
+`payments.py` parses `STRIPE_PACKS` (a JSON env var mapping `price_id ->
+credits`) — pure config, no Stripe SDK calls. `stripe_client.py` wraps the
+`stripe` SDK (v15.2.1) with `create_customer`, `create_checkout_session`,
+`retrieve_price`, and `construct_event` (webhook signature verification),
+reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` from env lazily. Consumed
+by `web/routers/payments.py`, which records `Purchase` rows and grants
+credits via `grant_credits(reason="purchase")` on a verified
+`checkout.session.completed` webhook. See `ARCHITECTURE.md` → "Payments" and
+`web/CONTEXT.md` for the route surface and the `window.__creditRate`
+cross-widget read used by the navbar session-usage overlay.
 
 ## Key Invariants
 

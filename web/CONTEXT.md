@@ -26,6 +26,7 @@ web/
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
     ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, GET /api/admin/system-balance; require_admin dependency
+    ├── payments.py          # GET /api/payments/packs, POST /checkout, POST /webhook (Stripe), GET /history
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
     ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
     ├── shutdown.py          # POST /api/shutdown (graceful or immediate server exit)
@@ -45,6 +46,7 @@ web/
 | Skill alias groups + marking profile skills | `routers/skills.py` (invalidates `stats.py` skill cache on mutation) |
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Credit balance / history, admin grants, system balance | `routers/credits.py` |
+| Stripe Checkout (packs/checkout/webhook/history) | `routers/payments.py` |
 | Server shutdown (immediate or wait for LLM) | `routers/shutdown.py` |
 | LLM provider/model/key config | `routers/config.py` |
 | Prompt template get/set per profile | `routers/prompts.py` |
@@ -60,6 +62,9 @@ web/
 ## Key Design Notes
 
 - **Access control (Auth sub-project — DONE & live)** — the hosted instance uses **Google/GitHub OAuth** (`web/auth/`, Authlib + Starlette signed-cookie sessions). Flow: `GET /auth/login/{provider}` → provider → `GET /auth/callback/{provider}` calls `_fetch_claims` (the only provider-I/O function, mocked in tests) → `resolve_or_provision_account` (returning user → existing account; new provider on a known verified email → linked identity; new email → provisioned `account`+`user_profile` with seeded prompts/aliases). Beta-gated by `ALLOWED_EMAILS`; `ADMIN_EMAILS` bypass it and the **first admin login claims the existing `profile_id=1`** (carries over current data). Session holds `account_id`; `GET /api/me` returns `{email,is_admin,profile_name}` or 401. `web/auth/middleware.py` (pure ASGI, so the `/api/events` SSE stream isn't buffered) 401s unauthenticated `/api/*` **in production only** — `/health`, `/auth/*`, the SPA shell, and static assets pass so an unauthenticated browser can load the login screen. `web/tenancy.py` `current_profile_id` resolves the session account's profile in production, else the dev stub (→ `Config['dev_tenant_id']`, default 1) so local dev + tests need no login. Middleware order in `main.py`: `SessionMiddleware` is registered **last** (outermost) so `scope["session"]` is populated before the gate runs. The old `web/auth_gate.py` HTTP Basic gate was deleted.
+  - **Webhook exemption** — `_EXEMPT_PATHS` includes `/api/payments/webhook` so Stripe's
+    unauthenticated callback bypasses the `/api/*` gate; the route is secured entirely by
+    `stripe_client.construct_event`'s signature check, not a session.
   - **Prod requirements:** `SESSION_SECRET` (the app **refuses to boot** in production if unset or left as the dev default — see `_session_secret()` in `main.py`), `GOOGLE_/GITHUB_CLIENT_ID/SECRET`, `ALLOWED_EMAILS`, `ADMIN_EMAILS`. Uvicorn must run with `--proxy-headers --forwarded-allow-ips="*"` (in the Dockerfile CMD) so Railway's `X-Forwarded-Proto: https` is trusted and `request.url_for()` builds **https** OAuth callback URLs — otherwise providers reject `http://` callbacks as `redirect_uri_mismatch`.
 - **Score/generate are in `core/job.py`** — `routers/jobs.py` resolves the LLM client, prompt content, and template paths, then delegates to `job.score()`, `job.generate_resume_md/pdf()`, `job.generate_cover_md/pdf()`.
 - **Generation is synchronous** — resume/cover generation blocks the request 30–60s while Claude + pandoc run. Acceptable for single-user local use.
@@ -71,6 +76,16 @@ web/
 - **Credits & Metering (sub-project 2 — DONE)** — `routers/credits.py`: `GET /api/credits` returns the caller's `{balance, rate, recent[]}` (last 20 ledger rows; `{balance:0, rate:0.0, recent:[]}` if no `Account` row). `require_admin` (a FastAPI dependency) resolves the account for `current_profile_id` and 403s unless `is_admin`; gates `POST /api/admin/credits/grant` (target by `profile_id` or `email`, `reason="admin_grant"` — the same `grant_credits` call a future Stripe webhook will reuse) and `GET /api/admin/system-balance` (reads the platform OpenRouter key's remaining balance via `LLM_API_KEY`, 502 on upstream failure, 503 if unset). `core.credits.InsufficientCredits` is registered in `web/main.py` as an exception handler returning **HTTP 402** `{error:"insufficient_credits", balance, floor}` — raised by `meter_action` (see `core/CONTEXT.md` → "Credits & Metering") when an account's balance is below `CREDIT_FLOOR`.
   - **Metered endpoints**: `POST /{job_key}/score`, `POST /{job_key}/generate/resume`, `POST /{job_key}/generate/cover` (`routers/jobs.py`); the intake-pipeline score/eval/refine steps (`intake_pipeline.py`); and `_do_extract_description` (extraction — gated but its debit is always 0, see `core/CONTEXT.md` limitation). All wrap the LLM call in `meter_action(db, profile_id, action=..., job_key=...)`.
   - Frontend: `CreditBalance.jsx` (navbar + User tab) shows balance/rate; a global 402 interceptor shows an "out of credits" toast and the navbar refetches. Admin-only system-balance panel reads `/api/admin/system-balance`. Known caveat: the balance does **not** auto-refresh after a successful metered action (those are SSE-driven, not request/response) — it can lag until the next load or a 402.
+- **Payments (sub-project 3 — DONE)** — `routers/payments.py`: `GET /packs` lists configured packs
+  (`core/payments.load_packs`) with live price/currency from Stripe; `POST /checkout` creates a Stripe
+  customer on first buy, records a `pending` `Purchase`, and returns the Checkout URL; `POST /webhook`
+  verifies the Stripe signature, is idempotent on `stripe_event_id`, marks the `Purchase` `completed`,
+  and grants credits via `grant_credits(reason="purchase")`; `GET /history` returns the caller's recent
+  purchases. Frontend: `BuyCreditsModal.jsx`, navbar `+` buy button, purchase-success toast + balance
+  refresh, purchase history in `UserHome.jsx`. `CreditBalance.jsx` sets `window.__creditRate` (read by
+  `Navbar.jsx` to convert the session's $ LLM cost into an equivalent credit count for the
+  click-to-see "session usage in credits" overlay). **Known limitation:** refunds are admin-manual
+  only — no automatic credit clawback on a Stripe refund.
 
 ## Known caveats (Phase 3b)
 
@@ -120,6 +135,10 @@ web/
 | `GET` | `/api/credits` | Caller's `{balance, rate, recent[]}` (last 20 ledger rows) |
 | `POST` | `/api/admin/credits/grant` | Admin-only; grant credits to a profile by `profile_id` or `email`, reason `admin_grant` |
 | `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key |
+| `GET` | `/api/payments/packs` | Configured credit packs with live price/currency from Stripe |
+| `POST` | `/api/payments/checkout` | Create a Stripe Checkout session for a pack; records a pending `Purchase`, returns the session URL |
+| `POST` | `/api/payments/webhook` | Stripe webhook (signature-verified, unauthenticated — see Auth gate exemption below); idempotent on `stripe_event_id`; grants credits via `grant_credits(reason="purchase")` |
+| `GET` | `/api/payments/history` | Caller's recent purchases |
 | `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
 | `GET/PUT` | `/api/config/{key}` | Config key-value store |
 | `GET/PUT` | `/api/prompts/...` | Prompt templates per profile |
