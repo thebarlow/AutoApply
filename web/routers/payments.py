@@ -105,7 +105,12 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
     if db.query(Purchase).filter_by(stripe_event_id=event.id).first():
         return {"status": "duplicate"}
 
-    session_id = event.data.object["id"]
+    obj = event.data.object
+    session_id = obj.get("id") if hasattr(obj, "get") else getattr(obj, "id", None)
+    if not session_id:
+        logger.error("webhook: completed event missing session id")
+        return {"status": "bad_payload"}
+
     purchase = db.query(Purchase).filter_by(stripe_session_id=session_id).first()
     if purchase is None:
         logger.error("webhook: no purchase for session %s", session_id)
@@ -113,9 +118,14 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
     if purchase.status == "completed":
         return {"status": "already_completed"}
 
+    granted = grant_credits(db, purchase.profile_id, purchase.credits,
+                            reason="purchase", note=f"pack {purchase.price_id}",
+                            commit=False)
+    if granted is None:
+        db.rollback()
+        logger.error("webhook: no account for profile %s", purchase.profile_id)
+        return {"status": "no_account"}
     purchase.stripe_event_id = event.id
     purchase.status = "completed"
     db.commit()
-    grant_credits(db, purchase.profile_id, purchase.credits, reason="purchase",
-                  note=f"pack {purchase.price_id}")
     return {"status": "ok"}

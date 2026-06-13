@@ -66,3 +66,29 @@ def test_webhook_bad_signature_400(client):
     mp.setattr(payments_router.stripe_client, "construct_event", _raise)
     r = c.post("/api/payments/webhook", content=b"{}", headers={"stripe-signature": "x"})
     assert r.status_code == 400
+
+
+def test_webhook_missing_session_id_returns_bad_payload(client):
+    c, db, mp = client
+    bad = type("E", (), {"id": "evt_x", "type": "checkout.session.completed",
+                         "data": type("D", (), {"object": {}})()})()
+    mp.setattr(payments_router.stripe_client, "construct_event",
+               lambda payload, sig: bad)
+    r = c.post("/api/payments/webhook", content=b"{}", headers={"stripe-signature": "x"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "bad_payload"
+    assert db.query(CreditLedger).filter_by(reason="purchase").count() == 0
+
+
+def test_webhook_no_account_does_not_complete(client):
+    c, db, mp = client
+    # Remove the account so grant returns None; purchase must NOT be marked completed.
+    db.query(Account).delete()
+    db.commit()
+    mp.setattr(payments_router.stripe_client, "construct_event",
+               lambda payload, sig: _event("cs_1"))
+    r = c.post("/api/payments/webhook", content=b"{}", headers={"stripe-signature": "x"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "no_account"
+    assert db.query(Purchase).filter_by(stripe_session_id="cs_1").one().status == "pending"
+    assert db.query(Purchase).filter_by(stripe_session_id="cs_1").one().stripe_event_id is None
