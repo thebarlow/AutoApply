@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { logout } from "../api";
 import CreditBalance from "./widgets/CreditBalance";
+import BuyCreditsModal from "./widgets/BuyCreditsModal";
 
 export default function Navbar() {
   const [sessionCost, setSessionCost] = useState(0);
@@ -9,6 +10,7 @@ export default function Navbar() {
   const [shutdownOpen, setShutdownOpen] = useState(false);
   const [inFlight, setInFlight] = useState([]);
   const [serverDown, setServerDown] = useState(false);
+  const [buyOpen, setBuyOpen] = useState(false);
   const shutdownRef = useRef(null);
   const costRef = useRef(null);
   const missesRef = useRef(0);
@@ -91,34 +93,24 @@ export default function Navbar() {
       </Link>
 
       <div className="flex items-center gap-4">
-        {/* Credit balance */}
-        <CreditBalance variant="nav" />
-
-        {/* Session Cost */}
-        <div className="relative" ref={costRef}>
+        {/* Credits: click = session usage overlay, + = buy */}
+        <div className="relative flex items-center gap-1" ref={costRef}>
+          <CreditBalance variant="nav" onClick={() => setCostOpen((v) => !v)} />
           <button
-            onClick={() => setCostOpen((v) => !v)}
-            className="text-sm font-medium text-purple-400 hover:text-purple-300 transition-colors bg-transparent border-0 p-0 cursor-pointer"
+            onClick={() => setBuyOpen(true)}
+            aria-label="Buy credits"
+            className="w-5 h-5 rounded-full border border-purple-400 text-purple-400 hover:bg-purple-400/10 flex items-center justify-center text-sm leading-none"
           >
-            Session Cost: ${sessionCost.toFixed(2)}
+            +
           </button>
 
           {costOpen && (
             <div className="absolute right-0 top-full mt-1 bg-[#0f0f1a] border border-space-border rounded-xl p-4 shadow-2xl min-w-[200px] z-50">
-              <div className="flex items-center gap-1 mb-2">
-                <p className="text-sm font-semibold text-space-text">Session Cost</p>
-                <div className="relative group ml-auto">
-                  <span className="text-[10px] text-space-dim border border-space-border rounded-full w-4 h-4 flex items-center justify-center cursor-default select-none">
-                    ?
-                  </span>
-                  <div className="absolute right-0 top-5 w-44 bg-[#1a1a2e] border border-space-border rounded-md px-2 py-1.5 text-[10px] text-space-dim shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                    Accumulated LLM cost this session. Resets on server restart.
-                  </div>
-                </div>
-              </div>
+              <p className="text-sm font-semibold text-space-text mb-2">Session usage</p>
               <p className="text-2xl font-mono text-purple-400">
-                ${sessionCost.toFixed(8)}
+                {Math.round(sessionCost * (window.__creditRate || 0) * 1000).toLocaleString()} credits
               </p>
+              <p className="text-[11px] text-space-dim mt-1">${sessionCost.toFixed(4)}</p>
             </div>
           )}
         </div>
@@ -213,6 +205,8 @@ export default function Navbar() {
           <p className="text-space-dim text-sm">Close this window or restart via start.bat</p>
         </div>
       )}
+
+      {buyOpen && <BuyCreditsModal onClose={() => setBuyOpen(false)} />}
     </nav>
   );
 }
