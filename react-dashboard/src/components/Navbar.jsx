@@ -43,6 +43,20 @@ export default function Navbar() {
   }, [shutdownOpen]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const purchase = params.get("purchase");
+    if (purchase === "success") {
+      window.dispatchEvent(new Event("auto-apply:credits-stale"));
+      window.dispatchEvent(new Event("auto-apply:purchase-success"));
+    }
+    if (purchase) {
+      params.delete("purchase");
+      const qs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+  }, []);
+
+  useEffect(() => {
     if (!costOpen) return;
     const handler = (e) => {
       if (costRef.current && !costRef.current.contains(e.target))
