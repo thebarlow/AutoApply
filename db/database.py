@@ -135,6 +135,7 @@ class Account(Base):
     created_at = Column(String, nullable=False)
     credit_balance = Column(Integer, nullable=False, default=0)
     credit_rate = Column(Float, nullable=False, default=1.5)
+    stripe_customer_id = Column(String, nullable=True)
 
 
 class Identity(Base):
@@ -170,6 +171,27 @@ class CreditLedger(Base):
     raw_cost_usd = Column(Float, nullable=True)
     meta = Column(Text, nullable=True)                 # JSON: model, tokens, calls
     created_by = Column(Integer, nullable=True)        # account id for admin grants
+    created_at = Column(String, nullable=False)
+
+
+class Purchase(Base):
+    """A Stripe Checkout purchase of a credit pack.
+
+    Payment-side record linking a Checkout session to its credit grant. The
+    ``credit_ledger`` remains the balance source of truth; this row tracks the
+    Stripe lifecycle and enforces idempotent fulfillment via unique constraints.
+    """
+
+    __tablename__ = "purchase"
+
+    id = Column(Integer, primary_key=True)
+    profile_id = Column(Integer, nullable=False, index=True)
+    stripe_session_id = Column(String, nullable=False, unique=True)
+    stripe_event_id = Column(String, nullable=True, unique=True)
+    price_id = Column(String, nullable=False)
+    credits = Column(Integer, nullable=False)
+    amount_usd = Column(Float, nullable=False)
+    status = Column(String, nullable=False, default="pending")  # pending | completed
     created_at = Column(String, nullable=False)
 
 
