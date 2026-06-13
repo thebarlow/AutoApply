@@ -5,11 +5,12 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core import payments, stripe_client
+from core.credits import grant_credits
 from db.database import Account, Purchase, get_db
 from web.tenancy import current_profile_id
 
@@ -74,3 +75,36 @@ def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db),
                     status="pending", created_at=_now()))
     db.commit()
     return {"url": session.url}
+
+
+@router.post("/webhook")
+async def webhook(request: Request, db: Session = Depends(get_db)):
+    """Stripe webhook: fulfill a completed checkout by granting credits (idempotent)."""
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe_client.construct_event(payload, sig)
+    except Exception:
+        logger.warning("webhook: signature verification failed")
+        raise HTTPException(status_code=400, detail="invalid signature")
+
+    if event.type != "checkout.session.completed":
+        return {"status": "ignored"}
+
+    if db.query(Purchase).filter_by(stripe_event_id=event.id).first():
+        return {"status": "duplicate"}
+
+    session_id = event.data.object["id"]
+    purchase = db.query(Purchase).filter_by(stripe_session_id=session_id).first()
+    if purchase is None:
+        logger.error("webhook: no purchase for session %s", session_id)
+        return {"status": "no_purchase"}
+    if purchase.status == "completed":
+        return {"status": "already_completed"}
+
+    purchase.stripe_event_id = event.id
+    purchase.status = "completed"
+    db.commit()
+    grant_credits(db, purchase.profile_id, purchase.credits, reason="purchase",
+                  note=f"pack {purchase.price_id}")
+    return {"status": "ok"}
