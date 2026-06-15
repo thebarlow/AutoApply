@@ -19,7 +19,7 @@ core/
 ├── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ├── credits.py           # Credit ledger: conversion formula, grant/debit/reconcile, env tier helpers
 ├── metering.py          # meter_action context manager: per-action gate + debit settle around LLM calls
-├── payments.py          # STRIPE_PACKS env config: load_packs()/credits_for_price() (no Stripe SDK calls)
+├── payments.py          # Tier-aware pricing calculator: compute_credits()/packs_for_tier()/resolve_price_id() (no Stripe SDK calls)
 └── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, retrieve_price, construct_event
 ```
 
@@ -72,7 +72,7 @@ core/
 | Semantic ATS roundtrip check (LLM re-parse of extracted text) | `ats_gate.py` → `check_roundtrip()` |
 | Credit conversion, grants, debits, reconciliation | `credits.py` → `to_credits()`, `grant_credits()`, `debit_for_action()`, `reconcile_balance()` |
 | Per-action credit gate + debit settle around LLM calls | `metering.py` → `meter_action()` |
-| Credit-pack env config (`STRIPE_PACKS` -> price_id/credits map) | `payments.py` → `load_packs()`, `credits_for_price()` |
+| Tier-aware credit pricing (margins, bulk discounts, fees, per-tier credits) | `payments.py` → `tier_margins()`, `price_tiers()`, `tier_visibility()`, `price_ids()`, `compute_credits()`, `packs_for_tier()`, `resolve_price_id()` |
 | Stripe SDK calls (customer, Checkout session, price lookup, webhook signature verification) | `stripe_client.py` → `create_customer()`, `create_checkout_session()`, `retrieve_price()`, `construct_event()` |
 
 ## LLM Integration
@@ -201,8 +201,18 @@ to 0 — extraction is effectively free in v1.
 
 ## Payments (`core/payments.py`, `core/stripe_client.py`)
 
-`payments.py` parses `STRIPE_PACKS` (a JSON env var mapping `price_id ->
-credits`) — pure config, no Stripe SDK calls. `stripe_client.py` wraps the
+`payments.py` is a pure tier-aware pricing **calculator** (no Stripe SDK
+calls): margin lives on the *purchase* side, so the same dollar amount buys
+different credits per tier (`beta`/`friends_family`/`standard`). Public
+functions: `tier_margins()`, `price_tiers()` (bulk discount per dollar
+amount), `tier_visibility()`, `price_ids()` (dollar→Stripe price id),
+`compute_credits(price_usd, tier)` (net→cost basis→round-to-25, profit guard;
+raises `ValueError` if unprofitable/unknown tier), `packs_for_tier()`,
+`resolve_price_id()`. The old `load_packs`/`credits_for_price`/`STRIPE_PACKS`
+flat map is retired in favor of `STRIPE_PRICE_IDS` plus optional overrides
+`CREDIT_TIER_MARGINS`/`CREDIT_PRICE_TIERS`/`CREDIT_TIER_VISIBILITY` and the fee
+model `STRIPE_FEE_PCT`/`STRIPE_FEE_FIXED`/`TAX_RATE`. Note: `account.credit_rate`
+now defaults to **1.0** for metered users (was 1.5). `stripe_client.py` wraps the
 `stripe` SDK (v15.2.1) with `create_customer`, `create_checkout_session`,
 `retrieve_price`, and `construct_event` (webhook signature verification),
 reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` from env lazily. Consumed

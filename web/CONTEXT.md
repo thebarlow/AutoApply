@@ -25,7 +25,7 @@ web/
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
-    ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, GET /api/admin/system-balance; require_admin dependency
+    ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, POST /api/admin/credits/tier, GET /api/admin/system-balance; require_admin dependency
     ├── payments.py          # GET /api/payments/packs, POST /checkout, GET /verify, POST /webhook (Stripe), GET /history
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
     ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
@@ -145,6 +145,7 @@ web/
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
 | `GET` | `/api/credits` | Caller's `{balance, rate, recent[]}` (last 20 ledger rows) |
 | `POST` | `/api/admin/credits/grant` | Admin-only; grant credits to a profile by `profile_id` or `email`, reason `admin_grant` |
+| `POST` | `/api/admin/credits/tier` | Admin-only; set a profile's pricing tier (target by `profile_id` or `email`; validated against `payments.tier_margins()`) |
 | `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key |
 | `GET` | `/api/payments/packs` | Configured credit packs with live price/currency from Stripe |
 | `POST` | `/api/payments/checkout` | Create a Stripe Checkout session for a pack; records a pending `Purchase`, returns the session URL |
