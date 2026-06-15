@@ -74,9 +74,11 @@ web/
 - **Credits & Metering (sub-project 2 — DONE)** — `routers/credits.py`: `GET /api/credits` returns the caller's `{balance, rate, recent[]}` (last 20 ledger rows; `{balance:0, rate:0.0, recent:[]}` if no `Account` row). `require_admin` (a FastAPI dependency) resolves the account for `current_profile_id` and 403s unless `is_admin`; gates `POST /api/admin/credits/grant` (target by `profile_id` or `email`, `reason="admin_grant"` — the same `grant_credits` call a future Stripe webhook will reuse) and `GET /api/admin/system-balance` (reads the platform OpenRouter key's remaining balance via `LLM_API_KEY`, 502 on upstream failure, 503 if unset). `core.credits.InsufficientCredits` is registered in `web/main.py` as an exception handler returning **HTTP 402** `{error:"insufficient_credits", balance, floor}` — raised by `meter_action` (see `core/CONTEXT.md` → "Credits & Metering") when an account's balance is below `CREDIT_FLOOR`.
   - **Metered endpoints**: `POST /{job_key}/score`, `POST /{job_key}/generate/resume`, `POST /{job_key}/generate/cover` (`routers/jobs.py`); the intake-pipeline score/eval/refine steps (`intake_pipeline.py`); and `_do_extract_description` (extraction — gated but its debit is always 0, see `core/CONTEXT.md` limitation). All wrap the LLM call in `meter_action(db, profile_id, action=..., job_key=...)`.
   - Frontend: `CreditBalance.jsx` (navbar + User tab) shows balance/rate; a global 402 interceptor shows an "out of credits" toast and the navbar refetches. Admin-only system-balance panel reads `/api/admin/system-balance`. Known caveat: the balance does **not** auto-refresh after a successful metered action (those are SSE-driven, not request/response) — it can lag until the next load or a 402.
-- **Payments (sub-project 3 — DONE)** — `routers/payments.py`: `GET /packs` lists configured packs
-  (`core/payments.load_packs`) with live price/currency from Stripe; `POST /checkout` creates a Stripe
-  customer on first buy, records a `pending` `Purchase`, and returns the Checkout URL; `POST /webhook`
+- **Payments (sub-project 3 — DONE)** — `routers/payments.py`: `GET /packs` lists the packs visible to
+  the caller's tier with server-computed credits (`core/payments.packs_for_tier`, no Stripe call);
+  `POST /checkout` resolves the price against the buyer's tier (`resolve_price_id`), computes credits
+  server-side, creates a Stripe customer on first buy, records a `pending` `Purchase` (storing the
+  buyer's `tier` + computed `credits`), and returns the Checkout URL; `POST /webhook`
   verifies the Stripe signature, is idempotent on `stripe_event_id`, marks the `Purchase` `completed`,
   and grants credits via `grant_credits(reason="purchase")`; `GET /history` returns the caller's recent
   purchases. Fulfillment is shared by the webhook and `GET /verify?session_id=` via the `_fulfill`
