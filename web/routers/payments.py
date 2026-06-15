@@ -23,18 +23,12 @@ def _now() -> str:
 
 
 @router.get("/packs")
-def list_packs():
-    """Configured packs with live price/currency from Stripe."""
-    out = []
-    for price_id, credits in payments.load_packs().items():
-        price = stripe_client.retrieve_price(price_id)
-        out.append({
-            "price_id": price_id,
-            "credits": credits,
-            "amount_usd": (price.unit_amount or 0) / 100,
-            "currency": price.currency,
-        })
-    return out
+def list_packs(db: Session = Depends(get_db),
+               profile_id: int = Depends(current_profile_id)):
+    """Packs visible to the current account's tier, with computed credits."""
+    acct = db.query(Account).filter_by(profile_id=profile_id).first()
+    tier = acct.tier if acct is not None else "standard"
+    return payments.packs_for_tier(tier)
 
 
 class CheckoutRequest(BaseModel):
@@ -44,13 +38,15 @@ class CheckoutRequest(BaseModel):
 @router.post("/checkout")
 def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db),
                     profile_id: int = Depends(current_profile_id)):
-    """Create a Stripe Checkout session for a pack and record a pending purchase."""
-    credits = payments.credits_for_price(body.price_id)
-    if credits is None:
-        raise HTTPException(status_code=400, detail="unknown price_id")
+    """Create a Checkout session for a pack visible to the buyer's tier."""
     acct = db.query(Account).filter_by(profile_id=profile_id).first()
     if acct is None:
         raise HTTPException(status_code=404, detail="account not found")
+
+    resolved = payments.resolve_price_id(body.price_id, acct.tier)
+    if resolved is None:
+        raise HTTPException(status_code=400, detail="unknown or unavailable price_id")
+    amount_usd, credits = resolved
 
     if not acct.stripe_customer_id:
         acct.stripe_customer_id = stripe_client.create_customer(acct.email)
@@ -68,11 +64,10 @@ def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db),
         logger.exception("checkout: Stripe session creation failed")
         raise HTTPException(status_code=502, detail="payment provider error")
 
-    price = stripe_client.retrieve_price(body.price_id)
     db.add(Purchase(profile_id=profile_id, stripe_session_id=session.id,
                     price_id=body.price_id, credits=credits,
-                    amount_usd=(price.unit_amount or 0) / 100,
-                    status="pending", created_at=_now()))
+                    amount_usd=float(amount_usd), status="pending",
+                    tier=acct.tier, created_at=_now()))
     db.commit()
     return {"url": session.url}
 
