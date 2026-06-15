@@ -1,4 +1,5 @@
 """Pricing calculator: tier margins, bulk discounts, fees, profit guard."""
+
 import pytest
 
 from core import payments
@@ -7,22 +8,32 @@ from core import payments
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     # Force all calculator config to its documented defaults.
-    for k in ("CREDIT_TIER_MARGINS", "CREDIT_PRICE_TIERS", "CREDIT_TIER_VISIBILITY",
-              "STRIPE_FEE_PCT", "STRIPE_FEE_FIXED", "TAX_RATE", "STRIPE_PRICE_IDS"):
+    for k in (
+        "CREDIT_TIER_MARGINS",
+        "CREDIT_PRICE_TIERS",
+        "CREDIT_TIER_VISIBILITY",
+        "STRIPE_FEE_PCT",
+        "STRIPE_FEE_FIXED",
+        "TAX_RATE",
+        "STRIPE_PRICE_IDS",
+    ):
         monkeypatch.delenv(k, raising=False)
 
 
-@pytest.mark.parametrize("tier,price,expected", [
-    ("beta", 1, 450),
-    ("friends_family", 1, 125),
-    ("friends_family", 5, 950),
-    ("friends_family", 10, 2075),
-    ("friends_family", 20, 4400),
-    ("standard", 1, 25),
-    ("standard", 5, 250),
-    ("standard", 10, 525),
-    ("standard", 20, 1100),
-])
+@pytest.mark.parametrize(
+    "tier,price,expected",
+    [
+        ("beta", 1, 450),
+        ("friends_family", 1, 125),
+        ("friends_family", 5, 950),
+        ("friends_family", 10, 2075),
+        ("friends_family", 20, 4400),
+        ("standard", 1, 25),
+        ("standard", 5, 250),
+        ("standard", 10, 525),
+        ("standard", 20, 1100),
+    ],
+)
 def test_compute_credits_matches_worked_table(tier, price, expected):
     assert payments.compute_credits(price, tier) == expected
 

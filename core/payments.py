@@ -5,6 +5,7 @@ credit counts per user tier. Credits mirror raw API cost 1:1 on consumption
 (``credit_rate`` is 1.0 for metered users), so every feature costs the same
 credits for everyone. All functions here are pure config math — no Stripe calls.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,6 +29,7 @@ def _env_json(key: str) -> dict | None:
 
 
 def tier_margins() -> dict[str, float]:
+    """Tier name -> profit margin multiplier applied to net proceeds."""
     cfg = _env_json("CREDIT_TIER_MARGINS")
     if not cfg:
         return dict(_DEFAULT_MARGINS)
@@ -43,6 +45,7 @@ def price_tiers() -> dict[int, float]:
 
 
 def tier_visibility() -> dict[str, list[int]]:
+    """Tier name -> list of dollar pack amounts visible to that tier."""
     cfg = _env_json("CREDIT_TIER_VISIBILITY")
     if not cfg:
         return {k: list(v) for k, v in _DEFAULT_VISIBILITY.items()}
@@ -106,12 +109,14 @@ def packs_for_tier(tier: str) -> list[dict]:
     discounts = price_tiers()
     out = []
     for amount in tier_visibility().get(tier, []):
-        out.append({
-            "price_id": ids.get(amount),
-            "amount_usd": amount,
-            "credits": compute_credits(amount, tier),
-            "discount": discounts.get(amount, 0.0),
-        })
+        out.append(
+            {
+                "price_id": ids.get(amount),
+                "amount_usd": amount,
+                "credits": compute_credits(amount, tier),
+                "discount": discounts.get(amount, 0.0),
+            }
+        )
     return out
 
 
