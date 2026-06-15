@@ -23,7 +23,6 @@ from web.routers import llm_test
 from web.routers import setup_status
 from web.routers import docs_router
 from web.routers import session_cost_router
-from web.routers import shutdown as shutdown_router
 from web.routers import stats as stats_router
 from web.routers import skills as skills_router
 from web.routers import credits as credits_router
@@ -124,7 +123,6 @@ app.include_router(llm_test.router)
 app.include_router(setup_status.router)
 app.include_router(docs_router.router)
 app.include_router(session_cost_router.router)
-app.include_router(shutdown_router.router)
 app.include_router(stats_router.router)
 app.include_router(skills_router.router)
 app.include_router(credits_router.router)

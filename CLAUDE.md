@@ -38,10 +38,11 @@ Read the target directory's `CONTEXT.md` before making changes there.
 ## Running the App
 
 ```bat
-start.bat
+start.bat        :: server + Stripe webhook listener + tray app
+start.bat dev    :: also runs the Vite dev server (cd react-dashboard && npm run dev)
 ```
 
-Starts the FastAPI server (uvicorn, port 8080) in a separate console window and launches the PyQt6 tray app in the foreground.
+Starts the FastAPI server (uvicorn, port 8080) and a `stripe listen` webhook-forwarding window in separate consoles, then launches the PyQt6 tray app in the foreground. Pass `dev` to additionally run the hot-reload frontend dev server.
 
 ## Deployment & SaaS Roadmap
 

@@ -61,7 +61,7 @@ def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db),
         session = stripe_client.create_checkout_session(
             customer_id=acct.stripe_customer_id,
             price_id=body.price_id,
-            success_url=f"{base}/?purchase=success",
+            success_url=f"{base}/?purchase=success&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base}/?purchase=cancel",
         )
     except Exception:
@@ -88,6 +88,70 @@ def history(db: Session = Depends(get_db),
              "created_at": r.created_at} for r in rows]
 
 
+def _fulfill(db: Session, session_id: str, *, event_id: str | None = None) -> str:
+    """Grant credits for a paid checkout exactly once. Shared by the webhook and
+    the success-redirect verify path. Returns a short status string.
+
+    Idempotency is enforced by an **atomic conditional claim**: a single SQL
+    ``UPDATE ... WHERE status != 'completed'`` flips the purchase to completed,
+    and only the caller whose update actually matches a row (rowcount == 1) goes
+    on to grant credits. Concurrent webhook/verify calls (or double-clicks) that
+    lose the race match 0 rows and grant nothing — so a single payment can never
+    be credited twice, even under a race. The grant and the status flip share one
+    transaction, so a failed grant rolls the claim back too (the purchase stays
+    pending and can be retried)."""
+    purchase = db.query(Purchase).filter_by(stripe_session_id=session_id).first()
+    if purchase is None:
+        logger.error("fulfill: no purchase for session %s", session_id)
+        return "no_purchase"
+    if purchase.status == "completed":
+        return "already_completed"
+
+    values = {Purchase.status: "completed"}
+    if event_id:
+        values[Purchase.stripe_event_id] = event_id
+    claimed = (db.query(Purchase)
+               .filter(Purchase.id == purchase.id, Purchase.status != "completed")
+               .update(values, synchronize_session=False))
+    if not claimed:
+        # Another concurrent caller already claimed and granted this purchase.
+        db.rollback()
+        return "already_completed"
+
+    granted = grant_credits(db, purchase.profile_id, purchase.credits,
+                            reason="purchase", note=f"pack {purchase.price_id}",
+                            commit=False)
+    if granted is None:
+        db.rollback()  # also reverts the status claim — purchase stays pending
+        logger.error("fulfill: no account for profile %s", purchase.profile_id)
+        return "no_account"
+    db.commit()
+    return "ok"
+
+
+@router.get("/verify")
+def verify(session_id: str, db: Session = Depends(get_db),
+           profile_id: int = Depends(current_profile_id)):
+    """Fallback fulfillment on the success redirect — covers the local case where
+    Stripe's webhook can't reach localhost, and delayed/missed webhooks in prod.
+    Confirms payment with Stripe before granting; idempotent with the webhook."""
+    try:
+        session = stripe_client.retrieve_checkout_session(session_id)
+    except Exception:
+        logger.exception("verify: retrieve session failed")
+        raise HTTPException(status_code=502, detail="payment provider error")
+
+    status = (session.get("payment_status") if hasattr(session, "get")
+              else getattr(session, "payment_status", None))
+    if status != "paid":
+        return {"status": "unpaid"}
+
+    purchase = db.query(Purchase).filter_by(stripe_session_id=session_id).first()
+    if purchase is not None and purchase.profile_id != profile_id:
+        raise HTTPException(status_code=403, detail="not your purchase")
+    return {"status": _fulfill(db, session_id)}
+
+
 @router.post("/webhook")
 async def webhook(request: Request, db: Session = Depends(get_db)):
     """Stripe webhook: fulfill a completed checkout by granting credits (idempotent)."""
@@ -111,21 +175,4 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
         logger.error("webhook: completed event missing session id")
         return {"status": "bad_payload"}
 
-    purchase = db.query(Purchase).filter_by(stripe_session_id=session_id).first()
-    if purchase is None:
-        logger.error("webhook: no purchase for session %s", session_id)
-        return {"status": "no_purchase"}
-    if purchase.status == "completed":
-        return {"status": "already_completed"}
-
-    granted = grant_credits(db, purchase.profile_id, purchase.credits,
-                            reason="purchase", note=f"pack {purchase.price_id}",
-                            commit=False)
-    if granted is None:
-        db.rollback()
-        logger.error("webhook: no account for profile %s", purchase.profile_id)
-        return {"status": "no_account"}
-    purchase.stripe_event_id = event.id
-    purchase.status = "completed"
-    db.commit()
-    return {"status": "ok"}
+    return {"status": _fulfill(db, session_id, event_id=event.id)}

@@ -51,6 +51,18 @@ def create_checkout_session(*, customer_id: str, price_id: str,
     })
 
 
+def retrieve_checkout_session(session_id: str):
+    """Fetch a Checkout Session (to confirm payment on the success redirect).
+
+    Args:
+        session_id: The Checkout Session ID.
+
+    Returns:
+        The `stripe.checkout.Session` object (exposes `.payment_status`, `.id`).
+    """
+    return _client().v1.checkout.sessions.retrieve(session_id)
+
+
 def retrieve_price(price_id: str):
     """Fetch a Stripe Price.
 

@@ -41,6 +41,20 @@ export default function CreditBalance({ variant = 'nav', onClick }) {
     )
   }
 
+  // Centered, clickable balance shown under the user name in the Settings widget.
+  if (variant === 'settings') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title="Buy credits"
+        className="self-center text-sm font-mono text-purple-400 hover:text-purple-300 transition-colors"
+      >
+        {text}
+      </button>
+    )
+  }
+
   return (
     <span
       className="text-sm font-medium text-purple-400 cursor-pointer hover:text-purple-300"

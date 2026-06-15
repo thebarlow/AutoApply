@@ -80,6 +80,66 @@ def test_webhook_missing_session_id_returns_bad_payload(client):
     assert db.query(CreditLedger).filter_by(reason="purchase").count() == 0
 
 
+def _session(payment_status="paid"):
+    return {"id": "cs_1", "payment_status": payment_status}
+
+
+def test_verify_then_webhook_credits_once(client):
+    """Cross-path idempotency: success-redirect verify followed by the real
+    webhook must grant exactly one set of credits."""
+    c, db, mp = client
+    from web.tenancy import current_profile_id
+    c.app.dependency_overrides[current_profile_id] = lambda: 7
+    mp.setattr(payments_router.stripe_client, "retrieve_checkout_session",
+               lambda sid: _session("paid"))
+    mp.setattr(payments_router.stripe_client, "construct_event",
+               lambda payload, sig: _event("cs_1"))
+
+    r1 = c.get("/api/payments/verify", params={"session_id": "cs_1"})
+    assert r1.json()["status"] == "ok"
+    r2 = c.post("/api/payments/webhook", content=b"{}", headers={"stripe-signature": "x"})
+    assert r2.json()["status"] == "already_completed"
+
+    assert db.query(CreditLedger).filter_by(reason="purchase").count() == 1
+    assert db.query(Account).filter_by(profile_id=7).one().credit_balance == 5000
+
+
+def test_verify_repeated_credits_once(client):
+    c, db, mp = client
+    from web.tenancy import current_profile_id
+    c.app.dependency_overrides[current_profile_id] = lambda: 7
+    mp.setattr(payments_router.stripe_client, "retrieve_checkout_session",
+               lambda sid: _session("paid"))
+    for _ in range(3):
+        c.get("/api/payments/verify", params={"session_id": "cs_1"})
+    assert db.query(CreditLedger).filter_by(reason="purchase").count() == 1
+    assert db.query(Account).filter_by(profile_id=7).one().credit_balance == 5000
+
+
+def test_verify_unpaid_does_not_grant(client):
+    c, db, mp = client
+    from web.tenancy import current_profile_id
+    c.app.dependency_overrides[current_profile_id] = lambda: 7
+    mp.setattr(payments_router.stripe_client, "retrieve_checkout_session",
+               lambda sid: _session("unpaid"))
+    r = c.get("/api/payments/verify", params={"session_id": "cs_1"})
+    assert r.json()["status"] == "unpaid"
+    assert db.query(CreditLedger).filter_by(reason="purchase").count() == 0
+    assert db.query(Purchase).filter_by(stripe_session_id="cs_1").one().status == "pending"
+
+
+def test_verify_other_tenant_forbidden(client):
+    """A logged-in user cannot fulfill a purchase belonging to another tenant."""
+    c, db, mp = client
+    from web.tenancy import current_profile_id
+    c.app.dependency_overrides[current_profile_id] = lambda: 999
+    mp.setattr(payments_router.stripe_client, "retrieve_checkout_session",
+               lambda sid: _session("paid"))
+    r = c.get("/api/payments/verify", params={"session_id": "cs_1"})
+    assert r.status_code == 403
+    assert db.query(CreditLedger).filter_by(reason="purchase").count() == 0
+
+
 def test_webhook_no_account_does_not_complete(client):
     c, db, mp = client
     # Remove the account so grant returns None; purchase must NOT be marked completed.

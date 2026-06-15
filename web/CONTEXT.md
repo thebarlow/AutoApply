@@ -26,10 +26,9 @@ web/
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
     ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, GET /api/admin/system-balance; require_admin dependency
-    ├── payments.py          # GET /api/payments/packs, POST /checkout, POST /webhook (Stripe), GET /history
+    ├── payments.py          # GET /api/payments/packs, POST /checkout, GET /verify, POST /webhook (Stripe), GET /history
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
     ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
-    ├── shutdown.py          # POST /api/shutdown (graceful or immediate server exit)
     ├── tray.py              # Tray app integration endpoints
     ├── events.py            # SSE endpoint (/api/events)
     └── docs_router.py       # Serves Obsidian markdown docs as JSON
@@ -46,8 +45,7 @@ web/
 | Skill alias groups + marking profile skills | `routers/skills.py` (invalidates `stats.py` skill cache on mutation) |
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Credit balance / history, admin grants, system balance | `routers/credits.py` |
-| Stripe Checkout (packs/checkout/webhook/history) | `routers/payments.py` |
-| Server shutdown (immediate or wait for LLM) | `routers/shutdown.py` |
+| Stripe Checkout (packs/checkout/verify/webhook/history) | `routers/payments.py` |
 | LLM provider/model/key config | `routers/config.py` |
 | Prompt template get/set per profile | `routers/prompts.py` |
 | LLM connectivity test | `routers/llm_test.py` |
@@ -81,11 +79,22 @@ web/
   customer on first buy, records a `pending` `Purchase`, and returns the Checkout URL; `POST /webhook`
   verifies the Stripe signature, is idempotent on `stripe_event_id`, marks the `Purchase` `completed`,
   and grants credits via `grant_credits(reason="purchase")`; `GET /history` returns the caller's recent
-  purchases. Frontend: `BuyCreditsModal.jsx`, navbar `+` buy button, purchase-success toast + balance
-  refresh, purchase history in `UserHome.jsx`. `CreditBalance.jsx` sets `window.__creditRate` (read by
-  `Navbar.jsx` to convert the session's $ LLM cost into an equivalent credit count for the
-  click-to-see "session usage in credits" overlay). **Known limitation:** refunds are admin-manual
-  only — no automatic credit clawback on a Stripe refund.
+  purchases. Fulfillment is shared by the webhook and `GET /verify?session_id=` via the `_fulfill`
+  helper. **Exactly-once is enforced by an atomic conditional claim** — a single
+  `UPDATE Purchase SET status='completed' WHERE id=? AND status!='completed'`; only the caller whose
+  update matches a row (rowcount 1) grants credits, so concurrent webhook/verify calls or
+  double-clicks can never double-credit a payment. The claim and the grant share one transaction (a
+  failed grant rolls the claim back → purchase stays pending, retryable). The webhook also keeps its
+  `stripe_event_id` pre-check for replays. `GET /verify` is the success-redirect
+  fallback: `success_url` carries `&session_id={CHECKOUT_SESSION_ID}`, the browser hits `/verify` on
+  return, which retrieves the session, confirms `payment_status == "paid"`, checks tenant ownership,
+  then fulfills. This covers **local dev (Stripe's webhook can't reach localhost without
+  `stripe listen`)** and delayed/missed webhooks in prod. Frontend: credits are bought from the
+  **Settings widget** — `CreditBalance.jsx` `variant="settings"` renders a centered, clickable
+  `{n} credits` under the user name in `UserHome.jsx` that opens `BuyCreditsModal.jsx` (closes on Esc
+  or backdrop click); `Navbar.jsx` calls `verifyPurchase` on the `purchase=success` redirect, then
+  dispatches `credits-stale` + `purchase-success`. The navbar no longer shows credits or a buy button.
+  **Known limitation:** refunds are admin-manual only — no automatic credit clawback on a Stripe refund.
 
 ## Known caveats (Phase 3b)
 
@@ -137,9 +146,9 @@ web/
 | `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key |
 | `GET` | `/api/payments/packs` | Configured credit packs with live price/currency from Stripe |
 | `POST` | `/api/payments/checkout` | Create a Stripe Checkout session for a pack; records a pending `Purchase`, returns the session URL |
+| `GET` | `/api/payments/verify` | Success-redirect fallback fulfillment; confirms `payment_status=="paid"` with Stripe, tenant-checks, then grants (idempotent with the webhook) |
 | `POST` | `/api/payments/webhook` | Stripe webhook (signature-verified, unauthenticated — see Auth gate exemption below); idempotent on `stripe_event_id`; grants credits via `grant_credits(reason="purchase")` |
 | `GET` | `/api/payments/history` | Caller's recent purchases |
-| `POST` | `/api/shutdown` | Shut down server (`mode=immediate` or `mode=wait`) |
 | `GET/PUT` | `/api/config/{key}` | Config key-value store |
 | `GET/PUT` | `/api/prompts/...` | Prompt templates per profile |
 | `POST` | `/api/llm/test` | Test LLM connectivity |

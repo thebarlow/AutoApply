@@ -11,6 +11,12 @@ export default function BuyCreditsModal({ onClose }) {
     getPacks().then(setPacks).catch(() => setError(true))
   }, [])
 
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const buy = async (priceId) => {
     setBusy(true)
     try {

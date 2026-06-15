@@ -280,6 +280,9 @@ export const startCheckout = (priceId) =>
     body: JSON.stringify({ price_id: priceId }),
   })
 
+export const verifyPurchase = (sessionId) =>
+  _fetch(`/api/payments/verify?session_id=${encodeURIComponent(sessionId)}`)
+
 export const getSystemBalance = () => _fetch('/api/admin/system-balance')
 
 export const logout = () =>
