@@ -42,3 +42,21 @@ def test_provision_account_admin_gets_zero_rate(monkeypatch):
 
     assert acct.credit_rate == 0.0
     assert acct.credit_balance == 100
+
+
+def test_default_rate_defaults_to_one(monkeypatch):
+    from core.credits import default_rate
+    monkeypatch.delenv("CREDIT_DEFAULT_RATE", raising=False)
+    assert default_rate() == 1.0
+
+
+def test_provision_account_is_standard_tier_rate_one(monkeypatch):
+    monkeypatch.delenv("CREDIT_DEFAULT_RATE", raising=False)
+    monkeypatch.setenv("CREDIT_SIGNUP_GRANT", "100")
+    db = _db()
+    claims = identity.Claims(
+        provider="google", subject="sub-9", email="std@x.c", email_verified=True
+    )
+    acct = identity._provision_account(db, email="std@x.c", is_admin=False, claims=claims)
+    assert acct.tier == "standard"
+    assert acct.credit_rate == 1.0
