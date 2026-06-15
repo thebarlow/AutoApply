@@ -20,3 +20,5 @@ alembic>=1.13,<2.0
 psycopg[binary]>=3.1,<4.0
 authlib>=1.3,<2.0
 itsdangerous>=2.0,<3.0
+# dev: static type checker (CLI)
+pyright>=1.1.410,<2.0
