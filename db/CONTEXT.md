@@ -77,6 +77,22 @@ The running app boots via `alembic upgrade head` inside `init_db` (Phase 3). The
 suite still builds schema via `create_all` for in-memory speed; the parity gate keeps
 the two in sync.
 
+### Known issue: SQLite `skill_aliases` PK from `bdf3f4523095`
+
+Migration `bdf3f4523095` moves `skill_aliases` from a single-column PK (`alias_key`)
+to a composite PK (`profile_id, alias_key`). On SQLite this needs a table rebuild
+(`batch_alter_table(..., recreate='always')`). Some older local dev DBs ended up
+**stamped at head while still carrying the old `PRIMARY KEY (alias_key)`** — i.e. the
+column was added but the PK rebuild never took. Symptom: provisioning a *second*
+tenant fails with `UNIQUE constraint failed: skill_aliases.alias_key` (the default
+aliases collide across profiles), which surfaces at OAuth login as a spurious
+`BetaAccessDenied` ("closed beta") because `resolve_or_provision_account` swallows the
+`IntegrityError` and re-raises denial. Fix on the affected DB: rebuild the table with
+`PRIMARY KEY (profile_id, alias_key)` (preserve rows). Verify with
+`SELECT sql FROM sqlite_master WHERE name='skill_aliases'`. Fresh DBs built via
+`create_all` are unaffected (the model has the composite PK), so the parity gate
+doesn't catch it.
+
 ### Tenant scoping (Phase 2)
 
 Every tenant-owned table (`jobs`, `documents`, `skill_aliases`) carries

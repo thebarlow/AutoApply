@@ -54,8 +54,14 @@ def get_account_for_profile(db: Session, profile_id: int) -> Account | None:
 
 
 def grant_credits(db: Session, profile_id: int, amount: int, reason: str, *,
-                  created_by: int | None = None, note: str | None = None) -> CreditLedger | None:
-    """Insert a positive ledger row and bump the cached balance atomically."""
+                  created_by: int | None = None, note: str | None = None,
+                  commit: bool = True) -> CreditLedger | None:
+    """Insert a positive ledger row and bump the cached balance atomically.
+
+    If ``commit`` is False, the ledger row and balance bump are added to the
+    session but not committed, letting the caller fold them into a larger
+    atomic transaction.
+    """
     acct = get_account_for_profile(db, profile_id)
     if acct is None:
         return None
@@ -64,7 +70,8 @@ def grant_credits(db: Session, profile_id: int, amount: int, reason: str, *,
                        created_by=created_by, created_at=_now())
     db.add(row)
     acct.credit_balance = (acct.credit_balance or 0) + amount
-    db.commit()
+    if commit:
+        db.commit()
     return row
 
 

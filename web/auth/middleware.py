@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 _GATED_PREFIXES = ("/api/",)
+_EXEMPT_PATHS = ("/api/payments/webhook",)
 
 
 class AuthGateMiddleware:
@@ -27,7 +28,7 @@ class AuthGateMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if not path.startswith(_GATED_PREFIXES):
+        if not path.startswith(_GATED_PREFIXES) or path in _EXEMPT_PATHS:
             await self.app(scope, receive, send)
             return
         session = scope.get("session") or {}

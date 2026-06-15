@@ -3,10 +3,11 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, Sector, LabelList,
 } from 'recharts'
-import { getProfiles, getStats, getSkillFrequency, getJobsForSkill, getMe, getSystemBalance } from '../../api'
+import { getProfiles, getStats, getSkillFrequency, getJobsForSkill, getMe, getSystemBalance, getPurchaseHistory } from '../../api'
 import ProfileCards from './ProfileCards'
 import SkillChipModal from './SkillChipModal'
 import CreditBalance from './CreditBalance'
+import BuyCreditsModal from './BuyCreditsModal'
 
 // Dev-only panel: shows the OpenRouter balance ("money in the system").
 // Rendered only for admin accounts; hidden entirely otherwise.
@@ -215,6 +216,17 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   const [hoveredIndex, setHoveredIndex] = useState(null)
   const [drillCategory, setDrillCategory] = useState(null)
   const [modalSkill, setModalSkill] = useState(null)
+  const [history, setHistory] = useState([])
+  const [buyOpen, setBuyOpen] = useState(false)
+
+  useEffect(() => { getPurchaseHistory().then(setHistory).catch(() => {}) }, [])
+
+  // Refresh purchase history after a successful checkout (navbar dispatches this).
+  useEffect(() => {
+    const onPurchase = () => getPurchaseHistory().then(setHistory).catch(() => {})
+    window.addEventListener('auto-apply:purchase-success', onPurchase)
+    return () => window.removeEventListener('auto-apply:purchase-success', onPurchase)
+  }, [])
 
   const fetchProfiles = () => {
     getProfiles()
@@ -368,10 +380,24 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
         >
           {displayName}
         </button>
+        <CreditBalance variant="settings" onClick={() => setBuyOpen(true)} />
       </div>
 
       <div className="flex flex-col gap-2">
-        <CreditBalance variant="panel" />
+        {history.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs uppercase tracking-widest text-space-dim mb-1">Purchases</p>
+            <ul className="flex flex-col gap-1">
+              {history.map((h) => (
+                <li key={h.stripe_session_id} className="flex justify-between text-xs text-space-text">
+                  <span>{new Date(h.created_at).toLocaleDateString()}</span>
+                  <span>{h.credits.toLocaleString()} cr</span>
+                  <span className="text-space-dim">${h.amount_usd.toFixed(2)} · {h.status}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <SystemBalancePanel />
       </div>
 
@@ -568,6 +594,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
           onChanged={() => { getSkillFrequency().then(setSkillFreq).catch(() => {}) }}
         />
       )}
+      {buyOpen && <BuyCreditsModal onClose={() => setBuyOpen(false)} />}
     </div>
   )
 }

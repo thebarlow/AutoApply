@@ -7,13 +7,16 @@ import { getCredits } from '../../api'
  * action or a 402). `variant` selects navbar ('nav') vs settings-panel ('panel')
  * styling.
  */
-export default function CreditBalance({ variant = 'nav' }) {
+export default function CreditBalance({ variant = 'nav', onClick }) {
   const [balance, setBalance] = useState(null)
   const [error, setError] = useState(false)
 
   const refresh = useCallback(() => {
     getCredits()
-      .then((d) => { setBalance(d.balance); setError(false) })
+      .then((d) => {
+        setBalance(d.balance); setError(false)
+        window.__creditRate = d.rate ?? 0   // read by Navbar for $→credits conversion
+      })
       .catch(() => setError(true))
   }, [])
 
@@ -38,10 +41,25 @@ export default function CreditBalance({ variant = 'nav' }) {
     )
   }
 
+  // Centered, clickable balance shown under the user name in the Settings widget.
+  if (variant === 'settings') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title="Buy credits"
+        className="self-center text-sm font-mono text-purple-400 hover:text-purple-300 transition-colors"
+      >
+        {text}
+      </button>
+    )
+  }
+
   return (
     <span
-      className="text-sm font-medium text-purple-400"
-      title="Your remaining credits"
+      className="text-sm font-medium text-purple-400 cursor-pointer hover:text-purple-300"
+      title="Session usage"
+      onClick={onClick}
     >
       {text}
     </span>

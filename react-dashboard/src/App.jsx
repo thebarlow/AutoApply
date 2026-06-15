@@ -57,6 +57,13 @@ export default function App() {
     return () => window.removeEventListener('auto-apply:credits-error', handler)
   }, [pushToast])
 
+  // Purchase success signal (dispatched from Navbar after Stripe Checkout redirect)
+  useEffect(() => {
+    const handler = () => pushToast('Payment received — credits added.')
+    window.addEventListener('auto-apply:purchase-success', handler)
+    return () => window.removeEventListener('auto-apply:purchase-success', handler)
+  }, [pushToast])
+
   // Upsert a single job into the jobs list
   const upsertJob = useCallback((job) => {
     setJobs((prev) => {
