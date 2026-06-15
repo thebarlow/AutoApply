@@ -134,7 +134,8 @@ class Account(Base):
     profile_id = Column(Integer, ForeignKey("user_profile.id"), nullable=False, unique=True)
     created_at = Column(String, nullable=False)
     credit_balance = Column(Integer, nullable=False, default=0)
-    credit_rate = Column(Float, nullable=False, default=1.5)
+    credit_rate = Column(Float, nullable=False, default=1.0)
+    tier = Column(String, nullable=False, default="standard")
     stripe_customer_id = Column(String, nullable=True)
 
 
@@ -192,6 +193,7 @@ class Purchase(Base):
     credits = Column(Integer, nullable=False)
     amount_usd = Column(Float, nullable=False)
     status = Column(String, nullable=False, default="pending")  # pending | completed
+    tier = Column(String, nullable=True)  # buyer tier at purchase (audit)
     created_at = Column(String, nullable=False)
 
 
