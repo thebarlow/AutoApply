@@ -28,7 +28,11 @@ def list_packs(db: Session = Depends(get_db),
     """Packs visible to the current account's tier, with computed credits."""
     acct = db.query(Account).filter_by(profile_id=profile_id).first()
     tier = acct.tier if acct is not None else "standard"
-    return payments.packs_for_tier(tier)
+    try:
+        return payments.packs_for_tier(tier)
+    except ValueError:
+        logger.exception("packs: pricing misconfigured for tier %s", tier)
+        raise HTTPException(status_code=500, detail="pricing configuration error")
 
 
 class CheckoutRequest(BaseModel):
@@ -43,7 +47,11 @@ def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db),
     if acct is None:
         raise HTTPException(status_code=404, detail="account not found")
 
-    resolved = payments.resolve_price_id(body.price_id, acct.tier)
+    try:
+        resolved = payments.resolve_price_id(body.price_id, acct.tier)
+    except ValueError:
+        logger.exception("checkout: pricing misconfigured for tier %s", acct.tier)
+        raise HTTPException(status_code=500, detail="pricing configuration error")
     if resolved is None:
         raise HTTPException(status_code=400, detail="unknown or unavailable price_id")
     amount_usd, credits = resolved

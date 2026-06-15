@@ -100,3 +100,18 @@ def test_history_lists_profile_purchases(client):
     rows = r.json()
     assert [x["stripe_session_id"] for x in rows] == ["cs_h"]
     assert rows[0]["credits"] == 250
+
+
+def test_packs_misconfigured_pricing_500(client, monkeypatch):
+    c, _db, _mp = client
+    # Margin large enough that the profit guard reduces credits to <=0 -> ValueError.
+    monkeypatch.setenv("CREDIT_TIER_MARGINS", '{"standard": 1000}')
+    r = c.get("/api/payments/packs")
+    assert r.status_code == 500
+
+
+def test_checkout_misconfigured_pricing_500(client, monkeypatch):
+    c, _db, _mp = client
+    monkeypatch.setenv("CREDIT_TIER_MARGINS", '{"standard": 1000}')
+    r = c.post("/api/payments/checkout", json={"price_id": "price_5"})
+    assert r.status_code == 500
