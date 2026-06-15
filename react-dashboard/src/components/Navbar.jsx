@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { logout } from "../api";
 import CreditBalance from "./widgets/CreditBalance";
 import BuyCreditsModal from "./widgets/BuyCreditsModal";
+import CreditsOverlay from "./widgets/CreditsOverlay";
 
 export default function Navbar() {
   const [sessionCost, setSessionCost] = useState(0);
@@ -11,6 +12,7 @@ export default function Navbar() {
   const [inFlight, setInFlight] = useState([]);
   const [serverDown, setServerDown] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const shutdownRef = useRef(null);
   const costRef = useRef(null);
   const missesRef = useRef(0);
@@ -111,8 +113,8 @@ export default function Navbar() {
         <div className="relative flex items-center gap-1" ref={costRef}>
           <CreditBalance variant="nav" onClick={() => setCostOpen((v) => !v)} />
           <button
-            onClick={() => setBuyOpen(true)}
-            aria-label="Buy credits"
+            onClick={() => setCreditsOpen(true)}
+            aria-label="Credits"
             className="w-5 h-5 rounded-full border border-purple-400 text-purple-400 hover:bg-purple-400/10 flex items-center justify-center text-sm leading-none"
           >
             +
@@ -220,6 +222,12 @@ export default function Navbar() {
         </div>
       )}
 
+      {creditsOpen && (
+        <CreditsOverlay
+          onClose={() => setCreditsOpen(false)}
+          onBuy={() => { setCreditsOpen(false); setBuyOpen(true); }}
+        />
+      )}
       {buyOpen && <BuyCreditsModal onClose={() => setBuyOpen(false)} />}
     </nav>
   );
