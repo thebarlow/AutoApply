@@ -104,14 +104,22 @@ def compute_credits(price_usd: int, tier: str) -> int:
 
 
 def packs_for_tier(tier: str) -> list[dict]:
-    """Visible packs for a tier, each with computed credits and price id."""
+    """Visible, purchasable packs for a tier, each with computed credits.
+
+    A pack is included only if its dollar amount has a configured Stripe price id
+    (``STRIPE_PRICE_IDS``); amounts without one are skipped so the UI never shows
+    a pack that cannot be checked out (which would post a null ``price_id``).
+    """
     ids = price_ids()
     discounts = price_tiers()
     out = []
     for amount in tier_visibility().get(tier, []):
+        price_id = ids.get(amount)
+        if price_id is None:
+            continue
         out.append(
             {
-                "price_id": ids.get(amount),
+                "price_id": price_id,
                 "amount_usd": amount,
                 "credits": compute_credits(amount, tier),
                 "discount": discounts.get(amount, 0.0),

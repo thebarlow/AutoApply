@@ -46,16 +46,34 @@ def test_every_configured_pack_is_profitable():
             assert net > credits / payments.CREDITS_PER_DOLLAR, (tier, price)
 
 
-def test_packs_for_tier_beta_only_dollar_one():
+_ALL_PRICE_IDS = '{"1": "price_1", "5": "price_5", "10": "price_10", "20": "price_20"}'
+
+
+def test_packs_for_tier_beta_only_dollar_one(monkeypatch):
+    monkeypatch.setenv("STRIPE_PRICE_IDS", _ALL_PRICE_IDS)
     packs = payments.packs_for_tier("beta")
     assert [p["amount_usd"] for p in packs] == [1]
     assert packs[0]["credits"] == 450
     assert packs[0]["discount"] == 0
 
 
-def test_packs_for_tier_standard_all_four():
+def test_packs_for_tier_standard_all_four(monkeypatch):
+    monkeypatch.setenv("STRIPE_PRICE_IDS", _ALL_PRICE_IDS)
     packs = payments.packs_for_tier("standard")
     assert [p["amount_usd"] for p in packs] == [1, 5, 10, 20]
+
+
+def test_packs_for_tier_skips_amounts_without_a_price_id(monkeypatch):
+    # Only $1 and $5 have configured Stripe price ids -> the other visible
+    # amounts ($10, $20) are omitted rather than returned un-purchasable.
+    monkeypatch.setenv("STRIPE_PRICE_IDS", '{"1": "price_1", "5": "price_5"}')
+    packs = payments.packs_for_tier("standard")
+    assert [p["amount_usd"] for p in packs] == [1, 5]
+
+
+def test_packs_for_tier_empty_when_no_price_ids():
+    # STRIPE_PRICE_IDS unset (via the autouse fixture) -> nothing sellable.
+    assert payments.packs_for_tier("standard") == []
 
 
 def test_packs_for_tier_uses_configured_price_ids(monkeypatch):
