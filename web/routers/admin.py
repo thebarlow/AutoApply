@@ -28,8 +28,12 @@ class InviteRequest(BaseModel):
 @router.post("/invite")
 def invite_user(body: InviteRequest, db: Session = Depends(get_db),
                 admin: Account = Depends(require_admin)):
+    """Allowlist an email and send an invite. Idempotent: a repeat email is not
+    re-inserted (no duplicate row) but the email is resent. Returns
+    {email, already_invited, emailed}."""
     email = body.email.strip().lower()
-    if "@" not in email or "." not in email:
+    local, _, domain = email.partition("@")
+    if not local or "." not in domain or not domain.rsplit(".", 1)[-1]:
         raise HTTPException(status_code=400, detail="invalid email")
     existing = db.query(AllowedEmail).filter_by(email=email).first()
     already = existing is not None
