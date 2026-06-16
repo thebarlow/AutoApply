@@ -8,7 +8,7 @@ import Wizard from './components/Onboarding/Wizard'
 import Docs from './components/Docs'
 import AdminPage from './components/AdminPage'
 import LoginScreen from './components/LoginScreen'
-import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe } from './api'
+import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe, stopImpersonation } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
 
 export default function App() {
@@ -200,6 +200,17 @@ export default function App() {
               onFinish={() => { window.location.reload(); }}
               onSkip={() => setWizardSkipped(true)}
             />
+          )}
+          {me?.impersonating && (
+            <div className="sticky top-0 z-[120] flex items-center justify-center gap-3 bg-amber-400 text-black text-sm font-semibold px-4 py-2">
+              <span>Viewing as {me.impersonating.email}</span>
+              <button
+                onClick={() => { stopImpersonation().finally(() => { window.location.href = '/' }) }}
+                className="underline hover:no-underline"
+              >
+                Exit
+              </button>
+            </div>
           )}
           <Navbar me={me} />
           {toasts.length > 0 && (
