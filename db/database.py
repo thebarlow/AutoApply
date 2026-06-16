@@ -137,6 +137,7 @@ class Account(Base):
     credit_rate = Column(Float, nullable=False, default=1.0)
     tier = Column(String, nullable=False, default="standard")
     stripe_customer_id = Column(String, nullable=True)
+    banned = Column(Boolean, nullable=False, default=False)
 
 
 class Identity(Base):
