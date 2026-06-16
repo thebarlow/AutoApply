@@ -5,12 +5,12 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.email import send_invite
-from db.database import Account, AllowedEmail, get_db
+from db.database import Account, AllowedEmail, Purchase, get_db
 from web.routers.credits import require_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -51,3 +51,41 @@ def list_invites(db: Session = Depends(get_db),
                  admin: Account = Depends(require_admin)):
     rows = db.query(AllowedEmail).order_by(AllowedEmail.id.desc()).all()
     return [{"email": r.email, "created_at": r.created_at} for r in rows]
+
+
+def require_real_admin(request: Request, db: Session = Depends(get_db)) -> Account:
+    """Resolve the REAL logged-in account from the session and require admin.
+
+    Unlike require_admin (which depends on current_profile_id and would resolve
+    the *impersonated* tenant), this always authorizes the actual admin, so admin
+    endpoints keep working -- and stay admin-gated -- while impersonating.
+    Outside production there is no session login; fall back to the dev tenant's
+    account so local/dev and tests behave.
+    """
+    account_id = request.session.get("account_id")
+    acct = db.query(Account).filter_by(id=account_id).first() if account_id else None
+    if acct is None:
+        from web.tenancy import get_dev_tenant_id
+        acct = db.query(Account).filter_by(profile_id=get_dev_tenant_id(db)).first()
+    if acct is None or not acct.is_admin:
+        raise HTTPException(status_code=403, detail="admin only")
+    return acct
+
+
+@router.get("/users")
+def list_users(db: Session = Depends(get_db),
+               admin: Account = Depends(require_real_admin)):
+    rows = db.query(Account).order_by(Account.profile_id.asc()).all()
+    return [{"profile_id": a.profile_id, "email": a.email, "tier": a.tier,
+             "credits": a.credit_balance or 0, "is_admin": a.is_admin}
+            for a in rows]
+
+
+@router.get("/users/{profile_id}/purchases")
+def user_purchases(profile_id: int, db: Session = Depends(get_db),
+                   admin: Account = Depends(require_real_admin)):
+    rows = (db.query(Purchase).filter_by(profile_id=profile_id)
+            .order_by(Purchase.id.desc()).limit(50).all())
+    return [{"stripe_session_id": r.stripe_session_id, "credits": r.credits,
+             "amount_usd": r.amount_usd, "status": r.status,
+             "created_at": r.created_at} for r in rows]
