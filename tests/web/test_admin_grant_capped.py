@@ -70,6 +70,7 @@ def test_grant_exceeds_cap_400(client, monkeypatch):
     r = TestClient(app).post("/api/admin/users/3/grant", json={"amount": 501})
     assert r.status_code == 400
     assert r.json()["detail"]["error"] == "exceeds_grant_budget"
+    assert r.json()["detail"]["available"] == 500
 
 
 def test_grant_unavailable_balance_409(client, monkeypatch):
@@ -97,3 +98,11 @@ def test_grant_nonpositive_400(client, monkeypatch):
     _set_remaining(monkeypatch, 20.0)
     r = TestClient(app).post("/api/admin/users/3/grant", json={"amount": 0})
     assert r.status_code == 400
+
+
+def test_grant_unknown_profile_404(client, monkeypatch):
+    app, db = client
+    _admin_ok(app, db)
+    _set_remaining(monkeypatch, 20.0)
+    r = TestClient(app).post("/api/admin/users/999/grant", json={"amount": 10})
+    assert r.status_code == 404
