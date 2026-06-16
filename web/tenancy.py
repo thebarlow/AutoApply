@@ -59,6 +59,8 @@ def current_profile_id(request: Request, db: Session = Depends(get_db)) -> int:
         acct = db.query(Account).filter_by(id=account_id).first()
         if acct is None:
             raise HTTPException(status_code=401, detail="Not authenticated")
+        if acct.banned:
+            raise HTTPException(status_code=401, detail="account suspended")
         impersonated = _impersonated_profile_id(request, db, acct)
         return impersonated if impersonated is not None else acct.profile_id
     return get_dev_tenant_id(db)

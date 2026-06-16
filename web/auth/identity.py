@@ -94,7 +94,10 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
         .first()
     )
     if ident is not None:
-        return db.query(Account).filter_by(id=ident.account_id).first()
+        acct = db.query(Account).filter_by(id=ident.account_id).first()
+        if acct is not None and acct.banned:
+            raise BetaAccessDenied(email)
+        return acct
 
     admin = is_admin_email(email)
     if not admin and not is_allowed_email(db, email):
