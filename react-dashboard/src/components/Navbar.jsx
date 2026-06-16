@@ -60,7 +60,7 @@ export default function Navbar({ me }) {
         {me?.is_admin && (
           <Link
             to="/admin"
-            className="text-sm text-space-dim hover:text-purple-400 transition-colors"
+            className="text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 rounded-md px-2.5 py-1 transition-colors"
           >
             Admin
           </Link>
