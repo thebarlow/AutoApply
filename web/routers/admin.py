@@ -77,8 +77,31 @@ def list_users(db: Session = Depends(get_db),
                admin: Account = Depends(require_real_admin)):
     rows = db.query(Account).order_by(Account.profile_id.asc()).all()
     return [{"profile_id": a.profile_id, "email": a.email, "tier": a.tier,
-             "credits": a.credit_balance or 0, "is_admin": a.is_admin}
+             "credits": a.credit_balance or 0, "is_admin": a.is_admin,
+             "banned": a.banned}
             for a in rows]
+
+
+class AccessRequest(BaseModel):
+    banned: bool
+
+
+@router.post("/users/{profile_id}/access")
+def set_user_access(profile_id: int, body: AccessRequest,
+                    db: Session = Depends(get_db),
+                    admin: Account = Depends(require_real_admin)):
+    target = db.query(Account).filter_by(profile_id=profile_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="profile not found")
+    if target.is_admin:
+        raise HTTPException(status_code=400, detail="cannot ban an admin")
+    target.banned = body.banned
+    if body.banned:
+        row = db.query(AllowedEmail).filter_by(email=target.email.lower()).first()
+        if row is not None:
+            db.delete(row)
+    db.commit()
+    return {"profile_id": profile_id, "banned": target.banned}
 
 
 @router.get("/users/{profile_id}/purchases")
