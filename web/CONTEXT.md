@@ -24,7 +24,7 @@ web/
     ├── llm_test.py          # POST /api/llm/test (verify LLM connectivity)
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
-    ├── setup_status.py      # GET /api/setup/status (onboarding completeness)
+    ├── setup_status.py      # GET /api/setup-status (onboarding completeness: llm_configured | resume_parsed)
     ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, POST /api/admin/credits/tier, GET /api/admin/system-balance; require_admin dependency
     ├── payments.py          # GET /api/payments/packs, POST /checkout, GET /verify, POST /webhook (Stripe), GET /history
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
@@ -156,7 +156,7 @@ web/
 | `GET/PUT` | `/api/prompts/...` | Prompt templates per profile |
 | `POST` | `/api/llm/test` | Test LLM connectivity |
 | `GET` | `/api/llm/status` | Active LLM task status |
-| `GET` | `/api/setup/status` | Onboarding completeness check |
+| `GET` | `/api/setup-status` | Onboarding completeness (`llm_configured`, `resume_parsed`); `llm_configured` counts the platform `LLM_API_KEY` |
 | `GET` | `/api/events` | SSE stream for job updates |
 | `GET` | `/auth/login/{provider}` | Start OAuth (`google`/`github`); 404 for unknown provider |
 | `GET` | `/auth/callback/{provider}` | OAuth callback; provisions/resolves account, sets session, redirects `/` (or `/?beta=closed`, `/?auth_error=1`) |

@@ -315,6 +315,13 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
    admin grant/system-balance endpoints. See "Credits & Metering" above.
 3. **Payments** *(implemented)* — Stripe Checkout for credit packs + webhook →
    credit grants via `grant_credits(reason="purchase")`. See "Payments" above.
-4. **Onboarding UX rework** — drop the API-key step, surface credits/buy flow,
-   and close the job-ingestion gap (the unhooked browser extension means hosted
-   users currently have no way to add jobs).
+4. **Onboarding UX rework** *(in progress)* — the API-key step is dropped: the
+   welcome wizard is now a single "Upload Master Resume" modal triggered on first
+   login (no parsed résumé), parsing against the auto-provisioned profile using
+   the platform key and the account's signup credit grant
+   (`CREDIT_SIGNUP_GRANT`). `setup-status.llm_configured` counts the platform
+   `LLM_API_KEY` so credit-gated actions aren't blocked.
+   Spec: `docs/superpowers/specs/2026-06-15-resume-first-onboarding-design.md`.
+   Still open: surface the credits/buy flow in onboarding, and close the
+   job-ingestion gap (the unhooked browser extension means hosted users currently
+   have no way to add jobs).

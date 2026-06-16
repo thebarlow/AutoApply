@@ -8,7 +8,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 - **Right (col-span-2)** — `Settings.jsx`: profile editor, task monitor, document preview
 - **Wrapper** — `Dashboard.jsx`: framer-motion animated grid container, height = `100vh - 53px`
 - **Header** — `Navbar.jsx`: branding, credits display, help button
-- **Onboarding** — `Onboarding/Wizard.jsx`: first-run wizard shown when prerequisites are unmet; steps: LLM config (`StepLLM.jsx`) then resume upload/parse (`StepResume.jsx`)
+- **Onboarding** — `Onboarding/Wizard.jsx`: single-step "Upload Master Resume" modal shown on first login (no parsed résumé yet); the platform owns the LLM key, so there is no API-key step — just resume upload/parse (`StepResume.jsx`)
 - **Docs viewer** — `Docs.jsx`: full-page markdown docs viewer with sidebar nav; replaces dashboard when docs route active
 - **User home** — `widgets/UserHome.jsx`: stats dashboard (bar/pie charts via recharts) + profile card grid; shown as right-panel home tab
 
@@ -40,8 +40,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
-| First-run onboarding wizard (LLM + resume steps) | `src/components/Onboarding/Wizard.jsx` |
-| Onboarding LLM configuration step | `src/components/Onboarding/StepLLM.jsx` |
+| First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
 | Docs viewer (markdown rendering, sidebar nav) | `src/components/Docs.jsx` |
 | Inline docs markdown content | `src/docs-content/` |
@@ -94,10 +93,9 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Embeds `ProfileCards` for quick profile switching
 
 ### Onboarding/Wizard.jsx
-- Multi-step first-run wizard; shown when `usePrerequisites` reports unmet prerequisites
-- Step 1: `StepLLM` — provider type, model, API key
-- Step 2: `StepResume` — paste or upload resume for parsing
-- Skip exits early but still creates the profile if LLM was configured
+- Single-step "Upload Master Resume" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The platform owns the LLM key via env, so onboarding no longer collects an API key (`StepLLM.jsx` was removed).
+- Renders `StepResume` — uploads + parses the résumé against the already-provisioned active profile, then calls `setActiveProfile` so the dashboard resolves it (otherwise `UserHome` falls back to the profile picker).
+- "Skip for now" just dismisses for the session (`setWizardSkipped`); the profile already exists, so nothing is created. The modal reappears on next login until a résumé is parsed.
 
 ### shared/GatedButton.jsx
 - Wraps action buttons; disables + shows tooltip when prerequisites unmet
