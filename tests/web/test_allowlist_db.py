@@ -37,3 +37,10 @@ def test_db_allowlist_row_matches(db, monkeypatch):
 def test_unknown_email_rejected(db, monkeypatch):
     monkeypatch.setenv("ALLOWED_EMAILS", "")
     assert is_allowed_email(db, "stranger@example.com") is False
+
+
+def test_db_allowlist_case_insensitive(db, monkeypatch):
+    monkeypatch.setenv("ALLOWED_EMAILS", "")
+    db.add(AllowedEmail(email="Test@Example.COM", created_at=_now()))
+    db.commit()
+    assert is_allowed_email(db, "test@example.com") is True

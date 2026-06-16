@@ -15,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, validates
 
 
 class Base(DeclarativeBase):
@@ -164,6 +164,10 @@ class AllowedEmail(Base):
     email = Column(String, nullable=False, unique=True)
     invited_by = Column(Integer, ForeignKey("account.id"), nullable=True)
     created_at = Column(String, nullable=False)
+
+    @validates("email")
+    def _lowercase_email(self, key, value):
+        return value.lower() if value else value
 
 
 class CreditLedger(Base):
