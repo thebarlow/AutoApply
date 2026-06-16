@@ -115,3 +115,44 @@ def test_checkout_misconfigured_pricing_500(client, monkeypatch):
     monkeypatch.setenv("CREDIT_TIER_MARGINS", '{"standard": 1000}')
     r = c.post("/api/payments/checkout", json={"price_id": "price_5"})
     assert r.status_code == 500
+
+
+def test_checkout_recreates_stale_customer_and_retries(client, monkeypatch):
+    c, db, _mp = client
+    acct = db.query(Account).filter_by(profile_id=7).one()
+    acct.stripe_customer_id = "cus_stale"
+    db.commit()
+
+    monkeypatch.setattr(payments_router.stripe_client, "create_customer",
+                        lambda email: "cus_fresh")
+
+    calls = {"n": 0}
+
+    def fake_session(**kw):
+        calls["n"] += 1
+        if kw["customer_id"] == "cus_stale":
+            raise Exception("No such customer: 'cus_stale'")
+        return type("S", (), {"id": "cs_retry", "url": "https://s/cs_retry"})()
+
+    monkeypatch.setattr(payments_router.stripe_client, "create_checkout_session", fake_session)
+
+    r = c.post("/api/payments/checkout", json={"price_id": "price_5"})
+    assert r.status_code == 200
+    assert r.json()["url"] == "https://s/cs_retry"
+    assert calls["n"] == 2  # first call failed on stale customer, retried after refresh
+    assert db.query(Account).filter_by(profile_id=7).one().stripe_customer_id == "cus_fresh"
+    row = db.query(Purchase).filter_by(stripe_session_id="cs_retry").one()
+    assert row.credits == 250 and row.status == "pending"
+
+
+def test_checkout_non_customer_stripe_error_still_502(client, monkeypatch):
+    c, db, _mp = client
+    db.query(Account).filter_by(profile_id=7).one().stripe_customer_id = "cus_ok"
+    db.commit()
+
+    def boom(**kw):
+        raise Exception("No such price: 'price_5'")
+
+    monkeypatch.setattr(payments_router.stripe_client, "create_checkout_session", boom)
+    r = c.post("/api/payments/checkout", json={"price_id": "price_5"})
+    assert r.status_code == 502
