@@ -155,6 +155,23 @@ class Identity(Base):
     created_at = Column(String, nullable=False)
 
 
+class ExtensionToken(Base):
+    """A long-lived, revocable bearer token for the browser extension.
+
+    Stores only the sha256 hash of the issued token; the raw value is returned
+    once at mint time and never persisted.
+    """
+
+    __tablename__ = "extension_token"
+
+    id = Column(Integer, primary_key=True)
+    account_id = Column(Integer, ForeignKey("account.id"), nullable=False)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(String, nullable=False)
+    last_used_at = Column(String, nullable=True)
+    revoked = Column(Boolean, nullable=False, default=False)
+
+
 class AllowedEmail(Base):
     """Runtime allowlist entry (an admin invite). Supplements the ALLOWED_EMAILS
     env var, which remains the bootstrap allowlist."""
