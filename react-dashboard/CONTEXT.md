@@ -18,8 +18,8 @@ Two-panel layout split 3:2 in a 5-column grid:
 
 | What you want to change | File |
 |---|---|
-| Top navbar (branding, credits, help button) | `src/components/Navbar.jsx` |
-| Credit balance display (navbar + User tab panel) | `src/components/widgets/CreditBalance.jsx` — fetches `/api/credits`; refetches on `auto-apply:credits-stale` event; `variant` prop: `nav`/`panel` |
+| Top navbar (branding, credits, help button, Admin link for admins) | `src/components/Navbar.jsx` — shows an Admin link when `me.is_admin` |
+| Credit balance display (navbar + User tab panel) | `src/components/widgets/CreditBalance.jsx` — fetches `/api/credits`; refetches on `auto-apply:credits-stale` event; `variant` prop: `nav`/`panel`; for admins shows the platform system balance (click toggles $/credits) instead of personal credits |
 | Admin dev system-balance panel (OpenRouter balance) | `src/components/widgets/UserHome.jsx` — `SystemBalancePanel` (gated on `/api/me` `is_admin`; GETs `/api/admin/system-balance`) |
 | Out-of-credits (HTTP 402) global signal | `src/api.js` — `_fetch` dispatches `auto-apply:credits-error` + `auto-apply:credits-stale`; toasted in `src/App.jsx` |
 | Grid layout or viewport sizing | `src/components/Dashboard.jsx` |
@@ -40,6 +40,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
+| Admin invite page (email input → `inviteUser`, lists invited emails) | `src/components/AdminPage.jsx` — admin-only, route `/admin` |
 | First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
 | Docs viewer (markdown rendering, sidebar nav) | `src/components/Docs.jsx` |

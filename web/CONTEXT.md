@@ -26,6 +26,7 @@ web/
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup-status (onboarding completeness: llm_configured | resume_parsed)
     ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, POST /api/admin/credits/tier, GET /api/admin/system-balance; require_admin dependency
+    ├── admin.py             # Admin-only (require_admin reused from credits.py): POST /api/admin/invite (normalizes email, idempotently inserts allowed_email row with invited_by, calls core.email.send_invite) + GET /api/admin/invites (list invited emails)
     ├── payments.py          # GET /api/payments/packs, POST /checkout, GET /verify, POST /webhook (Stripe), GET /history
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
     ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
@@ -56,6 +57,7 @@ web/
 | Documentation content for Docs page | `routers/docs_router.py` |
 | OAuth login/callback/logout, `/api/me`, identity provisioning | `auth/routes.py` + `auth/identity.py` |
 | Production `/api/*` access gate | `auth/middleware.py` |
+| Admin invite management (send invites, list invites) | `routers/admin.py` |
 
 ## Key Design Notes
 
@@ -63,6 +65,7 @@ web/
   - **Webhook exemption** — `_EXEMPT_PATHS` includes `/api/payments/webhook` so Stripe's
     unauthenticated callback bypasses the `/api/*` gate; the route is secured entirely by
     `stripe_client.construct_event`'s signature check, not a session.
+  - **Runtime invite allowlist** — `is_allowed_email` (`web/auth/identity.py`) checks the `allowed_email` DB table (rows inserted by `POST /api/admin/invite`) in addition to the `ALLOWED_EMAILS` env var, so invites take effect immediately without a redeploy.
   - **Prod requirements:** `SESSION_SECRET` (the app **refuses to boot** in production if unset or left as the dev default — see `_session_secret()` in `main.py`), `GOOGLE_/GITHUB_CLIENT_ID/SECRET`, `ALLOWED_EMAILS`, `ADMIN_EMAILS`. Uvicorn must run with `--proxy-headers --forwarded-allow-ips="*"` (in the Dockerfile CMD) so Railway's `X-Forwarded-Proto: https` is trusted and `request.url_for()` builds **https** OAuth callback URLs — otherwise providers reject `http://` callbacks as `redirect_uri_mismatch`.
 - **Score/generate are in `core/job.py`** — `routers/jobs.py` resolves the LLM client, prompt content, and template paths, then delegates to `job.score()`, `job.generate_resume_md/pdf()`, `job.generate_cover_md/pdf()`.
 - **Generation is synchronous** — resume/cover generation blocks the request 30–60s while Claude + pandoc run. Acceptable for single-user local use.
@@ -147,6 +150,8 @@ web/
 | `POST` | `/api/admin/credits/grant` | Admin-only; grant credits to a profile by `profile_id` or `email`, reason `admin_grant` |
 | `POST` | `/api/admin/credits/tier` | Admin-only; set a profile's pricing tier (target by `profile_id` or `email`; validated against `payments.tier_margins()`) |
 | `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key |
+| `POST` | `/api/admin/invite` | Admin-only; normalizes email, idempotently inserts `allowed_email` row, sends invite email via `core.email.send_invite` |
+| `GET` | `/api/admin/invites` | Admin-only; list all invited emails |
 | `GET` | `/api/payments/packs` | Configured credit packs with live price/currency from Stripe |
 | `POST` | `/api/payments/checkout` | Create a Stripe Checkout session for a pack; records a pending `Purchase`, returns the session URL |
 | `GET` | `/api/payments/verify` | Success-redirect fallback fulfillment; confirms `payment_status=="paid"` with Stripe, tenant-checks, then grants (idempotent with the webhook) |
