@@ -84,6 +84,8 @@ def list_users(db: Session = Depends(get_db),
 @router.get("/users/{profile_id}/purchases")
 def user_purchases(profile_id: int, db: Session = Depends(get_db),
                    admin: Account = Depends(require_real_admin)):
+    if db.query(Account).filter_by(profile_id=profile_id).first() is None:
+        raise HTTPException(status_code=404, detail="profile not found")
     rows = (db.query(Purchase).filter_by(profile_id=profile_id)
             .order_by(Purchase.id.desc()).limit(50).all())
     return [{"stripe_session_id": r.stripe_session_id, "credits": r.credits,

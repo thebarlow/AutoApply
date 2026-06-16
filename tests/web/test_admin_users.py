@@ -87,3 +87,11 @@ def test_user_purchases(client):
     assert len(body) == 1
     assert body[0]["stripe_session_id"] == "cs_3"
     assert body[0]["credits"] == 1000
+
+
+def test_user_purchases_unknown_404(client):
+    c, db = client
+    app = c.app
+    _admin_ok(app, db)
+    r = TestClient(app).get("/api/admin/users/999/purchases")
+    assert r.status_code == 404
