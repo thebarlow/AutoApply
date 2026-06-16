@@ -65,3 +65,14 @@ def test_start_and_stop(client):
     assert r.status_code == 200 and r.json()["ok"] is True
     r2 = cl.post("/api/admin/impersonate/stop")
     assert r2.status_code == 200 and r2.json()["ok"] is True
+
+
+def test_impersonate_banned_target_400(client):
+    c, db = client
+    app = c.app
+    _admin_ok(app, db)
+    _seed_target(db)
+    db.query(Account).filter_by(profile_id=9).first().banned = True
+    db.commit()
+    r = TestClient(app).post("/api/admin/impersonate/start", json={"profile_id": 9})
+    assert r.status_code == 400

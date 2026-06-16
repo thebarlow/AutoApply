@@ -106,3 +106,14 @@ def test_grant_unknown_profile_404(client, monkeypatch):
     _set_remaining(monkeypatch, 20.0)
     r = TestClient(app).post("/api/admin/users/999/grant", json={"amount": 10})
     assert r.status_code == 404
+
+
+def test_grant_banned_target_400(client, monkeypatch):
+    app, db = client
+    _admin_ok(app, db)
+    _seed_target(db)
+    db.query(Account).filter_by(profile_id=3).first().banned = True
+    db.commit()
+    _set_remaining(monkeypatch, 20.0)
+    r = TestClient(app).post("/api/admin/users/3/grant", json={"amount": 10})
+    assert r.status_code == 400

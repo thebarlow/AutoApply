@@ -129,6 +129,8 @@ def impersonate_start(body: ImpersonateRequest, request: Request,
     target = db.query(Account).filter_by(profile_id=body.profile_id).first()
     if target is None:
         raise HTTPException(status_code=404, detail="profile not found")
+    if target.banned:
+        raise HTTPException(status_code=400, detail="cannot impersonate a banned user")
     request.session["impersonate_profile_id"] = body.profile_id
     return {"ok": True}
 
@@ -166,6 +168,8 @@ def grant_to_user(profile_id: int, body: GrantRequest,
         raise HTTPException(status_code=404, detail="profile not found")
     if target.is_admin:
         raise HTTPException(status_code=400, detail="cannot grant to an admin")
+    if target.banned:
+        raise HTTPException(status_code=400, detail="cannot grant to a banned user")
     if body.amount <= 0:
         raise HTTPException(status_code=400, detail="amount must be positive")
     budget = _grant_budget(db)
@@ -178,8 +182,7 @@ def grant_to_user(profile_id: int, body: GrantRequest,
                                     "available": budget["available"]})
     grant_credits(db, profile_id, body.amount, reason="admin_grant",
                   created_by=admin.id)
-    bal = db.query(Account).filter_by(profile_id=profile_id).first().credit_balance
-    return {"granted": body.amount, "balance": bal}
+    return {"granted": body.amount, "balance": target.credit_balance}
 
 
 @router.post("/impersonate/stop")

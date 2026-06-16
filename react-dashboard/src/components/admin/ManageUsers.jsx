@@ -97,7 +97,7 @@ export default function ManageUsers() {
     setGranting(true)
     setGrantError(null)
     try {
-      await grantCredits(grantFor.profile_id, Number(grantAmount))
+      await grantCredits(grantFor.profile_id, Math.floor(Number(grantAmount)))
       setGrantFor(null)
       refreshUsers()
       refreshBudget()
@@ -307,6 +307,7 @@ export default function ManageUsers() {
             <input
               type="number"
               min="1"
+              step="1"
               max={budget?.available ?? undefined}
               value={grantAmount}
               onChange={(e) => setGrantAmount(e.target.value)}
