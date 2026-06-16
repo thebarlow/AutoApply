@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session
 
 from db.database import Account, get_db
 from core.user import User
-from web.auth.identity import Claims, BetaAccessDenied, resolve_or_provision_account
+from web.auth.identity import (
+    Claims,
+    BetaAccessDenied,
+    NoExtensionAccount,
+    resolve_or_provision_account,
+    resolve_existing_account,
+)
+from web.auth.ext_token import mint_token, profile_from_extension_token, resolve_token, revoke_token, _bearer
 
 router = APIRouter()
 
@@ -37,6 +44,11 @@ oauth.register(
     api_base_url="https://api.github.com/",
     client_kwargs={"scope": "read:user user:email"},
 )
+
+
+def _allowed_ext_redirects() -> set[str]:
+    """Return the set of permitted extension redirect URIs from env."""
+    return {u.strip() for u in os.getenv("EXTENSION_REDIRECT_URLS", "").split(",") if u.strip()}
 
 
 def _redirect_uri(request: Request, provider: str) -> str:
@@ -70,6 +82,32 @@ async def _fetch_claims(provider: str, request: Request) -> Claims:
     )
 
 
+@router.get("/auth/ext/login/{provider}")
+async def auth_ext_login(provider: str, request: Request, redirect_uri: str = ""):
+    """Begin an extension OAuth flow for an existing account.
+
+    Validates redirect_uri against EXTENSION_REDIRECT_URLS, stashes ext_mode and
+    ext_redirect in the session, then redirects to the provider.
+
+    Args:
+        provider: OAuth provider name (google or github).
+        request: FastAPI request.
+        redirect_uri: The extension's registered redirect URI.
+
+    Raises:
+        HTTPException: 404 if provider unknown, 400 if redirect_uri not on allowlist.
+    """
+    if provider not in _PROVIDERS:
+        raise HTTPException(status_code=404)
+    if redirect_uri not in _allowed_ext_redirects():
+        raise HTTPException(status_code=400, detail="redirect_uri not allowed")
+    request.session["ext_mode"] = True
+    request.session["ext_redirect"] = redirect_uri
+    return await oauth.create_client(provider).authorize_redirect(
+        request, _redirect_uri(request, provider)
+    )
+
+
 @router.get("/auth/login/{provider}")
 async def auth_login(provider: str, request: Request):
     if provider not in _PROVIDERS:
@@ -81,8 +119,36 @@ async def auth_login(provider: str, request: Request):
 
 @router.get("/auth/callback/{provider}", name="auth_callback")
 async def auth_callback(provider: str, request: Request, db: Session = Depends(get_db)):
+    """Handle the OAuth provider callback for both website and extension flows.
+
+    Extension flow: reads ext_mode/ext_redirect from session (set by /auth/ext/login),
+    resolves an EXISTING account, and redirects to ext_redirect with a bearer token or
+    error fragment. Website flow (unchanged): provisions account, sets session cookie.
+
+    Args:
+        provider: OAuth provider name.
+        request: FastAPI request.
+        db: Database session.
+
+    Raises:
+        HTTPException: 404 if provider unknown.
+    """
     if provider not in _PROVIDERS:
         raise HTTPException(status_code=404)
+    ext_mode = request.session.pop("ext_mode", False)
+    ext_redirect = request.session.pop("ext_redirect", "")
+    if ext_mode:
+        try:
+            claims = await _fetch_claims(provider, request)
+        except Exception:
+            return RedirectResponse(url=f"{ext_redirect}#error=auth")
+        try:
+            acct = resolve_existing_account(db, claims)
+        except NoExtensionAccount:
+            return RedirectResponse(url=f"{ext_redirect}#error=no_account")
+        token = mint_token(db, acct.id)
+        return RedirectResponse(url=f"{ext_redirect}#token={token}")
+    # --- existing website flow unchanged below ---
     try:
         claims = await _fetch_claims(provider, request)
     except Exception:
@@ -93,6 +159,44 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         return RedirectResponse(url="/?beta=closed")
     request.session["account_id"] = acct.id
     return RedirectResponse(url="/")
+
+
+@router.post("/auth/ext/revoke")
+def auth_ext_revoke(request: Request, db: Session = Depends(get_db)):
+    """Revoke the extension bearer token presented in the Authorization header.
+
+    Args:
+        request: FastAPI request.
+        db: Database session.
+
+    Returns:
+        JSON {"ok": true}.
+    """
+    revoke_token(db, _bearer(request))
+    return {"ok": True}
+
+
+@router.get("/api/ext/me")
+def api_ext_me(
+    request: Request,
+    profile_id: int = Depends(profile_from_extension_token),
+    db: Session = Depends(get_db),
+):
+    """Return the email of the account owning the presented bearer token.
+
+    profile_from_extension_token raises 401 for invalid tokens, so this handler
+    only runs when the token is valid.
+
+    Args:
+        request: FastAPI request.
+        profile_id: Resolved from bearer token (injected by dependency).
+        db: Database session.
+
+    Returns:
+        JSON {"email": ...}.
+    """
+    acct = resolve_token(db, _bearer(request))
+    return {"email": acct.email}
 
 
 @router.post("/auth/logout")
