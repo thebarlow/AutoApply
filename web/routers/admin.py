@@ -89,3 +89,25 @@ def user_purchases(profile_id: int, db: Session = Depends(get_db),
     return [{"stripe_session_id": r.stripe_session_id, "credits": r.credits,
              "amount_usd": r.amount_usd, "status": r.status,
              "created_at": r.created_at} for r in rows]
+
+
+class ImpersonateRequest(BaseModel):
+    profile_id: int
+
+
+@router.post("/impersonate/start")
+def impersonate_start(body: ImpersonateRequest, request: Request,
+                      db: Session = Depends(get_db),
+                      admin: Account = Depends(require_real_admin)):
+    target = db.query(Account).filter_by(profile_id=body.profile_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="profile not found")
+    request.session["impersonate_profile_id"] = body.profile_id
+    return {"ok": True}
+
+
+@router.post("/impersonate/stop")
+def impersonate_stop(request: Request,
+                     admin: Account = Depends(require_real_admin)):
+    request.session.pop("impersonate_profile_id", None)
+    return {"ok": True}
