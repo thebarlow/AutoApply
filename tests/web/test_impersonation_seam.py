@@ -44,3 +44,9 @@ def test_no_flag_returns_own(db, monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     _seed(db, account_id=1, profile_id=1, is_admin=True)
     assert current_profile_id(_req({"account_id": 1}), db) == 1
+
+
+def test_malformed_flag_ignored(db, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    _seed(db, account_id=1, profile_id=1, is_admin=True)
+    assert current_profile_id(_req({"account_id": 1, "impersonate_profile_id": "abc"}), db) == 1

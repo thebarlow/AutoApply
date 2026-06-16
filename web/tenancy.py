@@ -37,7 +37,12 @@ def _impersonated_profile_id(request: Request, db: Session, account: Account) ->
     if not account.is_admin:
         return None
     target = request.session.get("impersonate_profile_id")
-    return int(target) if target else None
+    if target is None:
+        return None
+    try:
+        return int(target)
+    except (ValueError, TypeError):
+        return None
 
 
 def current_profile_id(request: Request, db: Session = Depends(get_db)) -> int:
