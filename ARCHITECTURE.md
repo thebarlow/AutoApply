@@ -164,9 +164,33 @@ debit always settles to 0. Extraction is effectively free in v1.
 ## Payments
 
 Stripe Checkout sells credit packs via server-side redirect (no client-side
-Stripe.js). `core/payments.py` `load_packs()`/`credits_for_price()` parse the
-`STRIPE_PACKS` env var (JSON map `price_id -> credits`); pricing rule is 1000
-credits = $1 (default packs: $5/5000, $15/15000, $40/40000).
+Stripe.js). **Pricing is tiered**: margin lives on the *purchase* side, not on
+consumption — every feature costs the same credits for everyone
+(`account.credit_rate` is **1.0** for metered users, 0.0 for admins/unmetered),
+but the same dollar amount buys *different* credit counts per user tier.
+
+**Tiers** (`account.tier`, `purchase.tier`; enum-ish strings): `beta` (1.5×
+margin), `friends_family` (5×), `standard` (20×). Existing accounts were
+backfilled to `beta` by migration `aa02tiers01` (which also reset
+`credit_rate` 1.5→1.0); new signups are provisioned `standard`.
+
+`core/payments.py` is a pure pricing **calculator** (no Stripe calls):
+`tier_margins()`, `price_tiers()` (bulk discount per dollar amount: $1→0,
+$5→5%, $10→10%, $20→15%), `tier_visibility()` (beta sees only $1;
+friends_family/standard see $1/$5/$10/$20), `price_ids()` (dollar→Stripe price
+id from `STRIPE_PRICE_IDS`), `compute_credits(price_usd, tier)`, and helpers
+`packs_for_tier`/`resolve_price_id`. `compute_credits` takes net proceeds
+(price minus the fee model: `STRIPE_FEE_PCT` 0.029 + `STRIPE_FEE_FIXED` 0.30,
+plus a flat `TAX_RATE` buffer, default 0), divides by the tier margin to get a
+cost basis, applies the bulk discount, and rounds to the nearest 25 credits; a
+profit guard steps the grant down by 25 until it is strictly profitable, or
+raises `ValueError` if the pack/tier can't be made profitable. Stripe stores
+only the **4 dollar prices** ($1/$5/$10/$20 under one "Auto Apply Credits"
+product); credits are always computed server-side per tier (never trusted from
+the client). Worked defaults (TAX_RATE=0): beta $1=450; friends_family
+$1=125/$5=950/$10=2075/$20=4400; standard $1=25/$5=250/$10=525/$20=1100.
+
+The old `load_packs`/`credits_for_price`/`STRIPE_PACKS` flat map is **retired**.
 `core/stripe_client.py` thinly wraps the `stripe` SDK (v15.2.1):
 `create_customer`, `create_checkout_session`, `retrieve_price`,
 `construct_event` — all reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`
@@ -179,9 +203,11 @@ created_at`; `account.stripe_customer_id` caches the Stripe customer per
 tenant (created on first buy).
 
 **Routes (`web/routers/payments.py`, `/api/payments/*`):**
-- `GET /packs` — configured packs with live price/currency from Stripe.
-- `POST /checkout` (auth-gated) — creates the Stripe customer if needed,
-  records a `pending` `Purchase`, and returns the Checkout session URL.
+- `GET /packs` — packs visible to the caller's tier with server-computed
+  credits (`payments.packs_for_tier`, no Stripe call).
+- `POST /checkout` (auth-gated) — resolves the price against the buyer's tier,
+  computes credits server-side, creates the Stripe customer if needed, records
+  a `pending` `Purchase` (storing `tier` + `credits`), returns the session URL.
 - `POST /webhook` — Stripe callback, signature-verified
   (`stripe_client.construct_event`); on `checkout.session.completed`, marks
   the matching `Purchase` `completed` and grants credits via
@@ -194,8 +220,15 @@ cookie) — `web/auth/middleware.py` adds `/api/payments/webhook` to
 `_EXEMPT_PATHS`, relying entirely on signature verification for security.
 
 **New env vars:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-`STRIPE_PACKS` (JSON map `price_id -> credits`), `APP_BASE_URL` (base URL for
-Checkout success/cancel redirects).
+`STRIPE_PRICE_IDS` (JSON map `dollar amount -> Stripe price id`; replaces the
+retired `STRIPE_PACKS`), `APP_BASE_URL` (base URL for Checkout success/cancel
+redirects). Optional pricing overrides: `CREDIT_TIER_MARGINS`,
+`CREDIT_PRICE_TIERS`, `CREDIT_TIER_VISIBILITY` (JSON), and `STRIPE_FEE_PCT`,
+`STRIPE_FEE_FIXED`, `TAX_RATE` (floats).
+
+**Admin:** `POST /api/admin/credits/tier` (admin-only, `web/routers/credits.py`)
+sets a profile's tier (target by `profile_id` or `email`; validated against
+`payments.tier_margins()`).
 
 **Known limitation:** refunds are not handled — a Stripe refund does not
 claw back granted credits; reversal is admin-manual only.

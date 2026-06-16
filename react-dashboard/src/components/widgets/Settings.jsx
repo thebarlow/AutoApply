@@ -1058,6 +1058,7 @@ function CreateProfile({ onBack, onCreated }) {
     setFieldErrors({})
     setSavingStep1(true)
     setError(null)
+    const trimmed = name.trim()
     try {
       const profile = await createProfile(trimmed)
       await updateProfile(profile.id, {

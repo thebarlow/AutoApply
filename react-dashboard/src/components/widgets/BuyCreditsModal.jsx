@@ -46,6 +46,11 @@ export default function BuyCreditsModal({ onClose }) {
                     className="flex items-center justify-between px-4 py-3 rounded-xl border border-space-border bg-white/5 hover:border-purple-400 disabled:opacity-50 transition-colors">
               <span className="text-sm font-medium text-space-text">
                 {p.credits.toLocaleString()} credits
+                {p.discount > 0 && (
+                  <span className="ml-2 text-[11px] text-emerald-400">
+                    +{Math.round(p.discount * 100)}% bonus
+                  </span>
+                )}
               </span>
               <span className="text-sm font-mono text-purple-400">
                 ${p.amount_usd.toFixed(2)}

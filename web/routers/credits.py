@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from db.database import Account, CreditLedger, get_db
 from core.credits import grant_credits
+from core import payments
 from web.tenancy import current_profile_id
 
 router = APIRouter(prefix="/api", tags=["credits"])
@@ -72,6 +73,32 @@ def admin_grant(body: GrantRequest, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="target account not found")
     bal = db.query(Account).filter_by(profile_id=target_pid).first().credit_balance
     return {"granted": body.amount, "balance": bal}
+
+
+class SetTierRequest(BaseModel):
+    profile_id: int | None = None
+    email: str | None = None
+    tier: str
+
+
+@router.post("/admin/credits/tier")
+def admin_set_tier(body: SetTierRequest, db: Session = Depends(get_db),
+                   admin: Account = Depends(require_admin)):
+    """Set a profile's pricing tier (admin only)."""
+    if body.tier not in payments.tier_margins():
+        raise HTTPException(status_code=400, detail="unknown tier")
+    target = None
+    if body.profile_id is not None:
+        target = db.query(Account).filter_by(profile_id=body.profile_id).first()
+    elif body.email:
+        target = (db.query(Account)
+                  .filter(func.lower(Account.email) == body.email.strip().lower())
+                  .first())
+    if target is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    target.tier = body.tier
+    db.commit()
+    return {"profile_id": target.profile_id, "tier": target.tier}
 
 
 @router.get("/admin/system-balance")

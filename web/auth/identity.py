@@ -113,6 +113,7 @@ def _provision_account(db: Session, *, email: str, is_admin: bool, claims: Claim
     acct = Account(
         email=email, is_admin=is_admin, profile_id=profile_id, created_at=_now(),
         credit_rate=0.0 if is_admin else default_rate(),
+        tier="standard",
     )
     db.add(acct)
     db.flush()

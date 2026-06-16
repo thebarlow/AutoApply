@@ -29,7 +29,7 @@ class InsufficientCredits(Exception):
 
 
 def default_rate() -> float:
-    return float(os.getenv("CREDIT_DEFAULT_RATE", "1.5"))
+    return float(os.getenv("CREDIT_DEFAULT_RATE", "1.0"))
 
 
 def signup_grant_amount() -> int:

@@ -22,19 +22,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _is_no_such_customer(exc: Exception) -> bool:
+    """True if a Stripe error indicates the referenced customer doesn't exist."""
+    return "no such customer" in str(exc).lower()
+
+
 @router.get("/packs")
-def list_packs():
-    """Configured packs with live price/currency from Stripe."""
-    out = []
-    for price_id, credits in payments.load_packs().items():
-        price = stripe_client.retrieve_price(price_id)
-        out.append({
-            "price_id": price_id,
-            "credits": credits,
-            "amount_usd": (price.unit_amount or 0) / 100,
-            "currency": price.currency,
-        })
-    return out
+def list_packs(db: Session = Depends(get_db),
+               profile_id: int = Depends(current_profile_id)):
+    """Packs visible to the current account's tier, with computed credits."""
+    acct = db.query(Account).filter_by(profile_id=profile_id).first()
+    tier = acct.tier if acct is not None else "standard"
+    try:
+        return payments.packs_for_tier(tier)
+    except ValueError:
+        logger.exception("packs: pricing misconfigured for tier %s", tier)
+        raise HTTPException(status_code=500, detail="pricing configuration error")
 
 
 class CheckoutRequest(BaseModel):
@@ -44,35 +47,57 @@ class CheckoutRequest(BaseModel):
 @router.post("/checkout")
 def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db),
                     profile_id: int = Depends(current_profile_id)):
-    """Create a Stripe Checkout session for a pack and record a pending purchase."""
-    credits = payments.credits_for_price(body.price_id)
-    if credits is None:
-        raise HTTPException(status_code=400, detail="unknown price_id")
+    """Create a Checkout session for a pack visible to the buyer's tier."""
     acct = db.query(Account).filter_by(profile_id=profile_id).first()
     if acct is None:
         raise HTTPException(status_code=404, detail="account not found")
+
+    try:
+        resolved = payments.resolve_price_id(body.price_id, acct.tier)
+    except ValueError:
+        logger.exception("checkout: pricing misconfigured for tier %s", acct.tier)
+        raise HTTPException(status_code=500, detail="pricing configuration error")
+    if resolved is None:
+        raise HTTPException(status_code=400, detail="unknown or unavailable price_id")
+    amount_usd, credits = resolved
 
     if not acct.stripe_customer_id:
         acct.stripe_customer_id = stripe_client.create_customer(acct.email)
         db.commit()
 
     base = os.getenv("APP_BASE_URL", "http://localhost:8080")
-    try:
-        session = stripe_client.create_checkout_session(
+
+    def _open_session():
+        return stripe_client.create_checkout_session(
             customer_id=acct.stripe_customer_id,
             price_id=body.price_id,
             success_url=f"{base}/?purchase=success&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base}/?purchase=cancel",
         )
-    except Exception:
-        logger.exception("checkout: Stripe session creation failed")
-        raise HTTPException(status_code=502, detail="payment provider error")
 
-    price = stripe_client.retrieve_price(body.price_id)
+    try:
+        session = _open_session()
+    except Exception as exc:
+        # A stored customer can go stale (e.g. the Stripe environment/key changed).
+        # Recreate it once and retry rather than failing the purchase.
+        if _is_no_such_customer(exc):
+            logger.warning("checkout: stale customer %s, recreating",
+                           acct.stripe_customer_id)
+            acct.stripe_customer_id = stripe_client.create_customer(acct.email)
+            db.commit()
+            try:
+                session = _open_session()
+            except Exception:
+                logger.exception("checkout: session creation failed after customer refresh")
+                raise HTTPException(status_code=502, detail="payment provider error")
+        else:
+            logger.exception("checkout: Stripe session creation failed")
+            raise HTTPException(status_code=502, detail="payment provider error")
+
     db.add(Purchase(profile_id=profile_id, stripe_session_id=session.id,
                     price_id=body.price_id, credits=credits,
-                    amount_usd=(price.unit_amount or 0) / 100,
-                    status="pending", created_at=_now()))
+                    amount_usd=float(amount_usd), status="pending",
+                    tier=acct.tier, created_at=_now()))
     db.commit()
     return {"url": session.url}
 

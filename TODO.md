@@ -95,6 +95,17 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   `APP_BASE_URL`. Known limitation: refunds are admin-manual only — no automatic credit clawback.
   See `ARCHITECTURE.md` → "Payments", `core/CONTEXT.md`, `web/CONTEXT.md`. **Unblocks (4) Onboarding.**
 
+- [x] **(3+) Tiered credit pricing** — DONE (2026-06-15). Layered on top of (3) Payments. Moved
+  margin from consumption to the *purchase* side: `account.credit_rate` now defaults to 1.0 for
+  metered users (was 1.5), so features cost the same credits for everyone while the same dollar
+  amount buys different credits per tier. New `account.tier`/`purchase.tier` (`beta`/`friends_family`/
+  `standard`; Alembic `aa02tiers01` backfills existing accounts to `beta` and resets `credit_rate`
+  1.5→1.0; new signups → `standard`). `core/payments.py` rewritten as a pure pricing calculator
+  (per-tier margins, bulk discounts, fee model, profit guard, round-to-25); `STRIPE_PACKS` retired
+  for `STRIPE_PRICE_IDS` + the calculator. Tier-filtered `GET /packs` and tier-aware `POST /checkout`
+  (server-computed credits); admin `POST /api/admin/credits/tier`. `BuyCreditsModal.jsx` shows a bonus
+  badge on discounted packs. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-15-tiered-credit-pricing*`.
+
 - [x] **(2) Credits & Metering** — DONE (2026-06-12). Cost-backed credit ledger
   (`credit_ledger`, append-only source of truth) + cached `account.credit_balance`/`credit_rate`
   (Alembic `85e2c6aab4f8`). `core/metering.meter_action` gates score/generate/eval/refine/extract on
