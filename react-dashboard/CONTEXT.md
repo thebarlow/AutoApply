@@ -40,7 +40,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
 | Admin page shell (Docs-style top Navbar + left function nav; functions: Manage Users) | `src/components/AdminPage.jsx` — admin-only, route `/admin` |
-| Admin user management (invite form + users table with view-as + purchase-history modal) | `src/components/admin/ManageUsers.jsx` — rendered by `AdminPage.jsx` |
+| Admin user management (invite form + users table with view-as, ban/restore, capped credit grants, purchase-history modal) | `src/components/admin/ManageUsers.jsx` — rendered by `AdminPage.jsx` |
 | Impersonation banner ("Viewing as {email} — Exit") | `src/App.jsx` — rendered when `me.impersonating` is set; calls `stopImpersonation` on exit |
 | First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
@@ -50,6 +50,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Form validation helpers (provider, prompt) | `src/validation.js` |
 | Help icon tooltip component | `src/components/shared/HelpIcon.jsx` |
 | Loading spinner component | `src/components/shared/Spinner.jsx` |
+| Admin ban/restore, grant-budget, credit grants | `src/api.js` — `setUserAccess`, `getGrantBudget`, `grantCredits` |
 | API calls (jobs, profiles, providers, generate, apply, setup status) | `src/api.js` |
 | Structured document fetch/save | `src/api.js` — `getDocument` / `putDocument` (replaced `putDocumentMarkdown`) |
 | Global state (jobs list, selected job, processing keys, active tab) | `src/App.jsx` |
@@ -83,6 +84,13 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Submitting feedback runs a one-shot refine via `POST /{doc_type}/feedback`
 - **Escape handling:** a capture-phase listener keeps Escape inside the modal — it exits an open inline edit/feedback first (via a shared `escapeRef` consumer set by `InteractiveResume`/`CoverView`), and only closes the modal (back to job details, *not* the app-level "deselect → User view" handler in `App.jsx`) when nothing is open
 - `TurnEntry` labels user-feedback turns "Your feedback"
+
+### ManageUsers.jsx
+
+- Search box filters users by email; columns (Email / Tier / Credits) are sortable and left-aligned.
+- Admins get an `ADMIN` badge; their credits cell shows `—` (non-clickable) to prevent self-grants.
+- Clicking a non-admin's credits cell opens a **grant modal**: amount defaults to `min(100, available)`, capped at the `available` figure from `getGrantBudget`; submits via `grantCredits`.
+- **BANNED** tag appears on banned rows. Revoke ✕ opens a confirm modal → `setUserAccess({banned:true})`; Restore ↺ calls `setUserAccess({banned:false})` directly.
 
 ### ProfileCards.jsx
 - Card grid for selecting and activating profiles
