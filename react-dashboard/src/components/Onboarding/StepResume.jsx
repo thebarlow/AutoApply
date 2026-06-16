@@ -4,15 +4,15 @@ import Spinner from "../shared/Spinner";
 import {
   uploadProfileResume,
   parseProfileResume,
+  getProfiles,
   getProfile,
   updateProfile,
-  ensureProfileWithProvider,
 } from "../../api";
 
 const inputClass =
   "w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors";
 
-export default function StepResume({ onBack, onFinish, profileName, setProfileName, llmInfo }) {
+export default function StepResume({ onFinish }) {
   const [file, setFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [parsed, setParsed] = useState(null); // { name, first_name, last_name, work_history, skills, education }
@@ -23,24 +23,20 @@ export default function StepResume({ onBack, onFinish, profileName, setProfileNa
     setParsing(true);
     setError("");
     try {
-      // Step 1: Upload the file to get its server-side path.
+      // Upload the file to get its server-side path.
       const { path, filename } = await uploadProfileResume(file);
 
-      // Step 2: Ensure a named profile exists with the LLM provider linked.
-      //         This guarantees get_client_for_profile won't 500 on parse.
-      const { id: profileId } = await ensureProfileWithProvider(
-        profileName || "Master",
-        llmInfo || { providerType: "", model: "", apiKey: "" },
-      );
+      // Resolve the already-provisioned active profile (no creation needed).
+      const { profiles, active_id } = await getProfiles();
+      const profileId =
+        active_id ?? (profiles && profiles[0] && profiles[0].id);
+      if (!profileId) throw new Error("No profile found for this account");
 
-      // Fetch the full profile row to get any existing data fields.
+      // Attach the uploaded file to the profile so parse can read it.
       const profile = await getProfile(profileId);
-
-      // Step 3: Associate the uploaded file with the profile so the parse
-      //         endpoint can read it from disk.
       const existingData = profile.data || {};
       await updateProfile(profileId, {
-        name: profile.name || profileName || "Master",
+        name: profile.name,
         data: {
           ...existingData,
           resume_path: path,
@@ -49,13 +45,10 @@ export default function StepResume({ onBack, onFinish, profileName, setProfileNa
         },
       });
 
-      // Step 4: Parse the resume — this merges extracted fields (skills,
-      //         work_history, education, etc.) back into the profile row so
-      //         /api/setup-status returns resume_parsed: true.
-      //         Returns { id, name } — the name may have been updated from the resume.
+      // Parse — merges skills/work_history/education into the profile row,
+      // which flips /api/setup-status resume_parsed to true.
       const result = await parseProfileResume(profileId);
 
-      // Fetch the updated profile to build the preview card.
       const updated = await getProfile(result.id);
       const d = updated.data || {};
       setParsed({
@@ -77,17 +70,6 @@ export default function StepResume({ onBack, onFinish, profileName, setProfileNa
         The app will parse your resume into structured fields using AI. You can
         edit anything afterwards in the Profile tab.
       </p>
-
-      {/* Profile name */}
-      <div className="flex flex-col gap-1 mb-4">
-        <label className="text-xs text-space-dim">Profile name</label>
-        <input
-          className={inputClass}
-          value={profileName}
-          onChange={(e) => setProfileName(e.target.value)}
-          placeholder="Master"
-        />
-      </div>
 
       {/* File picker */}
       <div className="mb-4">
@@ -156,13 +138,7 @@ export default function StepResume({ onBack, onFinish, profileName, setProfileNa
       )}
 
       {/* Navigation */}
-      <div className="flex justify-between">
-        <button
-          onClick={onBack}
-          className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
-        >
-          Back
-        </button>
+      <div className="flex justify-end">
         <button
           onClick={onFinish}
           disabled={!parsed}
