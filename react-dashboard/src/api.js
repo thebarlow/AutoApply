@@ -285,5 +285,14 @@ export const verifyPurchase = (sessionId) =>
 
 export const getSystemBalance = () => _fetch('/api/admin/system-balance')
 
+export const inviteUser = (email) =>
+  _fetch('/api/admin/invite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+
+export const getInvites = () => _fetch('/api/admin/invites')
+
 export const logout = () =>
   fetch('/auth/logout', { method: 'POST' }).then(() => { window.location.href = '/' })
