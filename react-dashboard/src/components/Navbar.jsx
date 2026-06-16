@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { logout, verifyPurchase } from "../api";
 
-export default function Navbar() {
+export default function Navbar({ me }) {
   const [serverDown, setServerDown] = useState(false);
   const missesRef = useRef(0);
 
@@ -57,6 +57,15 @@ export default function Navbar() {
       </Link>
 
       <div className="flex items-center gap-4">
+        {me?.is_admin && (
+          <Link
+            to="/admin"
+            className="text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 rounded-md px-2.5 py-1 transition-colors"
+          >
+            Admin
+          </Link>
+        )}
+
         {/* Help link */}
         <a
           href="/docs"

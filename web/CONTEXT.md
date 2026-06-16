@@ -6,12 +6,13 @@ FastAPI backend. Serves the REST API on port 8080. The frontend (React) is a sep
 
 ```
 web/
-├── main.py                  # FastAPI app; includes all routers; registers AuthGate + Session middleware
-├── tenancy.py               # current_profile_id seam (session in prod / dev stub otherwise) + scoped()
-├── sse.py                   # Server-Sent Events helpers (job update broadcasts)
-├── llm_status.py            # In-memory tracker for active LLM jobs (keyed by job_key+action)
-├── intake_pipeline.py       # Post-ingest pipeline (score + generate) run per new job
-├── static/images/           # Favicon and apple-touch-icon (served by FastAPI)
+├── main.py                       # FastAPI app; includes all routers; registers AuthGate + Session middleware
+├── tenancy.py                    # current_profile_id seam (session in prod / dev stub otherwise) + scoped(); honors impersonation (see Auth below)
+├── middleware_impersonation.py   # ImpersonationReadOnlyMiddleware — blocks unsafe methods while impersonating (see Auth below)
+├── sse.py                        # Server-Sent Events helpers (job update broadcasts)
+├── llm_status.py                 # In-memory tracker for active LLM jobs (keyed by job_key+action)
+├── intake_pipeline.py            # Post-ingest pipeline (score + generate) run per new job
+├── static/images/                # Favicon and apple-touch-icon (served by FastAPI)
 ├── auth/
 │   ├── identity.py          # Pure logic: Claims, resolve_or_provision_account, beta gate, provisioning
 │   ├── routes.py            # Google/GitHub OAuth login/callback/logout + GET /api/me; _fetch_claims (provider I/O)
@@ -26,6 +27,7 @@ web/
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup-status (onboarding completeness: llm_configured | resume_parsed)
     ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, POST /api/admin/credits/tier, GET /api/admin/system-balance; require_admin dependency
+    ├── admin.py             # Admin-only endpoints: invites + user management + impersonation (see Routing Rules and Auth below)
     ├── payments.py          # GET /api/payments/packs, POST /checkout, GET /verify, POST /webhook (Stripe), GET /history
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
     ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
@@ -56,6 +58,9 @@ web/
 | Documentation content for Docs page | `routers/docs_router.py` |
 | OAuth login/callback/logout, `/api/me`, identity provisioning | `auth/routes.py` + `auth/identity.py` |
 | Production `/api/*` access gate | `auth/middleware.py` |
+| Admin invite management (send invites, list invites) | `routers/admin.py` |
+| Admin user management (list users, purchase history) | `routers/admin.py` |
+| Admin impersonation (start/stop read-only view-as) | `routers/admin.py` + `middleware_impersonation.py` |
 
 ## Key Design Notes
 
@@ -63,6 +68,9 @@ web/
   - **Webhook exemption** — `_EXEMPT_PATHS` includes `/api/payments/webhook` so Stripe's
     unauthenticated callback bypasses the `/api/*` gate; the route is secured entirely by
     `stripe_client.construct_event`'s signature check, not a session.
+  - **Runtime invite allowlist** — `is_allowed_email` (`web/auth/identity.py`) checks the `allowed_email` DB table (rows inserted by `POST /api/admin/invite`) in addition to the `ALLOWED_EMAILS` env var, so invites take effect immediately without a redeploy.
+  - **Ban / restore** — `account.banned` (bool) is set by `POST /api/admin/users/{id}/access` `{banned}`. All account resolution paths in `web/auth/identity.py` reject a banned account; `web/tenancy.py`'s `current_profile_id` also returns 401 for banned accounts so every API request is blocked. Banning also deletes the target's `allowed_email` row so the account can't re-provision. The endpoint returns 400 if the target is an admin and 404 if unknown. `banned` is included in the `GET /api/admin/users` row shape.
+  - **Admin impersonation** — `POST /api/admin/impersonate/start` stores `impersonate_profile_id` in the session. While set, `tenancy.py`'s `current_profile_id` (via the `_impersonated_profile_id` helper) re-verifies the caller is still an admin on every request, then returns the impersonated profile's ID — so all tenant-scoped DB reads transparently re-point to that user. `ImpersonationReadOnlyMiddleware` (`web/middleware_impersonation.py`) blocks all unsafe HTTP methods (POST/PUT/PATCH/DELETE) with 403 `impersonation_read_only` while a session holds `impersonate_profile_id`, with an allowlist for `POST /api/admin/impersonate/stop` and `POST /auth/logout`. The middleware is registered **inside** `SessionMiddleware` in `main.py` so `scope["session"]` is available. Admin endpoints in `routers/admin.py` use a `require_real_admin` dependency that authorizes against `session["account_id"]` directly (bypassing the impersonated profile) so they remain admin-gated while impersonating. `POST /api/admin/impersonate/stop` clears the session key. `GET /api/me` returns `impersonating: {profile_id, email}` when active, `null` otherwise.
   - **Prod requirements:** `SESSION_SECRET` (the app **refuses to boot** in production if unset or left as the dev default — see `_session_secret()` in `main.py`), `GOOGLE_/GITHUB_CLIENT_ID/SECRET`, `ALLOWED_EMAILS`, `ADMIN_EMAILS`. Uvicorn must run with `--proxy-headers --forwarded-allow-ips="*"` (in the Dockerfile CMD) so Railway's `X-Forwarded-Proto: https` is trusted and `request.url_for()` builds **https** OAuth callback URLs — otherwise providers reject `http://` callbacks as `redirect_uri_mismatch`.
 - **Score/generate are in `core/job.py`** — `routers/jobs.py` resolves the LLM client, prompt content, and template paths, then delegates to `job.score()`, `job.generate_resume_md/pdf()`, `job.generate_cover_md/pdf()`.
 - **Generation is synchronous** — resume/cover generation blocks the request 30–60s while Claude + pandoc run. Acceptable for single-user local use.
@@ -73,6 +81,7 @@ web/
 - **Per-turn refinement snapshots** are written as structured JSON `{job_key}_{doc_type}_turn_{n}.json` in `generator/outputs/`. `GET /api/jobs/{job_key}/{doc_type}/turn/{n}/markdown` assembles Markdown on the fly from that JSON (`422` on schema mismatch).
 - **Credits & Metering (sub-project 2 — DONE)** — `routers/credits.py`: `GET /api/credits` returns the caller's `{balance, rate, recent[]}` (last 20 ledger rows; `{balance:0, rate:0.0, recent:[]}` if no `Account` row). `require_admin` (a FastAPI dependency) resolves the account for `current_profile_id` and 403s unless `is_admin`; gates `POST /api/admin/credits/grant` (target by `profile_id` or `email`, `reason="admin_grant"` — the same `grant_credits` call a future Stripe webhook will reuse) and `GET /api/admin/system-balance` (reads the platform OpenRouter key's remaining balance via `LLM_API_KEY`, 502 on upstream failure, 503 if unset). `core.credits.InsufficientCredits` is registered in `web/main.py` as an exception handler returning **HTTP 402** `{error:"insufficient_credits", balance, floor}` — raised by `meter_action` (see `core/CONTEXT.md` → "Credits & Metering") when an account's balance is below `CREDIT_FLOOR`.
   - **Metered endpoints**: `POST /{job_key}/score`, `POST /{job_key}/generate/resume`, `POST /{job_key}/generate/cover` (`routers/jobs.py`); the intake-pipeline score/eval/refine steps (`intake_pipeline.py`); and `_do_extract_description` (extraction — gated but its debit is always 0, see `core/CONTEXT.md` limitation). All wrap the LLM call in `meter_action(db, profile_id, action=..., job_key=...)`.
+  - `credits.py` exposes an `openrouter_remaining()` helper (returns remaining USD or `None`); `GET /api/admin/system-balance` uses it and returns just `{remaining}`. The same helper drives `GET /api/admin/grant-budget`.
   - Frontend: `CreditBalance.jsx` (navbar + User tab) shows balance/rate; a global 402 interceptor shows an "out of credits" toast and the navbar refetches. Admin-only system-balance panel reads `/api/admin/system-balance`. Known caveat: the balance does **not** auto-refresh after a successful metered action (those are SSE-driven, not request/response) — it can lag until the next load or a 402.
 - **Payments (sub-project 3 — DONE)** — `routers/payments.py`: `GET /packs` lists the packs visible to
   the caller's tier with server-computed credits (`core/payments.packs_for_tier`, no Stripe call);
@@ -146,7 +155,16 @@ web/
 | `GET` | `/api/credits` | Caller's `{balance, rate, recent[]}` (last 20 ledger rows) |
 | `POST` | `/api/admin/credits/grant` | Admin-only; grant credits to a profile by `profile_id` or `email`, reason `admin_grant` |
 | `POST` | `/api/admin/credits/tier` | Admin-only; set a profile's pricing tier (target by `profile_id` or `email`; validated against `payments.tier_margins()`) |
-| `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key |
+| `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key (`{remaining}` USD) |
+| `POST` | `/api/admin/invite` | Admin-only; normalizes email, idempotently inserts `allowed_email` row, sends invite email via `core.email.send_invite` |
+| `GET` | `/api/admin/invites` | Admin-only; list all invited emails |
+| `GET` | `/api/admin/users` | Admin-only; list all users `[{profile_id, email, tier, credits, is_admin, banned}]` |
+| `GET` | `/api/admin/users/{profile_id}/purchases` | Admin-only; purchase history for a specific user; 404 if profile unknown |
+| `POST` | `/api/admin/users/{id}/access` | Admin-only (`require_real_admin`); `{banned: bool}` — bans or restores a user; banning also deletes the `allowed_email` row; 400 if target is admin, 404 if unknown |
+| `GET` | `/api/admin/grant-budget` | Admin-only (`require_real_admin`); returns `{system_credits, allocated, available}` — `system_credits` = OpenRouter remaining × 1000; `allocated` = sum of non-admin balances; `available` = max(system−allocated, 0); fields are null when the balance is unavailable |
+| `POST` | `/api/admin/users/{id}/grant` | Admin-only (`require_real_admin`); `{amount: int}` — grants credits to a user via `grant_credits`; capped at `available` from grant-budget; 409 if balance unavailable (fail-closed), 400 `exceeds_grant_budget` if amount exceeds available |
+| `POST` | `/api/admin/impersonate/start` | Admin-only; body `{profile_id}`; sets `impersonate_profile_id` in session; 404 if profile unknown |
+| `POST` | `/api/admin/impersonate/stop` | Admin-only (allowlisted through read-only gate); clears `impersonate_profile_id` from session |
 | `GET` | `/api/payments/packs` | Configured credit packs with live price/currency from Stripe |
 | `POST` | `/api/payments/checkout` | Create a Stripe Checkout session for a pack; records a pending `Purchase`, returns the session URL |
 | `GET` | `/api/payments/verify` | Success-redirect fallback fulfillment; confirms `payment_status=="paid"` with Stripe, tenant-checks, then grants (idempotent with the webhook) |
@@ -161,7 +179,7 @@ web/
 | `GET` | `/auth/login/{provider}` | Start OAuth (`google`/`github`); 404 for unknown provider |
 | `GET` | `/auth/callback/{provider}` | OAuth callback; provisions/resolves account, sets session, redirects `/` (or `/?beta=closed`, `/?auth_error=1`) |
 | `POST` | `/auth/logout` | Clear the session |
-| `GET` | `/api/me` | Logged-in identity `{email,is_admin,profile_name}`; 401 if no session |
+| `GET` | `/api/me` | Logged-in identity `{email,is_admin,profile_name,impersonating:{profile_id,email}|null}`; 401 if no session |
 
 ## Known Issues
 

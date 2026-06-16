@@ -43,8 +43,12 @@ def is_admin_email(email: str) -> bool:
     return email.lower() in _email_set("ADMIN_EMAILS")
 
 
-def is_allowed_email(email: str) -> bool:
-    return email.lower() in _email_set("ALLOWED_EMAILS")
+def is_allowed_email(db: Session, email: str) -> bool:
+    e = email.lower()
+    if e in _email_set("ALLOWED_EMAILS"):
+        return True
+    from db.database import AllowedEmail
+    return db.query(AllowedEmail).filter_by(email=e).first() is not None
 
 
 def resolve_or_provision_account(db: Session, claims: Claims) -> Account:
@@ -71,9 +75,14 @@ def _resolve_existing_or_raise(db: Session, claims: Claims) -> Account:
         .first()
     )
     if ident is not None:
-        return db.query(Account).filter_by(id=ident.account_id).first()
+        acct = db.query(Account).filter_by(id=ident.account_id).first()
+        if acct is not None and acct.banned:
+            raise BetaAccessDenied(claims.email)
+        return acct
     acct = db.query(Account).filter_by(email=claims.email.lower()).first()
     if acct is not None:
+        if acct.banned:
+            raise BetaAccessDenied(claims.email)
         return acct
     raise BetaAccessDenied(claims.email)  # defensive: should not happen
 
@@ -90,14 +99,19 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
         .first()
     )
     if ident is not None:
-        return db.query(Account).filter_by(id=ident.account_id).first()
+        acct = db.query(Account).filter_by(id=ident.account_id).first()
+        if acct is not None and acct.banned:
+            raise BetaAccessDenied(email)
+        return acct
 
     admin = is_admin_email(email)
-    if not admin and not is_allowed_email(email):
+    if not admin and not is_allowed_email(db, email):
         raise BetaAccessDenied(email)
 
     acct = db.query(Account).filter_by(email=email).first()
     if acct is not None:
+        if acct.banned:
+            raise BetaAccessDenied(email)
         db.add(Identity(
             account_id=acct.id, provider=claims.provider,
             provider_subject=claims.subject, created_at=_now(),

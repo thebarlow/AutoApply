@@ -101,20 +101,28 @@ def admin_set_tier(body: SetTierRequest, db: Session = Depends(get_db),
     return {"profile_id": target.profile_id, "tier": target.tier}
 
 
-@router.get("/admin/system-balance")
-def system_balance(admin: Account = Depends(require_admin)):
-    """Remaining balance on the platform OpenRouter key (money in the system)."""
+def openrouter_remaining() -> float | None:
+    """Remaining USD on the platform OpenRouter key, or None if unset/unreachable."""
     key = os.getenv("LLM_API_KEY", "")
     if not key:
-        raise HTTPException(status_code=503, detail="no platform key")
+        return None
     try:
         resp = httpx.get("https://openrouter.ai/api/v1/credits",
                          headers={"Authorization": f"Bearer {key}"}, timeout=10)
         resp.raise_for_status()
         data = resp.json().get("data", {})
-        total = float(data.get("total_credits", 0))
-        used = float(data.get("total_usage", 0))
-        return {"total": total, "used": used, "remaining": total - used}
+        return float(data.get("total_credits", 0)) - float(data.get("total_usage", 0))
     except httpx.HTTPError:
-        logger.exception("system-balance: OpenRouter request failed")
+        logger.exception("openrouter_remaining: request failed")
+        return None
+
+
+@router.get("/admin/system-balance")
+def system_balance(admin: Account = Depends(require_admin)):
+    """Remaining balance on the platform OpenRouter key (money in the system)."""
+    if not os.getenv("LLM_API_KEY", ""):
+        raise HTTPException(status_code=503, detail="no platform key")
+    remaining = openrouter_remaining()
+    if remaining is None:
         raise HTTPException(status_code=502, detail="failed to reach OpenRouter")
+    return {"remaining": remaining}

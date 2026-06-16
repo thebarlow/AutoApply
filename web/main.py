@@ -27,10 +27,12 @@ from web.routers import stats as stats_router
 from web.routers import skills as skills_router
 from web.routers import credits as credits_router
 from web.routers import payments as payments_router
+from web.routers import admin as admin_router
 from web.auth import routes as auth_routes
 from core.credits import InsufficientCredits
 from fastapi.responses import JSONResponse
 from web.auth.middleware import AuthGateMiddleware
+from web.middleware_impersonation import ImpersonationReadOnlyMiddleware
 
 
 def _timed(label: str, fn):
@@ -102,6 +104,7 @@ app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redo
 # the most-recently-added middleware outermost, so the session is populated on
 # the request scope before AuthGateMiddleware inspects it.
 app.add_middleware(AuthGateMiddleware)
+app.add_middleware(ImpersonationReadOnlyMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=_session_secret(),
@@ -127,6 +130,7 @@ app.include_router(stats_router.router)
 app.include_router(skills_router.router)
 app.include_router(credits_router.router)
 app.include_router(payments_router.router)
+app.include_router(admin_router.router)
 app.include_router(auth_routes.router)
 
 

@@ -15,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, validates
 
 
 class Base(DeclarativeBase):
@@ -137,6 +137,7 @@ class Account(Base):
     credit_rate = Column(Float, nullable=False, default=1.0)
     tier = Column(String, nullable=False, default="standard")
     stripe_customer_id = Column(String, nullable=True)
+    banned = Column(Boolean, nullable=False, default=False)
 
 
 class Identity(Base):
@@ -152,6 +153,22 @@ class Identity(Base):
     provider = Column(String, nullable=False)
     provider_subject = Column(String, nullable=False)
     created_at = Column(String, nullable=False)
+
+
+class AllowedEmail(Base):
+    """Runtime allowlist entry (an admin invite). Supplements the ALLOWED_EMAILS
+    env var, which remains the bootstrap allowlist."""
+
+    __tablename__ = "allowed_email"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, nullable=False, unique=True)
+    invited_by = Column(Integer, ForeignKey("account.id"), nullable=True)
+    created_at = Column(String, nullable=False)
+
+    @validates("email")
+    def _lowercase_email(self, key, value):
+        return value.lower() if value else value
 
 
 class CreditLedger(Base):

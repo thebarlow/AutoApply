@@ -111,8 +111,21 @@ def api_me(request: Request, db: Session = Depends(get_db)):
         request.session.clear()
         raise HTTPException(status_code=401)
     user = db.query(User).filter_by(id=acct.profile_id).first()
+    impersonating = None
+    if acct.is_admin:
+        target_pid = request.session.get("impersonate_profile_id")
+        if target_pid:
+            try:
+                pid = int(target_pid)
+            except (ValueError, TypeError):
+                pid = None
+            target = (db.query(Account).filter_by(profile_id=pid).first()
+                      if pid is not None else None)
+            if target is not None:
+                impersonating = {"profile_id": target.profile_id, "email": target.email}
     return {
         "email": acct.email,
         "is_admin": acct.is_admin,
         "profile_name": user.name if user else "",
+        "impersonating": impersonating,
     }

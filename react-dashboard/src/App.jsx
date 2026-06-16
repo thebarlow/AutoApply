@@ -6,8 +6,9 @@ import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
 import Wizard from './components/Onboarding/Wizard'
 import Docs from './components/Docs'
+import AdminPage from './components/AdminPage'
 import LoginScreen from './components/LoginScreen'
-import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe } from './api'
+import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe, stopImpersonation } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
 
 export default function App() {
@@ -191,6 +192,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/docs" element={<Docs />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={
         <div className="min-h-screen text-space-text">
           {showWizard && (
@@ -199,7 +201,18 @@ export default function App() {
               onSkip={() => setWizardSkipped(true)}
             />
           )}
-          <Navbar />
+          {me?.impersonating && (
+            <div className="sticky top-0 z-[120] flex items-center justify-center gap-3 bg-amber-400 text-black text-sm font-semibold px-4 py-2">
+              <span>Viewing as {me.impersonating.email}</span>
+              <button
+                onClick={() => { stopImpersonation().finally(() => { window.location.href = '/' }) }}
+                className="underline hover:no-underline"
+              >
+                Exit
+              </button>
+            </div>
+          )}
+          <Navbar me={me} />
           {toasts.length > 0 && (
             <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-sm">
               {toasts.map((t) => (

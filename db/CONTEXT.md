@@ -40,9 +40,10 @@ longer exist.
 | `prompts` | `Prompt` | Per-profile active prompt slots `(profile_id, type_key)` + per-type `model` override. | 2 |
 | `documents` | `Document` | Structured generated artifact per `(job_key, doc_type)`; `structured_json` is the **source of truth**. Unique on `(job_key, doc_type)`. Helpers: `Document.fetch(db, job_key, doc_type)`, `Document.upsert(db, job_key, doc_type, structured_json)` (upsert commits). | 3a |
 | `skill_aliases` | `SkillAlias` | Global skill synonym map: `alias_key` (PK, lowercased token) → `canonical` (display = group identity). A group = all rows sharing one canonical; each canonical has a self-row. Seeded from `core/skill_analytics._ALIASES` via `seed_skill_aliases`. | — |
-| `account` | `Account` | Login-identity owner, 1:1 → `user_profile` (unique `profile_id`); unique `email`; `is_admin`; `credit_balance` (cached running total); `credit_rate` (per-account tier multiplier). Not tenant-guarded. | Auth / Credits |
+| `account` | `Account` | Login-identity owner, 1:1 → `user_profile` (unique `profile_id`); unique `email`; `is_admin`; `banned` (bool — suspends login and all API access; set by `POST /api/admin/users/{id}/access`); `credit_balance` (cached running total); `credit_rate` (per-account tier multiplier). Not tenant-guarded. | Auth / Credits |
 | `identity` | `Identity` | OAuth `(provider, provider_subject)` (unique together) → `account`. Many identities per account (link-by-verified-email). Not tenant-guarded. | Auth |
 | `credit_ledger` | `CreditLedger` | Append-only credit history: `profile_id, delta, reason, action, job_key, raw_cost_usd, meta, created_by, created_at`. Source of truth for `account.credit_balance`. Not tenant-guarded (keyed by `profile_id` but not in `_TENANT_TABLES`). | Credits |
+| `allowed_email` | `AllowedEmail` | Runtime invite allowlist: `email` (unique, lowercased via validator), `invited_by` (FK → `account.id`), `created_at`. Supplements the `ALLOWED_EMAILS` env var — `is_allowed_email` checks both. Rows inserted by `POST /api/admin/invite`. | Auth |
 
 ## Prompt seeding at startup
 

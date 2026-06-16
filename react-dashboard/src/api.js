@@ -285,5 +285,45 @@ export const verifyPurchase = (sessionId) =>
 
 export const getSystemBalance = () => _fetch('/api/admin/system-balance')
 
+export const inviteUser = (email) =>
+  _fetch('/api/admin/invite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+
+export const getInvites = () => _fetch('/api/admin/invites')
+
+export const getUsers = () => _fetch('/api/admin/users')
+
+export const getUserPurchases = (profileId) =>
+  _fetch(`/api/admin/users/${profileId}/purchases`)
+
+export const startImpersonation = (profileId) =>
+  _fetch('/api/admin/impersonate/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile_id: profileId }),
+  })
+
+export const stopImpersonation = () =>
+  _fetch('/api/admin/impersonate/stop', { method: 'POST' })
+
+export const setUserAccess = (profileId, banned) =>
+  _fetch(`/api/admin/users/${profileId}/access`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ banned }),
+  })
+
+export const getGrantBudget = () => _fetch('/api/admin/grant-budget')
+
+export const grantCredits = (profileId, amount) =>
+  _fetch(`/api/admin/users/${profileId}/grant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount }),
+  })
+
 export const logout = () =>
   fetch('/auth/logout', { method: 'POST' }).then(() => { window.location.href = '/' })
