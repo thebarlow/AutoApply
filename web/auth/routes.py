@@ -115,7 +115,12 @@ def api_me(request: Request, db: Session = Depends(get_db)):
     if acct.is_admin:
         target_pid = request.session.get("impersonate_profile_id")
         if target_pid:
-            target = db.query(Account).filter_by(profile_id=int(target_pid)).first()
+            try:
+                pid = int(target_pid)
+            except (ValueError, TypeError):
+                pid = None
+            target = (db.query(Account).filter_by(profile_id=pid).first()
+                      if pid is not None else None)
             if target is not None:
                 impersonating = {"profile_id": target.profile_id, "email": target.email}
     return {

@@ -44,3 +44,9 @@ def test_me_non_admin_impersonation_ignored(db):
     _seed(db, id=2, email="user@x.com", is_admin=False, profile_id=5)
     out = api_me(_req({"account_id": 2, "impersonate_profile_id": 9}), db)
     assert out["impersonating"] is None
+
+
+def test_me_malformed_impersonation_ignored(db):
+    _seed(db, id=1, email="admin@x.com", is_admin=True, profile_id=1)
+    out = api_me(_req({"account_id": 1, "impersonate_profile_id": "garbage"}), db)
+    assert out["impersonating"] is None
