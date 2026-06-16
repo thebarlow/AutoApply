@@ -75,9 +75,14 @@ def _resolve_existing_or_raise(db: Session, claims: Claims) -> Account:
         .first()
     )
     if ident is not None:
-        return db.query(Account).filter_by(id=ident.account_id).first()
+        acct = db.query(Account).filter_by(id=ident.account_id).first()
+        if acct is not None and acct.banned:
+            raise BetaAccessDenied(claims.email)
+        return acct
     acct = db.query(Account).filter_by(email=claims.email.lower()).first()
     if acct is not None:
+        if acct.banned:
+            raise BetaAccessDenied(claims.email)
         return acct
     raise BetaAccessDenied(claims.email)  # defensive: should not happen
 
@@ -105,6 +110,8 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
 
     acct = db.query(Account).filter_by(email=email).first()
     if acct is not None:
+        if acct.banned:
+            raise BetaAccessDenied(email)
         db.add(Identity(
             account_id=acct.id, provider=claims.provider,
             provider_subject=claims.subject, created_at=_now(),

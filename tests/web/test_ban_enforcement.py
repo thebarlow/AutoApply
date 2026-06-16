@@ -52,3 +52,30 @@ def test_login_blocks_banned_existing_identity(db):
                     email_verified=True)
     with pytest.raises(BetaAccessDenied):
         _resolve_or_provision(db, claims)
+
+
+def test_login_blocks_banned_second_provider(db):
+    # Banned account exists by email; login via a NEW provider must be rejected.
+    _seed_acct(db, account_id=1, profile_id=1, banned=True)
+    claims = Claims(provider="github", subject="gh-sub", email="a1@x.com",
+                    email_verified=True)
+    # email is allowlisted so we reach the email-match branch, not the allowlist gate
+    import os
+    os.environ["ALLOWED_EMAILS"] = "a1@x.com"
+    try:
+        with pytest.raises(BetaAccessDenied):
+            _resolve_or_provision(db, claims)
+    finally:
+        os.environ.pop("ALLOWED_EMAILS", None)
+
+
+def test_resolve_existing_blocks_banned(db):
+    from web.auth.identity import _resolve_existing_or_raise
+    _seed_acct(db, account_id=1, profile_id=1, banned=True)
+    db.add(Identity(account_id=1, provider="google", provider_subject="sub1",
+                    created_at="2026-01-01T00:00:00+00:00"))
+    db.commit()
+    claims = Claims(provider="google", subject="sub1", email="a1@x.com",
+                    email_verified=True)
+    with pytest.raises(BetaAccessDenied):
+        _resolve_existing_or_raise(db, claims)
