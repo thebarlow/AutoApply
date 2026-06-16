@@ -39,7 +39,9 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
-| Admin invite page (email input → `inviteUser`, lists invited emails) | `src/components/AdminPage.jsx` — admin-only, route `/admin` |
+| Admin page shell (Docs-style top Navbar + left function nav; functions: Manage Users) | `src/components/AdminPage.jsx` — admin-only, route `/admin` |
+| Admin user management (invite form + users table with view-as + purchase-history modal) | `src/components/admin/ManageUsers.jsx` — rendered by `AdminPage.jsx` |
+| Impersonation banner ("Viewing as {email} — Exit") | `src/App.jsx` — rendered when `me.impersonating` is set; calls `stopImpersonation` on exit |
 | First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
 | Docs viewer (markdown rendering, sidebar nav) | `src/components/Docs.jsx` |
