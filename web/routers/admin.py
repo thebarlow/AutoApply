@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from core.credits import grant_credits
 from core.email import send_invite
 from db.database import Account, AllowedEmail, Purchase, get_db
 from web.routers.credits import openrouter_remaining, require_admin
@@ -150,6 +151,35 @@ def _grant_budget(db: Session) -> dict:
 def grant_budget(db: Session = Depends(get_db),
                  admin: Account = Depends(require_real_admin)):
     return _grant_budget(db)
+
+
+class GrantRequest(BaseModel):
+    amount: int
+
+
+@router.post("/users/{profile_id}/grant")
+def grant_to_user(profile_id: int, body: GrantRequest,
+                  db: Session = Depends(get_db),
+                  admin: Account = Depends(require_real_admin)):
+    target = db.query(Account).filter_by(profile_id=profile_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="profile not found")
+    if target.is_admin:
+        raise HTTPException(status_code=400, detail="cannot grant to an admin")
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="amount must be positive")
+    budget = _grant_budget(db)
+    if budget["available"] is None:
+        raise HTTPException(status_code=409,
+                            detail={"error": "system_balance_unavailable"})
+    if body.amount > budget["available"]:
+        raise HTTPException(status_code=400,
+                            detail={"error": "exceeds_grant_budget",
+                                    "available": budget["available"]})
+    grant_credits(db, profile_id, body.amount, reason="admin_grant",
+                  created_by=admin.id)
+    bal = db.query(Account).filter_by(profile_id=profile_id).first().credit_balance
+    return {"granted": body.amount, "balance": bal}
 
 
 @router.post("/impersonate/stop")
