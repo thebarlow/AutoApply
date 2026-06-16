@@ -1,36 +1,46 @@
 import { useState, useEffect, useCallback } from 'react'
-import { inviteUser, getInvites, getUsers, getUserPurchases, startImpersonation } from '../../api'
+import {
+  inviteUser, getInvites, getUsers, getUserPurchases, startImpersonation,
+  setUserAccess, getGrantBudget, grantCredits,
+} from '../../api'
+
+const SORTS = [
+  { key: 'email', label: 'Email' },
+  { key: 'tier', label: 'Tier' },
+  { key: 'credits', label: 'Credits' },
+]
+
+// Admins display '—' for credits; sort them to the bottom of a credits sort.
+const creditSortVal = (u) => (u.is_admin ? -1 : (u.credits ?? 0))
 
 export default function ManageUsers() {
   const [email, setEmail] = useState('')
-  const [status, setStatus] = useState(null) // { kind: 'ok'|'err', text }
+  const [status, setStatus] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [invites, setInvites] = useState([])
+
   const [users, setUsers] = useState([])
-  const [purchasesFor, setPurchasesFor] = useState(null) // profile_id | null
-  const [purchases, setPurchases] = useState(null)        // null=loading
+  const [search, setSearch] = useState('')
+  const [sortKey, setSortKey] = useState('email')
+  const [sortDir, setSortDir] = useState('asc')
 
-  useEffect(() => { getUsers().then(setUsers).catch(() => {}) }, [])
+  const [purchasesFor, setPurchasesFor] = useState(null)
+  const [purchases, setPurchases] = useState(null)
 
-  const openPurchases = (profileId) => {
-    setPurchasesFor(profileId)
-    setPurchases(null)
-    getUserPurchases(profileId).then(setPurchases).catch(() => setPurchases([]))
-  }
+  const [budget, setBudget] = useState(null)
+  const [grantFor, setGrantFor] = useState(null)   // user | null
+  const [grantAmount, setGrantAmount] = useState(100)
+  const [grantError, setGrantError] = useState(null)
+  const [granting, setGranting] = useState(false)
 
-  const viewAs = async (profileId) => {
-    try {
-      await startImpersonation(profileId)
-      window.location.href = '/'
-    } catch {
-      setStatus({ kind: 'err', text: 'Could not start impersonation.' })
-    }
-  }
+  const [revokeFor, setRevokeFor] = useState(null) // user | null
 
-  const refreshInvites = useCallback(() => {
-    getInvites().then(setInvites).catch(() => {})
-  }, [])
+  const refreshUsers = useCallback(() => { getUsers().then(setUsers).catch(() => {}) }, [])
+  const refreshBudget = useCallback(() => { getGrantBudget().then(setBudget).catch(() => setBudget(null)) }, [])
+  const refreshInvites = useCallback(() => { getInvites().then(setInvites).catch(() => {}) }, [])
 
+  useEffect(() => { refreshUsers() }, [refreshUsers])
+  useEffect(() => { refreshBudget() }, [refreshBudget])
   useEffect(() => { refreshInvites() }, [refreshInvites])
 
   const submit = async (e) => {
@@ -54,6 +64,78 @@ export default function ManageUsers() {
       setSubmitting(false)
     }
   }
+
+  const openPurchases = (profileId) => {
+    setPurchasesFor(profileId)
+    setPurchases(null)
+    getUserPurchases(profileId).then(setPurchases).catch(() => setPurchases([]))
+  }
+
+  const viewAs = async (profileId) => {
+    try {
+      await startImpersonation(profileId)
+      window.location.href = '/'
+    } catch {
+      setStatus({ kind: 'err', text: 'Could not start impersonation.' })
+    }
+  }
+
+  const toggleSort = (key) => {
+    if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const openGrant = (u) => {
+    setGrantFor(u)
+    setGrantError(null)
+    const avail = budget?.available
+    setGrantAmount(avail != null ? Math.min(100, avail) : 100)
+  }
+
+  const submitGrant = async () => {
+    if (!grantFor) return
+    setGranting(true)
+    setGrantError(null)
+    try {
+      await grantCredits(grantFor.profile_id, Number(grantAmount))
+      setGrantFor(null)
+      refreshUsers()
+      refreshBudget()
+    } catch {
+      setGrantError('Grant failed (over budget or balance unavailable).')
+    } finally {
+      setGranting(false)
+    }
+  }
+
+  const confirmRevoke = async () => {
+    if (!revokeFor) return
+    try {
+      await setUserAccess(revokeFor.profile_id, true)
+      setRevokeFor(null)
+      refreshUsers()
+    } catch {
+      setStatus({ kind: 'err', text: 'Could not revoke access.' })
+    }
+  }
+
+  const restore = async (u) => {
+    try { await setUserAccess(u.profile_id, false); refreshUsers() }
+    catch { setStatus({ kind: 'err', text: 'Could not restore access.' }) }
+  }
+
+  const shown = users
+    .filter((u) => u.email.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => {
+      let av, bv
+      if (sortKey === 'credits') { av = creditSortVal(a); bv = creditSortVal(b) }
+      else { av = (a[sortKey] ?? '').toString().toLowerCase(); bv = (b[sortKey] ?? '').toString().toLowerCase() }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+
+  const arrow = (key) => (key === sortKey ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
   return (
     <div className="flex flex-col gap-6">
@@ -96,16 +178,54 @@ export default function ManageUsers() {
 
       <section>
         <h2 className="text-lg font-semibold mb-3">Users</h2>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by email…"
+          className="w-full mb-3 px-3 py-2 rounded-lg bg-white/5 border border-space-border text-sm focus:outline-none focus:border-purple-500"
+        />
         <div className="border border-space-border rounded-lg overflow-hidden">
           <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-2 px-3 py-2 text-xs uppercase tracking-widest text-space-dim bg-white/5">
-            <span>Email</span><span>Tier</span><span>Credits</span><span>Actions</span>
+            {SORTS.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => toggleSort(s.key)}
+                className="text-left hover:text-space-text transition-colors"
+              >
+                {s.label}{arrow(s.key)}
+              </button>
+            ))}
+            <span className="text-left">Actions</span>
           </div>
           <div className="max-h-60 overflow-y-auto">
-            {users.map((u) => (
-              <div key={u.profile_id} className="grid grid-cols-[2fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm items-center border-t border-space-border/50">
-                <span className="truncate" title={u.email}>{u.email}</span>
-                <span className="text-space-dim">{u.tier}</span>
-                <span className="font-mono text-purple-400">{(u.credits ?? 0).toLocaleString()}</span>
+            {shown.map((u) => (
+              <div
+                key={u.profile_id}
+                className={`grid grid-cols-[2fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm items-center border-t border-space-border/50 ${u.banned ? 'opacity-60' : ''}`}
+              >
+                <span className="truncate flex items-center gap-2" title={u.email}>
+                  {u.email}
+                  {u.is_admin && (
+                    <span className="text-[10px] font-bold text-black bg-amber-400 rounded px-1 py-0.5">ADMIN</span>
+                  )}
+                  {u.banned && (
+                    <span className="text-[10px] font-bold text-white bg-red-600 rounded px-1 py-0.5">BANNED</span>
+                  )}
+                </span>
+                <span className="text-space-dim text-left">{u.tier}</span>
+                {u.is_admin ? (
+                  <span className="font-mono text-space-dim text-left">—</span>
+                ) : (
+                  <button
+                    type="button"
+                    title="Grant credits"
+                    onClick={() => openGrant(u)}
+                    className="font-mono text-purple-400 hover:text-purple-300 text-left"
+                  >
+                    {(u.credits ?? 0).toLocaleString()}
+                  </button>
+                )}
                 <span className="flex items-center gap-2">
                   <button
                     type="button"
@@ -125,10 +245,25 @@ export default function ManageUsers() {
                   >
                     Purchases
                   </button>
+                  {!u.is_admin && (u.banned ? (
+                    <button
+                      type="button"
+                      title="Restore access"
+                      onClick={() => restore(u)}
+                      className="text-space-dim hover:text-green-400 transition-colors"
+                    >↺</button>
+                  ) : (
+                    <button
+                      type="button"
+                      title="Revoke access"
+                      onClick={() => setRevokeFor(u)}
+                      className="text-red-500 hover:text-red-400 transition-colors font-bold"
+                    >✕</button>
+                  ))}
                 </span>
               </div>
             ))}
-            {users.length === 0 && <p className="px-3 py-3 text-xs text-space-dim">No users.</p>}
+            {shown.length === 0 && <p className="px-3 py-3 text-xs text-space-dim">No users.</p>}
           </div>
         </div>
       </section>
@@ -155,6 +290,55 @@ export default function ManageUsers() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+
+      {grantFor && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70" onClick={() => setGrantFor(null)}>
+          <div className="bg-[#12121f] border border-space-border rounded-xl p-5 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold mb-1">Grant credits</h3>
+            <p className="text-xs text-space-dim mb-3">{grantFor.email}</p>
+            {budget?.available == null ? (
+              <p className="text-xs text-red-400 mb-3">System balance unavailable — grants are disabled.</p>
+            ) : (
+              <p className="text-xs text-space-dim mb-3">Up to {budget.available.toLocaleString()} credits available (free to the user, funded from the system balance).</p>
+            )}
+            <input
+              type="number"
+              min="1"
+              max={budget?.available ?? undefined}
+              value={grantAmount}
+              onChange={(e) => setGrantAmount(e.target.value)}
+              disabled={budget?.available == null}
+              className="w-full mb-3 px-3 py-2 rounded-lg bg-white/5 border border-space-border text-sm focus:outline-none focus:border-purple-500 disabled:opacity-50"
+            />
+            {grantError && <p className="text-xs text-red-400 mb-2">{grantError}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setGrantFor(null)} className="px-3 py-1.5 text-sm text-space-dim hover:text-space-text">Cancel</button>
+              <button
+                onClick={submitGrant}
+                disabled={granting || budget?.available == null || Number(grantAmount) <= 0}
+                className="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-500 disabled:opacity-50"
+              >
+                {granting ? 'Granting…' : 'Grant'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revokeFor && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70" onClick={() => setRevokeFor(null)}>
+          <div className="bg-[#12121f] border border-space-border rounded-xl p-5 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold mb-1">Revoke access</h3>
+            <p className="text-xs text-space-dim mb-4">
+              Ban <span className="text-space-text">{revokeFor.email}</span> and remove them from the allowlist? They'll be signed out and need a fresh invite to return.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setRevokeFor(null)} className="px-3 py-1.5 text-sm text-space-dim hover:text-space-text">Cancel</button>
+              <button onClick={confirmRevoke} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-500">Revoke</button>
+            </div>
           </div>
         </div>
       )}
