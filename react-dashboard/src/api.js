@@ -294,5 +294,20 @@ export const inviteUser = (email) =>
 
 export const getInvites = () => _fetch('/api/admin/invites')
 
+export const getUsers = () => _fetch('/api/admin/users')
+
+export const getUserPurchases = (profileId) =>
+  _fetch(`/api/admin/users/${profileId}/purchases`)
+
+export const startImpersonation = (profileId) =>
+  _fetch('/api/admin/impersonate/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile_id: profileId }),
+  })
+
+export const stopImpersonation = () =>
+  _fetch('/api/admin/impersonate/stop', { method: 'POST' })
+
 export const logout = () =>
   fetch('/auth/logout', { method: 'POST' }).then(() => { window.location.href = '/' })
