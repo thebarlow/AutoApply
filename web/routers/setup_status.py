@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -14,8 +15,15 @@ router = APIRouter()
 
 
 def _has_configured_llm_provider(db: Session) -> bool:
-    """Return True if any named provider or profile has a usable API key."""
+    """Return True if a usable LLM key is configured.
+
+    On the hosted app the platform owns the key via ``LLM_API_KEY`` (see
+    ``core.llm.get_client_for_profile``); that alone makes the LLM usable. Local
+    setups may instead carry per-provider or per-profile keys in the env file.
+    """
     env = _read_env()
+    if os.getenv("LLM_API_KEY") or env.get("LLM_API_KEY"):
+        return True
     for p in _get_providers(db):
         if env.get(_env_key_name(p["id"])):
             return True
