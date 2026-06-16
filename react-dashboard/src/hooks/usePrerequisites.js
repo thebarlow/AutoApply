@@ -27,7 +27,8 @@ export function usePrerequisites() {
     refresh();
   }, [refresh]);
 
-  const isFirstRun = state.loaded && !state.error && !state.llmReady && !state.resumeReady;
+  // The platform owns the LLM key, so onboarding keys only on a missing résumé.
+  const isFirstRun = state.loaded && !state.error && !state.resumeReady;
 
   return { ...state, isFirstRun, refresh };
 }
