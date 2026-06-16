@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.email import send_invite
 from db.database import Account, AllowedEmail, Purchase, get_db
-from web.routers.credits import require_admin
+from web.routers.credits import openrouter_remaining, require_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -129,6 +130,26 @@ def impersonate_start(body: ImpersonateRequest, request: Request,
         raise HTTPException(status_code=404, detail="profile not found")
     request.session["impersonate_profile_id"] = body.profile_id
     return {"ok": True}
+
+
+CREDITS_PER_DOLLAR = 1000
+
+
+def _grant_budget(db: Session) -> dict:
+    remaining = openrouter_remaining()
+    allocated = int(db.query(func.coalesce(func.sum(Account.credit_balance), 0))
+                    .filter(Account.is_admin.is_(False)).scalar() or 0)
+    if remaining is None:
+        return {"system_credits": None, "allocated": allocated, "available": None}
+    system_credits = round(remaining * CREDITS_PER_DOLLAR)
+    return {"system_credits": system_credits, "allocated": allocated,
+            "available": max(system_credits - allocated, 0)}
+
+
+@router.get("/grant-budget")
+def grant_budget(db: Session = Depends(get_db),
+                 admin: Account = Depends(require_real_admin)):
+    return _grant_budget(db)
 
 
 @router.post("/impersonate/stop")
