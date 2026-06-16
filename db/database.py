@@ -154,6 +154,18 @@ class Identity(Base):
     created_at = Column(String, nullable=False)
 
 
+class AllowedEmail(Base):
+    """Runtime allowlist entry (an admin invite). Supplements the ALLOWED_EMAILS
+    env var, which remains the bootstrap allowlist."""
+
+    __tablename__ = "allowed_email"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, nullable=False, unique=True)
+    invited_by = Column(Integer, ForeignKey("account.id"), nullable=True)
+    created_at = Column(String, nullable=False)
+
+
 class CreditLedger(Base):
     """Append-only credit ledger: the reconcilable source of truth for balances.
 
