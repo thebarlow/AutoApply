@@ -6,6 +6,7 @@ import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
 import Wizard from './components/Onboarding/Wizard'
 import Docs from './components/Docs'
+import AdminPage from './components/AdminPage'
 import LoginScreen from './components/LoginScreen'
 import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
@@ -191,6 +192,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/docs" element={<Docs />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={
         <div className="min-h-screen text-space-text">
           {showWizard && (
@@ -199,7 +201,7 @@ export default function App() {
               onSkip={() => setWizardSkipped(true)}
             />
           )}
-          <Navbar />
+          <Navbar me={me} />
           {toasts.length > 0 && (
             <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-sm">
               {toasts.map((t) => (
