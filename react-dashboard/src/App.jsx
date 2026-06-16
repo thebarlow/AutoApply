@@ -196,7 +196,7 @@ export default function App() {
           {showWizard && (
             <Wizard
               onFinish={() => { window.location.reload(); }}
-              onSkip={(didCreate) => { if (didCreate) window.location.reload(); else setWizardSkipped(true); }}
+              onSkip={() => setWizardSkipped(true)}
             />
           )}
           <Navbar />
