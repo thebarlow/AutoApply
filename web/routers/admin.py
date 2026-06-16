@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from core.credits import grant_credits
 from core.email import send_invite
+from core.payments import tier_margins
 from db.database import Account, AllowedEmail, Purchase, get_db
 from web.routers.credits import openrouter_remaining, require_admin
 
@@ -28,22 +29,33 @@ def _now() -> str:
 
 class InviteRequest(BaseModel):
     email: str
+    tier: str = "standard"
+    is_admin: bool = False
 
 
 @router.post("/invite")
 def invite_user(body: InviteRequest, db: Session = Depends(get_db),
                 admin: Account = Depends(require_admin)):
-    """Allowlist an email and send an invite. Idempotent: a repeat email is not
-    re-inserted (no duplicate row) but the email is resent. Returns
+    """Allowlist an email (with an intended user type) and send an invite.
+
+    Idempotent: a repeat email is not re-inserted, but its tier/is_admin are
+    updated to the latest request and the email is resent. The type is applied
+    to the Account when it is provisioned at first login. Returns
     {email, already_invited, emailed}."""
     email = body.email.strip().lower()
     if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="invalid email")
+    if body.tier not in tier_margins():
+        raise HTTPException(status_code=400, detail="invalid tier")
     existing = db.query(AllowedEmail).filter_by(email=email).first()
     already = existing is not None
-    if not already:
-        db.add(AllowedEmail(email=email, invited_by=admin.id, created_at=_now()))
-        db.commit()
+    if already:
+        existing.tier = body.tier
+        existing.is_admin = body.is_admin
+    else:
+        db.add(AllowedEmail(email=email, invited_by=admin.id, created_at=_now(),
+                            tier=body.tier, is_admin=body.is_admin))
+    db.commit()
     emailed = send_invite(email)
     return {"email": email, "already_invited": already, "emailed": emailed}
 
@@ -52,7 +64,8 @@ def invite_user(body: InviteRequest, db: Session = Depends(get_db),
 def list_invites(db: Session = Depends(get_db),
                  admin: Account = Depends(require_admin)):
     rows = db.query(AllowedEmail).order_by(AllowedEmail.id.desc()).all()
-    return [{"email": r.email, "created_at": r.created_at} for r in rows]
+    return [{"email": r.email, "created_at": r.created_at,
+             "tier": r.tier, "is_admin": r.is_admin} for r in rows]
 
 
 def require_real_admin(request: Request, db: Session = Depends(get_db)) -> Account:

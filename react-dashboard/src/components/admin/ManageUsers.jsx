@@ -15,6 +15,8 @@ const creditSortVal = (u) => (u.is_admin ? -1 : (u.credits ?? 0))
 
 export default function ManageUsers() {
   const [email, setEmail] = useState('')
+  const [tier, setTier] = useState('standard')
+  const [isAdmin, setIsAdmin] = useState(false)
   const [status, setStatus] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [invites, setInvites] = useState([])
@@ -49,14 +51,15 @@ export default function ManageUsers() {
     setSubmitting(true)
     setStatus(null)
     try {
-      const r = await inviteUser(email.trim())
+      const r = await inviteUser(email.trim(), tier, isAdmin)
       const text = r.already_invited
-        ? 'Already invited.'
+        ? 'Invite updated.'
         : r.emailed
         ? 'Invited — email sent.'
         : 'Added to allowlist (email not configured).'
       setStatus({ kind: 'ok', text })
       setEmail('')
+      setIsAdmin(false)
       refreshInvites()
     } catch {
       setStatus({ kind: 'err', text: 'Failed to send invite.' })
@@ -141,15 +144,33 @@ export default function ManageUsers() {
     <div className="flex flex-col gap-6">
       <section>
         <h2 className="text-lg font-semibold mb-3">Invite a user</h2>
-        <form onSubmit={submit} className="flex gap-2">
+        <form onSubmit={submit} className="flex flex-wrap gap-2 items-center">
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="person@example.com"
-            className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-space-border text-sm focus:outline-none focus:border-purple-500"
+            className="flex-1 min-w-[14rem] px-3 py-2 rounded-lg bg-white/5 border border-space-border text-sm focus:outline-none focus:border-purple-500"
           />
+          <select
+            value={tier}
+            onChange={(e) => setTier(e.target.value)}
+            className="px-3 py-2 rounded-lg bg-white/5 border border-space-border text-sm focus:outline-none focus:border-purple-500"
+          >
+            <option value="standard" className="bg-[#0f0f1a]">Standard</option>
+            <option value="friends_family" className="bg-[#0f0f1a]">Friends &amp; Family</option>
+            <option value="beta" className="bg-[#0f0f1a]">Beta</option>
+          </select>
+          <label className="flex items-center gap-1.5 text-sm text-space-dim select-none">
+            <input
+              type="checkbox"
+              checked={isAdmin}
+              onChange={(e) => setIsAdmin(e.target.checked)}
+              className="accent-purple-600"
+            />
+            Make admin
+          </label>
           <button
             type="submit"
             disabled={submitting}
@@ -167,8 +188,16 @@ export default function ManageUsers() {
           <ul className="flex flex-col gap-1 mt-4">
             <li className="text-xs uppercase tracking-widest text-space-dim mb-1">Invited</li>
             {invites.map((inv) => (
-              <li key={inv.email} className="flex justify-between text-sm border-b border-space-border/50 py-1">
-                <span>{inv.email}</span>
+              <li key={inv.email} className="flex justify-between items-center gap-2 text-sm border-b border-space-border/50 py-1">
+                <span className="flex items-center gap-2">
+                  {inv.email}
+                  {inv.tier && inv.tier !== 'standard' && (
+                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 text-space-dim">{inv.tier.replace('_', ' ')}</span>
+                  )}
+                  {inv.is_admin && (
+                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/30 text-purple-300">admin</span>
+                  )}
+                </span>
                 <span className="text-space-dim text-xs">{new Date(inv.created_at).toLocaleDateString()}</span>
               </li>
             ))}

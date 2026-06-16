@@ -285,11 +285,11 @@ export const verifyPurchase = (sessionId) =>
 
 export const getSystemBalance = () => _fetch('/api/admin/system-balance')
 
-export const inviteUser = (email) =>
+export const inviteUser = (email, tier = 'standard', is_admin = false) =>
   _fetch('/api/admin/invite', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, tier, is_admin }),
   })
 
 export const getInvites = () => _fetch('/api/admin/invites')

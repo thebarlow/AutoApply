@@ -86,6 +86,28 @@ def test_allowlisted_provisions_account_profile_and_prompts(db, monkeypatch):
     assert db.query(Prompt).filter_by(profile_id=acct.profile_id).count() == len(PROMPT_TYPE_KEYS)
 
 
+def test_invite_type_applied_at_provisioning(db, monkeypatch):
+    monkeypatch.delenv("ALLOWED_EMAILS", raising=False)
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    _seed_prompt_defaults(db)
+    from db.database import AllowedEmail
+    db.add(AllowedEmail(email="new@x.com", created_at="t", tier="beta", is_admin=True))
+    db.commit()
+    acct = resolve_or_provision_account(db, _claims())
+    assert acct.tier == "beta"
+    assert acct.is_admin is True
+    assert acct.credit_rate == 0.0  # admin runs ungated
+
+
+def test_allowlisted_without_invite_row_defaults_standard(db, monkeypatch):
+    monkeypatch.setenv("ALLOWED_EMAILS", "new@x.com")
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    _seed_prompt_defaults(db)
+    acct = resolve_or_provision_account(db, _claims())
+    assert acct.tier == "standard"
+    assert acct.is_admin is False
+
+
 def test_returning_identity_returns_same_account(db, monkeypatch):
     monkeypatch.setenv("ALLOWED_EMAILS", "new@x.com")
     _seed_prompt_defaults(db)

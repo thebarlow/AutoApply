@@ -123,11 +123,17 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
 
 
 def _provision_account(db: Session, *, email: str, is_admin: bool, claims: Claims) -> Account:
+    # An admin invite may set the intended tier and grant admin; env-based admin
+    # (ADMIN_EMAILS) still wins via OR. No invite row => standard, non-admin.
+    from db.database import AllowedEmail
+    invite = db.query(AllowedEmail).filter_by(email=email.lower()).first()
+    tier = invite.tier if invite is not None else "standard"
+    is_admin = is_admin or (invite.is_admin if invite is not None else False)
     profile_id = _profile_for_new_account(db, is_admin)
     acct = Account(
         email=email, is_admin=is_admin, profile_id=profile_id, created_at=_now(),
         credit_rate=0.0 if is_admin else default_rate(),
-        tier="standard",
+        tier=tier,
     )
     db.add(acct)
     db.flush()

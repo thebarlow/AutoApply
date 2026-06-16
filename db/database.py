@@ -165,6 +165,9 @@ class AllowedEmail(Base):
     email = Column(String, nullable=False, unique=True)
     invited_by = Column(Integer, ForeignKey("account.id"), nullable=True)
     created_at = Column(String, nullable=False)
+    # Intended user type, applied to the Account when it is provisioned at first login.
+    tier = Column(String, nullable=False, default="standard")
+    is_admin = Column(Boolean, nullable=False, default=False)
 
     @validates("email")
     def _lowercase_email(self, key, value):

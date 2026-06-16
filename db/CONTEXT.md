@@ -43,7 +43,7 @@ longer exist.
 | `account` | `Account` | Login-identity owner, 1:1 → `user_profile` (unique `profile_id`); unique `email`; `is_admin`; `banned` (bool — suspends login and all API access; set by `POST /api/admin/users/{id}/access`); `credit_balance` (cached running total); `credit_rate` (per-account tier multiplier). Not tenant-guarded. | Auth / Credits |
 | `identity` | `Identity` | OAuth `(provider, provider_subject)` (unique together) → `account`. Many identities per account (link-by-verified-email). Not tenant-guarded. | Auth |
 | `credit_ledger` | `CreditLedger` | Append-only credit history: `profile_id, delta, reason, action, job_key, raw_cost_usd, meta, created_by, created_at`. Source of truth for `account.credit_balance`. Not tenant-guarded (keyed by `profile_id` but not in `_TENANT_TABLES`). | Credits |
-| `allowed_email` | `AllowedEmail` | Runtime invite allowlist: `email` (unique, lowercased via validator), `invited_by` (FK → `account.id`), `created_at`. Supplements the `ALLOWED_EMAILS` env var — `is_allowed_email` checks both. Rows inserted by `POST /api/admin/invite`. | Auth |
+| `allowed_email` | `AllowedEmail` | Runtime invite allowlist: `email` (unique, lowercased via validator), `invited_by` (FK → `account.id`), `created_at`, `tier` (default `standard`), `is_admin` (default false). `tier`/`is_admin` carry the intended user type, applied to the `Account` at first-login provisioning (`_provision_account`); env `ADMIN_EMAILS` still OR's into admin. Supplements the `ALLOWED_EMAILS` env var — `is_allowed_email` checks both. Rows upserted by `POST /api/admin/invite` (repeat email updates type + resends). | Auth |
 
 ## Prompt seeding at startup
 

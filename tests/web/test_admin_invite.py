@@ -83,3 +83,44 @@ def test_list_invites(client):
     assert r.status_code == 200
     emails = [row["email"] for row in r.json()]
     assert "listed@example.com" in emails
+
+
+def test_invite_stores_type(client):
+    c, db = client
+    with patch("web.routers.admin.send_invite", return_value=False):
+        r = c.post("/api/admin/invite",
+                   json={"email": "vip@example.com", "tier": "beta", "is_admin": True})
+    assert r.status_code == 200
+    row = db.query(AllowedEmail).filter_by(email="vip@example.com").first()
+    assert row.tier == "beta"
+    assert row.is_admin is True
+    listed = next(x for x in c.get("/api/admin/invites").json()
+                  if x["email"] == "vip@example.com")
+    assert listed["tier"] == "beta" and listed["is_admin"] is True
+
+
+def test_invite_defaults_to_standard_non_admin(client):
+    c, db = client
+    with patch("web.routers.admin.send_invite", return_value=False):
+        c.post("/api/admin/invite", json={"email": "plain@example.com"})
+    row = db.query(AllowedEmail).filter_by(email="plain@example.com").first()
+    assert row.tier == "standard" and row.is_admin is False
+
+
+def test_invite_rejects_unknown_tier(client):
+    c, _db = client
+    r = c.post("/api/admin/invite",
+               json={"email": "x@example.com", "tier": "platinum"})
+    assert r.status_code == 400
+
+
+def test_repeat_invite_updates_type(client):
+    c, db = client
+    with patch("web.routers.admin.send_invite", return_value=False):
+        c.post("/api/admin/invite", json={"email": "dup@example.com"})
+        r = c.post("/api/admin/invite",
+                   json={"email": "dup@example.com", "tier": "beta", "is_admin": True})
+    assert r.json()["already_invited"] is True
+    rows = db.query(AllowedEmail).filter_by(email="dup@example.com").all()
+    assert len(rows) == 1
+    assert rows[0].tier == "beta" and rows[0].is_admin is True
