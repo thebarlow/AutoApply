@@ -31,6 +31,10 @@ class BetaAccessDenied(Exception):
     """Raised when a login is rejected (unverified email or not on the allowlist)."""
 
 
+class NoExtensionAccount(Exception):
+    """Raised when an extension login has no existing AutoApply account to bind to."""
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -49,6 +53,40 @@ def is_allowed_email(db: Session, email: str) -> bool:
         return True
     from db.database import AllowedEmail
     return db.query(AllowedEmail).filter_by(email=e).first() is not None
+
+
+def resolve_existing_account(db: Session, claims: Claims) -> Account:
+    """Map OAuth claims to an EXISTING account; never provision (Option B).
+
+    Links a new provider identity onto a known verified email. Raises
+    NoExtensionAccount for unverified email, no matching account, or a banned
+    account — the extension is a companion to a website-created account, not a
+    sign-up surface.
+    """
+    if not claims.email or not claims.email_verified:
+        raise NoExtensionAccount("email not verified")
+    email = claims.email.lower()
+
+    ident = (
+        db.query(Identity)
+        .filter_by(provider=claims.provider, provider_subject=claims.subject)
+        .first()
+    )
+    if ident is not None:
+        acct = db.query(Account).filter_by(id=ident.account_id).first()
+        if acct is None or acct.banned:
+            raise NoExtensionAccount(email)
+        return acct
+
+    acct = db.query(Account).filter_by(email=email).first()
+    if acct is None or acct.banned:
+        raise NoExtensionAccount(email)
+    db.add(Identity(
+        account_id=acct.id, provider=claims.provider,
+        provider_subject=claims.subject, created_at=_now(),
+    ))
+    db.commit()
+    return acct
 
 
 def resolve_or_provision_account(db: Session, claims: Claims) -> Account:
