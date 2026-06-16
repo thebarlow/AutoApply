@@ -20,7 +20,6 @@ Two-panel layout split 3:2 in a 5-column grid:
 |---|---|
 | Top navbar (branding, credits, help button, Admin link for admins) | `src/components/Navbar.jsx` — shows an Admin link when `me.is_admin` |
 | Credit balance display (navbar + User tab panel) | `src/components/widgets/CreditBalance.jsx` — fetches `/api/credits`; refetches on `auto-apply:credits-stale` event; `variant` prop: `nav`/`panel`; for admins shows the platform system balance (click toggles $/credits) instead of personal credits |
-| Admin dev system-balance panel (OpenRouter balance) | `src/components/widgets/UserHome.jsx` — `SystemBalancePanel` (gated on `/api/me` `is_admin`; GETs `/api/admin/system-balance`) |
 | Out-of-credits (HTTP 402) global signal | `src/api.js` — `_fetch` dispatches `auto-apply:credits-error` + `auto-apply:credits-stale`; toasted in `src/App.jsx` |
 | Grid layout or viewport sizing | `src/components/Dashboard.jsx` |
 | Job card appearance (title, company, status icon, doc badges) | `src/components/shared/JobCard.jsx` |

@@ -70,7 +70,7 @@ def test_invite_idempotent(client):
 
 def test_invite_rejects_malformed_email(client):
     c, _db = client  # fixture yields (TestClient, db); client is admin-authed
-    for bad in ["nope", "@example.com", "user@", "user@nodot"]:
+    for bad in ["nope", "@example.com", "user@", "user@nodot", "user@@example.com"]:
         r = c.post("/api/admin/invite", json={"email": bad})
         assert r.status_code == 400
 

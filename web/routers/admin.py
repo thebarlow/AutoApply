@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +16,8 @@ from web.routers.credits import require_admin
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 logger = logging.getLogger(__name__)
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _now() -> str:
@@ -32,8 +35,7 @@ def invite_user(body: InviteRequest, db: Session = Depends(get_db),
     re-inserted (no duplicate row) but the email is resent. Returns
     {email, already_invited, emailed}."""
     email = body.email.strip().lower()
-    local, _, domain = email.partition("@")
-    if not local or "." not in domain or not domain.rsplit(".", 1)[-1]:
+    if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="invalid email")
     existing = db.query(AllowedEmail).filter_by(email=email).first()
     already = existing is not None
