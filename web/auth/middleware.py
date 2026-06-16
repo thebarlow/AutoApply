@@ -16,7 +16,11 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 _GATED_PREFIXES = ("/api/",)
-_EXEMPT_PATHS = ("/api/payments/webhook",)
+_EXEMPT_PATHS = (
+    "/api/payments/webhook",
+    "/api/scraper/stage-job",
+    "/api/ext/me",
+)
 
 
 class AuthGateMiddleware:
