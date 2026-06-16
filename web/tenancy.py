@@ -28,6 +28,18 @@ def get_dev_tenant_id(db: Session) -> int:
     return DEFAULT_TENANT_ID
 
 
+def _impersonated_profile_id(request: Request, db: Session, account: Account) -> int | None:
+    """The impersonation target, honored only when the real account is an admin.
+
+    Admin status is re-verified here every request, so a stale session flag left
+    by a since-demoted account is ignored.
+    """
+    if not account.is_admin:
+        return None
+    target = request.session.get("impersonate_profile_id")
+    return int(target) if target else None
+
+
 def current_profile_id(request: Request, db: Session = Depends(get_db)) -> int:
     """FastAPI dependency: the active tenant for this request.
 
@@ -42,7 +54,8 @@ def current_profile_id(request: Request, db: Session = Depends(get_db)) -> int:
         acct = db.query(Account).filter_by(id=account_id).first()
         if acct is None:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        return acct.profile_id
+        impersonated = _impersonated_profile_id(request, db, acct)
+        return impersonated if impersonated is not None else acct.profile_id
     return get_dev_tenant_id(db)
 
 
