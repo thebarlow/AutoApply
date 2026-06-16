@@ -43,8 +43,12 @@ def is_admin_email(email: str) -> bool:
     return email.lower() in _email_set("ADMIN_EMAILS")
 
 
-def is_allowed_email(email: str) -> bool:
-    return email.lower() in _email_set("ALLOWED_EMAILS")
+def is_allowed_email(db: Session, email: str) -> bool:
+    e = email.lower()
+    if e in _email_set("ALLOWED_EMAILS"):
+        return True
+    from db.database import AllowedEmail
+    return db.query(AllowedEmail).filter_by(email=e).first() is not None
 
 
 def resolve_or_provision_account(db: Session, claims: Claims) -> Account:
@@ -93,7 +97,7 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
         return db.query(Account).filter_by(id=ident.account_id).first()
 
     admin = is_admin_email(email)
-    if not admin and not is_allowed_email(email):
+    if not admin and not is_allowed_email(db, email):
         raise BetaAccessDenied(email)
 
     acct = db.query(Account).filter_by(email=email).first()
