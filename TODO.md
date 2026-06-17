@@ -11,7 +11,40 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   `getDescription`/`detailReadySelector` against current Indeed DOM and capture the full
   description body.
 
+- [ ] **Invite email times out to Zoho SMTP.** Resending the invite to
+  shadowling39@gmail.com surfaced `Email failed: TimeoutError: timed out` — the SMTP
+  connection from Railway to `smtp.zoho.com:465` times out (now visible thanks to the
+  invite error-surfacing fix). Likely Railway egress to port 465 blocked/slow. Investigate:
+  try STARTTLS on 587, confirm Railway allows outbound SMTP, or move to an HTTP email API
+  (e.g. Zoho's API, Resend, Postmark) instead of raw SMTP.
+
 ## Features
+
+- [ ] **Per-section resume content/format control + section-paired prompts.** SPEC IN
+  PROGRESS (umbrella spec decomposes into three sub-projects sharing a per-section config
+  on the profile: A=rewrite behavior, B=content structure/order, C=visual layout). Per-item
+  rewrite toggles, per-section prompts with per-section eval/refine + final ATS gate,
+  user-creatable/renamable sections. Ship rewrite behavior first. See
+  `docs/superpowers/specs/` once written.
+
+- [ ] **High-effort toggle.** A toggle (per-prompt and/or a general switch) that swaps to a
+  more capable model for a request, consuming more credits in exchange for higher quality.
+  Surface the cost implication in the UI.
+
+- [ ] **Feedback tab → admin ticketing.** Add a Feedback link in the navbar where users
+  submit suggestions. Submissions become tickets visible in the Admin tab. A ticket has a
+  sender, title, and description; admins can mark tickets completed and add notes. Keep it
+  simple but robust enough to ingest user feedback and iterate. (New `tickets` table; user
+  submit endpoint + admin list/update endpoints; navbar entry + admin panel.)
+
+- [ ] **Auto-score jobs after upload.** Trigger scoring automatically once a job is ingested
+  (extension stage-job + manual upload), instead of requiring a manual score action.
+
+- [ ] **Remove "For Developers" from help docs.** Hosted users interact via the website,
+  not a repo checkout; drop `Obsidian/Auto Apply/Docs/For Developers.md`.
+
+- [ ] **Flesh out "Making a Good Master Resume" help doc.** Add concrete tips for writing a
+  strong master résumé (`Obsidian/Auto Apply/Docs/Making a Good Master Resume.md`).
 
 ### Hosting / SaaS conversion
 
