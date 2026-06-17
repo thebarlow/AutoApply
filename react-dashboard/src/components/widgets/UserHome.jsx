@@ -4,7 +4,6 @@ import {
   PieChart, Pie, Cell, Sector, LabelList,
 } from 'recharts'
 import { getProfiles, getStats, getSkillFrequency, getJobsForSkill, getMe, getPurchaseHistory } from '../../api'
-import ProfileCards from './ProfileCards'
 import SkillChipModal from './SkillChipModal'
 import CreditBalance from './CreditBalance'
 import BuyCreditsModal from './BuyCreditsModal'
@@ -164,7 +163,6 @@ function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, o
 export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, activeSkill }) {
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
-  const [showSwitchUser, setShowSwitchUser] = useState(false)
   const [win, setWin] = useState('all_time')
   const [metricIdx, setMetricIdx] = useState(0)
   const [stats, setStats] = useState(null)
@@ -230,22 +228,17 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   }
 
   if (!activeProfile) {
-    return <ProfileCards onSelect={onSelect} onCreateProfile={onCreateProfile} onActiveChanged={fetchProfiles} />
-  }
-
-  if (showSwitchUser) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col items-center gap-3 py-6">
+        <p className="text-sm text-space-dim text-center">
+          A profile is required to use the app.
+        </p>
         <button
-          onClick={() => setShowSwitchUser(false)}
-          className="flex items-center gap-1.5 text-xs text-space-dim hover:text-purple-400 transition-colors self-start"
+          onClick={onCreateProfile}
+          className="shiny-border border border-transparent bg-[#0a0a14] text-purple-300 hover:text-white rounded-lg px-4 py-2 text-sm transition-colors"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 12L6 8l4-4" />
-          </svg>
-          Back
+          + Create your profile
         </button>
-        <ProfileCards onSelect={onSelect} onCreateProfile={onCreateProfile} onActiveChanged={fetchProfiles} />
       </div>
     )
   }
@@ -338,8 +331,8 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
       <div className="flex flex-col items-center gap-2">
         <span className="text-xs text-space-dim uppercase tracking-widest">Welcome back</span>
         <button
-          onClick={() => setShowSwitchUser(true)}
-          title="Switch user"
+          onClick={() => onSelect(activeProfile.id)}
+          title="Edit your profile"
           className="max-w-full truncate px-4 py-1.5 rounded-lg border border-space-border text-lg font-semibold text-purple-300 hover:text-purple-200 hover:border-purple-500 transition-colors"
         >
           {displayName}
