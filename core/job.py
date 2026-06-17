@@ -1139,9 +1139,9 @@ class Job(Base):
             "phone": user.phone or "",
             "location": user.location or "",
         }
-        github = _cfg("resume_github")
-        linkedin = _cfg("resume_linkedin")
-        website = _cfg("resume_website")
+        github = (user.github or "") or _cfg("resume_github")
+        linkedin = (user.linkedin or "") or _cfg("resume_linkedin")
+        website = (user.website or "") or _cfg("resume_website")
         if github:
             data["github"] = github
         if linkedin:

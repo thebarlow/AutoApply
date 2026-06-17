@@ -44,9 +44,9 @@ def build_resume_header(user: Any, db: Session) -> ResumeHeader:
         email=user.email or "",
         phone=user.phone or "",
         location=user.location or "",
-        github=_cfg(db, "resume_github"),
-        linkedin=_cfg(db, "resume_linkedin"),
-        website=_cfg(db, "resume_website"),
+        github=(user.github or "") or _cfg(db, "resume_github"),
+        linkedin=(user.linkedin or "") or _cfg(db, "resume_linkedin"),
+        website=(user.website or "") or _cfg(db, "resume_website"),
     )
 
 
