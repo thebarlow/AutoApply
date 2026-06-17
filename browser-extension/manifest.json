@@ -11,7 +11,7 @@
   ],
   "background": {
     "service_worker": "background/service_worker.js",
-    "scripts": ["lib/browser_shim.js", "background/service_worker.js"]
+    "scripts": ["background/service_worker.js"]
   },
   "browser_specific_settings": {
     "gecko": { "id": "job-scraper@autoapply" }

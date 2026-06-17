@@ -1,24 +1,43 @@
 // browser-extension/background/service_worker.js
-// Chrome MV3 runs this as a real service worker (importScripts available) and
-// ignores the manifest `scripts` array, so it must load the shim here. Firefox
-// MV3 runs an event page (no importScripts) and loads the shim via the manifest
-// `scripts` array instead, so guard the call to avoid a ReferenceError on load.
-if (typeof importScripts === "function") {
-  importScripts("../lib/browser_shim.js");
+// Self-contained: does NOT load the external browser_shim.js. Firefox MV3 and
+// Chrome MV3 disagree on whether the background is a service worker (importScripts
+// available) or an event page (it is not), and on whether the manifest `scripts`
+// array is honored — relying on either to inject the shim proved unreliable. The
+// few APIs the background needs are wrapped inline instead, so the worker has zero
+// external-load dependency and registers its message listener no matter how the
+// background context is created.
+const _api = typeof browser !== "undefined" ? browser : chrome;
+const _isFirefox = typeof browser !== "undefined";
+
+// Promisify a callback-style chrome.* API; pass Firefox's native promise through.
+function _p(fn, ctx) {
+  return (...args) =>
+    _isFirefox
+      ? fn.apply(ctx, args)
+      : new Promise((resolve, reject) =>
+          fn.call(ctx, ...args, (res) =>
+            chrome.runtime.lastError
+              ? reject(new Error(chrome.runtime.lastError.message))
+              : resolve(res)
+          )
+        );
 }
+
+const storageGet = _p(_api.storage.local.get, _api.storage.local);
+const storageSet = _p(_api.storage.local.set, _api.storage.local);
 
 const SERVER = "https://autoapply.matthewbarlow.me";
 const DEDUP_KEY = "stagedJobKeys";
 const TOKEN_KEY = "extToken";
 
-xb.runtime.onMessage.addListener((message, sender, sendResponse) => {
+_api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender, sendResponse);
   return true;
 });
 
 async function handleMessage(message, sender, sendResponse) {
   if (message.type === "CHECK_DEDUP") {
-    const { [DEDUP_KEY]: keys = [] } = await xb.storage.local.get(DEDUP_KEY);
+    const { [DEDUP_KEY]: keys = [] } = await storageGet(DEDUP_KEY);
     sendResponse({ isDuplicate: keys.includes(message.job_key) });
     return;
   }
@@ -32,11 +51,11 @@ async function handleMessage(message, sender, sendResponse) {
 }
 
 async function handleScrape(payload) {
-  const { [DEDUP_KEY]: keys = [] } = await xb.storage.local.get(DEDUP_KEY);
+  const { [DEDUP_KEY]: keys = [] } = await storageGet(DEDUP_KEY);
   const keySet = new Set(keys);
   if (keySet.has(payload.job_key)) return { ok: true, status: "duplicate" };
 
-  const { [TOKEN_KEY]: token } = await xb.storage.local.get(TOKEN_KEY);
+  const { [TOKEN_KEY]: token } = await storageGet(TOKEN_KEY);
   if (!token) return { ok: false, error: "no_account" };
 
   const res = await fetch(`${SERVER}/api/scraper/stage-job`, {
@@ -50,6 +69,6 @@ async function handleScrape(payload) {
 
   const data = await res.json();
   keySet.add(payload.job_key);
-  await xb.storage.local.set({ [DEDUP_KEY]: [...keySet] });
+  await storageSet({ [DEDUP_KEY]: [...keySet] });
   return { ok: true, status: data.status };
 }
