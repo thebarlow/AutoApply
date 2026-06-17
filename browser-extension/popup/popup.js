@@ -54,15 +54,20 @@ async function render() {
   }
   try {
     const res = await fetch(`${SERVER}/api/ext/me`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error();
+    if (!res.ok) {
+      if (res.status === 401) {
+        await xb.storage.local.remove(TOKEN_KEY);
+        inEl.classList.add("hidden");
+        outEl.classList.remove("hidden");
+      }
+      return;
+    }
     const { email } = await res.json();
     document.getElementById("email").textContent = email;
     inEl.classList.remove("hidden");
     outEl.classList.add("hidden");
   } catch (_) {
-    await xb.storage.local.remove(TOKEN_KEY);
-    inEl.classList.add("hidden");
-    outEl.classList.remove("hidden");
+    // Network error or other transient failure; keep token and stay signed in
   }
 }
 
@@ -71,6 +76,9 @@ document.getElementById("loginGithub").addEventListener("click", () => signIn("g
 document.getElementById("logout").addEventListener("click", signOut);
 document.getElementById("clearDedup").addEventListener("click", async () => {
   await xb.storage.local.remove("stagedJobKeys");
-  showError("Scrape history cleared.");
+  const msgEl = document.getElementById("msg");
+  if (msgEl) {
+    msgEl.textContent = "Scrape history cleared.";
+  }
 });
 render();
