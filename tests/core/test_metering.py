@@ -50,6 +50,19 @@ def test_settles_cost_even_when_action_raises():
     assert db.query(CreditLedger).filter_by(reason="debit").count() == 1
 
 
+def test_admin_bypasses_gate_and_debit_despite_rate_and_zero_balance():
+    # Admins draw from the system balance: never gated, never debited, even with a
+    # positive credit_rate and a zero balance.
+    db = _db_with_account(rate=1.5, balance=0)
+    acct = db.query(Account).first()
+    acct.is_admin = True
+    db.commit()
+    with metering.meter_action(db, 1, action="generate", job_key="j1", floor=10):
+        metering.record_call(0.05, "modelA", 100, 50)
+    assert db.query(CreditLedger).filter_by(reason="debit").count() == 0
+    assert db.query(Account).first().credit_balance == 0
+
+
 def test_record_call_outside_meter_is_noop():
     metering.record_call(0.01, "m", 1, 1)  # must not raise
 

@@ -51,7 +51,9 @@ def meter_action(db: Session, profile_id: int, *, action: str,
     if floor is None:
         floor = credit_floor()
     acct = get_account_for_profile(db, profile_id)
-    metered = acct is not None and (acct.credit_rate or 0.0) > 0
+    # Admins draw directly from the platform's system balance: never gated, never
+    # debited, regardless of any stored credit_rate.
+    metered = acct is not None and not acct.is_admin and (acct.credit_rate or 0.0) > 0
     if metered and (acct.credit_balance or 0) < floor:
         raise InsufficientCredits(acct.credit_balance or 0, floor)
 
