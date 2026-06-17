@@ -53,7 +53,7 @@ export default function App() {
   // Out-of-credits signal (dispatched from api.js on HTTP 402)
   useEffect(() => {
     const handler = () =>
-      pushToast("You're out of credits — contact the admin to top up.")
+      pushToast("You're out of credits — purchase more to continue.")
     window.addEventListener('auto-apply:credits-error', handler)
     return () => window.removeEventListener('auto-apply:credits-error', handler)
   }, [pushToast])

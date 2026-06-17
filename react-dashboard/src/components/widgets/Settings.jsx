@@ -624,7 +624,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
         if (res.status === 402 && body?.error === 'insufficient_credits') {
           window.dispatchEvent(new CustomEvent('auto-apply:credits-error', { detail: body }))
           window.dispatchEvent(new Event('auto-apply:credits-stale'))
-          detail = "You're out of credits — contact the admin to top up."
+          detail = "You're out of credits — purchase more to continue."
         }
         setActionError(detail)
       }
