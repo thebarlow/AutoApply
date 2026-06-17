@@ -6,7 +6,11 @@
   <style>
     body { font: 13px system-ui; width: 240px; padding: 12px; }
     button { display: block; width: 100%; margin: 6px 0; padding: 8px; cursor: pointer; }
-    #email { font-weight: 600; }
+    a.joblink { display: block; width: 100%; margin: 6px 0; padding: 8px; box-sizing: border-box;
+      text-align: center; text-decoration: none; color: #fff; background: #2563eb; border-radius: 4px; }
+    a.joblink:hover { background: #1d4ed8; }
+    #greeting { font-weight: 600; }
+    #email { color: #555; font-size: 12px; }
     .hidden { display: none; }
   </style>
 </head>
@@ -18,7 +22,11 @@
     <p id="err" style="color:#b00;"></p>
   </div>
   <div id="signedIn" class="hidden">
-    <p>Signed in as <span id="email"></span></p>
+    <p id="greeting"></p>
+    <p>Ready to look at jobs?</p>
+    <a class="joblink" href="https://www.linkedin.com/jobs/" target="_blank" rel="noopener">Browse LinkedIn jobs</a>
+    <a class="joblink" href="https://www.indeed.com/jobs" target="_blank" rel="noopener">Browse Indeed jobs</a>
+    <p id="email"></p>
     <button id="logout">Sign out</button>
   </div>
   <hr />

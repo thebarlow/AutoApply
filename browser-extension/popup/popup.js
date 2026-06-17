@@ -42,6 +42,13 @@ function showError(msg) {
   document.getElementById("err").textContent = msg;
 }
 
+// Friendly first name derived from the email local part (no name field exists
+// server-side); "matthew.barlow@x.com" -> "Matthew".
+function displayName(email) {
+  const local = (email || "").split("@")[0].split(/[._-]/)[0];
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : "there";
+}
+
 async function render() {
   const token = await getToken();
   const inEl = document.getElementById("signedIn");
@@ -63,6 +70,7 @@ async function render() {
       return;
     }
     const { email } = await res.json();
+    document.getElementById("greeting").textContent = `Hi ${displayName(email)}!`;
     document.getElementById("email").textContent = email;
     inEl.classList.remove("hidden");
     outEl.classList.add("hidden");
