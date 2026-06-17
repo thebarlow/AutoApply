@@ -75,6 +75,26 @@ async function handleSignIn(provider) {
   return { ok: true };
 }
 
+const REQUEST_TIMEOUT_MS = 10000;
+const MAX_ATTEMPTS = 2;
+
+// POST with an abortable timeout. The first request after the service worker
+// wakes from idle can be slow (worker spin-up + cold TLS), so the caller retries.
+async function postStageJob(token, payload) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(`${SERVER}/api/scraper/stage-job`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function handleScrape(payload) {
   const { [DEDUP_KEY]: keys = [] } = await storageGet(DEDUP_KEY);
   const keySet = new Set(keys);
@@ -83,11 +103,18 @@ async function handleScrape(payload) {
   const { [TOKEN_KEY]: token } = await storageGet(TOKEN_KEY);
   if (!token) return { ok: false, error: "no_account" };
 
-  const res = await fetch(`${SERVER}/api/scraper/stage-job`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
-  });
+  let res;
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      res = await postStageJob(token, payload);
+      break; // got an HTTP response (even an error status) — don't retry those
+    } catch (err) {
+      // Timeout (AbortError) or network failure — retry once, then give up.
+      lastErr = err;
+    }
+  }
+  if (!res) throw new Error(lastErr && lastErr.name === "AbortError" ? "timeout" : "network");
 
   if (res.status === 401) return { ok: false, error: "no_account" };
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
