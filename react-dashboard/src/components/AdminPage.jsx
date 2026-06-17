@@ -9,15 +9,15 @@ const FUNCTIONS = [
 ]
 
 export default function AdminPage() {
-  const [allowed, setAllowed] = useState(undefined) // undefined=loading
+  const [me, setMe] = useState(undefined) // undefined=loading
   const [active, setActive] = useState('users')
 
   useEffect(() => {
-    getMe().then((me) => setAllowed(!!me?.is_admin)).catch(() => setAllowed(false))
+    getMe().then(setMe).catch(() => setMe(null))
   }, [])
 
-  if (allowed === undefined) return null
-  if (!allowed) {
+  if (me === undefined) return null
+  if (!me?.is_admin) {
     return (
       <div className="min-h-screen flex items-center justify-center text-space-dim">
         <p>Not authorized. <Link to="/" className="text-purple-400 hover:underline">Go home</Link></p>
@@ -27,7 +27,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-[#0f0f1a] text-space-text">
-      <Navbar />
+      <Navbar me={me} />
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex gap-8 h-[calc(100vh-4rem)]">
           <nav className="w-56 shrink-0 sticky top-6 self-start">

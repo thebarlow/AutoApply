@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import Navbar from "./Navbar";
+import { getMe } from "../api";
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
@@ -18,6 +19,7 @@ function extractH1s(markdown) {
 }
 
 export default function Docs() {
+  const [me, setMe] = useState(null);
   const [docs, setDocs] = useState([]);
   const [active, setActive] = useState(null);
   const [content, setContent] = useState("");
@@ -25,6 +27,10 @@ export default function Docs() {
   const [contentMap, setContentMap] = useState({});
   const pendingScrollRef = useRef(null);
   const hashResolvedRef = useRef(false);
+
+  useEffect(() => {
+    getMe().then(setMe).catch(() => setMe(null));
+  }, []);
 
   useEffect(() => {
     fetch("/api/docs")
@@ -118,7 +124,7 @@ export default function Docs() {
 
   return (
     <div className="min-h-screen bg-[#0f0f1a] text-space-text">
-      <Navbar />
+      <Navbar me={me} />
       <div className="max-w-5xl mx-auto p-6">
         <div className="flex gap-8 h-[calc(100vh-4rem)]">
           <nav className="w-64 shrink-0 sticky top-6 self-start overflow-y-auto max-h-[calc(100vh-5rem)]">
