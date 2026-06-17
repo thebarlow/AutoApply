@@ -11,12 +11,10 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   `getDescription`/`detailReadySelector` against current Indeed DOM and capture the full
   description body.
 
-- [ ] **Invite email times out to Zoho SMTP.** Resending the invite to
-  shadowling39@gmail.com surfaced `Email failed: TimeoutError: timed out` — the SMTP
-  connection from Railway to `smtp.zoho.com:465` times out (now visible thanks to the
-  invite error-surfacing fix). Likely Railway egress to port 465 blocked/slow. Investigate:
-  try STARTTLS on 587, confirm Railway allows outbound SMTP, or move to an HTTP email API
-  (e.g. Zoho's API, Resend, Postmark) instead of raw SMTP.
+- [x] **Invite email times out to Zoho SMTP.** Fixed: replaced raw Zoho SMTP
+  (`smtp.zoho.com:465`, blocked/throttled by Railway egress) with the Resend HTTP API
+  in `core/email.py`. Now needs `RESEND_API_KEY` (+ optional `RESEND_FROM`) env vars;
+  `ZOHO_SMTP_*` removed. Sends from a Resend-verified domain (matthewbarlow.me).
 
 ## Features
 

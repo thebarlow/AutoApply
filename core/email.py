@@ -1,17 +1,22 @@
-"""Outbound email via Zoho SMTP. No-op (returns False) when SMTP env vars are
-unset, so invite flows still work in local/dev without mail configured."""
+"""Outbound email via the Resend HTTP API. No-op (returns False) when
+``RESEND_API_KEY`` is unset, so invite flows still work in local/dev without
+mail configured.
+
+Resend is used over raw SMTP because Railway throttles/blocks outbound SMTP
+egress (Zoho :465 timed out); an HTTPS POST is never blocked.
+"""
 from __future__ import annotations
 
 import logging
 import os
-import smtplib
-from email.message import EmailMessage
-from email.utils import formataddr
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
-SMTP_HOST = "smtp.zoho.com"
-SMTP_PORT = 465
+RESEND_API_URL = "https://api.resend.com/emails"
+# From address must be on a Resend-verified domain (matthewbarlow.me).
+DEFAULT_FROM = "Auto Apply <noreply@matthewbarlow.me>"
 
 # Brand palette mirrors the dashboard's dark "space" theme (react-dashboard/src/index.css).
 _BG = "#0a0a1a"
@@ -67,36 +72,40 @@ def _invite_html(to_email: str, url: str) -> str:
 
 
 def send_invite(to_email: str) -> bool:
-    """Send an invitation email. Returns True if sent, False if SMTP is unconfigured.
+    """Send an invitation email. Returns True if sent, False if Resend is unconfigured.
 
     Access is gated by the allowlist + OAuth login, so the message carries no
     token -- it just points the recipient at the app to sign in.
 
-    Auth uses ``ZOHO_SMTP_USER``; the visible ``From:`` is ``ZOHO_SMTP_FROM`` when
-    set (e.g. a verified alias), otherwise it falls back to the auth user.
+    The visible ``From:`` is ``RESEND_FROM`` when set, otherwise ``DEFAULT_FROM``
+    (must be an address on a Resend-verified domain). Raises ``httpx.HTTPError``
+    on transport failure or a non-2xx response so the admin route can surface why.
     """
-    user = os.getenv("ZOHO_SMTP_USER")
-    password = os.getenv("ZOHO_SMTP_PASSWORD")
-    if not user or not password:
-        logger.info("send_invite: SMTP not configured; skipping email to %s", to_email)
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key:
+        logger.info("send_invite: Resend not configured; skipping email to %s", to_email)
         return False
 
-    from_addr = os.getenv("ZOHO_SMTP_FROM") or user
+    from_addr = os.getenv("RESEND_FROM") or DEFAULT_FROM
     url = _app_base_url()
-    msg = EmailMessage()
-    msg["Subject"] = "You're invited to Auto Apply"
-    msg["From"] = formataddr(("Auto Apply", from_addr))
-    msg["To"] = to_email
-    msg.set_content(
-        "You've been invited to Auto Apply.\n\n"
-        f"Sign in at {url} using this email address ({to_email}) "
-        "with Google or GitHub to get started.\n"
+    payload = {
+        "from": from_addr,
+        "to": [to_email],
+        "subject": "You're invited to Auto Apply",
+        "html": _invite_html(to_email, url),
+        "text": (
+            "You've been invited to Auto Apply.\n\n"
+            f"Sign in at {url} using this email address ({to_email}) "
+            "with Google or GitHub to get started.\n"
+        ),
+    }
+    # A bounded timeout keeps a hung connection from stalling the request.
+    resp = httpx.post(
+        RESEND_API_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json=payload,
+        timeout=20,
     )
-    msg.add_alternative(_invite_html(to_email, url), subtype="html")
-
-    # A bounded timeout keeps a hung Zoho connection from stalling the request.
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
-        smtp.login(user, password)
-        smtp.send_message(msg)
+    resp.raise_for_status()
     logger.info("send_invite: sent invite from %s to %s", from_addr, to_email)
     return True
