@@ -69,6 +69,11 @@ async function _handleViewScrape(btn) {
 
     const result = await _msg({ type: 'SCRAPE_JOB', payload });
 
+    if (!result.ok && result.error === "no_account") {
+      btn.textContent = "✗ Sign in required";
+      btn.title = "Open the Job Scraper extension and sign in to AutoApply.";
+      return;
+    }
     if (!result.ok) {
       btn.textContent = '✗ Server error';
       return;
@@ -153,6 +158,11 @@ async function _handleScrape(card, btn) {
 
     const result = await _msg({ type: "SCRAPE_JOB", payload });
 
+    if (!result.ok && result.error === "no_account") {
+      btn.textContent = "✗ Sign in required";
+      btn.title = "Open the Job Scraper extension and sign in to AutoApply.";
+      return;
+    }
     if (!result.ok) {
       btn.textContent = "✗ Server error";
       return;
