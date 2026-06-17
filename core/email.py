@@ -94,7 +94,8 @@ def send_invite(to_email: str) -> bool:
     )
     msg.add_alternative(_invite_html(to_email, url), subtype="html")
 
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as smtp:
+    # A bounded timeout keeps a hung Zoho connection from stalling the request.
+    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
         smtp.login(user, password)
         smtp.send_message(msg)
     logger.info("send_invite: sent invite from %s to %s", from_addr, to_email)

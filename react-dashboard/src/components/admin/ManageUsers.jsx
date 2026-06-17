@@ -20,6 +20,7 @@ export default function ManageUsers() {
   const [status, setStatus] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [invites, setInvites] = useState([])
+  const [resendingEmail, setResendingEmail] = useState(null)
 
   const [users, setUsers] = useState([])
   const [search, setSearch] = useState('')
@@ -52,12 +53,14 @@ export default function ManageUsers() {
     setStatus(null)
     try {
       const r = await inviteUser(email.trim(), tier, isAdmin)
-      const text = r.already_invited
-        ? 'Invite updated.'
-        : r.emailed
-        ? 'Invited — email sent.'
-        : 'Added to allowlist (email not configured).'
-      setStatus({ kind: 'ok', text })
+      if (r.email_error) {
+        setStatus({ kind: 'err', text: `Allowlisted, but email failed: ${r.email_error}` })
+      } else {
+        const text = r.emailed
+          ? (r.already_invited ? 'Invite updated — email resent.' : 'Invited — email sent.')
+          : 'Added to allowlist (email not configured).'
+        setStatus({ kind: 'ok', text })
+      }
       setEmail('')
       setIsAdmin(false)
       refreshInvites()
@@ -65,6 +68,28 @@ export default function ManageUsers() {
       setStatus({ kind: 'err', text: 'Failed to send invite.' })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // Re-send an existing invite. /invite is idempotent: it keeps the row's
+  // tier/is_admin and resends the email.
+  const resend = async (inv) => {
+    setResendingEmail(inv.email)
+    setStatus(null)
+    try {
+      const r = await inviteUser(inv.email, inv.tier || 'standard', !!inv.is_admin)
+      setStatus({
+        kind: r.emailed ? 'ok' : 'err',
+        text: r.emailed
+          ? `Invite resent to ${inv.email}.`
+          : r.email_error
+          ? `Email failed: ${r.email_error}`
+          : 'Email not sent (SMTP not configured).',
+      })
+    } catch {
+      setStatus({ kind: 'err', text: 'Failed to resend invite.' })
+    } finally {
+      setResendingEmail(null)
     }
   }
 
@@ -198,7 +223,17 @@ export default function ManageUsers() {
                     <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-600/30 text-purple-300">admin</span>
                   )}
                 </span>
-                <span className="text-space-dim text-xs">{new Date(inv.created_at).toLocaleDateString()}</span>
+                <span className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => resend(inv)}
+                    disabled={resendingEmail === inv.email}
+                    className="text-xs text-purple-400 hover:text-purple-300 underline disabled:opacity-50"
+                  >
+                    {resendingEmail === inv.email ? 'Resending…' : 'Resend'}
+                  </button>
+                  <span className="text-space-dim text-xs">{new Date(inv.created_at).toLocaleDateString()}</span>
+                </span>
               </li>
             ))}
           </ul>

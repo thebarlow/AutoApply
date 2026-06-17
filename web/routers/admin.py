@@ -56,8 +56,18 @@ def invite_user(body: InviteRequest, db: Session = Depends(get_db),
         db.add(AllowedEmail(email=email, invited_by=admin.id, created_at=_now(),
                             tier=body.tier, is_admin=body.is_admin))
     db.commit()
-    emailed = send_invite(email)
-    return {"email": email, "already_invited": already, "emailed": emailed}
+    # The allowlist row is already committed, so a mail failure must not 500 the
+    # request (the user is still invited). Capture and surface the real reason so
+    # the admin sees *why* delivery failed instead of a generic error.
+    emailed = False
+    email_error = None
+    try:
+        emailed = send_invite(email)
+    except Exception as exc:  # noqa: BLE001 - report any SMTP/connection failure
+        logger.exception("send_invite failed for %s", email)
+        email_error = f"{type(exc).__name__}: {exc}"
+    return {"email": email, "already_invited": already, "emailed": emailed,
+            "email_error": email_error}
 
 
 @router.get("/invites")
