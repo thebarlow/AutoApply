@@ -114,6 +114,12 @@ web/
   `Authorization: Bearer` on `/api/scraper/stage-job` (resolved by
   `bearer_or_session_profile`, falling back to the session/dev-stub locally).
   `/api/scraper/stage-job` and `/api/ext/me` are in the cookie-gate `_EXEMPT_PATHS`.
+  **Stateless flow:** the Starlette session cookie set by `/auth/ext/login` does NOT
+  reliably survive `launchWebAuthFlow`'s round-trip, so ext-mode is carried in the OAuth
+  `state` (HMAC-signed with `SESSION_SECRET` via `sign_ext_state`/`verify_ext_state`),
+  reusing the registered `/auth/callback/{provider}`. The callback detects a valid signed
+  state, does a manual token exchange (`_ext_fetch_claims`, no Authlib session), and
+  branches to the ext path; otherwise the unchanged website Authlib flow runs.
 
 ## Known caveats (Phase 3b)
 

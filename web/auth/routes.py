@@ -3,9 +3,19 @@
 Provider I/O is confined to _fetch_claims; the rest of the module is plain
 request handling so the routes can be tested with _fetch_claims monkeypatched.
 """
+
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import os
+import secrets
+import time
+from urllib.parse import urlencode
+
+import httpx
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -21,7 +31,13 @@ from web.auth.identity import (
     resolve_or_provision_account,
     resolve_existing_account,
 )
-from web.auth.ext_token import mint_token, profile_from_extension_token, resolve_token, revoke_token, _bearer
+from web.auth.ext_token import (
+    mint_token,
+    profile_from_extension_token,
+    resolve_token,
+    revoke_token,
+    _bearer,
+)
 
 router = APIRouter()
 
@@ -48,11 +64,152 @@ oauth.register(
 
 def _allowed_ext_redirects() -> set[str]:
     """Return the set of permitted extension redirect URIs from env."""
-    return {u.strip() for u in os.getenv("EXTENSION_REDIRECT_URLS", "").split(",") if u.strip()}
+    return {
+        u.strip()
+        for u in os.getenv("EXTENSION_REDIRECT_URLS", "").split(",")
+        if u.strip()
+    }
 
 
 def _redirect_uri(request: Request, provider: str) -> str:
     return str(request.url_for("auth_callback", provider=provider))
+
+
+# --- Stateless extension OAuth state (signed, no server session) ------------
+#
+# launchWebAuthFlow runs the OAuth round-trip in a context where the Starlette
+# session cookie set by /auth/ext/login does not reliably survive back to the
+# callback, so the extension flow cannot rely on it. Instead the redirect target
+# is packed into the OAuth `state` parameter, HMAC-signed with SESSION_SECRET and
+# echoed back by the provider. The callback verifies the signature, so no session
+# is needed and the value cannot be tampered with.
+
+_EXT_STATE_MAX_AGE = 600  # seconds
+
+
+def _state_secret() -> bytes:
+    return os.getenv("SESSION_SECRET", "").encode("utf-8")
+
+
+def sign_ext_state(provider: str, redirect_uri: str) -> str:
+    """Return a signed, URL-safe state token carrying the ext redirect target."""
+    payload = {
+        "ext": True,
+        "provider": provider,
+        "redirect_uri": redirect_uri,
+        "ts": int(time.time()),
+        "nonce": secrets.token_urlsafe(8),
+    }
+    raw = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    sig = hmac.new(_state_secret(), raw.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{raw}.{sig}"
+
+
+def verify_ext_state(state: str) -> dict | None:
+    """Return the decoded ext-state payload if the signature/age are valid, else None."""
+    if not state or "." not in state:
+        return None
+    raw, _, sig = state.rpartition(".")
+    expected = hmac.new(
+        _state_secret(), raw.encode("ascii"), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(raw.encode("ascii")))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if (
+        not payload.get("ext")
+        or time.time() - payload.get("ts", 0) > _EXT_STATE_MAX_AGE
+    ):
+        return None
+    return payload
+
+
+def _ext_authorize_url(provider: str, redirect_uri: str, state: str) -> str:
+    """Build the provider authorize URL for the stateless extension flow."""
+    if provider == "google":
+        params = {
+            "response_type": "code",
+            "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
+            "redirect_uri": redirect_uri,
+            "scope": "openid email profile",
+            "state": state,
+        }
+        return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+    params = {
+        "client_id": os.getenv("GITHUB_CLIENT_ID", ""),
+        "redirect_uri": redirect_uri,
+        "scope": "read:user user:email",
+        "state": state,
+    }
+    return "https://github.com/login/oauth/authorize?" + urlencode(params)
+
+
+async def _ext_fetch_claims(provider: str, code: str, redirect_uri: str) -> Claims:
+    """Exchange an auth code for tokens and normalize provider data into Claims.
+
+    Stateless equivalent of _fetch_claims for the extension flow: performs the
+    token exchange manually (no Authlib session state). Isolated so tests can
+    monkeypatch it.
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        if provider == "google":
+            tok = (
+                await client.post(
+                    "https://oauth2.googleapis.com/token",
+                    data={
+                        "code": code,
+                        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                        "redirect_uri": redirect_uri,
+                        "grant_type": "authorization_code",
+                    },
+                )
+            ).json()
+            info = (
+                await client.get(
+                    "https://openidconnect.googleapis.com/v1/userinfo",
+                    headers={"Authorization": f"Bearer {tok['access_token']}"},
+                )
+            ).json()
+            return Claims(
+                provider="google",
+                subject=str(info["sub"]),
+                email=info.get("email", ""),
+                email_verified=bool(info.get("email_verified")),
+            )
+        tok = (
+            await client.post(
+                "https://github.com/login/oauth/access_token",
+                headers={"Accept": "application/json"},
+                data={
+                    "client_id": os.getenv("GITHUB_CLIENT_ID"),
+                    "client_secret": os.getenv("GITHUB_CLIENT_SECRET"),
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                },
+            )
+        ).json()
+        access = tok["access_token"]
+        headers = {
+            "Authorization": f"Bearer {access}",
+            "Accept": "application/vnd.github+json",
+        }
+        user = (await client.get("https://api.github.com/user", headers=headers)).json()
+        emails = (
+            await client.get("https://api.github.com/user/emails", headers=headers)
+        ).json()
+        primary = next(
+            (e for e in emails if e.get("primary") and e.get("verified")), None
+        )
+        return Claims(
+            provider="github",
+            subject=str(user["id"]),
+            email=(primary or {}).get("email", ""),
+            email_verified=primary is not None,
+        )
 
 
 async def _fetch_claims(provider: str, request: Request) -> Claims:
@@ -101,10 +258,9 @@ async def auth_ext_login(provider: str, request: Request, redirect_uri: str = ""
         raise HTTPException(status_code=404)
     if redirect_uri not in _allowed_ext_redirects():
         raise HTTPException(status_code=400, detail="redirect_uri not allowed")
-    request.session["ext_mode"] = True
-    request.session["ext_redirect"] = redirect_uri
-    return await oauth.create_client(provider).authorize_redirect(
-        request, _redirect_uri(request, provider)
+    state = sign_ext_state(provider, redirect_uri)
+    return RedirectResponse(
+        url=_ext_authorize_url(provider, _redirect_uri(request, provider), state)
     )
 
 
@@ -135,11 +291,18 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
     """
     if provider not in _PROVIDERS:
         raise HTTPException(status_code=404)
-    ext_mode = request.session.pop("ext_mode", False)
-    ext_redirect = request.session.pop("ext_redirect", "")
-    if ext_mode:
+    # Extension flow: detected by a valid signed state (no session dependency).
+    ext = verify_ext_state(request.query_params.get("state", ""))
+    if ext:
+        ext_redirect = ext["redirect_uri"]
+        if ext_redirect not in _allowed_ext_redirects():
+            return RedirectResponse(url=f"{ext_redirect}#error=auth")
         try:
-            claims = await _fetch_claims(provider, request)
+            claims = await _ext_fetch_claims(
+                provider,
+                request.query_params.get("code", ""),
+                _redirect_uri(request, provider),
+            )
         except Exception:
             return RedirectResponse(url=f"{ext_redirect}#error=auth")
         try:
@@ -223,8 +386,11 @@ def api_me(request: Request, db: Session = Depends(get_db)):
                 pid = int(target_pid)
             except (ValueError, TypeError):
                 pid = None
-            target = (db.query(Account).filter_by(profile_id=pid).first()
-                      if pid is not None else None)
+            target = (
+                db.query(Account).filter_by(profile_id=pid).first()
+                if pid is not None
+                else None
+            )
             if target is not None:
                 impersonating = {"profile_id": target.profile_id, "email": target.email}
     return {
