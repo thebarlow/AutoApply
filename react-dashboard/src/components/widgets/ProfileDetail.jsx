@@ -36,9 +36,10 @@ function ChevronDown({ open }) {
 
 function isSectionEmpty(section, d) {
   switch (section) {
-    case "identity":
+    case "profile":
+      return !d.first_name && !d.last_name && !d.hero;
+    case "contact":
       return (
-        !d.first_name && !d.last_name && !d.hero &&
         !d.email && !d.phone && !d.location &&
         !d.linkedin && !d.github && !d.website
       );
@@ -167,7 +168,21 @@ function Field({ label, value }) {
 
 // ─── Placeholder section components (filled in subsequent tasks) ───────────────
 
-function IdentitySection({ data, onSave }) {
+// Shared edit-field renderer for the profile/contact modals.
+function makeFieldRenderer(form, setForm) {
+  return (label, key, type = 'text', multiline = false) => (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-space-dim">{label}</label>
+      {multiline
+        ? <textarea rows={3} className={inputClass + ' resize-none'} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+        : <input type={type} className={inputClass} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+      }
+    </div>
+  )
+}
+
+// Profile = the resume header identity (name + tagline).
+function ProfileSection({ data, onSave }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
@@ -178,9 +193,59 @@ function IdentitySection({ data, onSave }) {
       first_name: data.first_name || '',
       last_name: data.last_name || '',
       hero: data.hero || '',
-      location: data.location || '',
+    })
+    setError(null)
+    setOpen(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave(form)
+      setOpen(false)
+    } catch {
+      setError('Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const f = makeFieldRenderer(form, setForm)
+  const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ')
+
+  return (
+    <>
+      <AccordionSection id="profile" title="Profile" editButton={<EditBtn onClick={openModal} />} empty={isSectionEmpty("profile", data)}>
+        <div className="flex flex-col gap-1.5">
+          {fullName && <p className="text-sm font-medium text-space-text">{fullName}</p>}
+          {data.hero && <p className="text-xs text-space-dim italic">{data.hero}</p>}
+          {!fullName && !data.hero && <p className="text-xs text-space-dim">No profile info yet.</p>}
+        </div>
+      </AccordionSection>
+
+      {open && (
+        <ItemOverlay title="Edit Profile" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
+          {f('First Name', 'first_name')}
+          {f('Last Name', 'last_name')}
+          {f('Tagline / Hero', 'hero', 'text', true)}
+        </ItemOverlay>
+      )}
+    </>
+  )
+}
+
+// Contact = the resume contact line (email, phone, location, socials).
+function ContactSection({ data, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const openModal = () => {
+    setForm({
       email: data.email || '',
       phone: data.phone || '',
+      location: data.location || '',
       linkedin: data.linkedin || '',
       github: data.github || '',
       website: data.website || '',
@@ -201,45 +266,27 @@ function IdentitySection({ data, onSave }) {
     }
   }
 
-  const f = (label, key, type = 'text', multiline = false) => (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs text-space-dim">{label}</label>
-      {multiline
-        ? <textarea rows={3} className={inputClass + ' resize-none'} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
-        : <input type={type} className={inputClass} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
-      }
-    </div>
-  )
-
-  const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ')
+  const f = makeFieldRenderer(form, setForm)
 
   return (
     <>
-      <AccordionSection id="identity" title="Identity" editButton={<EditBtn onClick={openModal} />} empty={isSectionEmpty("identity", data)}>
+      <AccordionSection id="contact" title="Contact" editButton={<EditBtn onClick={openModal} />} empty={isSectionEmpty("contact", data)}>
         <div className="flex flex-col gap-1.5">
-          {fullName && <p className="text-sm font-medium text-space-text">{fullName}</p>}
-          {data.hero && <p className="text-xs text-space-dim italic">{data.hero}</p>}
           <Field label="Email" value={data.email} />
           <Field label="Phone" value={data.phone} />
           <Field label="Location" value={data.location} />
           {data.linkedin && <Field label="LinkedIn" value={data.linkedin} />}
           {data.github && <Field label="GitHub" value={data.github} />}
           {data.website && <Field label="Website" value={data.website} />}
-          {!fullName && !data.email && <p className="text-xs text-space-dim">No identity info yet.</p>}
+          {!data.email && !data.phone && !data.location && <p className="text-xs text-space-dim">No contact info yet.</p>}
         </div>
       </AccordionSection>
 
       {open && (
-        <ItemOverlay title="Edit Identity" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
-          <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Personal</p>
-          {f('First Name', 'first_name')}
-          {f('Last Name', 'last_name')}
-          {f('Tagline / Hero', 'hero', 'text', true)}
-          {f('Location', 'location')}
-          <hr className="border-space-border" />
-          <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Contact</p>
+        <ItemOverlay title="Edit Contact" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
           {f('Email', 'email', 'email')}
           {f('Phone', 'phone', 'tel')}
+          {f('Location', 'location')}
           <hr className="border-space-border" />
           <p className="text-xs font-semibold uppercase tracking-widest text-space-dim">Socials</p>
           {f('LinkedIn URL', 'linkedin', 'url')}
@@ -611,97 +658,6 @@ function ProjectsSection({ data, onSave }) {
               onChange={e => setTechInput(e.target.value)}
               placeholder="e.g. Python, React, Docker"
             />
-          </div>
-        </ItemOverlay>
-      )}
-    </>
-  )
-}
-function JobPrefsSection({ data, onSave }) {
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({})
-  const [rolesInput, setRolesInput] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-
-  const openModal = () => {
-    setForm({
-      target_salary_min: data.target_salary_min ?? '',
-      target_salary_max: data.target_salary_max ?? '',
-    })
-    setRolesInput((data.target_roles || []).join(', '))
-    setError(null)
-    setOpen(true)
-  }
-
-  const handleSave = async () => {
-    const target_roles = rolesInput.split(',').map(r => r.trim()).filter(Boolean)
-    const patch = {
-      target_roles,
-      target_salary_min: form.target_salary_min !== '' ? Number(form.target_salary_min) : null,
-      target_salary_max: form.target_salary_max !== '' ? Number(form.target_salary_max) : null,
-    }
-    setSaving(true)
-    try {
-      await onSave(patch)
-      setOpen(false)
-    } catch {
-      setError('Save failed')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const salaryStr = data.target_salary_min != null && data.target_salary_max != null
-    ? `$${data.target_salary_min.toLocaleString()} – $${data.target_salary_max.toLocaleString()}`
-    : data.target_salary_min != null ? `From $${data.target_salary_min.toLocaleString()}` : null
-
-  return (
-    <>
-      <AccordionSection id="job-preferences" title="Job Preferences" editButton={<EditBtn onClick={openModal} />} empty={isSectionEmpty("job-preferences", data)}>
-        <div className="flex flex-col gap-1.5">
-          {(data.target_roles || []).length > 0 && (
-            <Field label="Target Roles" value={data.target_roles.join(', ')} />
-          )}
-          {salaryStr && <Field label="Target Salary" value={salaryStr} />}
-          {!(data.target_roles?.length) && !salaryStr && (
-            <p className="text-xs text-space-dim">No preferences set yet.</p>
-          )}
-        </div>
-      </AccordionSection>
-
-      {open && (
-        <ItemOverlay title="Job Preferences" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">Target Roles (comma-separated)</label>
-            <input
-              className={inputClass}
-              value={rolesInput}
-              onChange={e => setRolesInput(e.target.value)}
-              placeholder="e.g. Backend Engineer, Staff Engineer"
-            />
-          </div>
-          <div className="flex gap-2">
-            <div className="flex flex-col gap-1 flex-1">
-              <label className="text-xs text-space-dim">Salary Min ($)</label>
-              <input
-                type="number"
-                className={inputClass}
-                value={form.target_salary_min ?? ''}
-                onChange={e => setForm(f => ({ ...f, target_salary_min: e.target.value }))}
-                placeholder="120000"
-              />
-            </div>
-            <div className="flex flex-col gap-1 flex-1">
-              <label className="text-xs text-space-dim">Salary Max ($)</label>
-              <input
-                type="number"
-                className={inputClass}
-                value={form.target_salary_max ?? ''}
-                onChange={e => setForm(f => ({ ...f, target_salary_max: e.target.value }))}
-                placeholder="160000"
-              />
-            </div>
           </div>
         </ItemOverlay>
       )}
@@ -1449,117 +1405,6 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
     </>
   )
 }
-
-function LlmSection({ profile, onSave }) {
-  const [open, setOpen] = useState(false)
-  const [providerType, setProviderType] = useState('')
-  const [model, setModel] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [keyEdited, setKeyEdited] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-  const [errors, setErrors] = useState({})
-
-  const openModal = () => {
-    setProviderType(profile.llm_provider_type || profile.data?.llm_provider_type || '')
-    setModel(profile.llm_model || profile.data?.llm_model || '')
-    setApiKey('')
-    setKeyEdited(false)
-    setError(null)
-    setErrors({})
-    setOpen(true)
-  }
-
-  const handleSave = async () => {
-    // Validate: api_key required when no existing key or actively editing
-    const needsKey = !profile.has_llm_key || keyEdited
-    const errs = validateProvider({
-      api_key: needsKey ? apiKey : 'placeholder',
-      model,
-    })
-    // If key is not being changed and one already exists, skip api_key error
-    if (!needsKey) delete errs.api_key
-    setErrors(errs)
-    if (Object.keys(errs).length > 0) return
-    setSaving(true)
-    try {
-      await onSave({
-        providerType,
-        model,
-        apiKey: keyEdited ? apiKey : '',
-      })
-      setOpen(false)
-    } catch {
-      setError('Save failed')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <>
-      <AccordionSection id="llm-config" title="LLM Config" editButton={<EditBtn onClick={openModal} />}>
-        <div className="flex flex-col gap-1.5">
-          {(profile.llm_provider_type || profile.data?.llm_provider_type)
-            ? <Field label="Provider" value={profile.llm_provider_type || profile.data?.llm_provider_type} />
-            : <p className="text-xs text-space-dim">No LLM provider configured.</p>
-          }
-          {(profile.llm_model || profile.data?.llm_model) && <Field label="Model" value={profile.llm_model || profile.data?.llm_model} />}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-space-dim">API Key</span>
-            <span className={`text-xs font-medium ${profile.has_llm_key ? 'text-green-400' : 'text-space-dim/50'}`}>
-              {profile.has_llm_key ? 'Configured' : 'Not set'}
-            </span>
-          </div>
-        </div>
-      </AccordionSection>
-
-      {open && (
-        <ItemOverlay title="LLM Config" onClose={() => setOpen(false)} onSave={handleSave} saving={saving} error={error}>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">Provider</label>
-            <select
-              className={inputClass}
-              value={providerType}
-              onChange={e => setProviderType(e.target.value)}
-            >
-              <option value="">— select —</option>
-              {PROVIDER_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">Model <span className="text-red-400">*</span><HelpIcon text="The specific model to use (e.g., claude-haiku-4-5-20251001 for Anthropic, gpt-4o-mini for OpenAI)." docHref="/docs" /></label>
-            <input
-              className={inputClass}
-              value={model}
-              onChange={e => { setModel(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.model; return n }) }}
-              placeholder="e.g. gpt-4o"
-            />
-            {errors.model && <div className="text-red-400 text-sm mt-1">{errors.model}</div>}
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-space-dim">
-              API Key {(!profile.has_llm_key || keyEdited) && <span className="text-red-400">*</span>}<HelpIcon text="Your provider's secret API key. The app uses this to call the LLM on your behalf. Keep it private — never share it." docHref="/docs" />
-            </label>
-            <input
-              type="password"
-              className={inputClass}
-              value={!keyEdited && profile.has_llm_key ? '••••••••' : apiKey}
-              onFocus={() => { if (!keyEdited && profile.has_llm_key) { setKeyEdited(true); setApiKey('') } }}
-              onChange={e => { setKeyEdited(true); setApiKey(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.api_key; return n }) }}
-              placeholder={profile.has_llm_key ? '' : 'Enter API key'}
-            />
-            {profile.has_llm_key && !keyEdited && (
-              <p className="text-xs text-space-dim">Click to replace existing key</p>
-            )}
-            {errors.api_key && <div className="text-red-400 text-sm mt-1">{errors.api_key}</div>}
-          </div>
-        </ItemOverlay>
-      )}
-    </>
-  )
-}
-
 // ─── ProfileDetailView ─────────────────────────────────────────────────────────
 
 const PROFILE_DATA_DEFAULTS = {
@@ -1593,14 +1438,6 @@ export default function ProfileDetailView({ profileId, onDelete }) {
     const newData = { ...profile.data, ...patch }
     await updateProfile(profileId, { name: profile.name, data: newData })
     setProfile(p => ({ ...p, data: newData }))
-  }
-
-  const handleSaveLlm = async ({ providerType, model, apiKey }) => {
-    const newData = { ...profile.data, llm_provider_type: providerType, llm_model: model }
-    const body = { name: profile.name, data: newData }
-    if (apiKey) body.llm_api_key = apiKey
-    await updateProfile(profileId, body)
-    setProfile(p => ({ ...p, data: newData, llm_provider_type: providerType, llm_model: model, has_llm_key: apiKey ? true : p.has_llm_key }))
   }
 
   const handleExportMaster = async () => {
@@ -1644,12 +1481,12 @@ export default function ProfileDetailView({ profileId, onDelete }) {
   return (
     <>
       <div className="flex flex-col gap-3">
-        <IdentitySection data={d} onSave={handleSave} />
+        <ProfileSection data={d} onSave={handleSave} />
+        <ContactSection data={d} onSave={handleSave} />
         <SkillsSection data={d} onSave={handleSave} />
         <ExperienceSection data={d} onSave={handleSave} />
         <EducationSection data={d} onSave={handleSave} />
         <ProjectsSection data={d} onSave={handleSave} />
-        <JobPrefsSection data={d} onSave={handleSave} />
         <PromptsSection
           data={d}
           profileId={profileId}
@@ -1657,7 +1494,6 @@ export default function ProfileDetailView({ profileId, onDelete }) {
           defaultModel={profile.llm_model || ''}
           onSave={handleSave}
         />
-        <LlmSection profile={profile} onSave={handleSaveLlm} />
 
         <button
           onClick={handleExportMaster}
