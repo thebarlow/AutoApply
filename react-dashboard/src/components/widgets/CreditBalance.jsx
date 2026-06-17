@@ -73,9 +73,17 @@ export default function CreditBalance({ variant = 'nav', onClick, isAdmin = fals
         type="button"
         onClick={handleClick}
         title={title ?? 'Buy credits'}
-        className="self-center text-sm font-mono text-purple-400 hover:text-purple-300 transition-colors"
+        className="self-center inline-flex items-center gap-1 text-sm font-mono text-purple-400 hover:text-purple-300 transition-colors"
       >
         {text}
+        {!isAdmin && (
+          <span
+            aria-hidden="true"
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-purple-400/60 text-xs leading-none"
+          >
+            +
+          </span>
+        )}
       </button>
     )
   }
