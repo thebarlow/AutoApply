@@ -1,5 +1,11 @@
 // browser-extension/background/service_worker.js
-importScripts("../lib/browser_shim.js");
+// Chrome MV3 runs this as a real service worker (importScripts available) and
+// ignores the manifest `scripts` array, so it must load the shim here. Firefox
+// MV3 runs an event page (no importScripts) and loads the shim via the manifest
+// `scripts` array instead, so guard the call to avoid a ReferenceError on load.
+if (typeof importScripts === "function") {
+  importScripts("../lib/browser_shim.js");
+}
 
 const SERVER = "https://autoapply.matthewbarlow.me";
 const DEDUP_KEY = "stagedJobKeys";
