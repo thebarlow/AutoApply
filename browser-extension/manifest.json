@@ -1,54 +1,41 @@
 {
   "manifest_version": 3,
   "name": "Job Scraper",
-  "version": "1.0.0",
-  "description": "Scrapes job listings from LinkedIn and Indeed.",
-  "permissions": ["storage"],
+  "version": "1.1.0",
+  "description": "Scrapes job listings from LinkedIn and Indeed into AutoApply.",
+  "permissions": ["storage", "identity"],
   "host_permissions": [
     "https://*.linkedin.com/*",
     "https://*.indeed.com/*",
-    "http://localhost/*"
+    "https://autoapply.matthewbarlow.me/*"
   ],
   "background": {
     "service_worker": "background/service_worker.js",
-    "scripts": ["background/service_worker.js"]
+    "scripts": ["lib/browser_shim.js", "background/service_worker.js"]
   },
-
   "browser_specific_settings": {
-    "gecko": {
-      "id": "job-scraper@local"
-    }
+    "gecko": { "id": "job-scraper@autoapply" }
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.linkedin.com/jobs/*",
-        "https://www.linkedin.com/my-items/*"
-      ],
-      "js": ["content/injector.js", "content/linkedin.js"]
+      "matches": ["https://www.linkedin.com/jobs/*", "https://www.linkedin.com/my-items/*"],
+      "js": ["lib/browser_shim.js", "content/injector.js", "content/linkedin.js"]
     },
     {
-      "matches": [
-        "https://www.indeed.com/jobs*",
-        "https://myjobs.indeed.com/*"
-      ],
-      "js": ["content/injector.js", "content/indeed.js"]
+      "matches": ["https://www.indeed.com/jobs*", "https://myjobs.indeed.com/*"],
+      "js": ["lib/browser_shim.js", "content/injector.js", "content/indeed.js"]
     }
   ],
   "icons": {
-    "16": "icons/icon-16.png",
-    "32": "icons/icon-32.png",
-    "48": "icons/icon-48.png",
-    "128": "icons/icon-128.png"
+    "16": "icons/icon-16.png", "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png", "128": "icons/icon-128.png"
   },
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "Job Scraper",
     "default_icon": {
-      "16": "icons/icon-16.png",
-      "32": "icons/icon-32.png",
-      "48": "icons/icon-48.png",
-      "128": "icons/icon-128.png"
+      "16": "icons/icon-16.png", "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png", "128": "icons/icon-128.png"
     }
   }
 }
