@@ -19,18 +19,18 @@ def prod_client(monkeypatch):
 
 
 def test_stage_job_not_gated_by_cookie(prod_client):
-    # /api/scraper/stage-job is exempt from the gate, so requests reach the route's auth.
-    # Even with no session cookie, the route is accessible (not blocked by the gate).
-    # The route's own auth (current_profile_id) will reject with 401, but that proves
-    # the request made it past the gate middleware.
-    r = prod_client.post("/api/scraper/stage-job", json={})
-    # Should get 422 (validation error) if passed the gate, or 401 from route auth.
-    # Both are acceptable; the key is we're not getting the gate's early rejection.
-    assert r.status_code in (401, 422)
+    # Behavioral assertion is not possible here: route-level 401 (current_profile_id dep)
+    # is byte-identical to the gate's 401 {"detail": "Not authenticated"}, so an HTTP
+    # round-trip cannot distinguish "gate blocked" from "route auth blocked".  The
+    # gate-bypass proof for stage-job in a bearer-auth context belongs in the bearer
+    # tests once stage-job accepts bearer tokens.  Guard the config directly instead.
+    from web.auth.middleware import _EXEMPT_PATHS
+    assert "/api/scraper/stage-job" in _EXEMPT_PATHS
 
 
 def test_ext_me_not_gated(prod_client):
     r = prod_client.get("/api/ext/me")
+    assert r.status_code == 401
     assert r.json().get("detail") != "Not authenticated"
 
 
