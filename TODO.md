@@ -16,6 +16,16 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   in `core/email.py`. Now needs `RESEND_API_KEY` (+ optional `RESEND_FROM`) env vars;
   `ZOHO_SMTP_*` removed. Sends from a Resend-verified domain (matthewbarlow.me).
 
+- [ ] **Improve invite-email deliverability (lands in spam).** Resend sends work but
+  Gmail files them as spam. To fix, in order of impact:
+  1. **Add a DMARC record** (Resend sets SPF+DKIM on verification but not DMARC). TXT at
+     `_dmarc.matthewbarlow.me` = `v=DMARC1; p=none; rua=mailto:dmarc@matthewbarlow.me;`.
+     Start `p=none` (monitor), tighten to `p=quarantine` after SPF/DKIM align cleanly.
+  2. Confirm SPF + DKIM show green/verified in the Resend dashboard.
+  3. **Switch to a sending subdomain** to isolate reputation from the root domain: verify
+     `send.matthewbarlow.me` in Resend and set `RESEND_FROM=Auto Apply <noreply@send.matthewbarlow.me>`.
+  4. Have early recipients mark "Not spam" — positive engagement signal during warm-up.
+
 ## Features
 
 - [ ] **Per-section resume content/format control + section-paired prompts.** SPEC IN
