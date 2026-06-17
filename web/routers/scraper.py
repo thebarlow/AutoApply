@@ -16,6 +16,7 @@ from scraper.runner import run_scraper
 from web.sse import send as _sse_send
 from web.intake_pipeline import run_pipeline
 from web.tenancy import current_profile_id
+from web.auth.ext_token import bearer_or_session_profile
 
 router = APIRouter(prefix="/api/scraper")
 
@@ -88,7 +89,7 @@ class StageJobRequest(BaseModel):
 def stage_job(
     body: StageJobRequest,
     db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
+    profile_id: int = Depends(bearer_or_session_profile),
 ) -> dict[str, str]:
     """Stage a single job submitted by the browser extension.
 

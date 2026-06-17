@@ -143,8 +143,8 @@ def test_stage_job_triggers_pipeline(monkeypatch):
 
         from fastapi.testclient import TestClient
         from web.main import app
-        from web.tenancy import current_profile_id
-        app.dependency_overrides[current_profile_id] = lambda: 1
+        from web.auth.ext_token import bearer_or_session_profile
+        app.dependency_overrides[bearer_or_session_profile] = lambda: 1
         c = TestClient(app)
         try:
             resp = c.post("/api/scraper/stage-job", json={
@@ -156,7 +156,7 @@ def test_stage_job_triggers_pipeline(monkeypatch):
                 "description": "Do stuff.",
             })
         finally:
-            app.dependency_overrides.pop(current_profile_id, None)
+            app.dependency_overrides.pop(bearer_or_session_profile, None)
 
     assert resp.status_code == 200
     mock_pipe.assert_called_once_with("test-key-1", 1)
