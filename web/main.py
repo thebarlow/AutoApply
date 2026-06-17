@@ -4,7 +4,9 @@ import os
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -50,19 +52,52 @@ def _warm_lazy_imports() -> None:
     print("[startup] Background warm-up complete — all imports ready.")
 
 
-def _purge_deleted_jobs() -> None:
-    """Permanently remove any jobs left in state='deleted' from a prior session."""
-    # global purge across tenants — startup maintenance, not request-scoped
+def _purge_deleted_jobs(context: str = "startup") -> int:
+    """Permanently remove all jobs in state='deleted'. Returns the count purged.
+
+    Global purge across tenants — maintenance, not request-scoped. Runs at startup
+    and on the daily scheduler.
+    """
     from db.database import SessionLocal
     from core.job import Job
+
     db = SessionLocal()
     try:
-        count = db.query(Job).filter(Job.state == "deleted").delete(synchronize_session=False)
+        count = (
+            db.query(Job)
+            .filter(Job.state == "deleted")
+            .delete(synchronize_session=False)
+        )
         db.commit()
         if count:
-            print(f"[startup] Purged {count} deleted job(s) from prior session.")
+            print(f"[{context}] Purged {count} deleted job(s).")
+        return count
     finally:
         db.close()
+
+
+# Deleted jobs are purged daily at 23:59 America/New_York (Eastern, DST-aware) —
+# replaces the old "cleared on a fresh session" behavior, which effectively never
+# fired once the app became an always-on hosted service.
+_PURGE_TZ = ZoneInfo("America/New_York")
+
+
+def _seconds_until_next_purge(now: datetime | None = None) -> float:
+    """Seconds from now until the next 23:59 in the purge timezone."""
+    now = now or datetime.now(_PURGE_TZ)
+    target = now.replace(hour=23, minute=59, second=0, microsecond=0)
+    if now >= target:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
+
+
+def _daily_purge_loop(stop_event: threading.Event) -> None:
+    """Sleep until the next 23:59 ET, purge deleted jobs, repeat until stopped."""
+    while not stop_event.wait(_seconds_until_next_purge()):
+        try:
+            _purge_deleted_jobs(context="daily-purge")
+        except Exception as exc:  # never let a transient DB error kill the loop
+            print(f"[daily-purge] error: {exc}")
 
 
 @asynccontextmanager
@@ -74,12 +109,20 @@ async def lifespan(app: FastAPI):
     t = threading.Thread(target=_warm_lazy_imports, daemon=True)
     t.start()
 
+    purge_stop = threading.Event()
+    purge_thread = threading.Thread(
+        target=_daily_purge_loop, args=(purge_stop,), daemon=True
+    )
+    purge_thread.start()
+
     print("[startup] Open http://localhost:8080 in your browser")
 
     yield
 
-    print("[shutdown] Waiting for background thread...")
+    print("[shutdown] Waiting for background threads...")
+    purge_stop.set()
     t.join(timeout=5)
+    purge_thread.join(timeout=5)
 
 
 _DEV_SESSION_SECRET = "dev-insecure-session-secret"
@@ -99,7 +142,9 @@ def _session_secret() -> str:
     return secret or _DEV_SESSION_SECRET
 
 
-app = FastAPI(title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redoc_url=None)
+app = FastAPI(
+    title="Auto Apply", lifespan=lifespan, docs_url="/endpoints", redoc_url=None
+)
 # SessionMiddleware is registered LAST in this block on purpose: Starlette runs
 # the most-recently-added middleware outermost, so the session is populated on
 # the request scope before AuthGateMiddleware inspects it.
@@ -136,9 +181,15 @@ app.include_router(auth_routes.router)
 
 @app.exception_handler(InsufficientCredits)
 async def _insufficient_credits_handler(request, exc: InsufficientCredits):
-    return JSONResponse(status_code=402,
-                        content={"error": "insufficient_credits",
-                                 "balance": exc.balance, "floor": exc.floor})
+    return JSONResponse(
+        status_code=402,
+        content={
+            "error": "insufficient_credits",
+            "balance": exc.balance,
+            "floor": exc.floor,
+        },
+    )
+
 
 # Serve legacy static assets (favicons, images)
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
