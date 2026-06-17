@@ -5,7 +5,11 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Bugs
 
-_(none)_
+- [ ] **Indeed job descriptions are not fully captured by the scraper.** The browser
+  extension's Indeed content script (`browser-extension/content/indeed.js`) returns a
+  truncated/partial description for at least some Indeed job layouts. Audit
+  `getDescription`/`detailReadySelector` against current Indeed DOM and capture the full
+  description body.
 
 ## Features
 

@@ -83,11 +83,4 @@ async function render() {
 document.getElementById("loginGoogle").addEventListener("click", () => signIn("google"));
 document.getElementById("loginGithub").addEventListener("click", () => signIn("github"));
 document.getElementById("logout").addEventListener("click", signOut);
-document.getElementById("clearDedup").addEventListener("click", async () => {
-  await xb.storage.local.remove("stagedJobKeys");
-  const msgEl = document.getElementById("msg");
-  if (msgEl) {
-    msgEl.textContent = "Scrape history cleared.";
-  }
-});
 render();
