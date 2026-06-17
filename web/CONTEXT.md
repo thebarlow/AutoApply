@@ -106,6 +106,14 @@ web/
   or backdrop click); `Navbar.jsx` calls `verifyPurchase` on the `purchase=success` redirect, then
   dispatches `credits-stale` + `purchase-success`. The navbar no longer shows credits or a buy button.
   **Known limitation:** refunds are admin-manual only — no automatic credit clawback on a Stripe refund.
+- **Extension auth (sub-project A)** — the browser extension runs OAuth via
+  `identity.launchWebAuthFlow` against `/auth/ext/login/{provider}`; the callback mints
+  a long-lived revocable opaque token (`extension_token` table, sha256-hashed) for an
+  EXISTING account only (`resolve_existing_account` — no provisioning, Option B) and
+  302s it to the allowlisted `redirect_uri` in a `#token=` fragment. The token rides
+  `Authorization: Bearer` on `/api/scraper/stage-job` (resolved by
+  `bearer_or_session_profile`, falling back to the session/dev-stub locally).
+  `/api/scraper/stage-job` and `/api/ext/me` are in the cookie-gate `_EXEMPT_PATHS`.
 
 ## Known caveats (Phase 3b)
 
@@ -180,6 +188,9 @@ web/
 | `GET` | `/auth/callback/{provider}` | OAuth callback; provisions/resolves account, sets session, redirects `/` (or `/?beta=closed`, `/?auth_error=1`) |
 | `POST` | `/auth/logout` | Clear the session |
 | `GET` | `/api/me` | Logged-in identity `{email,is_admin,profile_name,impersonating:{profile_id,email}|null}`; 401 if no session |
+| `GET` | `/auth/ext/login/{provider}` | Start extension OAuth; `redirect_uri` must match `EXTENSION_REDIRECT_URLS` (400 otherwise); ext-mode flag stashed in session |
+| `POST` | `/auth/ext/revoke` | Bearer-authed; revoke the presented extension token |
+| `GET` | `/api/ext/me` | Bearer-authed; `{email}` of the token's account; 401 if invalid |
 
 ## Known Issues
 
