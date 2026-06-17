@@ -8,22 +8,23 @@ async function getToken() {
 }
 
 async function signIn(provider) {
-  const redirectUri = xb.identity.getRedirectURL();
-  const url = `${SERVER}/auth/ext/login/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`;
-  let resultUrl;
+  // Delegate to the service worker: opening the auth window closes this popup,
+  // so any token-storing code awaited here would never run. The worker stores
+  // the token; on success we re-render if the popup is still open, and if it
+  // was closed the next open will already show the signed-in state.
+  showError("Opening sign-in…");
+  let res;
   try {
-    resultUrl = await xb.identity.launchWebAuthFlow({ url, interactive: true });
+    res = await xb.runtime.sendMessage({ type: "SIGN_IN", provider });
   } catch (e) {
-    return showError("Sign-in cancelled or failed.");
+    return; // popup closed during the flow; worker finishes + stores the token
   }
-  const frag = new URL(resultUrl).hash.slice(1);
-  const params = new URLSearchParams(frag);
-  if (params.get("error") === "no_account") {
-    return showError("No AutoApply account. Sign up at autoapply.matthewbarlow.me first.");
+  if (res && res.ok === false) {
+    if (res.error === "no_account") {
+      return showError("No AutoApply account. Sign up at autoapply.matthewbarlow.me first.");
+    }
+    return showError("Sign-in failed, try again.");
   }
-  const token = params.get("token");
-  if (!token) return showError("Sign-in failed, try again.");
-  await xb.storage.local.set({ [TOKEN_KEY]: token });
   await render();
 }
 
