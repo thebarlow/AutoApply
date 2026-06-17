@@ -11,10 +11,9 @@ def test_send_invite_noop_when_unconfigured(monkeypatch):
 def test_send_invite_sends_when_configured(monkeypatch):
     monkeypatch.setenv("RESEND_API_KEY", "re_test")
     monkeypatch.delenv("RESEND_FROM", raising=False)
-    resp = MagicMock()
+    resp = MagicMock(is_error=False)
     with patch("core.email.httpx.post", return_value=resp) as post:
         assert email_mod.send_invite("new@example.com") is True
-    resp.raise_for_status.assert_called_once()
     args, kwargs = post.call_args
     assert args[0] == email_mod.RESEND_API_URL
     assert kwargs["headers"]["Authorization"] == "Bearer re_test"
@@ -29,6 +28,6 @@ def test_send_invite_sends_when_configured(monkeypatch):
 def test_send_invite_uses_from_override(monkeypatch):
     monkeypatch.setenv("RESEND_API_KEY", "re_test")
     monkeypatch.setenv("RESEND_FROM", "Custom <noreply@example.com>")
-    with patch("core.email.httpx.post", return_value=MagicMock()) as post:
+    with patch("core.email.httpx.post", return_value=MagicMock(is_error=False)) as post:
         assert email_mod.send_invite("new@example.com") is True
     assert post.call_args.kwargs["json"]["from"] == "Custom <noreply@example.com>"

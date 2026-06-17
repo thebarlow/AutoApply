@@ -106,6 +106,11 @@ def send_invite(to_email: str) -> bool:
         json=payload,
         timeout=20,
     )
-    resp.raise_for_status()
+    if resp.is_error:
+        # Resend returns a JSON body explaining *why* (e.g. unverified domain);
+        # raise_for_status drops it, so include it in the surfaced message.
+        raise httpx.HTTPStatusError(
+            f"Resend {resp.status_code}: {resp.text}", request=resp.request, response=resp
+        )
     logger.info("send_invite: sent invite from %s to %s", from_addr, to_email)
     return True
