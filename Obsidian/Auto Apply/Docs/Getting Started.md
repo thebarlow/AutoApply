@@ -1,68 +1,63 @@
 ---
 order: 1
 ---
-Auto Apply is an app for generating custom Resumes and Cover Letter for jobs on LinkedIn. Every custom document needs two things : A User and a Job. 
+Auto Apply generates custom résumés and cover letters tailored to specific job postings. Everything runs in your browser at **autoapply.matthewbarlow.me** — there's nothing to install on your machine except the optional browser extension described below. Every custom document needs two things: your profile and a job.
 
-# Setting up your User Profile
-Auto Apply offers the functionality to set up multiple user profiles. While it is not necessary to set up multiple profiles, we leave you this option open so that you can maximize the output of your generated documents.
-You could have one profile for : Data Scientist, one for Software Dev, one for Quant, etc.
+# Setting up your profile
+Your account has a single profile that holds everything Auto Apply knows about you — your work history, skills, education, and projects. The fastest way to fill it in is to upload your master résumé during the first-run setup; Auto Apply parses it into structured fields you can then edit by hand.
 
-## Setting up your LLM Provider
-Auto Apply leans heavily on Large Language Models (LLM) for the production of customized documents. To use most of the features, you must provide a working API key to a major LLM Provider. 
+To edit your profile at any time, click your name in the dashboard. This opens your profile directly in its edit view. The richer and more accurate your profile, the better your generated documents will be — see **Making a Good Master Resume** for tips.
 
-- [OpenRouter API Key](https://openrouter.ai/workspaces/default/keys) : Assortment of many frontier models
-- [OpenAI API Key]() : ChatGPT
-- [Claude API Key](https://platform.claude.com/dashboard) : Anthropic
-- [Gemini API Key]() : Google
+> **You do not need an LLM API key.** Auto Apply runs the AI for you. Each AI action (scoring a job, generating a résumé or cover letter) draws from your **credit** balance, shown in the navbar. New accounts start with a small grant; you can buy more credits at any time from the navbar.
 
-After signing up for your preferred LLM Provider, you can input your Preferred model and API key. If you're not sure which model to pick don't worry, we have a reasonable default selected for each of the configured Providers.
-
-The user is encouraged to test different models at different stages of the generation process to maximize output to cost efficiency.
 # Installing the browser extension
+Auto Apply uses a browser extension to capture job postings directly from the LinkedIn and Indeed job boards and send them to your account. Installing it is optional — you can always add jobs by hand (see below) — but it's the easiest way to get postings in.
 
-This service uses a custom browser extension to scrape jobs from the LinkedIn job board. 
+**[⬇ Download the extension](/extension/download)** (a `.zip`). Unzip it somewhere you'll keep it (don't delete the folder afterward — the browser loads it from that location), then follow the instructions for your browser.
 
-## Firefox Install Instructions 
-1. In your browser's url bar, navigate to about:debugging
-2. Select "This Firefox" from the tabs on the left sidebar
-3. Click "Load Temporary Add-on..."
-4. Select auto_apply/browser-extension/manifest.json
+## Chrome / Edge install instructions
+1. Navigate to `chrome://extensions` (or `edge://extensions`) in your URL bar.
+2. Enable **Developer mode** (toggle in the top right).
+3. Click **Load unpacked**.
+4. Select the unzipped extension folder (the one containing `manifest.json`).
+5. Open the extension and sign in with the same account you use on the website.
 
-### Chrome Install Instructions
+## Firefox install instructions
+1. Navigate to `about:debugging` in your URL bar.
+2. Select **This Firefox** from the left sidebar.
+3. Click **Load Temporary Add-on…**
+4. Select the `manifest.json` file inside the unzipped extension folder.
+5. Open the extension and sign in with the same account you use on the website.
 
-1. In your browser's url bar, navigate to: chrome://extensions
-2. Enable developer mode in the top right
-3. Click "Load unpacked"
-4.  Select auto_apply/browser-extension/manifest.json
+Once installed and signed in, browse to a LinkedIn or Indeed job posting and use the extension to send it to your Inbox.
 
-# Generating your Documents
-Once your job is scraped, our servers automatically begin processing the raw job description into something more structured. You can see this process happening in real time in the inbox widget of the dashboard. 
+# Adding jobs
 
-## Manually Uploading a Job
-The browser extension is the easiest way to add jobs, but you can also enter one by hand — useful for postings that aren't on LinkedIn or that the extension can't reach.
+## With the extension
+On a LinkedIn or Indeed job posting, open the extension and capture the job. It lands in your Inbox, where our servers automatically process the raw description into a structured form. You can watch this happen in real time in the Inbox widget.
 
-Click the **+ Upload** button at the top of the Inbox widget to open the upload form. Fill in the fields:
+## Manually uploading a job
+You can also enter a job by hand — useful for postings the extension can't reach. Click the **+ Upload** button at the top of the Inbox widget and fill in the fields:
 
 - **Title** *(required)* — the job title.
-- **Description** *(required)* — paste the full job description. This is what the LLM tailors your documents to, so include as much detail as you can.
+- **Description** *(required)* — paste the full job description. This is what the AI tailors your documents to, so include as much detail as you can.
 - **Company**, **Location**, **Salary** — optional context that improves scoring and generation.
 - **Job URL** — optional link back to the original posting; also used to detect duplicates. Uploading a URL that already exists is rejected as a duplicate.
 
-Click **Upload** and the job lands in your Inbox, where it's processed exactly like a scraped job.
+Click **Upload** and the job lands in your Inbox, processed exactly like a captured job.
 
-Select a Job Card in your Inbox to interact with it. It will appear on the right of your screen in the Preview tab. If you do not see it, you probably need to exit out of your User Profile settings. They use the same widget.
+# Generating your documents
+Select a job card in your Inbox to open it in the Preview tab on the right. (If you don't see it, exit your profile edit view first — it shares the same panel.)
 
-The Job Card Preview view has a row of tabs for 
-- Description : Where you can view the raw scraped description of the job along with the AI Processed version. The processed version is what it fed into subsequent LLM calls
-- Resume : Custom Document Generation
-- Cover Letter : Custom document Generation
-- Score : An assessment of how well you fit the job, and how well the job fits you
+The job preview has a row of tabs:
+- **Description** — the raw posting alongside the AI-processed version that's fed into later AI calls.
+- **Résumé** — generate a tailored résumé.
+- **Cover Letter** — generate a tailored cover letter.
+- **Score** — an assessment of how well you fit the job and how well the job fits you.
 
-Navigating to one of these tabs reveals a unique action button on the right, allowing you to generate the associated document, calculate a compatibility score, or (re)process the description. 
-Each of these actions is associated with a specific prompt under the active user profile, which are all customizable. Reasonable defaults are set to start you off. 
+Each tab reveals an action button that generates the associated document, calculates a compatibility score, or (re)processes the description. Each action runs against a customizable prompt; reasonable defaults are set to start you off, and each action spends credits.
 
-# Applying to a Job
-Once you have generated at least a cover letter for a specific job, clicking on it will reveal an Apply button in the Preview window. Clicking this apply button will navigate you back to the initial posting, and open our system tray app.
-The tray app lets you drag your generated files into LinkedIn, or the ATS's file upload bars. 
-Pressing the checkmark next to the associated Resume and Cover Letter in the tray app will remove them and mark the job as applied. You can later view it in the dashboard under "Archives". Pressing the x will remove the files from the tray app, and mark the job as "deleted". Deleted jobs move to Archives and are recoverable until the user closes the server. They are cleaned up and removed from the database on server start.
-# Customizing your User Profile
+After generating, you can refine a document with feedback or edit its fields directly using the pencil (✎) button on the Résumé/Cover toolbar.
+
+# Applying to a job
+Once you've generated your documents for a job, download the résumé and cover-letter PDFs from the preview and submit them through the employer's application form. When you're done, mark the job as applied; it moves to **Archives**, where you can review it later.

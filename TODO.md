@@ -43,12 +43,12 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   currently have NO way to get jobs in — needs a manual add/paste path (or hosted scraping). Auth,
   Credits, and Payments are all done — this is the last remaining dependency.
 
-- [ ] **Public landing / marketing page.** Non-whitelisted users currently hit the auth gate or an
-  empty app with no explanation. Build a public (unauthenticated) landing page that explains what
-  AutoApply is, who it's for, and what it does (scrape → tailor résumé/cover → apply), so visitors
-  without access can understand the product even before they can use it. Include a clear call-to-action
-  (sign in / request access) and set expectations about the invite-gated beta. Should render for
-  logged-out users while the dashboard stays behind auth.
+- [ ] **Make landing page.** A public marketing page whose purpose is to **sell the product**.
+  Must be viewable whether or not the user is signed in. Explain what AutoApply is, who it's for, and
+  what it does (scrape → tailor résumé/cover → apply), with a clear call-to-action (sign in / get
+  started / buy credits). Non-whitelisted/logged-out visitors currently hit the auth gate or an empty
+  app with no explanation — the landing page replaces that with a real pitch. Dashboard stays behind
+  auth; the landing page renders in front of it for everyone.
 
 - [ ] **Improve the document feedback system.**
   _Current system:_ In `DocumentModal`, the user attaches free-text notes to individual items
