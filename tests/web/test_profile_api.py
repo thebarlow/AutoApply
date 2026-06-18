@@ -544,3 +544,18 @@ def test_get_profiles_includes_first_last_name(client, db_session):
     assert len(profiles) == 1
     assert profiles[0]["first_name"] == "Jane"
     assert profiles[0]["last_name"] == "Doe"
+
+
+def test_reset_profile(client, db_session):
+    data = json.dumps({"email": "a@b.com", "skills": ["Python"], "work_history": [{"title": "Eng"}]})
+    db_session.add(UserProfileModel(name="Keep Me", data=data))
+    db_session.commit()
+    row = db_session.query(UserProfileModel).first()
+
+    resp = client.post(f"/api/config/profiles/{row.id}/reset")
+    assert resp.status_code == 204
+
+    db_session.refresh(row)
+    assert db_session.query(UserProfileModel).count() == 1
+    assert row.name == "Keep Me"
+    assert json.loads(row.data) == {}

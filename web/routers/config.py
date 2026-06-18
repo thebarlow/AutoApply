@@ -741,6 +741,37 @@ def delete_profile(
             pass
 
 
+@router.post("/api/config/profiles/{profile_id}/reset", status_code=204)
+def reset_profile(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> None:
+    """Clear all résumé-derived profile data and remove uploaded files.
+
+    Keeps the profile row (and its name), jobs, documents, and prompts. Emptying
+    ``data`` makes ``_has_parsed_resume`` report False, re-triggering onboarding.
+    """
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row = db.query(User).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    data = json.loads(row.data) if row.data else {}
+    row.data = "{}"
+    db.commit()
+    for key in ("resume_path", "md_path", "cover_letter_path"):
+        path_str = data.get(key, "")
+        if not path_str:
+            continue
+        path = Path(path_str)
+        try:
+            if path.is_relative_to(_PROFILES_DIR) and path.exists():
+                path.unlink()
+        except Exception:
+            pass
+
+
 @router.get("/api/config/profiles/{profile_id}/file")
 def serve_profile_file(
     profile_id: int,
