@@ -120,7 +120,9 @@ def validate_tree(root: RootNode) -> None:
     """
     seen_ids: set[str] = set()
 
-    def visit(node: object) -> None:
+    _AnyNode = Union[RootNode, SectionNode, ListNode, GroupNode, FieldNode]
+
+    def visit(node: "_AnyNode") -> None:
         nid = getattr(node, "id", None)
         if nid is not None:
             if nid in seen_ids:
@@ -146,11 +148,6 @@ def validate_tree(root: RootNode) -> None:
             if len(node.children) != 1:
                 raise TreeValidationError(
                     f"Section {node.name!r} must have exactly one child"
-                )
-            child = node.children[0]
-            if not isinstance(child, (ListNode, GroupNode, FieldNode)):
-                raise TreeValidationError(
-                    f"Section {node.name!r} has invalid child type"
                 )
 
         if isinstance(node, ListNode):

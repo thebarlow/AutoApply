@@ -73,43 +73,120 @@ def test_validate_accepts_conforming_tree():
 
 def test_validate_rejects_nonconforming_list_item():
     from core.profile_tree import (
-        FieldNode, GroupNode, ListNode, RootNode, SectionNode,
-        TreeValidationError, validate_tree,
+        FieldNode,
+        GroupNode,
+        ListNode,
+        RootNode,
+        SectionNode,
+        TreeValidationError,
+        validate_tree,
     )
 
     tmpl = GroupNode(children=[FieldNode(name="Company", key="company", kind="text")])
     bad = GroupNode(children=[FieldNode(name="Other", key="other", kind="text")])
-    root = RootNode(children=[
-        SectionNode(name="Experience", role="experience",
-                    children=[ListNode(item_template=tmpl, children=[bad])])
-    ])
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="Experience",
+                role="experience",
+                children=[ListNode(item_template=tmpl, children=[bad])],
+            )
+        ]
+    )
     with pytest.raises(TreeValidationError):
         validate_tree(root)
 
 
 def test_validate_rejects_duplicate_sibling_order():
     from core.profile_tree import (
-        RootNode, SectionNode, TreeValidationError, validate_tree,
+        RootNode,
+        SectionNode,
+        TreeValidationError,
+        validate_tree,
     )
 
-    root = RootNode(children=[
-        SectionNode(name="A", order=0, children=[]),
-        SectionNode(name="B", order=0, children=[]),
-    ])
+    root = RootNode(
+        children=[
+            SectionNode(name="A", order=0, children=[]),
+            SectionNode(name="B", order=0, children=[]),
+        ]
+    )
     with pytest.raises(TreeValidationError):
         validate_tree(root)
 
 
 def test_validate_rejects_section_with_two_children():
     from core.profile_tree import (
-        FieldNode, RootNode, SectionNode, TreeValidationError, validate_tree,
+        FieldNode,
+        RootNode,
+        SectionNode,
+        TreeValidationError,
+        validate_tree,
     )
 
-    root = RootNode(children=[
-        SectionNode(name="X", children=[
-            FieldNode(name="a", key="a", kind="text"),
-            FieldNode(name="b", key="b", kind="text"),
-        ])
-    ])
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="X",
+                children=[
+                    FieldNode(name="a", key="a", kind="text"),
+                    FieldNode(name="b", key="b", kind="text"),
+                ],
+            )
+        ]
+    )
+    with pytest.raises(TreeValidationError):
+        validate_tree(root)
+
+
+def test_validate_rejects_invalid_bullets_bounds():
+    from core.profile_tree import (
+        FieldNode,
+        RootNode,
+        SectionNode,
+        TreeValidationError,
+        validate_tree,
+    )
+
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="S",
+                children=[
+                    FieldNode(name="B", key="b", kind="bullets", min=5, max=2),
+                ],
+            )
+        ]
+    )
+    with pytest.raises(TreeValidationError):
+        validate_tree(root)
+
+
+def test_validate_rejects_duplicate_group_key():
+    from core.profile_tree import (
+        FieldNode,
+        GroupNode,
+        RootNode,
+        SectionNode,
+        TreeValidationError,
+        validate_tree,
+    )
+
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="S",
+                children=[
+                    GroupNode(
+                        name="g",
+                        children=[
+                            FieldNode(name="A", key="x", kind="text"),
+                            FieldNode(name="B", key="x", kind="text"),
+                        ],
+                    )
+                ],
+            )
+        ]
+    )
     with pytest.raises(TreeValidationError):
         validate_tree(root)
