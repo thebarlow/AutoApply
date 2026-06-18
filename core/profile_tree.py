@@ -1,15 +1,16 @@
-"""Recursive, typed profile/résumé tree: closed node vocabulary + adapters.
+"""Recursive, typed profile/résumé tree: closed node vocabulary.
 
-Pure module — no DB, no LLM. ``RootNode`` is the source of truth for profile
-structure; ``tree_to_legacy`` projects it into today's flat profile shape and
-``legacy_to_tree`` migrates an old flat profile into the default preset tree.
+Pure module — no DB, no LLM. Provides ``FieldNode``, ``GroupNode``,
+``ListNode``, ``SectionNode``, and ``RootNode`` — the complete vocabulary for
+representing a structured profile/résumé tree.
 """
+
 from __future__ import annotations
 
 import uuid
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 def _new_id() -> str:
@@ -27,7 +28,7 @@ class FieldNode(BaseModel):
     order: int = 0
     visible: bool = True
     kind: Literal["text", "markdown", "bullets", "taglist"] = "text"
-    value: Union[str, list[str], None] = ""
+    value: Union[str, list[str]] = ""
     llm_output: bool = False
     llm_instructions: str = ""
     llm_input: bool = False
@@ -35,23 +36,20 @@ class FieldNode(BaseModel):
     min: Optional[int] = None
     max: Optional[int] = None
 
-    @model_validator(mode="after")
-    def _normalize_value(self) -> FieldNode:
-        if self.kind in ("text", "markdown"):
-            if isinstance(self.value, list):
-                self.value = " ".join(str(v) for v in self.value)
-            elif self.value is None:
-                self.value = ""
-            else:
-                self.value = str(self.value)
-        else:  # bullets, taglist
-            if isinstance(self.value, str):
-                self.value = [self.value] if self.value else []
-            elif self.value is None:
-                self.value = []
-            else:
-                self.value = [str(v) for v in self.value]
-        return self
+    @field_validator("value", mode="before")
+    @classmethod
+    def _normalize_value(cls, v, info):
+        kind = info.data.get("kind", "text")
+        if kind in ("text", "markdown"):
+            if isinstance(v, list):
+                return " ".join(str(x) for x in v)
+            return "" if v is None else str(v)
+        # bullets, taglist
+        if isinstance(v, str):
+            return [v] if v else []
+        if v is None:
+            return []
+        return [str(x) for x in v]
 
 
 class GroupNode(BaseModel):

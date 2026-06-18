@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 
 def test_field_text_value_coerces_to_str():
     from core.profile_tree import FieldNode
