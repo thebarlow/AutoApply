@@ -106,6 +106,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Single-step "Upload Master Resume" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The platform owns the LLM key via env, so onboarding no longer collects an API key (`StepLLM.jsx` was removed).
 - Renders `StepResume` — uploads + parses the résumé against the already-provisioned active profile, then calls `setActiveProfile` so the dashboard resolves it (otherwise `UserHome` falls back to the profile picker).
 - "Skip for now" just dismisses for the session (`setWizardSkipped`); the profile already exists, so nothing is created. The modal reappears on next login until a résumé is parsed.
+- The Profile view's **Reset Profile** button (`ProfileDetail.jsx`) calls `POST /api/config/profiles/{id}/reset`, which empties `User.data` (keeping the row, jobs, and generated documents). This flips `setup-status` `resume_parsed` to false, so reloading re-shows this wizard. Confirmation requires typing `Reset my Profile`.
 
 ### shared/GatedButton.jsx
 - Wraps action buttons; disables + shows tooltip when prerequisites unmet
