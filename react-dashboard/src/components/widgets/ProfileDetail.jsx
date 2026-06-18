@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
-import { getProfile, updateProfile, deleteProfile, getPrompt, putPrompt, resetPrompt } from '../../api'
+import { getProfile, updateProfile, deleteProfile, resetProfile, getPrompt, putPrompt, resetPrompt } from '../../api'
 import { validateProvider } from '../../validation'
 import HelpIcon from '../shared/HelpIcon'
 
@@ -1418,10 +1418,11 @@ export default function ProfileDetailView({ profileId, onDelete }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  useEscape(confirmDelete, () => setConfirmDelete(false))
-  const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState(null)
+  const [confirmReset, setConfirmReset] = useState(false)
+  useEscape(confirmReset, () => setConfirmReset(false))
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState(null)
+  const [resetPhrase, setResetPhrase] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState(null)
 
@@ -1461,15 +1462,15 @@ export default function ProfileDetailView({ profileId, onDelete }) {
     }
   }
 
-  const handleDelete = async () => {
-    setDeleting(true)
-    setDeleteError(null)
+  const handleReset = async () => {
+    setResetting(true)
+    setResetError(null)
     try {
-      await deleteProfile(profileId)
-      onDelete?.()
+      await resetProfile(profileId)
+      window.location.reload()
     } catch {
-      setDeleteError('Delete failed')
-      setDeleting(false)
+      setResetError('Reset failed')
+      setResetting(false)
     }
   }
 
@@ -1504,33 +1505,46 @@ export default function ProfileDetailView({ profileId, onDelete }) {
         </button>
         {exportError && <p className="text-xs text-red-400 mt-1">{exportError}</p>}
         <button
-          onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
+          onClick={() => { setResetError(null); setResetPhrase(''); setConfirmReset(true) }}
           className="w-full py-2 rounded-lg border border-red-500/30 text-sm text-red-400 hover:bg-red-500/10 transition-colors mt-2"
         >
-          Delete Profile
+          Reset Profile
         </button>
       </div>
 
-      {confirmDelete && (
+      {confirmReset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-sm p-5 flex flex-col gap-4 shadow-2xl">
             <div>
-              <p className="text-sm font-semibold text-space-text">Delete profile?</p>
+              <p className="text-sm font-semibold text-space-text">Reset profile?</p>
               <p className="text-xs text-space-dim mt-1">
-                This will permanently delete <span className="text-space-text">{profile.name}</span> and cannot be undone.
+                This permanently clears your résumé data — contact info, skills, work
+                history, education, projects, and your uploaded files. Your scraped jobs
+                and any documents you've already generated are kept. You'll be taken back
+                through résumé upload.
+              </p>
+              <p className="text-xs text-space-dim mt-2">
+                Type <span className="text-space-text font-semibold">Reset my Profile</span> to confirm.
               </p>
             </div>
-            {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+            <input
+              type="text"
+              value={resetPhrase}
+              onChange={(e) => setResetPhrase(e.target.value)}
+              placeholder="Reset my Profile"
+              className="w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors"
+            />
+            {resetError && <p className="text-xs text-red-400">{resetError}</p>}
             <div className="flex gap-2">
               <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+                onClick={handleReset}
+                disabled={resetting || resetPhrase !== 'Reset my Profile'}
+                className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
               >
-                {deleting ? 'Deleting…' : 'Delete'}
+                {resetting ? 'Resetting…' : 'Reset Profile'}
               </button>
               <button
-                onClick={() => setConfirmDelete(false)}
+                onClick={() => setConfirmReset(false)}
                 className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text transition-colors"
               >
                 Cancel

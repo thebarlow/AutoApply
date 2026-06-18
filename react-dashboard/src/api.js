@@ -69,6 +69,9 @@ export const updateProfile = (id, body) =>
 export const deleteProfile = (id) =>
   _fetch(`/api/config/profiles/${id}`, { method: 'DELETE' })
 
+export const resetProfile = (id) =>
+  _fetch(`/api/config/profiles/${id}/reset`, { method: 'POST' })
+
 export const setActiveProfile = (id) =>
   _fetch('/api/config/profiles/active', {
     method: 'PUT',
