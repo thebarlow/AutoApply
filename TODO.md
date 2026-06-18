@@ -26,6 +26,31 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
      `send.matthewbarlow.me` in Resend and set `RESEND_FROM=Auto Apply <noreply@send.matthewbarlow.me>`.
   4. Have early recipients mark "Not spam" — positive engagement signal during warm-up.
 
+- [ ] **`config` table is global, not tenant-scoped (multi-tenant settings bleak).**
+  `Config` is a pure key-value store (PK = `key` only), so per-user settings stored there
+  are shared across all tenants and any user can change them for everyone. Found during the
+  profile/prompt tenancy audit (the per-profile resume/prompt endpoints were fixed in
+  `[fix] Scope profile/prompt/setup endpoints to tenancy seam`; this is the remaining gap).
+  Affected keys, by priority:
+  1. **Scoring weights / thresholds** (`w1`, `w2`, `auto_reject_threshold`,
+     `auto_approve_threshold`) — read in `web/routers/jobs.py:_load_weights` and applied to
+     **every tenant's** scoring/intake. Live correctness bug (shared tuning), not a data leak.
+  2. Scraper prefs (`source_remotive`/`source_remoteok`, `keywords_whitelist/blacklist`,
+     `max_jobs_per_source`, `job_searches`) — shared, but the API scrapers are dormant.
+  3. LLM provider config + LaTeX templates (`llm_providers`, `named_providers`,
+     `latex_templates`, …) — arguably platform-global/admin-only now that the platform owns
+     the LLM key in hosted mode; decide global-admin vs per-tenant rather than auto-scope.
+  Fix is a schema change (add `profile_id` to the `config` PK + Alembic migration) and a
+  tenant-aware `_get`/`_set` across ~15 endpoints — run it through the spec workflow as its
+  own task, not a hotfix. Until then, scoring-weight edits in hosted mode are global.
+
+- [ ] **`PUT /api/config/profiles/active` is a dead/legacy multi-profile switcher in hosted
+  mode.** It writes the global `dev_tenant_id` Config row, which production's
+  `current_profile_id` ignores (1 account = 1 profile via the session seam). Harmless but
+  confusing and lets a user clobber the shared dev-stub row. Remove the endpoint (and the
+  frontend profile switcher) in hosted mode, or gate it to dev/admin-only. Verify no
+  React caller depends on it before deleting.
+
 ## Features
 
 - [ ] **Per-section resume content/format control + section-paired prompts.** SPEC IN

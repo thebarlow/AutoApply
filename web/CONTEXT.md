@@ -202,3 +202,17 @@ web/
 
 - `_serialize()` in `jobs.py` calls `Path.exists()` twice per job (resume_md_exists, cover_md_exists) on every `GET /api/jobs`. At current scale (<100 jobs) this is negligible. If job count grows, move to a per-job detail endpoint.
 - Salary sort is lexicographic for non-numeric salary strings (e.g. "$120k–$150k"). Values without parseable numbers sort as 0.
+- **Profile/prompt/setup endpoints must use the tenancy seam, not the legacy dev stub.**
+  `/api/setup-status`, all `/api/config/profiles*`, and `/api/prompts/{profile_id}/*` now
+  resolve/authorize the tenant via `current_profile_id` (a `{profile_id}` URL ≠ the caller's
+  tenant returns 404). Earlier they read the active profile from `Config['dev_tenant_id']` /
+  `User.first()` / the raw URL id, which in production served profile 1 to everyone and let
+  any tenant read/overwrite/delete another's profile, files, resume-parse, and prompts. When
+  adding profile-scoped endpoints, depend on `current_profile_id` — never `dev_tenant_id`.
+- **The `config` table is global (not tenant-scoped).** PK is `key` only, so settings stored
+  there (scoring weights/thresholds, scraper prefs, LLM/template config) are shared across
+  all tenants and any user can change them for everyone. The scoring weights
+  (`web/routers/jobs.py:_load_weights`) feed every tenant's scoring — a live shared-tuning
+  bug, not a data leak. Proper fix is a schema change (add `profile_id` to the PK) + a
+  tenant-aware `_get`/`_set`; tracked in `TODO.md` → Bugs. Until then treat config writes as
+  app-global.
