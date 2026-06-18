@@ -5,6 +5,7 @@ import {
   uploadProfileResume,
   parseProfileResume,
   getProfiles,
+  getProfile,
   updateProfile,
   setActiveProfile,
 } from "../../api";
@@ -33,7 +34,9 @@ export default function StepResume({ onFinish }) {
       await setActiveProfile(profileId);
 
       // Attach the uploaded file to the profile so parse can read it.
-      const profile = profiles.find((p) => p.id === profileId) || profiles[0];
+      // Fetch the full profile (the list response omits `data`) so we merge
+      // onto existing fields instead of wiping them.
+      const profile = await getProfile(profileId);
       const existingData = profile.data || {};
       await updateProfile(profileId, {
         name: profile.name,
