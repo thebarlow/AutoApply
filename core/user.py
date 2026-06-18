@@ -89,6 +89,21 @@ class User(Base):
         Returns True if legacy text-blob prompts were migrated to files (caller should save).
         """
         raw = json.loads(self.data or "{}")
+
+        from core.profile_tree import (
+            RootNode, legacy_to_tree, tree_to_legacy, validate_tree,
+        )
+        tree_raw = raw.get("profile_tree")
+        migrated_tree = False
+        if tree_raw:
+            self.profile_tree = RootNode.model_validate(tree_raw)
+        else:
+            self.profile_tree = legacy_to_tree(raw)
+            migrated_tree = True
+        validate_tree(self.profile_tree)
+        derived = tree_to_legacy(self.profile_tree)
+        raw = {**raw, **derived}  # tree is source of truth for document sections
+
         self.first_name = raw.get("first_name", "")
         self.last_name = raw.get("last_name", "")
         self.hero = raw.get("hero", "")
@@ -120,7 +135,47 @@ class User(Base):
         self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
         self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 3))
         self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
-        return False
+        return migrated_tree
+
+    def _sync_attrs_to_tree(self) -> None:
+        """Write mutated flat instance attrs back into the profile tree before serialization.
+
+        Keeps the tree consistent with direct attribute mutations (e.g. user.email = "...").
+        Only syncs the flat keys that tree_to_legacy derives from the header section.
+        """
+        from core.profile_tree import GroupNode, FieldNode, SectionNode
+
+        _CONTACT_KEYS = {
+            "first_name": getattr(self, "first_name", ""),
+            "last_name": getattr(self, "last_name", ""),
+            "email": getattr(self, "email", ""),
+            "phone": getattr(self, "phone", ""),
+            "location": getattr(self, "location", ""),
+            "github": getattr(self, "github", ""),
+            "linkedin": getattr(self, "linkedin", ""),
+            "website": getattr(self, "website", ""),
+        }
+
+        if not hasattr(self, "profile_tree") or self.profile_tree is None:
+            return
+
+        for section in self.profile_tree.children:
+            if not isinstance(section, SectionNode) or section.role != "header":
+                continue
+            for child in section.children:
+                if not isinstance(child, GroupNode):
+                    continue
+                for field in child.children:
+                    if isinstance(field, FieldNode) and field.key in _CONTACT_KEYS:
+                        field.value = _CONTACT_KEYS[field.key]
+
+        # Sync hero into summary section
+        hero_val = getattr(self, "hero", "")
+        for section in self.profile_tree.children:
+            if not isinstance(section, SectionNode) or section.role != "summary":
+                continue
+            if section.children and isinstance(section.children[0], FieldNode):
+                section.children[0].value = hero_val
 
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
@@ -144,6 +199,8 @@ class User(Base):
             "md_path": self.md_path,
             "website": self.website,
         }
+        self._sync_attrs_to_tree()
+        d["profile_tree"] = self.profile_tree.model_dump(mode="json")
         d["resume_refine_enabled"] = self.resume_refine_enabled
         d["resume_refine_max_turns"] = self.resume_refine_max_turns
         d["resume_refine_pass_score"] = self.resume_refine_pass_score

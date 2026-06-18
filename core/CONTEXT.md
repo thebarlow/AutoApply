@@ -8,6 +8,8 @@ Shared business logic. No framework dependencies — used by `web/`, `scraper/`,
 core/
 ├── job.py               # Job entity + all LLM-driven methods (score, generate, extract, eval, refine, ATS check)
 ├── user.py              # User entity; profile load/save, prompt resolution, degree/skills helpers
+├── profile_tree.py      # Recursive typed profile/résumé tree (closed node vocab) + validate_tree + tree_to_legacy adapter + legacy_to_tree migration
+├── section_presets.py   # Preset section subtrees mirroring the legacy master profile (header/summary/experience/education/projects/skills)
 ├── llm.py               # LLM client construction and model resolution
 ├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
 ├── session_cost.py      # Thread-safe accumulator for per-session LLM spend (from usage.cost)
@@ -22,6 +24,18 @@ core/
 ├── payments.py          # Tier-aware pricing calculator: compute_credits()/packs_for_tier()/resolve_price_id() (no Stripe SDK calls)
 └── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, retrieve_price, construct_event
 ```
+
+## Profile Schema Engine
+
+`profile_tree.py` is the source of truth for profile structure: a recursive,
+closed-vocabulary node tree (root → section → list/group → field). `User`
+stores it as `profile_tree` inside `user_profile.data` and derives the legacy
+typed attrs (`work_history`/`education`/`projects`/`skills`/contact/`hero`) from
+it on every load via `tree_to_legacy`, so generation/rendering/UI are unchanged.
+Legacy profiles are migrated once on load via `legacy_to_tree`. Job-search
+metadata (target roles/salary, resume/md paths) stays as flat `data` keys, not
+in the tree. **Known gap:** custom (non-`role`) sections are storable but do not
+appear on generated documents until sub-project #4.
 
 `document_parser.py` parses both the canonical `document_assembler` output and the older free-form LLM markdown (experience entries split on `### ` **or** bold-only headings, `Title at Company`/`Title, Company` separators, one-line `**Name:**`/`**Name**:` projects).
 

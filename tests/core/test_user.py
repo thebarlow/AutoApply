@@ -411,3 +411,32 @@ def test_hydrate_populates_model_from_rows(db_session):
     _make_profile_with_prompts(db_session, model="gpt-x")
     user = User.load(db_session)
     assert user.prompt_scoring_model == "gpt-x"
+
+
+def test_load_migrates_legacy_profile_to_tree(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    user = User.load(db_session)
+    assert getattr(user, "profile_tree", None) is not None
+    assert [s.role for s in user.profile_tree.children][0] == "header"
+    # Derived legacy attrs survive the round-trip.
+    assert user.email == "matt@example.com"
+    assert user.skills == ["Python", "SQL"]
+    assert user.work_history[0].company == "Acme"
+    # Migration persisted the tree.
+    stored = json.loads(db_session.query(User).first().data)
+    assert "profile_tree" in stored
+
+
+def test_migration_is_idempotent(db_session):
+    from core.user import User
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    User.load(db_session)
+    data_after_first = db_session.query(User).first().data
+    User.load(db_session)
+    data_after_second = db_session.query(User).first().data
+    assert data_after_first == data_after_second
