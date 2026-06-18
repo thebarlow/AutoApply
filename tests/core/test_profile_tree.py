@@ -190,3 +190,69 @@ def test_validate_rejects_duplicate_group_key():
     )
     with pytest.raises(TreeValidationError):
         validate_tree(root)
+
+
+LEGACY = {
+    "first_name": "Matt",
+    "last_name": "Barlow",
+    "hero": "Engineer",
+    "email": "m@x.com",
+    "phone": "555",
+    "location": "Remote",
+    "github": "gh",
+    "linkedin": "li",
+    "website": "w",
+    "skills": ["Python", "SQL"],
+    "work_history": [
+        {
+            "company": "Acme",
+            "title": "SWE",
+            "start": "2022",
+            "end": "Now",
+            "summary": "Built.",
+        },
+    ],
+    "education": [
+        {
+            "institution": "Columbia",
+            "degree": "B.S.",
+            "field": "EE",
+            "graduated": "2018",
+            "gpa": 3.5,
+        },
+    ],
+    "projects": [
+        {
+            "name": "auto_apply",
+            "description": "Pipeline",
+            "url": "u",
+            "technologies": ["Python"],
+        },
+    ],
+}
+
+
+def test_legacy_to_tree_is_valid_and_has_sections():
+    from core.profile_tree import legacy_to_tree, validate_tree
+
+    root = legacy_to_tree(LEGACY)
+    validate_tree(root)
+    roles = [s.role for s in root.children]
+    assert roles == [
+        "header",
+        "summary",
+        "experience",
+        "education",
+        "projects",
+        "skills",
+    ]
+
+
+def test_legacy_to_tree_populates_experience_item():
+    from core.profile_tree import legacy_to_tree
+
+    root = legacy_to_tree(LEGACY)
+    exp = next(s for s in root.children if s.role == "experience")
+    item = exp.children[0].children[0]
+    vals = {f.key: f.value for f in item.children}
+    assert vals["company"] == "Acme" and vals["summary"] == "Built."

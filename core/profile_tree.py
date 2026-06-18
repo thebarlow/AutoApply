@@ -170,3 +170,106 @@ def validate_tree(root: RootNode) -> None:
                 visit(c)
 
     visit(root)
+
+
+def _gpa_to_str(v: object) -> str:
+    """Convert GPA value to string, handling None/empty/zero cases."""
+    if v in (None, "", 0, 0.0):
+        return ""
+    return str(v)
+
+
+def legacy_to_tree(data: dict) -> "RootNode":
+    """Build the default preset tree from a legacy flat profile dict.
+
+    Args:
+        data: Legacy profile dict with top-level keys like first_name, hero,
+            work_history, education, projects, skills.
+
+    Returns:
+        A RootNode with fully populated preset sections.
+    """
+    from core.section_presets import (
+        education_template,
+        experience_template,
+        header_section,
+        projects_template,
+        skills_section,
+        summary_section,
+    )
+
+    def _instances(rows: list[dict], template: GroupNode, mapper) -> list[GroupNode]:
+        items: list[GroupNode] = []
+        for i, row in enumerate(rows or []):
+            vals = mapper(row)
+            fields = [
+                FieldNode(
+                    name=t.name,
+                    key=t.key,
+                    kind=t.kind,
+                    order=t.order,
+                    llm_output=t.llm_output,
+                    value=vals.get(t.key, ""),
+                )
+                for t in template.children
+            ]
+            items.append(GroupNode(name=template.name, order=i, children=fields))
+        return items
+
+    header = header_section()
+    for f in header.children[0].children:
+        f.value = data.get(f.key, "") or ""
+
+    summary = summary_section()
+    summary.children[0].value = data.get("hero", "") or ""
+
+    exp_tmpl = experience_template()
+    experience = SectionNode(
+        name="Experience",
+        role="experience",
+        order=2,
+        children=[
+            ListNode(
+                name="Experience",
+                item_template=exp_tmpl,
+                children=_instances(data.get("work_history"), exp_tmpl, lambda r: r),
+            )
+        ],
+    )
+
+    edu_tmpl = education_template()
+    education = SectionNode(
+        name="Education",
+        role="education",
+        order=3,
+        children=[
+            ListNode(
+                name="Education",
+                item_template=edu_tmpl,
+                children=_instances(
+                    data.get("education"),
+                    edu_tmpl,
+                    lambda r: {**r, "gpa": _gpa_to_str(r.get("gpa"))},
+                ),
+            )
+        ],
+    )
+
+    proj_tmpl = projects_template()
+    projects = SectionNode(
+        name="Projects",
+        role="projects",
+        order=4,
+        children=[
+            ListNode(
+                name="Projects",
+                item_template=proj_tmpl,
+                children=_instances(data.get("projects"), proj_tmpl, lambda r: r),
+            )
+        ],
+    )
+
+    skills = skills_section()
+    skills.children[0].value = list(data.get("skills") or [])
+
+    return RootNode(children=[header, summary, experience, education, projects, skills])
