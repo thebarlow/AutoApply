@@ -41,7 +41,9 @@ def summary_section() -> SectionNode:
         role="summary",
         order=1,
         children=[
-            FieldNode(name="Summary", key="hero", kind="markdown", llm_output=True)
+            FieldNode(
+                name="Summary", key="hero", kind="markdown", order=0, llm_output=True
+            )
         ],
     )
 

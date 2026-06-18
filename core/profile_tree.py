@@ -8,6 +8,7 @@ representing a structured profile/résumé tree.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
@@ -173,8 +174,8 @@ def validate_tree(root: RootNode) -> None:
 
 
 def _gpa_to_str(v: object) -> str:
-    """Convert GPA value to string, handling None/empty/zero cases."""
-    if v in (None, "", 0, 0.0):
+    """Convert a legacy GPA value to its string form ("" only for unset)."""
+    if v is None or v == "":
         return ""
     return str(v)
 
@@ -198,7 +199,11 @@ def legacy_to_tree(data: dict) -> "RootNode":
         summary_section,
     )
 
-    def _instances(rows: list[dict], template: GroupNode, mapper) -> list[GroupNode]:
+    def _instances(
+        rows: list[dict],
+        template: GroupNode,
+        mapper: Callable[[dict], dict],
+    ) -> list[GroupNode]:
         items: list[GroupNode] = []
         for i, row in enumerate(rows or []):
             vals = mapper(row)
@@ -272,4 +277,6 @@ def legacy_to_tree(data: dict) -> "RootNode":
     skills = skills_section()
     skills.children[0].value = list(data.get("skills") or [])
 
-    return RootNode(children=[header, summary, experience, education, projects, skills])
+    root = RootNode(children=[header, summary, experience, education, projects, skills])
+    validate_tree(root)
+    return root

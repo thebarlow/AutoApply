@@ -248,6 +248,16 @@ def test_legacy_to_tree_is_valid_and_has_sections():
     ]
 
 
+@pytest.mark.parametrize(
+    "v,expected",
+    [(3.5, "3.5"), (4.0, "4.0"), (None, ""), ("", ""), (0.0, "0.0"), (3, "3")],
+)
+def test_gpa_to_str(v, expected):
+    from core.profile_tree import _gpa_to_str
+
+    assert _gpa_to_str(v) == expected
+
+
 def test_legacy_to_tree_populates_experience_item():
     from core.profile_tree import legacy_to_tree
 
