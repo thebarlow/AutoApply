@@ -133,8 +133,14 @@ def validate_tree(root: RootNode) -> None:
                 raise TreeValidationError(f"Duplicate field key in group {node.name!r}")
 
         if isinstance(node, FieldNode) and node.kind == "bullets":
-            if node.min is not None and node.max is not None and not (0 <= node.min <= node.max):
-                raise TreeValidationError(f"Invalid bullets bounds in field {node.name!r}")
+            if (
+                node.min is not None
+                and node.max is not None
+                and not (0 <= node.min <= node.max)
+            ):
+                raise TreeValidationError(
+                    f"Invalid bullets bounds in field {node.name!r}"
+                )
 
         if isinstance(node, SectionNode):
             if len(node.children) != 1:
@@ -143,7 +149,9 @@ def validate_tree(root: RootNode) -> None:
                 )
             child = node.children[0]
             if not isinstance(child, (ListNode, GroupNode, FieldNode)):
-                raise TreeValidationError(f"Section {node.name!r} has invalid child type")
+                raise TreeValidationError(
+                    f"Section {node.name!r} has invalid child type"
+                )
 
         if isinstance(node, ListNode):
             tmpl_shape = _shape(node.item_template)
@@ -157,9 +165,8 @@ def validate_tree(root: RootNode) -> None:
 
         children = getattr(node, "children", None)
         if children is not None:
-            orders = [getattr(c, "order", 0) for c in children]
-            # Only enforce unique order if any child has an explicitly non-zero order
-            if any(order != 0 for order in orders):
+            if isinstance(node, (RootNode, SectionNode, ListNode)):
+                orders = [getattr(c, "order", 0) for c in children]
                 if len(set(orders)) != len(orders):
                     raise TreeValidationError("Duplicate sibling order")
             for c in children:
