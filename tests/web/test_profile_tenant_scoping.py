@@ -152,3 +152,11 @@ def test_reset_prompt_denies_other_tenant(two_tenants):
     client = _client(two_tenants, caller_profile_id=2)
     r = client.post("/api/prompts/1/scoring/reset")
     assert r.status_code == 404
+
+
+def test_reset_profile_denies_other_tenant(two_tenants):
+    """Tenant 2 must not be able to reset tenant 1's profile."""
+    client = _client(two_tenants, caller_profile_id=2)
+    r = client.post("/api/config/profiles/1/reset")
+    assert r.status_code == 404
+    assert json.loads(two_tenants.query(User).filter_by(id=1).first().data) == {"skills": ["Python"]}
