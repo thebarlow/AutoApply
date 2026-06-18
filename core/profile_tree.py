@@ -291,7 +291,11 @@ def _section_by_role(root: "RootNode", role: str) -> Optional[SectionNode]:
 
 
 def _gpa_to_float(v: object) -> float:
-    """Convert a stored GPA string/number to float (0.0 when unset or invalid)."""
+    """Convert a stored GPA string/number to float.
+
+    Returns 0.0 when v is absent, empty, or non-numeric. Note: a genuine GPA
+    of 0.0 is indistinguishable from an absent GPA after this conversion.
+    """
     try:
         return float(v)  # type: ignore[arg-type]
     except (TypeError, ValueError):
@@ -311,9 +315,19 @@ def tree_to_legacy(root: "RootNode") -> dict:
         ``work_history``, ``education``, ``projects``.
     """
     out: dict = {
-        "first_name": "", "last_name": "", "hero": "", "email": "", "phone": "",
-        "location": "", "github": "", "linkedin": "", "website": "",
-        "skills": [], "work_history": [], "education": [], "projects": [],
+        "first_name": "",
+        "last_name": "",
+        "hero": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "github": "",
+        "linkedin": "",
+        "website": "",
+        "skills": [],
+        "work_history": [],
+        "education": [],
+        "projects": [],
     }
 
     header = _section_by_role(root, "header")
@@ -334,23 +348,38 @@ def tree_to_legacy(root: "RootNode") -> dict:
         sect = _section_by_role(root, role)
         if not sect or not sect.children or not isinstance(sect.children[0], ListNode):
             return []
-        return [{f.key: f.value for f in item.children} for item in sect.children[0].children]
+        return [
+            {f.key: f.value for f in item.children}
+            for item in sect.children[0].children
+        ]
 
     out["work_history"] = [
-        {"company": r.get("company", ""), "title": r.get("title", ""),
-         "start": r.get("start", ""), "end": r.get("end", ""),
-         "summary": r.get("summary", "")}
+        {
+            "company": r.get("company", ""),
+            "title": r.get("title", ""),
+            "start": r.get("start", ""),
+            "end": r.get("end", ""),
+            "summary": r.get("summary", ""),
+        }
         for r in _rows("experience")
     ]
     out["education"] = [
-        {"institution": r.get("institution", ""), "degree": r.get("degree", ""),
-         "field": r.get("field", ""), "graduated": r.get("graduated", ""),
-         "gpa": _gpa_to_float(r.get("gpa", ""))}
+        {
+            "institution": r.get("institution", ""),
+            "degree": r.get("degree", ""),
+            "field": r.get("field", ""),
+            "graduated": r.get("graduated", ""),
+            "gpa": _gpa_to_float(r.get("gpa", "")),
+        }
         for r in _rows("education")
     ]
     out["projects"] = [
-        {"name": r.get("name", ""), "description": r.get("description", ""),
-         "url": r.get("url", ""), "technologies": list(r.get("technologies", []))}
+        {
+            "name": r.get("name", ""),
+            "description": r.get("description", ""),
+            "url": r.get("url", ""),
+            "technologies": list(r.get("technologies", [])),
+        }
         for r in _rows("projects")
     ]
     return out

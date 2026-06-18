@@ -275,7 +275,11 @@ def test_tree_to_legacy_round_trips_fields():
     assert out["email"] == "m@x.com"
     assert out["skills"] == ["Python", "SQL"]
     assert out["work_history"][0] == {
-        "company": "Acme", "title": "SWE", "start": "2022", "end": "Now", "summary": "Built.",
+        "company": "Acme",
+        "title": "SWE",
+        "start": "2022",
+        "end": "Now",
+        "summary": "Built.",
     }
     assert out["education"][0]["gpa"] == 3.5
     assert out["projects"][0]["technologies"] == ["Python"]
@@ -292,12 +296,29 @@ def test_golden_round_trip_markdown_identical():
     from core.user import EducationEntry, ProjectEntry, WorkHistoryEntry
 
     def _user(d: dict):
-        u = SimpleNamespace(**{k: "" for k in (
-            "first_name", "last_name", "email", "phone", "location",
-            "github", "linkedin", "website")})
-        u.first_name = d["first_name"]; u.last_name = d["last_name"]
-        u.email = d["email"]; u.phone = d["phone"]; u.location = d["location"]
-        u.github = d["github"]; u.linkedin = d["linkedin"]; u.website = d["website"]
+        u = SimpleNamespace(
+            **{
+                k: ""
+                for k in (
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "phone",
+                    "location",
+                    "github",
+                    "linkedin",
+                    "website",
+                )
+            }
+        )
+        u.first_name = d["first_name"]
+        u.last_name = d["last_name"]
+        u.email = d["email"]
+        u.phone = d["phone"]
+        u.location = d["location"]
+        u.github = d["github"]
+        u.linkedin = d["linkedin"]
+        u.website = d["website"]
         u.skills = d["skills"]
         u.work_history = [WorkHistoryEntry(**e) for e in d["work_history"]]
         u.education = [EducationEntry(**e) for e in d["education"]]
@@ -306,9 +327,13 @@ def test_golden_round_trip_markdown_identical():
         return u
 
     gen = ResumeGeneration()  # empty prose; structure-only comparison
-    before = assemble_resume_markdown(build_resume_document(_user(LEGACY), gen, _StubDB()))
+    before = assemble_resume_markdown(
+        build_resume_document(_user(LEGACY), gen, _StubDB())
+    )
     after_legacy = tree_to_legacy(legacy_to_tree(LEGACY))
-    after = assemble_resume_markdown(build_resume_document(_user(after_legacy), gen, _StubDB()))
+    after = assemble_resume_markdown(
+        build_resume_document(_user(after_legacy), gen, _StubDB())
+    )
     assert before == after
 
 
