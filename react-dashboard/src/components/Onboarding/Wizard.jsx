@@ -53,19 +53,25 @@ export default function Wizard({ onFinish, onSkip, onManual }) {
 
         <p className="text-xs text-space-dim mb-4">{active.blurb}</p>
 
-        {/* Tab body */}
-        {tab === "resume" ? (
-          <StepResume onFinish={onFinish} />
-        ) : (
-          <div className="flex justify-end">
-            <button
-              onClick={onManual}
-              className="text-sm text-purple-300 hover:text-purple-200 transition-colors hover:underline"
-            >
-              Try it out
-            </button>
-          </div>
-        )}
+        {/* Tab body — fixed min-height so the modal doesn't resize between tabs */}
+        <div className="min-h-[340px]">
+          {tab === "resume" ? (
+            <StepResume onFinish={onFinish} />
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-4 h-[340px] text-center">
+              <p className="text-sm text-space-dim max-w-xs">
+                You&apos;ll be taken straight to the profile editor, where you can type in
+                your experience, education, skills, and more by hand.
+              </p>
+              <button
+                onClick={onManual}
+                className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors"
+              >
+                Try it out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
