@@ -7,6 +7,7 @@ import { getProfiles, getStats, getSkillFrequency, getJobsForSkill, getMe, getPu
 import SkillChipModal from './SkillChipModal'
 import CreditBalance from './CreditBalance'
 import BuyCreditsModal from './BuyCreditsModal'
+import { usePrerequisites } from '../../hooks/usePrerequisites'
 
 const WINDOWS = [
   { key: 'today', label: 'Today' },
@@ -161,6 +162,7 @@ function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, o
 }
 
 export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, activeSkill }) {
+  const { isFirstRun } = usePrerequisites()
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [win, setWin] = useState('all_time')
@@ -329,14 +331,29 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col items-center gap-2">
-        <span className="text-xs text-space-dim uppercase tracking-widest">Welcome back</span>
-        <button
-          onClick={() => onSelect(activeProfile.id)}
-          title="Edit your profile"
-          className="max-w-full truncate px-4 py-1.5 rounded-lg border border-space-border text-lg font-semibold text-purple-300 hover:text-purple-200 hover:border-purple-500 transition-colors"
-        >
-          {displayName}
-        </button>
+        {isFirstRun ? (
+          <>
+            <span className="text-xs text-space-dim uppercase tracking-widest">Ready to set up</span>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('auto-apply:open-wizard'))}
+              title="Set up your profile"
+              className="max-w-full truncate px-4 py-1.5 rounded-lg border border-space-border text-lg font-semibold text-purple-300 hover:text-purple-200 hover:border-purple-500 transition-colors"
+            >
+              your profile
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-xs text-space-dim uppercase tracking-widest">Welcome back</span>
+            <button
+              onClick={() => onSelect(activeProfile.id)}
+              title="Edit your profile"
+              className="max-w-full truncate px-4 py-1.5 rounded-lg border border-space-border text-lg font-semibold text-purple-300 hover:text-purple-200 hover:border-purple-500 transition-colors"
+            >
+              {displayName}
+            </button>
+          </>
+        )}
         <CreditBalance
           variant="settings"
           isAdmin={isAdmin}
