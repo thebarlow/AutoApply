@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 
 def test_field_text_value_coerces_to_str():
     from core.profile_tree import FieldNode
@@ -37,3 +39,77 @@ def test_nested_tree_builds():
     )
     root = RootNode(children=[sect])
     assert root.children[0].children[0].item_template.children[0].key == "company"
+
+
+def _experience_section():
+    from core.profile_tree import FieldNode, GroupNode, ListNode, SectionNode
+
+    tmpl = GroupNode(
+        name="item",
+        children=[
+            FieldNode(name="Company", key="company", kind="text"),
+            FieldNode(name="Title", key="title", kind="text"),
+        ],
+    )
+    inst = GroupNode(
+        name="item",
+        children=[
+            FieldNode(name="Company", key="company", kind="text", value="Acme"),
+            FieldNode(name="Title", key="title", kind="text", value="SWE"),
+        ],
+    )
+    return SectionNode(
+        name="Experience",
+        role="experience",
+        children=[ListNode(name="Experience", item_template=tmpl, children=[inst])],
+    )
+
+
+def test_validate_accepts_conforming_tree():
+    from core.profile_tree import RootNode, validate_tree
+
+    validate_tree(RootNode(children=[_experience_section()]))  # no raise
+
+
+def test_validate_rejects_nonconforming_list_item():
+    from core.profile_tree import (
+        FieldNode, GroupNode, ListNode, RootNode, SectionNode,
+        TreeValidationError, validate_tree,
+    )
+
+    tmpl = GroupNode(children=[FieldNode(name="Company", key="company", kind="text")])
+    bad = GroupNode(children=[FieldNode(name="Other", key="other", kind="text")])
+    root = RootNode(children=[
+        SectionNode(name="Experience", role="experience",
+                    children=[ListNode(item_template=tmpl, children=[bad])])
+    ])
+    with pytest.raises(TreeValidationError):
+        validate_tree(root)
+
+
+def test_validate_rejects_duplicate_sibling_order():
+    from core.profile_tree import (
+        RootNode, SectionNode, TreeValidationError, validate_tree,
+    )
+
+    root = RootNode(children=[
+        SectionNode(name="A", order=0, children=[]),
+        SectionNode(name="B", order=0, children=[]),
+    ])
+    with pytest.raises(TreeValidationError):
+        validate_tree(root)
+
+
+def test_validate_rejects_section_with_two_children():
+    from core.profile_tree import (
+        FieldNode, RootNode, SectionNode, TreeValidationError, validate_tree,
+    )
+
+    root = RootNode(children=[
+        SectionNode(name="X", children=[
+            FieldNode(name="a", key="a", kind="text"),
+            FieldNode(name="b", key="b", kind="text"),
+        ])
+    ])
+    with pytest.raises(TreeValidationError):
+        validate_tree(root)

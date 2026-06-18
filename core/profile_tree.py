@@ -98,3 +98,71 @@ class RootNode(BaseModel):
     type: Literal["root"] = "root"
     id: str = Field(default_factory=_new_id)
     children: list[SectionNode] = Field(default_factory=list)
+
+
+class TreeValidationError(Exception):
+    """Raised when a profile tree violates a structural invariant."""
+
+
+def _shape(group: GroupNode) -> list[tuple[str, str]]:
+    """Return the sorted ``(key, kind)`` multiset that defines a group's shape."""
+    return sorted((f.key, f.kind) for f in group.children)
+
+
+def validate_tree(root: RootNode) -> None:
+    """Validate structural invariants of a profile tree.
+
+    Args:
+        root: The tree to validate.
+
+    Raises:
+        TreeValidationError: If any invariant is violated.
+    """
+    seen_ids: set[str] = set()
+
+    def visit(node: object) -> None:
+        nid = getattr(node, "id", None)
+        if nid is not None:
+            if nid in seen_ids:
+                raise TreeValidationError(f"Duplicate node id: {nid}")
+            seen_ids.add(nid)
+
+        if isinstance(node, GroupNode):
+            keys = [f.key for f in node.children]
+            if len(set(keys)) != len(keys):
+                raise TreeValidationError(f"Duplicate field key in group {node.name!r}")
+
+        if isinstance(node, FieldNode) and node.kind == "bullets":
+            if node.min is not None and node.max is not None and not (0 <= node.min <= node.max):
+                raise TreeValidationError(f"Invalid bullets bounds in field {node.name!r}")
+
+        if isinstance(node, SectionNode):
+            if len(node.children) != 1:
+                raise TreeValidationError(
+                    f"Section {node.name!r} must have exactly one child"
+                )
+            child = node.children[0]
+            if not isinstance(child, (ListNode, GroupNode, FieldNode)):
+                raise TreeValidationError(f"Section {node.name!r} has invalid child type")
+
+        if isinstance(node, ListNode):
+            tmpl_shape = _shape(node.item_template)
+            for item in node.children:
+                if _shape(item) != tmpl_shape:
+                    raise TreeValidationError(
+                        f"List {node.name!r} item does not conform to item_template"
+                    )
+            # Visit template separately to validate its structure (but not as a sibling)
+            visit(node.item_template)
+
+        children = getattr(node, "children", None)
+        if children is not None:
+            orders = [getattr(c, "order", 0) for c in children]
+            # Only enforce unique order if any child has an explicitly non-zero order
+            if any(order != 0 for order in orders):
+                if len(set(orders)) != len(orders):
+                    raise TreeValidationError("Duplicate sibling order")
+            for c in children:
+                visit(c)
+
+    visit(root)
