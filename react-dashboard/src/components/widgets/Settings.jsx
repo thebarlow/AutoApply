@@ -1244,6 +1244,22 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
   const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
   const [detailProfileId, setDetailProfileId] = useState(null)
 
+  // Wizard "Manual Entry → Try it out" opens the active profile's editor directly.
+  useEffect(() => {
+    const handler = () => {
+      getProfiles()
+        .then(({ profiles, active_id }) => {
+          const id = active_id ?? profiles?.[0]?.id
+          if (id == null) return
+          setDetailProfileId(id)
+          setView('profileDetail')
+        })
+        .catch(() => {})
+    }
+    window.addEventListener('auto-apply:edit-profile', handler)
+    return () => window.removeEventListener('auto-apply:edit-profile', handler)
+  }, [])
+
   const isPreviewDisabled = selectedJob === null
 
   // Selecting a job (App sets activeTab='Preview') must surface the Preview even

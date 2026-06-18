@@ -103,9 +103,12 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Embeds `ProfileCards` for quick profile switching
 
 ### Onboarding/Wizard.jsx
-- Single-step "Upload Master Resume" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The platform owns the LLM key via env, so onboarding no longer collects an API key (`StepLLM.jsx` was removed).
-- Renders `StepResume` — uploads + parses the résumé against the already-provisioned active profile, then calls `setActiveProfile` so the dashboard resolves it (otherwise `UserHome` falls back to the profile picker).
-- "Skip for now" just dismisses for the session (`setWizardSkipped`); the profile already exists, so nothing is created. The modal reappears on next login until a résumé is parsed.
+- "Create your User Profile" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The platform owns the LLM key via env, so onboarding no longer collects an API key (`StepLLM.jsx` was removed).
+- Two tabs under the "Skip for now" line: **"Use existing Resume"** (default) renders `StepResume`; **"Manual Entry"** shows a blurb + a **"Try it out"** link. Each tab shows a one-sentence explainer.
+- **No Finish button.** The modal auto-closes on: a successful résumé parse (`StepResume` calls `onFinish` → page reload), "Skip for now" (`setWizardSkipped`), or "Try it out".
+- `StepResume` uploads + parses the résumé against the already-provisioned active profile, calls `setActiveProfile` so the dashboard resolves it, then `onFinish` (reload). It fetches the full profile via `getProfile` before attaching the upload (the `getProfiles` list omits `data`).
+- **Reopen-after-skip:** when skipped, `UserHome`'s header swaps to "Ready to set up" / **"your profile"** (clickable) while `isFirstRun`. Clicking dispatches the `auto-apply:open-wizard` window event; `App.jsx` listens and re-shows the wizard (`setWizardSkipped(false)`).
+- **Manual Entry → Try it out:** `App.jsx`'s `onManual` handler dismisses the wizard, sets the User tab active, and dispatches `auto-apply:edit-profile`; `Settings.jsx` listens, resolves the active profile, and opens `ProfileDetailView` (manual editor). Entering experience/education/skills/projects flips `setup-status` `resume_parsed` true, so the header returns to "Welcome back".
 - The Profile view's **Reset Profile** button (`ProfileDetail.jsx`) calls `POST /api/config/profiles/{id}/reset`, which empties `User.data` (keeping the row, jobs, and generated documents). This flips `setup-status` `resume_parsed` to false, so reloading re-shows this wizard. Confirmation requires typing `Reset my Profile`.
 
 ### shared/GatedButton.jsx

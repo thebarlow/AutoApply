@@ -65,6 +65,21 @@ export default function App() {
     return () => window.removeEventListener('auto-apply:purchase-success', handler)
   }, [pushToast])
 
+  // "your profile" button in UserHome re-shows a skipped onboarding wizard.
+  useEffect(() => {
+    const handler = () => setWizardSkipped(false)
+    window.addEventListener('auto-apply:open-wizard', handler)
+    return () => window.removeEventListener('auto-apply:open-wizard', handler)
+  }, [])
+
+  // "Try it out" under the wizard's Manual Entry tab: close the wizard and
+  // open the manual profile editor (Settings listens for the event).
+  const handleManualEntry = useCallback(() => {
+    setWizardSkipped(true)
+    setSettingsTab('User')
+    window.dispatchEvent(new CustomEvent('auto-apply:edit-profile'))
+  }, [])
+
   // Upsert a single job into the jobs list
   const upsertJob = useCallback((job) => {
     setJobs((prev) => {
@@ -199,6 +214,7 @@ export default function App() {
             <Wizard
               onFinish={() => { window.location.reload(); }}
               onSkip={() => setWizardSkipped(true)}
+              onManual={handleManualEntry}
             />
           )}
           {me?.impersonating && (
