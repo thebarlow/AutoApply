@@ -266,3 +266,58 @@ def test_legacy_to_tree_populates_experience_item():
     item = exp.children[0].children[0]
     vals = {f.key: f.value for f in item.children}
     assert vals["company"] == "Acme" and vals["summary"] == "Built."
+
+
+def test_tree_to_legacy_round_trips_fields():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    out = tree_to_legacy(legacy_to_tree(LEGACY))
+    assert out["email"] == "m@x.com"
+    assert out["skills"] == ["Python", "SQL"]
+    assert out["work_history"][0] == {
+        "company": "Acme", "title": "SWE", "start": "2022", "end": "Now", "summary": "Built.",
+    }
+    assert out["education"][0]["gpa"] == 3.5
+    assert out["projects"][0]["technologies"] == ["Python"]
+
+
+def test_golden_round_trip_markdown_identical():
+    """legacy -> tree -> legacy must produce byte-identical assembled markdown."""
+    from types import SimpleNamespace
+
+    from core.document_assembler import assemble_resume_markdown
+    from core.document_builder import build_resume_document
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+    from core.schemas import ResumeGeneration
+    from core.user import EducationEntry, ProjectEntry, WorkHistoryEntry
+
+    def _user(d: dict):
+        u = SimpleNamespace(**{k: "" for k in (
+            "first_name", "last_name", "email", "phone", "location",
+            "github", "linkedin", "website")})
+        u.first_name = d["first_name"]; u.last_name = d["last_name"]
+        u.email = d["email"]; u.phone = d["phone"]; u.location = d["location"]
+        u.github = d["github"]; u.linkedin = d["linkedin"]; u.website = d["website"]
+        u.skills = d["skills"]
+        u.work_history = [WorkHistoryEntry(**e) for e in d["work_history"]]
+        u.education = [EducationEntry(**e) for e in d["education"]]
+        u.projects = [ProjectEntry(**e) for e in d["projects"]]
+        u.full_name = lambda: f"{d['first_name']} {d['last_name']}".strip()
+        return u
+
+    gen = ResumeGeneration()  # empty prose; structure-only comparison
+    before = assemble_resume_markdown(build_resume_document(_user(LEGACY), gen, _StubDB()))
+    after_legacy = tree_to_legacy(legacy_to_tree(LEGACY))
+    after = assemble_resume_markdown(build_resume_document(_user(after_legacy), gen, _StubDB()))
+    assert before == after
+
+
+class _StubDB:
+    def query(self, *a, **k):
+        return self
+
+    def filter_by(self, *a, **k):
+        return self
+
+    def first(self):
+        return None

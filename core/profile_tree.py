@@ -280,3 +280,77 @@ def legacy_to_tree(data: dict) -> "RootNode":
     root = RootNode(children=[header, summary, experience, education, projects, skills])
     validate_tree(root)
     return root
+
+
+def _section_by_role(root: "RootNode", role: str) -> Optional[SectionNode]:
+    """Return the first SectionNode whose role matches, or None."""
+    for s in root.children:
+        if s.role == role:
+            return s
+    return None
+
+
+def _gpa_to_float(v: object) -> float:
+    """Convert a stored GPA string/number to float (0.0 when unset or invalid)."""
+    try:
+        return float(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def tree_to_legacy(root: "RootNode") -> dict:
+    """Project a profile tree into the legacy flat document-section dict.
+
+    Args:
+        root: A fully populated RootNode (e.g. from ``legacy_to_tree``).
+
+    Returns:
+        Dict with keys matching the legacy profile/document surface:
+        ``first_name``, ``last_name``, ``hero``, ``email``, ``phone``,
+        ``location``, ``github``, ``linkedin``, ``website``, ``skills``,
+        ``work_history``, ``education``, ``projects``.
+    """
+    out: dict = {
+        "first_name": "", "last_name": "", "hero": "", "email": "", "phone": "",
+        "location": "", "github": "", "linkedin": "", "website": "",
+        "skills": [], "work_history": [], "education": [], "projects": [],
+    }
+
+    header = _section_by_role(root, "header")
+    if header and header.children and isinstance(header.children[0], GroupNode):
+        for f in header.children[0].children:
+            if f.key in out:
+                out[f.key] = f.value
+
+    summary = _section_by_role(root, "summary")
+    if summary and summary.children and isinstance(summary.children[0], FieldNode):
+        out["hero"] = summary.children[0].value
+
+    skills = _section_by_role(root, "skills")
+    if skills and skills.children and isinstance(skills.children[0], FieldNode):
+        out["skills"] = list(skills.children[0].value)
+
+    def _rows(role: str) -> list[dict]:
+        sect = _section_by_role(root, role)
+        if not sect or not sect.children or not isinstance(sect.children[0], ListNode):
+            return []
+        return [{f.key: f.value for f in item.children} for item in sect.children[0].children]
+
+    out["work_history"] = [
+        {"company": r.get("company", ""), "title": r.get("title", ""),
+         "start": r.get("start", ""), "end": r.get("end", ""),
+         "summary": r.get("summary", "")}
+        for r in _rows("experience")
+    ]
+    out["education"] = [
+        {"institution": r.get("institution", ""), "degree": r.get("degree", ""),
+         "field": r.get("field", ""), "graduated": r.get("graduated", ""),
+         "gpa": _gpa_to_float(r.get("gpa", ""))}
+        for r in _rows("education")
+    ]
+    out["projects"] = [
+        {"name": r.get("name", ""), "description": r.get("description", ""),
+         "url": r.get("url", ""), "technologies": list(r.get("technologies", []))}
+        for r in _rows("projects")
+    ]
+    return out
