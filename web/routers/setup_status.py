@@ -7,9 +7,10 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from db.database import get_db, Config
+from db.database import get_db
 from core.user import User
 from web.routers.config import _get_providers, _read_env, _env_key_name
+from web.tenancy import current_profile_id
 
 router = APIRouter()
 
@@ -33,23 +34,14 @@ def _has_configured_llm_provider(db: Session) -> bool:
     return False
 
 
-def _has_parsed_resume(db: Session) -> bool:
-    """Return True if the active profile has parsed resume content.
+def _has_parsed_resume(db: Session, profile_id: int) -> bool:
+    """Return True if the caller's profile has parsed resume content.
 
     Checks for structured data in skills, work_history, education, or projects.
+    Scoped to ``profile_id`` (the tenancy seam) so a new tenant is never judged
+    against another tenant's resume.
     """
-    # Get active profile (same logic as config.py)
-    active_raw = db.query(Config).filter_by(key="dev_tenant_id").first()
-    row: User | None = None
-
-    if active_raw and active_raw.value:
-        try:
-            row = db.query(User).filter_by(id=int(active_raw.value)).first()
-        except (ValueError, TypeError):
-            pass
-
-    if row is None:
-        row = db.query(User).first()
+    row = db.query(User).filter_by(id=profile_id).first()
 
     if row is None:
         return False
@@ -71,7 +63,10 @@ def _has_parsed_resume(db: Session) -> bool:
 
 
 @router.get("/api/setup-status")
-def get_setup_status(db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_setup_status(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
     """Return onboarding checklist status.
 
     Used by the frontend to decide whether to show the first-run wizard
@@ -85,5 +80,5 @@ def get_setup_status(db: Session = Depends(get_db)) -> dict[str, Any]:
     """
     return {
         "llm_configured": _has_configured_llm_provider(db),
-        "resume_parsed": _has_parsed_resume(db),
+        "resume_parsed": _has_parsed_resume(db, profile_id),
     }

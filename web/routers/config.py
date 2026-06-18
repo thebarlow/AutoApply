@@ -20,6 +20,7 @@ from core.user import User, PromptNotConfiguredError
 from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
+from web.tenancy import current_profile_id
 
 router = APIRouter()
 
@@ -564,10 +565,14 @@ class ActiveProfileBody(BaseModel):
 
 
 @router.get("/api/config/profiles")
-def get_profiles(db: Session = Depends(get_db)) -> dict[str, Any]:
-    rows = db.query(User).all()
-    active_raw = _get(db, "dev_tenant_id")
-    active_id = int(active_raw) if active_raw else None
+def get_profiles(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    # Scoped to the caller's tenant: 1 account = 1 profile. Never list other
+    # tenants' profiles.
+    rows = db.query(User).filter_by(id=profile_id).all()
+    active_id = profile_id
     profiles = []
     for r in rows:
         data = json.loads(r.data) if r.data else {}
@@ -618,20 +623,15 @@ def _prompt_row_configured(p) -> bool:
 
 
 @router.get("/api/config/profiles/active/prompt-status")
-def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
-    """Return {type_key: configured_bool} for the active profile's prompts.
+def get_active_profile_prompt_status(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict:
+    """Return {type_key: configured_bool} for the caller's profile's prompts.
 
-    Returns all False if no active profile or profile row missing.
+    Returns all False if the profile row is missing.
     """
-    active_raw = _get(db, "dev_tenant_id")
-    row: Optional[User] = None
-    if active_raw:
-        try:
-            row = db.query(User).filter_by(id=int(active_raw)).first()
-        except (ValueError, TypeError):
-            row = None
-    if row is None:
-        row = db.query(User).first()
+    row = db.query(User).filter_by(id=profile_id).first()
     if row is None:
         return {t: False for t in _PROFILE_PROMPT_TYPES}
     from db.database import Prompt
@@ -643,7 +643,13 @@ def get_active_profile_prompt_status(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/api/config/profiles/{profile_id}")
-def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_profile(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -669,7 +675,14 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any
 
 
 @router.put("/api/config/profiles/{profile_id}")
-def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+def update_profile(
+    profile_id: int,
+    body: ProfileBody,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -692,8 +705,14 @@ def update_profile(profile_id: int, body: ProfileBody, db: Session = Depends(get
 
 
 @router.delete("/api/config/profiles/{profile_id}", status_code=204)
-def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
+def delete_profile(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> None:
     """Delete a profile, clear active_profile_id if needed, and remove owned files from profiles/."""
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -727,7 +746,10 @@ def serve_profile_file(
     profile_id: int,
     type: str = "pdf",
     db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
 ) -> FileResponse:
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -752,8 +774,14 @@ def serve_profile_file(
 
 
 @router.post("/api/config/profiles/{profile_id}/parse")
-def parse_profile_from_resume(profile_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+def parse_profile_from_resume(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
     """Parse the already-uploaded resume for a profile and merge extracted data back into it."""
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")

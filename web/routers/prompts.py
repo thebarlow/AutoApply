@@ -9,10 +9,21 @@ from sqlalchemy.orm import Session
 from db.database import Prompt, PromptDefault, get_db
 from core.user import User
 from db.seed import PROMPT_TYPE_KEYS
+from web.tenancy import current_profile_id
 
 router = APIRouter(prefix="/api/prompts")
 
 _VALID_KEYS = set(PROMPT_TYPE_KEYS)
+
+
+def _require_own_profile(profile_id: int, caller_id: int) -> None:
+    """Raise 404 unless the URL profile_id is the caller's own tenant.
+
+    Prompts are per-tenant; a 404 (not 403) avoids confirming another tenant's
+    profile exists.
+    """
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
 
 
 def _require_type(type_key: str) -> None:
@@ -60,15 +71,28 @@ def get_default_prompt(type_key: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/{profile_id}/{type_key}")
-def get_prompt(profile_id: int, type_key: str, db: Session = Depends(get_db)) -> dict:
+def get_prompt(
+    profile_id: int,
+    type_key: str,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict:
     _require_type(type_key)
+    _require_own_profile(profile_id, caller_id)
     _require_profile(profile_id, db)
     return _slot(profile_id, type_key, db)
 
 
 @router.put("/{profile_id}/{type_key}")
-def put_prompt(profile_id: int, type_key: str, body: PromptBody, db: Session = Depends(get_db)) -> dict:
+def put_prompt(
+    profile_id: int,
+    type_key: str,
+    body: PromptBody,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict:
     _require_type(type_key)
+    _require_own_profile(profile_id, caller_id)
     _require_profile(profile_id, db)
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="Prompt content cannot be empty")
@@ -86,8 +110,14 @@ def put_prompt(profile_id: int, type_key: str, body: PromptBody, db: Session = D
 
 
 @router.post("/{profile_id}/{type_key}/reset")
-def reset_prompt(profile_id: int, type_key: str, db: Session = Depends(get_db)) -> dict:
+def reset_prompt(
+    profile_id: int,
+    type_key: str,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict:
     _require_type(type_key)
+    _require_own_profile(profile_id, caller_id)
     _require_profile(profile_id, db)
     default = _default_content(type_key, db)
     if not default:

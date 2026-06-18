@@ -46,7 +46,9 @@ def test_get_profiles_empty(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["profiles"] == []
-    assert data["active_id"] is None
+    # active_id is now the caller's tenant from the seam (dev stub → 1), not the
+    # legacy dev_tenant_id config (which was None when unset).
+    assert data["active_id"] == 1
 
 
 def test_post_profile_creates_row(client, db_session):
