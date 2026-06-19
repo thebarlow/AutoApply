@@ -136,10 +136,8 @@ def validate_tree(root: RootNode) -> None:
                 raise TreeValidationError(f"Duplicate field key in group {node.name!r}")
 
         if isinstance(node, FieldNode) and node.kind == "bullets":
-            if (
-                node.min is not None
-                and node.max is not None
-                and not (0 <= node.min <= node.max)
+            if (node.min is not None and node.min < 0) or (
+                node.min is not None and node.max is not None and node.min > node.max
             ):
                 raise TreeValidationError(
                     f"Invalid bullets bounds in field {node.name!r}"
@@ -278,7 +276,6 @@ def legacy_to_tree(data: dict) -> "RootNode":
     skills.children[0].value = list(data.get("skills") or [])
 
     root = RootNode(children=[header, summary, experience, education, projects, skills])
-    validate_tree(root)
     return root
 
 
@@ -297,7 +294,9 @@ def with_rebuilt_tree(data: dict) -> dict:
     """
     out = dict(data)
     out.pop("profile_tree", None)
-    out["profile_tree"] = legacy_to_tree(out).model_dump(mode="json")
+    tree = legacy_to_tree(out)
+    validate_tree(tree)
+    out["profile_tree"] = tree.model_dump(mode="json")
     return out
 
 

@@ -347,6 +347,24 @@ def test_with_rebuilt_tree_reflects_flat_edits():
     assert derived["email"] == "edited@x.com"
 
 
+def test_integer_gpa_round_trips():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    data = {
+        "education": [
+            {
+                "institution": "X",
+                "degree": "B.S.",
+                "field": "EE",
+                "graduated": "2018",
+                "gpa": 3,
+            }
+        ]
+    }
+    out = tree_to_legacy(legacy_to_tree(data))
+    assert out["education"][0]["gpa"] == 3.0
+
+
 class _StubDB:
     def query(self, *a, **k):
         return self
