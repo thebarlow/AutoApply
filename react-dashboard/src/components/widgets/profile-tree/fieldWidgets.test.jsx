@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { FieldWidget } from './fieldWidgets'
+
+vi.mock('../../../api', () => ({
+  getSkillAliases: vi.fn(async () => ({
+    groups: [{ canonical: 'Python', members: ['python', 'py'] }],
+  })),
+  assignSkillAlias: vi.fn(async (skill) => ({
+    canonical: 'Python', members: ['python', 'py', skill.toLowerCase()],
+  })),
+  removeSkillAliasMember: vi.fn(async () => {}),
+}))
 
 const field = (over) => ({
   type: 'field', id: 'f', name: 'X', key: 'x', kind: 'text', value: '',
@@ -51,5 +61,35 @@ describe('FieldWidget', () => {
     onChange.mockClear()
     fireEvent.click(screen.getByLabelText('Remove Python'))
     expect(onChange).toHaveBeenLastCalledWith([])
+  })
+
+  it('taglist: clicking a chip opens the edit modal; ✕ still deletes', async () => {
+    const onChange = vi.fn()
+    render(<FieldWidget field={field({ kind: 'taglist', value: ['Python'] })} onChange={onChange} />)
+    // ✕ deletes, does not open the modal
+    fireEvent.click(screen.getByLabelText('Remove Python'))
+    expect(onChange).toHaveBeenLastCalledWith([])
+    expect(screen.queryByText('Edit tag')).toBeNull()
+    // clicking the chip label opens the modal
+    fireEvent.click(screen.getByText('Python'))
+    expect(screen.getByText('Edit tag')).toBeInTheDocument()
+    // let the async alias load settle (avoids act() warnings)
+    expect(await screen.findByText('py')).toBeInTheDocument()
+  })
+
+  it('taglist modal: renames the chip and loads/edits aliases', async () => {
+    const onChange = vi.fn()
+    render(<FieldWidget field={field({ kind: 'taglist', value: ['Python'] })} onChange={onChange} />)
+    fireEvent.click(screen.getByText('Python'))
+    // alias group loads (canonical self 'python' filtered out, 'py' shown)
+    expect(await screen.findByText('py')).toBeInTheDocument()
+    // add an alias
+    fireEvent.change(screen.getByPlaceholderText('Add alias…'), { target: { value: 'py3' } })
+    fireEvent.click(screen.getByText('Add'))
+    await waitFor(() => expect(screen.getByText('py3')).toBeInTheDocument())
+    // rename the chip
+    fireEvent.change(screen.getByDisplayValue('Python'), { target: { value: 'Python 3' } })
+    fireEvent.click(screen.getByText('Save'))
+    expect(onChange).toHaveBeenLastCalledWith(['Python 3'])
   })
 })
