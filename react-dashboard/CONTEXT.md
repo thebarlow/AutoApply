@@ -35,7 +35,8 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Skill alias/own-skill modal (opened from In-Demand legend names + job-description chips) | `src/components/widgets/SkillChipModal.jsx` |
 | Processed-description skill chips (3-state ownership color: green have / amber required-gap / neutral) | `src/components/widgets/Settings.jsx` — `ExtractionView` (fetches `getOwnedSkills`) |
 | Tasks / processing jobs monitor | `src/components/widgets/Settings.jsx` — Tasks tab |
-| Profile editor sections (Identity, Skills, Experience, Education, Projects, Preferences) | `src/components/widgets/ProfileDetail.jsx` |
+| Profile doc-section editor (header/summary/experience/education/projects/skills, tree-driven, whole-tree Save via `PUT /api/config/profiles/{id}/tree`) | `src/components/widgets/profile-tree/ProfileTreeEditor.jsx` — rendered inside `ProfileDetail.jsx`; the `profile-tree/` module contains `treeOps.js` (tree mutation helpers), `fieldWidgets.jsx` (text/markdown/bullets/taglist kind renderers), `structuralControls.jsx` (add-item, add-custom-section, rename, reorder, remove, visible toggle), and `TreeNode.jsx` (recursive node renderer) |
+| Profile editor name/Prompts/Export/Reset | `src/components/widgets/ProfileDetail.jsx` — the flat doc-section accordions are retired; only Prompts accordion, Export Master button, and Reset Profile flow remain here |
 | Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
@@ -116,9 +117,21 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Uses `usePrerequisites`; rule map keyed by action name (`score`, `generate`, `parse_resume`)
 
 ### ProfileDetail.jsx
-- `AccordionSection` — collapsible section wrapper, reused for all 8 sections
-- `ItemOverlay` — modal wrapper for inline item edits (experience, education, etc.)
-- All saves go through `handleSave(field, value)` → `updateProfile` API → parent `setState`
+- `AccordionSection` — collapsible section wrapper, reused for Prompts and any future sections
+- Doc-section editing (header/summary/experience/education/projects/skills) is now handled entirely by `ProfileTreeEditor` (tree-driven); the flat `ItemOverlay`/`EditBtn`/section component UI is retired
+- Remaining responsibilities: Prompts accordion (scoring/resume/cover/extraction/resume_parse prompt slots + refinement), Export Master button, Reset Profile flow
+- The flat `update_profile` endpoint is retained for name/job-preferences/onboarding writes; only the doc-section editor UI was retired
+
+### profile-tree/ (new in 2B)
+- `ProfileTreeEditor.jsx` — root component; loads tree via `GET /api/config/profiles/{id}/tree`, manages dirty state, explicit Save (`PUT /api/config/profiles/{id}/tree`), Discard, and 422 error surfacing
+- `TreeNode.jsx` — recursive node renderer; dispatches ops (setValue, rename, toggleVisible, remove, move, addItem, addField) to parent
+- `fieldWidgets.jsx` — per-kind field renderers: `TextWidget`, `MarkdownWidget`, `BulletsWidget`, `TaglistWidget`
+- `structuralControls.jsx` — structural mutation controls: add list item, add custom section + fields, rename, reorder, remove, visibility toggle
+- `treeOps.js` — pure tree mutation helpers: `updateNode`, `removeNode`, `moveNode`, `addField`, `addListItem`, `addCustomSection`, `renumber`, `isPresetSection`, `makeField`, `cloneWithFreshIds`
+
+### Test suite
+- Vitest + React Testing Library + jsdom; run `npm run test` from `react-dashboard/`
+- 7 test files, 34 tests covering: API wrappers, treeOps helpers, TreeNode rendering, fieldWidgets, structuralControls, ProfileTreeEditor integration
 
 ---
 

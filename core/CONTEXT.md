@@ -37,6 +37,13 @@ metadata (target roles/salary, resume/md paths) stays as flat `data` keys, not
 in the tree. **Known gap:** custom (non-`role`) sections are storable but do not
 appear on generated documents until sub-project #4.
 
+**Sub-project 2B (tree-driven editor) is DONE:** the React dashboard now renders
+`ProfileTreeEditor` (consuming the 2A `GET`/`PUT /tree` endpoints) in place of
+the flat doc-section accordions. The flat `update_profile` endpoint is retained
+for name/job-preferences/onboarding writes — only the flat *doc-section editor
+UI* was retired. Custom sections remain unrendered on generated documents until
+sub-project #4.
+
 **Sub-project 2A (write-path consolidation + tree API) is DONE:** `User._to_dict`
 now uses `apply_flat_to_tree` (in-place overlay) instead of the former
 `with_rebuilt_tree` (destructive rebuild). All write paths (`User.save`,
