@@ -70,8 +70,7 @@ describe('SectionView custom', () => {
   it('toggles section visibility by id', () => {
     const ops = noopOps()
     render(<SectionView section={customSection} isFirst isLast={false} ops={ops} />)
-    const hideButtons = screen.getAllByLabelText('Hide')
-    fireEvent.click(hideButtons[0])  // section-level button is first
+    fireEvent.click(screen.getByLabelText('Hide section'))
     expect(ops.toggleVisible).toHaveBeenCalledWith('sec-c')
   })
 })

@@ -124,7 +124,7 @@ export function SectionView({ section, isFirst, isLast, ops }) {
             canUp={!isFirst} canDown={!isLast}
             onUp={() => ops.move(section.id, -1)} onDown={() => ops.move(section.id, 1)}
           />
-          <VisibleToggle visible={section.visible} onToggle={() => ops.toggleVisible(section.id)} />
+          <VisibleToggle visible={section.visible} onToggle={() => ops.toggleVisible(section.id)} label="section" />
           {!preset && <RemoveButton onRemove={() => ops.remove(section.id)} label="Remove section" />}
         </span>
       </div>

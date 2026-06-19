@@ -13,10 +13,12 @@ export function MoveButtons({ canUp, canDown, onUp, onDown }) {
   )
 }
 
-export function VisibleToggle({ visible, onToggle }) {
+export function VisibleToggle({ visible, onToggle, label }) {
+  const base = visible ? 'Hide' : 'Show'
+  const ariaLabel = label ? `${base} ${label}`.trim() : base
   return (
     <button
-      type="button" aria-label={visible ? 'Hide' : 'Show'} className={iconBtn}
+      type="button" aria-label={ariaLabel} className={iconBtn}
       onClick={onToggle}
     >{visible ? '👁' : '🚫'}</button>
   )
