@@ -59,10 +59,10 @@ function AddFieldForm({ groupId, ops }) {
         value={kind} onChange={(e) => setKind(e.target.value)}
         className="bg-white/5 border border-space-border rounded px-2 py-1 text-sm text-space-text"
       >
-        <option value="text">text</option>
-        <option value="markdown">markdown</option>
-        <option value="bullets">bullets</option>
-        <option value="taglist">taglist</option>
+        <option className="bg-white text-black" value="text">text</option>
+        <option className="bg-white text-black" value="markdown">markdown</option>
+        <option className="bg-white text-black" value="bullets">bullets</option>
+        <option className="bg-white text-black" value="taglist">taglist</option>
       </select>
       <button
         type="button" className="text-xs text-purple-400 hover:text-purple-300"
@@ -112,13 +112,22 @@ function SectionChild({ child, preset, ops }) {
 export function SectionView({ section, isFirst, isLast, ops }) {
   const preset = isPresetSection(section)
   const child = section.children[0]
+  const [collapsed, setCollapsed] = useState(false)
   return (
     <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
       <div className={headerRow}>
-        <RenameLabel
-          name={section.name} editable
-          onRename={(n) => ops.rename(section.id, n)}
-        />
+        <span className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            aria-label={collapsed ? 'Expand section' : 'Collapse section'}
+            className="px-1 text-space-dim hover:text-space-text transition-colors"
+            onClick={() => setCollapsed((c) => !c)}
+          >{collapsed ? '▸' : '▾'}</button>
+          <RenameLabel
+            name={section.name} editable
+            onRename={(n) => ops.rename(section.id, n)}
+          />
+        </span>
         <span className="inline-flex items-center gap-1">
           <MoveButtons
             canUp={!isFirst} canDown={!isLast}
@@ -128,7 +137,7 @@ export function SectionView({ section, isFirst, isLast, ops }) {
           {!preset && <RemoveButton onRemove={() => ops.remove(section.id)} label="Remove section" />}
         </span>
       </div>
-      {child && <SectionChild child={child} preset={preset} ops={ops} />}
+      {!collapsed && child && <SectionChild child={child} preset={preset} ops={ops} />}
     </div>
   )
 }

@@ -73,4 +73,14 @@ describe('SectionView custom', () => {
     fireEvent.click(screen.getByLabelText('Hide section'))
     expect(ops.toggleVisible).toHaveBeenCalledWith('sec-c')
   })
+
+  it('collapses and expands the section body', () => {
+    render(<SectionView section={customSection} isFirst isLast={false} ops={noopOps()} />)
+    // expanded by default: the field value is rendered
+    expect(screen.getByDisplayValue('Winner')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Collapse section'))
+    expect(screen.queryByDisplayValue('Winner')).toBeNull()
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    expect(screen.getByDisplayValue('Winner')).toBeInTheDocument()
+  })
 })

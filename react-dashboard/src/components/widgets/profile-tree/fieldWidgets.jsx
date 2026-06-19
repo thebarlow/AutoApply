@@ -62,17 +62,15 @@ export function TagListField({ value, onChange }) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-1.5">
         {arr.map((tag, i) => (
-          <span
+          <button
             key={i}
-            className="inline-flex items-center gap-1 bg-purple-500/15 text-purple-200 text-xs rounded-full px-2 py-0.5"
+            type="button" aria-label={`Remove ${tag}`} title="Click to remove"
+            className="inline-flex items-center gap-1 bg-purple-500/15 text-purple-200 hover:bg-red-500/20 hover:text-red-200 text-xs rounded-full px-2 py-0.5 transition-colors cursor-pointer"
+            onClick={() => onChange(arr.filter((_, j) => j !== i))}
           >
             {tag}
-            <button
-              type="button" aria-label={`Remove ${tag}`}
-              className="hover:text-red-300"
-              onClick={() => onChange(arr.filter((_, j) => j !== i))}
-            >✕</button>
-          </span>
+            <span aria-hidden="true">✕</span>
+          </button>
         ))}
       </div>
       <input

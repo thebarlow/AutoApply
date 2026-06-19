@@ -45,7 +45,7 @@ export default function ProfileTreeEditor({ profileId }) {
       const is422 = String(e?.message || '').includes('422')
       setSaveError(
         is422
-          ? 'Your changes could not be saved — the profile structure is invalid (check section/field limits).'
+          ? 'Your changes could not be saved — the profile structure is invalid (e.g. duplicate field names, size limits, or an unsupported change).'
           : 'Save failed. Please try again.',
       )
     } finally {
