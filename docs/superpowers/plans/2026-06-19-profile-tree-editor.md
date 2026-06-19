@@ -8,6 +8,40 @@
 
 **Tech Stack:** React 18, Vite 5, Vitest, React Testing Library, jsdom, Tailwind.
 
+## Roadmap Context (read first — this plan starts a fresh session)
+
+This is **sub-project 2B** of the "user-defined resume sections" initiative
+(replace the hardcoded 5-section résumé model with a user-definable schema
+tree). Full roadmap lives in the auto-memory `project-profile-schema-engine`
+and `core/CONTEXT.md` → "Profile Schema Engine". Sequence:
+
+1. **Schema engine** — DONE, merged to local `main`. Recursive tree
+   (`root → section → list/group → field`) is the profile source of truth in
+   `core/profile_tree.py`.
+2. **Builder UI** — phased:
+   - **2A** (write-path consolidation + tree API) — DONE, merged to local
+     `main`. Added `apply_flat_to_tree`, `merge_flat_into_stored`, and
+     `GET`/`PUT /api/config/profiles/{id}/tree`.
+   - **2B** (this plan) — tree-driven profile editor on those endpoints.
+   - **2C** (next, after 2B) — graphical drag-drop custom-section builder +
+     recommended-section gallery. 2B deliberately uses up/down reorder and
+     plain add-forms; drag-drop is 2C's job.
+3. **Schema-driven LLM generation** against custom sections.
+4. **Schema-driven rendering** of custom sections on documents (until this
+   ships, custom sections are storable/editable but do NOT appear on generated
+   résumés/cover letters — call this out in the 2B UI if natural, else leave).
+5. **Onboarding parse** that maps novel sections.
+
+**RELEASE CONSTRAINT:** do NOT push `main` until the entire swap (through #5)
+is complete. Each sub-project merges to LOCAL `main` only.
+
+**Before starting 2B:** create a feature branch off `main`
+(`git checkout -b feat/profile-tree-editor`). On completion, use
+`superpowers:finishing-a-development-branch` → merge to local `main` (no push).
+
+**After 2B:** brainstorm → spec → plan → impl **2C**, then sub-projects #3, #4,
+#5 in order. Update the `project-profile-schema-engine` memory when 2B lands.
+
 ## Global Constraints
 
 - The profile **tree** is the source of truth (2A). The editor persists only via `PUT /api/config/profiles/{id}/tree`; it never writes doc-section data through the flat `update_profile` endpoint.
