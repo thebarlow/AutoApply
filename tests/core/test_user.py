@@ -607,3 +607,35 @@ def test_migration_is_idempotent(db_session):
     assert (
         row._hydrate() is False
     ), "_hydrate() must return False on an already-migrated profile (no spurious re-save)"
+
+
+def test_skills_mutation_survives_save_reload(db_session):
+    from core.user import User
+
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    u = User.load(db_session)
+    u.skills = ["Rust", "Go"]
+    u.save(db_session)
+
+    reloaded = User.load(db_session)
+    assert reloaded.skills == ["Rust", "Go"]
+
+
+def test_work_history_mutation_survives_save_reload(db_session):
+    from core.user import User, WorkHistoryEntry
+
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    u = User.load(db_session)
+    u.work_history.append(
+        WorkHistoryEntry(
+            company="NewCo", title="Lead", start="2024", end="Now", summary="Led."
+        )
+    )
+    u.save(db_session)
+
+    reloaded = User.load(db_session)
+    assert "NewCo" in [w.company for w in reloaded.work_history]
