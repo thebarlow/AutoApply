@@ -10,6 +10,13 @@ from sqlalchemy.orm import Session
 
 from db.database import Base
 import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp registered with Base.metadata
+from core.profile_tree import (
+    legacy_to_tree,
+    tree_to_legacy,
+    validate_tree,
+    RootNode,
+    with_rebuilt_tree,
+)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPTS_DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
@@ -89,13 +96,6 @@ class User(Base):
         """
         raw = json.loads(self.data or "{}")
 
-        from core.profile_tree import (
-            RootNode,
-            legacy_to_tree,
-            tree_to_legacy,
-            validate_tree,
-        )
-
         tree_raw = raw.get("profile_tree")
         migrated_tree = False
         if tree_raw:
@@ -141,46 +141,6 @@ class User(Base):
         self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
         return migrated_tree
 
-    def _sync_attrs_to_tree(self) -> None:
-        """Write mutated flat instance attrs back into the profile tree before serialization.
-
-        Keeps the tree consistent with direct attribute mutations (e.g. user.email = "...").
-        Only syncs the flat keys that tree_to_legacy derives from the header section.
-        """
-        from core.profile_tree import GroupNode, FieldNode, SectionNode
-
-        _CONTACT_KEYS = {
-            "first_name": getattr(self, "first_name", ""),
-            "last_name": getattr(self, "last_name", ""),
-            "email": getattr(self, "email", ""),
-            "phone": getattr(self, "phone", ""),
-            "location": getattr(self, "location", ""),
-            "github": getattr(self, "github", ""),
-            "linkedin": getattr(self, "linkedin", ""),
-            "website": getattr(self, "website", ""),
-        }
-
-        if not hasattr(self, "profile_tree") or self.profile_tree is None:
-            return
-
-        for section in self.profile_tree.children:
-            if not isinstance(section, SectionNode) or section.role != "header":
-                continue
-            for child in section.children:
-                if not isinstance(child, GroupNode):
-                    continue
-                for field in child.children:
-                    if isinstance(field, FieldNode) and field.key in _CONTACT_KEYS:
-                        field.value = _CONTACT_KEYS[field.key]
-
-        # Sync hero into summary section
-        hero_val = getattr(self, "hero", "")
-        for section in self.profile_tree.children:
-            if not isinstance(section, SectionNode) or section.role != "summary":
-                continue
-            if section.children and isinstance(section.children[0], FieldNode):
-                section.children[0].value = hero_val
-
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
         d = {
@@ -203,14 +163,13 @@ class User(Base):
             "md_path": self.md_path,
             "website": self.website,
         }
-        self._sync_attrs_to_tree()
-        d["profile_tree"] = self.profile_tree.model_dump(mode="json")
         d["resume_refine_enabled"] = self.resume_refine_enabled
         d["resume_refine_max_turns"] = self.resume_refine_max_turns
         d["resume_refine_pass_score"] = self.resume_refine_pass_score
         d["cover_refine_enabled"] = self.cover_refine_enabled
         d["cover_refine_max_turns"] = self.cover_refine_max_turns
         d["cover_refine_pass_score"] = self.cover_refine_pass_score
+        d = with_rebuilt_tree(d)
         return d
 
     @classmethod
@@ -264,8 +223,6 @@ class User(Base):
         """
         with open(path) as f:
             data = json.load(f)
-        from core.profile_tree import with_rebuilt_tree
-
         data = with_rebuilt_tree(data)
         name = (
             data.get("name", "")

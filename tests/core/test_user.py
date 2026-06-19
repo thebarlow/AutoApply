@@ -600,3 +600,10 @@ def test_migration_is_idempotent(db_session):
     User.load(db_session)
     data_after_second = db_session.query(User).first().data
     assert data_after_first == data_after_second
+
+    # Migration must not re-trigger on an already-migrated profile: _hydrate()
+    # returns True only when it performed a legacy→tree migration, False otherwise.
+    row = db_session.query(User).first()
+    assert (
+        row._hydrate() is False
+    ), "_hydrate() must return False on an already-migrated profile (no spurious re-save)"
