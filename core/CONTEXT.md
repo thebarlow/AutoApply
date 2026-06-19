@@ -37,6 +37,16 @@ metadata (target roles/salary, resume/md paths) stays as flat `data` keys, not
 in the tree. **Known gap:** custom (non-`role`) sections are storable but do not
 appear on generated documents until sub-project #4.
 
+**⚠️ Prerequisite before sub-project #2 (builder UI):** today `User._to_dict`
+rebuilds the whole tree from the flat fields via `with_rebuilt_tree` on every
+save. This is correct for #1 (the only mutation source is flat-field edits) but
+it **regenerates node `id`s and discards any tree-only data** (custom sections,
+`regen_lock`, `llm_instructions`, `llm_input`, `bullet_style`, manual ordering)
+on every `user.save()`. Before #2 lets users author tree-only structure, the
+save path must switch to **in-place tree mutation that preserves `id`s** and
+projects flat edits *into* the existing tree, plus a regression test that a
+custom section + a regen lock survive a save/load cycle.
+
 `document_parser.py` parses both the canonical `document_assembler` output and the older free-form LLM markdown (experience entries split on `### ` **or** bold-only headings, `Title at Company`/`Title, Company` separators, one-line `**Name:**`/`**Name**:` projects).
 
 **Known limitation:** Backfill via `document_parser.py` is lossy for fields the assembler does not render. Notably `ResumeProject.url` is absent from the rendered Markdown (and the PDF), so reconstructed projects come back with `url=""`.
