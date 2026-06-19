@@ -337,12 +337,12 @@ def test_golden_round_trip_markdown_identical():
     assert before == after
 
 
-def test_with_rebuilt_tree_reflects_flat_edits():
-    from core.profile_tree import RootNode, tree_to_legacy, with_rebuilt_tree
+def test_merge_flat_into_stored_reflects_flat_edits():
+    from core.profile_tree import RootNode, merge_flat_into_stored, tree_to_legacy
 
-    data = with_rebuilt_tree(dict(LEGACY))  # store an initial tree
+    data = merge_flat_into_stored({}, dict(LEGACY))  # store an initial tree
     data["email"] = "edited@x.com"  # edit a flat field; tree now stale
-    data = with_rebuilt_tree(data)  # rebuild from the edited flat fields
+    data = merge_flat_into_stored(data, data)  # overlay onto existing tree
     derived = tree_to_legacy(RootNode.model_validate(data["profile_tree"]))
     assert derived["email"] == "edited@x.com"
 
@@ -363,6 +363,89 @@ def test_integer_gpa_round_trips():
     }
     out = tree_to_legacy(legacy_to_tree(data))
     assert out["education"][0]["gpa"] == 3.0
+
+
+def _tree_with_custom_and_lock():
+    """A migrated tree plus a custom section and a regen-locked experience item."""
+    from core.profile_tree import FieldNode, GroupNode, ListNode, SectionNode, legacy_to_tree
+
+    tree = legacy_to_tree(LEGACY)  # header/summary/experience/education/projects/skills
+    # lock the first experience item
+    exp = next(s for s in tree.children if s.role == "experience")
+    exp.children[0].children[0].regen_lock = True
+    # add a custom (role=None) section with a single text field
+    tree.children.append(
+        SectionNode(
+            name="Awards", role=None, order=99,
+            children=[GroupNode(name="Awards", children=[
+                FieldNode(name="Award", key="award", kind="text", value="Hackathon Winner"),
+            ])],
+        )
+    )
+    return tree
+
+
+def test_apply_flat_overlay_updates_scalar_preserving_id():
+    from core.profile_tree import apply_flat_to_tree, _section_by_role, legacy_to_tree
+
+    tree = legacy_to_tree(LEGACY)
+    email_field = _section_by_role(tree, "header").children[0].children
+    target = next(f for f in email_field if f.key == "email")
+    original_id = target.id
+    apply_flat_to_tree(tree, {"email": "new@x.com"})
+    target = next(f for f in _section_by_role(tree, "header").children[0].children if f.key == "email")
+    assert target.value == "new@x.com"
+    assert target.id == original_id  # id preserved
+
+
+def test_apply_flat_overlay_list_update_append_truncate():
+    from core.profile_tree import apply_flat_to_tree, _section_by_role, legacy_to_tree
+
+    tree = legacy_to_tree(LEGACY)  # 1 work_history entry
+    exp_list = _section_by_role(tree, "experience").children[0]
+    first_item_id = exp_list.children[0].id
+
+    # 2 rows: update existing + append one
+    apply_flat_to_tree(tree, {"work_history": [
+        {"company": "Acme2", "title": "SWE", "start": "2022", "end": "Now", "summary": "Updated."},
+        {"company": "NewCo", "title": "Lead", "start": "2024", "end": "Now", "summary": "Led."},
+    ]})
+    assert len(exp_list.children) == 2
+    assert exp_list.children[0].id == first_item_id  # preserved
+    vals0 = {f.key: f.value for f in exp_list.children[0].children}
+    assert vals0["company"] == "Acme2"
+
+    # back to 0 rows: truncate
+    apply_flat_to_tree(tree, {"work_history": []})
+    assert len(exp_list.children) == 0
+
+
+def test_apply_flat_overlay_preserves_custom_section_and_lock():
+    from core.profile_tree import apply_flat_to_tree, _section_by_role
+
+    tree = _tree_with_custom_and_lock()
+    apply_flat_to_tree(tree, {"skills": ["Rust"], "work_history": [
+        {"company": "Acme", "title": "SWE", "start": "2022", "end": "Now", "summary": "x"},
+    ]})
+    # custom section survived
+    awards = next((s for s in tree.children if s.role is None and s.name == "Awards"), None)
+    assert awards is not None
+    assert awards.children[0].children[0].value == "Hackathon Winner"
+    # regen lock survived
+    exp = _section_by_role(tree, "experience")
+    assert exp.children[0].children[0].regen_lock is True
+
+
+def test_apply_flat_overlay_education_gpa_coerced_to_str():
+    from core.profile_tree import apply_flat_to_tree, _section_by_role, legacy_to_tree
+
+    tree = legacy_to_tree(LEGACY)
+    apply_flat_to_tree(tree, {"education": [
+        {"institution": "MIT", "degree": "B.S.", "field": "CS", "graduated": "2020", "gpa": 4.0},
+    ]})
+    item = _section_by_role(tree, "education").children[0].children[0]
+    gpa = next(f.value for f in item.children if f.key == "gpa")
+    assert gpa == "4.0" and isinstance(gpa, str)
 
 
 class _StubDB:

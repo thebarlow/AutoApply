@@ -17,7 +17,14 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.database import Config, FieldHelp
 from core.user import User, PromptNotConfiguredError
-from core.profile_tree import with_rebuilt_tree
+from core.profile_tree import (
+    RootNode,
+    TreeValidationError,
+    merge_flat_into_stored,
+    tree_to_legacy,
+    validate_tree,
+    validate_tree_limits,
+)
 from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
@@ -693,7 +700,8 @@ def update_profile(
         last = data.get("last_name", "")
         data["name"] = f"{first} {last}".strip()
     row.name = body.name
-    row.data = json.dumps(with_rebuilt_tree(data))
+    existing = json.loads(row.data) if row.data else {}
+    row.data = json.dumps(merge_flat_into_stored(existing, data))
     db.commit()
     if body.llm_api_key:
         _validate_api_key(body.llm_api_key)
@@ -773,6 +781,51 @@ def reset_profile(
             pass
 
 
+class TreeBody(BaseModel):
+    tree: dict
+
+
+@router.get("/api/config/profiles/{profile_id}/tree")
+def get_profile_tree(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    try:
+        user = User.load(db, profile_id=profile_id)
+    except RuntimeError:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"tree": user.profile_tree.model_dump(mode="json")}
+
+
+@router.put("/api/config/profiles/{profile_id}/tree")
+def put_profile_tree(
+    profile_id: int,
+    body: TreeBody,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row = db.query(User).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    try:
+        root = RootNode.model_validate(body.tree)
+        validate_tree_limits(root)
+        validate_tree(root)
+    except (ValueError, TreeValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    existing = json.loads(row.data) if row.data else {}
+    derived = tree_to_legacy(root)
+    merged = {**existing, **derived, "profile_tree": root.model_dump(mode="json")}
+    row.data = json.dumps(merged)
+    db.commit()
+    return {"tree": root.model_dump(mode="json")}
+
+
 @router.get("/api/config/profiles/{profile_id}/file")
 def serve_profile_file(
     profile_id: int,
@@ -848,7 +901,8 @@ def parse_profile_from_resume(
             merged[_key] = data[_key]
     name = parsed.get("name") or row.name
     row.name = name
-    row.data = json.dumps(with_rebuilt_tree(merged))
+    existing = json.loads(row.data) if row.data else {}
+    row.data = json.dumps(merge_flat_into_stored(existing, merged))
     db.commit()
     return {"id": row.id, "name": name}
 
