@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.database import Config, FieldHelp
 from core.user import User, PromptNotConfiguredError
-from core.profile_tree import with_rebuilt_tree
+from core.profile_tree import merge_flat_into_stored
 from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
@@ -693,7 +693,8 @@ def update_profile(
         last = data.get("last_name", "")
         data["name"] = f"{first} {last}".strip()
     row.name = body.name
-    row.data = json.dumps(with_rebuilt_tree(data))
+    existing = json.loads(row.data) if row.data else {}
+    row.data = json.dumps(merge_flat_into_stored(existing, data))
     db.commit()
     if body.llm_api_key:
         _validate_api_key(body.llm_api_key)
@@ -848,7 +849,8 @@ def parse_profile_from_resume(
             merged[_key] = data[_key]
     name = parsed.get("name") or row.name
     row.name = name
-    row.data = json.dumps(with_rebuilt_tree(merged))
+    existing = json.loads(row.data) if row.data else {}
+    row.data = json.dumps(merge_flat_into_stored(existing, merged))
     db.commit()
     return {"id": row.id, "name": name}
 

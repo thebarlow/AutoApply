@@ -11,11 +11,12 @@ from sqlalchemy.orm import Session
 from db.database import Base
 import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp registered with Base.metadata
 from core.profile_tree import (
+    RootNode,
+    apply_flat_to_tree,
     legacy_to_tree,
+    merge_flat_into_stored,
     tree_to_legacy,
     validate_tree,
-    RootNode,
-    with_rebuilt_tree,
 )
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
@@ -169,7 +170,8 @@ class User(Base):
         d["cover_refine_enabled"] = self.cover_refine_enabled
         d["cover_refine_max_turns"] = self.cover_refine_max_turns
         d["cover_refine_pass_score"] = self.cover_refine_pass_score
-        d = with_rebuilt_tree(d)
+        apply_flat_to_tree(self.profile_tree, d)
+        d["profile_tree"] = self.profile_tree.model_dump(mode="json")
         return d
 
     @classmethod
@@ -223,7 +225,7 @@ class User(Base):
         """
         with open(path) as f:
             data = json.load(f)
-        data = with_rebuilt_tree(data)
+        data = merge_flat_into_stored({}, data)
         name = (
             data.get("name", "")
             or f"{data.get('first_name', '')} {data.get('last_name', '')}".strip()

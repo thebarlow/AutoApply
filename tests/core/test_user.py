@@ -570,19 +570,19 @@ def test_load_migrates_legacy_profile_to_tree(db_session):
 
 def test_edit_then_reload_reflects_change_when_tree_rebuilt(db_session):
     import json as _json
-    from core.profile_tree import with_rebuilt_tree
+    from core.profile_tree import merge_flat_into_stored
     from core.user import User
 
     db_session.add(User(name="Matt", data=_json.dumps(SAMPLE_DATA)))
     db_session.commit()
     User.load(db_session)  # migrates: persists a profile_tree
 
-    # Simulate the edit endpoint: change a flat field, rebuild the tree, store.
+    # Simulate the edit endpoint: change a flat field, overlay onto existing tree.
     row = db_session.query(User).first()
     stored = _json.loads(row.data)
     assert "profile_tree" in stored  # stale tree is present
     stored["email"] = "edited@x.com"
-    row.data = _json.dumps(with_rebuilt_tree(stored))
+    row.data = _json.dumps(merge_flat_into_stored(stored, stored))
     db_session.commit()
 
     reloaded = User.load(db_session)
@@ -639,3 +639,53 @@ def test_work_history_mutation_survives_save_reload(db_session):
 
     reloaded = User.load(db_session)
     assert "NewCo" in [w.company for w in reloaded.work_history]
+
+
+def test_custom_section_and_lock_survive_flat_save(db_session):
+    import json as _json
+    from core.user import User
+
+    db_session.add(User(name="Matt", data=_json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+    User.load(db_session)  # migrate + persist a tree
+
+    # Inject a custom section + regen lock directly into the stored tree, as a
+    # future builder (2C) would, then mutate a flat field and save().
+    row = db_session.query(User).first()
+    stored = _json.loads(row.data)
+    tree = stored["profile_tree"]
+    tree["children"].append({
+        "type": "section", "id": "custom1", "name": "Awards", "role": None,
+        "order": 99, "visible": True,
+        "children": [{
+            "type": "group", "id": "g1", "name": "Awards", "order": 0,
+            "visible": True, "regen_lock": False,
+            "children": [{
+                "type": "field", "id": "f1", "name": "Award", "key": "award",
+                "order": 0, "visible": True, "kind": "text", "value": "Winner",
+                "llm_output": False, "llm_instructions": "", "llm_input": False,
+                "regen_lock": False, "min": None, "max": None,
+            }],
+        }],
+    })
+    # lock the first experience item's first field
+    exp = next(s for s in tree["children"] if s.get("role") == "experience")
+    exp["children"][0]["children"][0]["children"][0]["regen_lock"] = True
+    row.data = _json.dumps(stored)
+    db_session.commit()
+
+    u = User.load(db_session)
+    u.skills = ["Rust", "Go"]          # flat mutation
+    u.save(db_session)                 # must NOT destroy custom section / lock / ids
+
+    reloaded = db_session.query(User).first()
+    out = _json.loads(reloaded.data)
+    roles = [s.get("role") for s in out["profile_tree"]["children"]]
+    assert None in roles  # custom section survived
+    awards = next(s for s in out["profile_tree"]["children"] if s.get("role") is None)
+    assert awards["children"][0]["children"][0]["value"] == "Winner"
+    assert awards["id"] == "custom1"  # id preserved
+    exp2 = next(s for s in out["profile_tree"]["children"] if s.get("role") == "experience")
+    assert exp2["children"][0]["children"][0]["children"][0]["regen_lock"] is True
+    # flat edit applied
+    assert _json.loads(reloaded.data)["skills"] == ["Rust", "Go"]

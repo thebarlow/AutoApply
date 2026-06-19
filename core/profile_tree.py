@@ -279,22 +279,30 @@ def legacy_to_tree(data: dict) -> "RootNode":
     return root
 
 
-def with_rebuilt_tree(data: dict) -> dict:
-    """Return a copy of a flat profile dict with a freshly rebuilt profile_tree.
+def merge_flat_into_stored(existing_data: dict, new_flat: dict) -> dict:
+    """Return the dict to persist: ``new_flat`` plus a tree with flat overlaid.
 
-    Rebuilds the tree from the flat fields (via legacy_to_tree) so the stored
-    tree always reflects the latest flat edits. Any pre-existing (possibly
-    stale) profile_tree in *data* is discarded and regenerated.
+    Picks the base tree from ``existing_data['profile_tree']`` when present
+    (preserving its IDs and tree-only data); otherwise builds one from the
+    merged flat via ``legacy_to_tree``. Any ``profile_tree`` inside ``new_flat``
+    is ignored (the stored tree is authoritative). The flat doc-section fields
+    are overlaid onto the base tree in place.
 
     Args:
-        data: A flat profile dict (the JSON stored in user_profile.data).
+        existing_data: The currently stored profile dict (may have profile_tree).
+        new_flat: The new flat profile dict to persist.
 
     Returns:
-        A new dict equal to *data* but with profile_tree set to the rebuilt tree.
+        ``new_flat`` (minus any stale profile_tree) plus a fresh ``profile_tree``.
     """
-    out = dict(data)
+    base = existing_data.get("profile_tree")
+    if base:
+        tree = RootNode.model_validate(base)
+    else:
+        tree = legacy_to_tree({**existing_data, **new_flat})
+    out = dict(new_flat)
     out.pop("profile_tree", None)
-    tree = legacy_to_tree(out)
+    apply_flat_to_tree(tree, out)
     validate_tree(tree)
     out["profile_tree"] = tree.model_dump(mode="json")
     return out
@@ -419,7 +427,9 @@ def apply_flat_to_tree(tree: "RootNode", flat: dict) -> "RootNode":
             if i < len(lst.children):
                 _overlay_group(lst.children[i], row)
             else:
-                lst.children.append(_new_item_from_template(lst.item_template, row))
+                new_item = _new_item_from_template(lst.item_template, row)
+                new_item.order = i
+                lst.children.append(new_item)
         if len(rows) < len(lst.children):
             del lst.children[len(rows):]
 
