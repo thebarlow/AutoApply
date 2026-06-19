@@ -37,14 +37,21 @@ metadata (target roles/salary, resume/md paths) stays as flat `data` keys, not
 in the tree. **Known gap:** custom (non-`role`) sections are storable but do not
 appear on generated documents until sub-project #4.
 
-**Sub-project 2A (write-path consolidation) is DONE:** `User._to_dict` now uses
-`apply_flat_to_tree` (in-place overlay) instead of the former `with_rebuilt_tree`
-(destructive rebuild). All write paths (`User.save`, `User.load_from_json`,
-`update_profile`, parse-merge endpoint) go through `merge_flat_into_stored`,
-which picks the stored tree as base (preserving node `id`s, custom sections,
-`regen_lock`, `llm_instructions`, `llm_input`, `bullet_style`, manual ordering)
-and overlays flat edits in place. A regression test verifies that a custom
-section + a regen lock survive a save/load cycle.
+**Sub-project 2A (write-path consolidation + tree API) is DONE:** `User._to_dict`
+now uses `apply_flat_to_tree` (in-place overlay) instead of the former
+`with_rebuilt_tree` (destructive rebuild). All write paths (`User.save`,
+`User.load_from_json`, `update_profile`, parse-merge endpoint) go through
+`merge_flat_into_stored`, which picks the stored tree as base (preserving node
+`id`s, custom sections, `regen_lock`, `llm_instructions`, `llm_input`,
+`bullet_style`, manual ordering) and overlays flat edits in place. A regression
+test verifies that a custom section + a regen lock survive a save/load cycle.
+`GET /api/config/profiles/{id}/tree` returns the tree (migrating legacy profiles
+on first access); `PUT /api/config/profiles/{id}/tree` accepts a full tree,
+validates it (`validate_tree_limits` — ≤ 500 nodes, ≤ 6 deep — then
+`validate_tree`), derives flat fields via `tree_to_legacy`, stores both (non-
+section metadata like `target_roles`, salary, and LLM/upload keys are preserved
+via `{**existing, **derived, "profile_tree": ...}`), and returns the stored tree.
+These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 
 `document_parser.py` parses both the canonical `document_assembler` output and the older free-form LLM markdown (experience entries split on `### ` **or** bold-only headings, `Title at Company`/`Title, Company` separators, one-line `**Name:**`/`**Name**:` projects).
 

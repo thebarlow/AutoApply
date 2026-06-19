@@ -308,6 +308,39 @@ def merge_flat_into_stored(existing_data: dict, new_flat: dict) -> dict:
     return out
 
 
+def validate_tree_limits(
+    root: "RootNode", *, max_nodes: int = 500, max_depth: int = 6
+) -> None:
+    """Raise TreeValidationError if the tree is too large or too deep.
+
+    Root is depth 0; a ListNode's item_template counts as a node one level
+    below the list. Guards the PUT endpoint against abusive/runaway trees.
+
+    Args:
+        root: The tree to validate.
+        max_nodes: Maximum total node count (default 500).
+        max_depth: Maximum depth, root = 0 (default 6).
+
+    Raises:
+        TreeValidationError: If the tree exceeds the node count or depth caps.
+    """
+    count = 0
+
+    def walk(node: object, depth: int) -> None:
+        nonlocal count
+        count += 1
+        if depth > max_depth:
+            raise TreeValidationError(f"Tree exceeds max depth {max_depth}")
+        for c in (getattr(node, "children", None) or []):
+            walk(c, depth + 1)
+        if isinstance(node, ListNode):
+            walk(node.item_template, depth + 1)
+
+    walk(root, 0)
+    if count > max_nodes:
+        raise TreeValidationError(f"Tree exceeds max nodes {max_nodes}")
+
+
 def _section_by_role(root: "RootNode", role: str) -> Optional[SectionNode]:
     """Return the first SectionNode whose role matches, or None."""
     for s in root.children:
