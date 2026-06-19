@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.database import Config, FieldHelp
 from core.user import User, PromptNotConfiguredError
+from core.profile_tree import with_rebuilt_tree
 from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
@@ -51,6 +52,7 @@ def _set(db: Session, key: str, value: str) -> None:
 
 # ---- Prompt Templates ----
 
+
 class PromptBody(BaseModel):
     name: str
     content: str
@@ -71,7 +73,9 @@ def _set_prompts(db: Session, type_: str, prompts: list[dict]) -> None:
     _set(db, f"{type_}_prompts", json.dumps(prompts))
 
 
-def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[dict]) -> None:
+def _sync_active_prompt(
+    db: Session, type_: str, active_id: str, prompts: list[dict]
+) -> None:
     """Keep the legacy template key in sync so the generator always reads current content."""
     legacy_key = f"{type_}_prompt_template"
     match = next((p for p in prompts if p["id"] == active_id), None)
@@ -83,20 +87,23 @@ def get_all_prompts(db: Session = Depends(get_db)) -> dict[str, Any]:
     all_prompts = []
     for type_ in ("resume", "cover", "description"):
         for p in _get_prompts(db, type_):
-            all_prompts.append({
-                "id": p["id"],
-                "name": p["name"],
-                "type": type_,
-                "provider_name": p.get("provider_name", ""),
-                "model_id": p.get("model_id", ""),
-                "template_name": p.get("template_name", ""),
-            })
+            all_prompts.append(
+                {
+                    "id": p["id"],
+                    "name": p["name"],
+                    "type": type_,
+                    "provider_name": p.get("provider_name", ""),
+                    "model_id": p.get("model_id", ""),
+                    "template_name": p.get("template_name", ""),
+                }
+            )
     return {"prompts": all_prompts}
 
 
 @router.get("/api/config/prompts/active-status")
 def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
     """Return whether each prompt type has a usable active configuration."""
+
     def _has_latex_template(type_: str) -> bool:
         active_id = _get(db, f"active_{type_}_prompt_id")
         if not active_id:
@@ -116,7 +123,9 @@ def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
 
     active_desc_id = _get(db, "active_description_prompt_id")
     desc_prompts = _get_prompts(db, "description")
-    has_description = bool(active_desc_id and any(p["id"] == active_desc_id for p in desc_prompts))
+    has_description = bool(
+        active_desc_id and any(p["id"] == active_desc_id for p in desc_prompts)
+    )
 
     return {
         "resume_has_template": _has_latex_template("resume"),
@@ -131,23 +140,30 @@ def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     active_id = _get(db, f"active_{type_}_prompt_id")
-    return {"prompts": [{"id": p["id"], "name": p["name"]} for p in prompts], "active_id": active_id}
+    return {
+        "prompts": [{"id": p["id"], "name": p["name"]} for p in prompts],
+        "active_id": active_id,
+    }
 
 
 @router.post("/api/config/prompts/{type_}")
-def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+def create_prompt(
+    type_: str, body: PromptBody, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
     new_id = uuid.uuid4().hex
-    prompts.append({
-        "id": new_id,
-        "name": body.name,
-        "content": body.content,
-        "provider_name": body.provider_name,
-        "model_id": body.model_id,
-        "template_name": body.template_name,
-    })
+    prompts.append(
+        {
+            "id": new_id,
+            "name": body.name,
+            "content": body.content,
+            "provider_name": body.provider_name,
+            "model_id": body.model_id,
+            "template_name": body.template_name,
+        }
+    )
     _set_prompts(db, type_, prompts)
     return {"id": new_id, "name": body.name}
 
@@ -155,7 +171,9 @@ def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -
 # IMPORTANT: /active must be registered before /{prompt_id} to avoid the literal
 # string "active" matching the {prompt_id} path parameter.
 @router.put("/api/config/prompts/{type_}/active")
-def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+def set_active_prompt(
+    type_: str, body: ActivePromptBody, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
@@ -167,7 +185,9 @@ def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(
 
 
 @router.get("/api/config/prompts/{type_}/{prompt_id}")
-def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_prompt(
+    type_: str, prompt_id: str, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
@@ -178,7 +198,9 @@ def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dic
 
 
 @router.put("/api/config/prompts/{type_}/{prompt_id}")
-def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+def update_prompt(
+    type_: str, prompt_id: str, body: PromptBody, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
@@ -214,6 +236,7 @@ def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> 
 
 # ---- Templates ----
 
+
 class TemplatesBody(BaseModel):
     resume_template_path: str = "generator/resume_template.html"
     cover_template_path: str = "generator/cover_template.html"
@@ -227,8 +250,12 @@ class TemplatesBody(BaseModel):
 @router.get("/api/config/templates")
 def get_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
     return {
-        "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.html"),
-        "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.html"),
+        "resume_template_path": _get(
+            db, "resume_template_path", "generator/resume_template.html"
+        ),
+        "cover_template_path": _get(
+            db, "cover_template_path", "generator/cover_template.html"
+        ),
         "resume_prompt_template": _get(db, "resume_prompt_template", ""),
         "cover_prompt_template": _get(db, "cover_prompt_template", ""),
         "github": _get(db, "resume_github", ""),
@@ -250,6 +277,7 @@ def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[st
 
 
 # ---- Scoring ----
+
 
 class ScoringBody(BaseModel):
     w1: float
@@ -286,6 +314,7 @@ def put_scoring(body: ScoringBody, db: Session = Depends(get_db)) -> dict[str, f
 
 # ---- .env helpers ----
 
+
 def _read_env() -> dict[str, str]:
     if not _ENV_PATH.exists():
         return {}
@@ -317,6 +346,7 @@ def _validate_api_key(key: str) -> str:
 
 
 # ---- LLM ----
+
 
 class LLMProviderIn(BaseModel):
     name: str
@@ -402,24 +432,35 @@ def get_providers(db: Session = Depends(get_db)) -> dict[str, Any]:
     result = []
     for p in providers:
         raw_key = env.get(_env_key_name(p["id"]), "")
-        result.append({
-            "id": p["id"],
-            "name": p["name"],
-            "provider_type": p["provider_type"],
-            "default_model": p.get("default_model", ""),
-            "has_key": bool(raw_key),
-            "masked_key": _mask_key(raw_key),
-        })
+        result.append(
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "provider_type": p["provider_type"],
+                "default_model": p.get("default_model", ""),
+                "has_key": bool(raw_key),
+                "masked_key": _mask_key(raw_key),
+            }
+        )
     return {"providers": result}
 
 
 @router.post("/api/config/providers")
 def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
     if body.provider_type not in _VALID_PROVIDER_TYPES:
-        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
+        raise HTTPException(
+            status_code=422, detail=f"Unknown provider_type: {body.provider_type}"
+        )
     providers = _get_providers(db)
     new_id = uuid.uuid4().hex
-    providers.append({"id": new_id, "name": body.name, "provider_type": body.provider_type, "default_model": body.default_model})
+    providers.append(
+        {
+            "id": new_id,
+            "name": body.name,
+            "provider_type": body.provider_type,
+            "default_model": body.default_model,
+        }
+    )
     _set_providers(db, providers)
     if body.api_key:
         env = _read_env()
@@ -429,9 +470,13 @@ def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str
 
 
 @router.put("/api/config/providers/{provider_id}")
-def update_provider(provider_id: str, body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
+def update_provider(
+    provider_id: str, body: ProviderIn, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     if body.provider_type not in _VALID_PROVIDER_TYPES:
-        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
+        raise HTTPException(
+            status_code=422, detail=f"Unknown provider_type: {body.provider_type}"
+        )
     providers = _get_providers(db)
     match = next((p for p in providers if p["id"] == provider_id), None)
     if not match:
@@ -495,7 +540,9 @@ def create_latex_template(
     filename = file.filename or ""
     suffix = Path(filename).suffix.lower()
     if suffix not in (".tex", ".html"):
-        raise HTTPException(status_code=400, detail="Only .tex and .html files are accepted")
+        raise HTTPException(
+            status_code=400, detail="Only .tex and .html files are accepted"
+        )
     _TEMPLATES_DIR.mkdir(exist_ok=True)
     new_id = uuid.uuid4().hex
     dest = _TEMPLATES_DIR / f"{new_id}{suffix}"
@@ -541,12 +588,22 @@ def delete_latex_template(template_id: str, db: Session = Depends(get_db)) -> No
 # ---- User Profiles ----
 
 _EMPTY_PROFILE_DATA: dict[str, Any] = {
-    "email": "", "phone": "", "location": "", "skills": [],
-    "work_history": [], "education": [], "target_salary_min": None,
-    "target_salary_max": None, "target_roles": [], "resume_path": "",
-    "md_path": "", "cover_letter_path": "",
-    "resume_uploaded_at": "", "cover_uploaded_at": "",
-    "resume_filename": "", "cover_filename": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "skills": [],
+    "work_history": [],
+    "education": [],
+    "target_salary_min": None,
+    "target_salary_max": None,
+    "target_roles": [],
+    "resume_path": "",
+    "md_path": "",
+    "cover_letter_path": "",
+    "resume_uploaded_at": "",
+    "cover_uploaded_at": "",
+    "resume_filename": "",
+    "cover_filename": "",
 }
 
 
@@ -576,25 +633,29 @@ def get_profiles(
     profiles = []
     for r in rows:
         data = json.loads(r.data) if r.data else {}
-        profiles.append({
-            "id": r.id,
-            "name": r.name,
-            "first_name": data.get("first_name", ""),
-            "last_name": data.get("last_name", ""),
-            "has_resume": bool(data.get("resume_path") or data.get("md_path")),
-            "has_cover": bool(data.get("cover_letter_path")),
-            "resume_path": data.get("resume_path", ""),
-            "cover_letter_path": data.get("cover_letter_path", ""),
-            "resume_uploaded_at": data.get("resume_uploaded_at", ""),
-            "cover_uploaded_at": data.get("cover_uploaded_at", ""),
-            "resume_filename": data.get("resume_filename", ""),
-            "cover_filename": data.get("cover_filename", ""),
-        })
+        profiles.append(
+            {
+                "id": r.id,
+                "name": r.name,
+                "first_name": data.get("first_name", ""),
+                "last_name": data.get("last_name", ""),
+                "has_resume": bool(data.get("resume_path") or data.get("md_path")),
+                "has_cover": bool(data.get("cover_letter_path")),
+                "resume_path": data.get("resume_path", ""),
+                "cover_letter_path": data.get("cover_letter_path", ""),
+                "resume_uploaded_at": data.get("resume_uploaded_at", ""),
+                "cover_uploaded_at": data.get("cover_uploaded_at", ""),
+                "resume_filename": data.get("resume_filename", ""),
+                "cover_filename": data.get("cover_filename", ""),
+            }
+        )
     return {"profiles": profiles, "active_id": active_id}
 
 
 @router.post("/api/config/profiles")
-def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+def create_profile(
+    body: ProfileNameBody, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     row = User(name=body.name, data=json.dumps(_EMPTY_PROFILE_DATA))
     db.add(row)
     db.commit()
@@ -605,7 +666,9 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
 # IMPORTANT: /active must be registered before /{profile_id} so FastAPI does not
 # attempt to coerce the literal string "active" to an integer profile_id.
 @router.put("/api/config/profiles/active")
-def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+def set_active_profile(
+    body: ActiveProfileBody, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     row = db.query(User).filter_by(id=body.active_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -635,6 +698,7 @@ def get_active_profile_prompt_status(
     if row is None:
         return {t: False for t in _PROFILE_PROMPT_TYPES}
     from db.database import Prompt
+
     status = {}
     for t in _PROFILE_PROMPT_TYPES:
         p = db.query(Prompt).filter_by(profile_id=row.id, type_key=t).first()
@@ -657,6 +721,7 @@ def get_profile(
     env = _read_env()
     has_llm_key = bool(env.get(f"LLM_KEY_PROFILE_{profile_id}"))
     from db.database import Prompt
+
     prompt_types = ("scoring", "resume", "cover", "extraction", "resume_parse")
     prompt_fields = {}
     for t in prompt_types:
@@ -692,6 +757,7 @@ def update_profile(
         last = data.get("last_name", "")
         data["name"] = f"{first} {last}".strip()
     row.name = body.name
+    data = with_rebuilt_tree(data)
     row.data = json.dumps(data)
     db.commit()
     if body.llm_api_key:
@@ -795,7 +861,9 @@ def serve_profile_file(
         file_path = data.get("cover_letter_path", "")
         media_type = "application/pdf"
     else:
-        raise HTTPException(status_code=400, detail="type must be 'pdf', 'md', or 'cover'")
+        raise HTTPException(
+            status_code=400, detail="type must be 'pdf', 'md', or 'cover'"
+        )
     if not file_path:
         raise HTTPException(status_code=404, detail="File path not set")
     path = Path(file_path)
@@ -819,7 +887,9 @@ def parse_profile_from_resume(
     data = json.loads(row.data) if row.data else {}
     resume_path = data.get("resume_path") or data.get("md_path")
     if not resume_path:
-        raise HTTPException(status_code=400, detail="No resume uploaded for this profile")
+        raise HTTPException(
+            status_code=400, detail="No resume uploaded for this profile"
+        )
     path = Path(resume_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Resume file not found on disk")
@@ -828,7 +898,11 @@ def parse_profile_from_resume(
             parsed = User.from_pdf(path.read_bytes(), db, profile_id=profile_id)
         else:
             # .md, .txt, or any plain-text format: pass content directly to the LLM
-            parsed = User.from_markdown(path.read_text(encoding="utf-8", errors="replace"), db, profile_id=profile_id)
+            parsed = User.from_markdown(
+                path.read_text(encoding="utf-8", errors="replace"),
+                db,
+                profile_id=profile_id,
+            )
     except PromptNotConfiguredError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except (ValueError, RuntimeError) as exc:
@@ -847,6 +921,7 @@ def parse_profile_from_resume(
             merged[_key] = data[_key]
     name = parsed.get("name") or row.name
     row.name = name
+    merged = with_rebuilt_tree(merged)
     row.data = json.dumps(merged)
     db.commit()
     return {"id": row.id, "name": name}
@@ -862,7 +937,9 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     filename = file.filename or "resume"
     suffix = Path(filename).suffix.lower()
     if suffix not in (".pdf", ".md", ".txt"):
-        raise HTTPException(status_code=400, detail="Only .pdf, .md, and .txt files are accepted")
+        raise HTTPException(
+            status_code=400, detail="Only .pdf, .md, and .txt files are accepted"
+        )
     _PROFILES_DIR.mkdir(exist_ok=True)
     dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
     dest.write_bytes(contents)
@@ -870,6 +947,7 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
 
 
 # ---- Sources ----
+
 
 class SourcesBody(BaseModel):
     remotive: bool = False
@@ -892,6 +970,7 @@ def put_sources(body: SourcesBody, db: Session = Depends(get_db)) -> dict[str, A
 
 # ---- Search Config ----
 
+
 class SearchBody(BaseModel):
     keywords_whitelist: list[str] = []
     keywords_blacklist: list[str] = []
@@ -903,7 +982,11 @@ def get_search(db: Session = Depends(get_db)) -> dict[str, Any]:
     whitelist = json.loads(_get(db, "keywords_whitelist", "[]"))
     blacklist = json.loads(_get(db, "keywords_blacklist", "[]"))
     max_jobs = int(_get(db, "max_jobs_per_source", "50"))
-    return {"keywords_whitelist": whitelist, "keywords_blacklist": blacklist, "max_jobs_per_source": max_jobs}
+    return {
+        "keywords_whitelist": whitelist,
+        "keywords_blacklist": blacklist,
+        "max_jobs_per_source": max_jobs,
+    }
 
 
 @router.put("/api/config/search")
@@ -915,6 +998,7 @@ def put_search(body: SearchBody, db: Session = Depends(get_db)) -> dict[str, Any
 
 
 # ---- Job Searches ----
+
 
 class JobSearchItem(BaseModel):
     id: str
@@ -933,13 +1017,17 @@ def get_job_searches(db: Session = Depends(get_db)) -> dict[str, Any]:
 
 
 @router.put("/api/config/job_searches")
-def put_job_searches(body: JobSearchesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+def put_job_searches(
+    body: JobSearchesBody, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]))
     return body.model_dump()
 
 
 @router.post("/api/config/profile/parse")
-def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict[str, Any]:
+def parse_profile(
+    file: UploadFile = File(...), db: Session = Depends(get_db)
+) -> dict[str, Any]:
     """Parse an uploaded PDF or Markdown resume into a profile dict using the active LLM."""
     MAX_BYTES = 10 * 1024 * 1024  # 10 MB
     contents = file.file.read()
@@ -959,6 +1047,7 @@ def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -
 
 # ---- Job Fields ----
 
+
 @router.get("/api/job-fields")
 def get_job_fields(db: Session = Depends(get_db)) -> dict:
     help_rows = db.query(FieldHelp).filter_by(table_name="jobs").all()
@@ -971,9 +1060,22 @@ def get_job_fields(db: Session = Depends(get_db)) -> dict:
 
 
 _USER_PROFILE_FIELDS = [
-    "name", "first_name", "last_name", "hero", "email", "phone", "linkedin",
-    "github", "location", "skills", "work_history", "education", "projects",
-    "target_salary_min", "target_salary_max", "target_roles",
+    "name",
+    "first_name",
+    "last_name",
+    "hero",
+    "email",
+    "phone",
+    "linkedin",
+    "github",
+    "location",
+    "skills",
+    "work_history",
+    "education",
+    "projects",
+    "target_salary_min",
+    "target_salary_max",
+    "target_roles",
 ]
 
 
@@ -985,16 +1087,21 @@ def get_user_profile_fields(db: Session = Depends(get_db)) -> dict:
         {"name": f"user_profile.{name}", "description": descriptions.get(name, "")}
         for name in _USER_PROFILE_FIELDS
     ]
-    fields.insert(0, {
-        "name": "user_profile.master_resume",
-        "description": "Full resume content loaded from md_path (or reconstructed from profile fields if md_path is not set)",
-    })
+    fields.insert(
+        0,
+        {
+            "name": "user_profile.master_resume",
+            "description": "Full resume content loaded from md_path (or reconstructed from profile fields if md_path is not set)",
+        },
+    )
     return {"fields": fields}
 
 
 # ---- Export Master Resume ----
 
-_MASTER_TEMPLATE = Path(__file__).parent.parent.parent / "generator" / "master_template.html"
+_MASTER_TEMPLATE = (
+    Path(__file__).parent.parent.parent / "generator" / "master_template.html"
+)
 
 
 def _build_master_resume_md(user: Any) -> str:
@@ -1026,7 +1133,8 @@ def _build_master_resume_md(user: Any) -> str:
         for proj in user.projects:
             tech_str = (
                 f"  \n*Technologies: {', '.join(proj.technologies)}*"
-                if proj.technologies else ""
+                if proj.technologies
+                else ""
             )
             url_str = f"  \n{proj.url}" if proj.url else ""
             lines.append(f"**{proj.name}** — {proj.description}{tech_str}{url_str}")

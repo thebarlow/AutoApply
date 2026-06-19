@@ -337,6 +337,16 @@ def test_golden_round_trip_markdown_identical():
     assert before == after
 
 
+def test_with_rebuilt_tree_reflects_flat_edits():
+    from core.profile_tree import RootNode, tree_to_legacy, with_rebuilt_tree
+
+    data = with_rebuilt_tree(dict(LEGACY))  # store an initial tree
+    data["email"] = "edited@x.com"  # edit a flat field; tree now stale
+    data = with_rebuilt_tree(data)  # rebuild from the edited flat fields
+    derived = tree_to_legacy(RootNode.model_validate(data["profile_tree"]))
+    assert derived["email"] == "edited@x.com"
+
+
 class _StubDB:
     def query(self, *a, **k):
         return self

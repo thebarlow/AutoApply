@@ -282,6 +282,25 @@ def legacy_to_tree(data: dict) -> "RootNode":
     return root
 
 
+def with_rebuilt_tree(data: dict) -> dict:
+    """Return a copy of a flat profile dict with a freshly rebuilt profile_tree.
+
+    Rebuilds the tree from the flat fields (via legacy_to_tree) so the stored
+    tree always reflects the latest flat edits. Any pre-existing (possibly
+    stale) profile_tree in *data* is discarded and regenerated.
+
+    Args:
+        data: A flat profile dict (the JSON stored in user_profile.data).
+
+    Returns:
+        A new dict equal to *data* but with profile_tree set to the rebuilt tree.
+    """
+    out = dict(data)
+    out.pop("profile_tree", None)
+    out["profile_tree"] = legacy_to_tree(out).model_dump(mode="json")
+    return out
+
+
 def _section_by_role(root: "RootNode", role: str) -> Optional[SectionNode]:
     """Return the first SectionNode whose role matches, or None."""
     for s in root.children:
