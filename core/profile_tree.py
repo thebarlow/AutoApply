@@ -320,6 +320,112 @@ def _gpa_to_float(v: object) -> float:
         return 0.0
 
 
+# Role → flat list key for the repeating sections.
+_LIST_ROLE_FLATKEY = {
+    "experience": "work_history",
+    "education": "education",
+    "projects": "projects",
+}
+
+
+def _coerce_field_value(kind: str, raw: object) -> "str | list[str]":
+    """Coerce a raw value to the Python type a FieldNode of ``kind`` stores.
+
+    Mirrors FieldNode's value normalizer, for use on direct attribute
+    assignment (Pydantic v2 does not re-validate on assignment).
+    """
+    if kind in ("text", "markdown"):
+        if isinstance(raw, list):
+            return " ".join(str(x) for x in raw)
+        return "" if raw is None else str(raw)
+    if isinstance(raw, str):
+        return [raw] if raw else []
+    if raw is None:
+        return []
+    return [str(x) for x in raw]
+
+
+def _row_for_role(role: str, row: dict) -> dict:
+    """Apply per-role flat-row value conversions (education gpa → str)."""
+    if role == "education":
+        return {**row, "gpa": _gpa_to_str(row.get("gpa"))}
+    return row
+
+
+def _overlay_group(group: GroupNode, row: dict) -> None:
+    """Update a group's field values from ``row``, by key, preserving IDs.
+
+    Only keys present in ``row`` are written; other fields (incl. tree-only
+    custom fields) are left untouched.
+    """
+    for f in group.children:
+        if f.key in row:
+            f.value = _coerce_field_value(f.kind, row[f.key])
+
+
+def _new_item_from_template(template: GroupNode, row: dict) -> GroupNode:
+    """Clone a list's item_template into a fresh item populated from ``row``."""
+    item = template.model_copy(deep=True)
+    item.id = _new_id()
+    for f in item.children:
+        f.id = _new_id()
+        if f.key in row:
+            f.value = _coerce_field_value(f.kind, row[f.key])
+    return item
+
+
+def apply_flat_to_tree(tree: "RootNode", flat: dict) -> "RootNode":
+    """Overlay flat doc-section fields onto an existing tree, in place.
+
+    Scalars (header contact, summary ``hero``, ``skills``) are matched by
+    ``(role, key)``; list sections (experience/education/projects) are matched
+    by index — existing items updated in place (IDs preserved), extra flat rows
+    appended (cloned from item_template with fresh IDs), trailing items removed.
+    Only flat keys that are present are written, so custom (``role is None``)
+    sections and tree-only fields/attributes survive untouched.
+
+    Args:
+        tree: The existing tree to mutate.
+        flat: A flat profile dict (subset is fine; absent keys are skipped).
+
+    Returns:
+        The same ``tree`` instance, mutated.
+    """
+    header = _section_by_role(tree, "header")
+    if header and header.children and isinstance(header.children[0], GroupNode):
+        for f in header.children[0].children:
+            if f.key in flat:
+                f.value = _coerce_field_value(f.kind, flat[f.key])
+
+    summary = _section_by_role(tree, "summary")
+    if summary and summary.children and isinstance(summary.children[0], FieldNode):
+        if "hero" in flat:
+            summary.children[0].value = _coerce_field_value(summary.children[0].kind, flat["hero"])
+
+    skills = _section_by_role(tree, "skills")
+    if skills and skills.children and isinstance(skills.children[0], FieldNode):
+        if "skills" in flat:
+            skills.children[0].value = _coerce_field_value(skills.children[0].kind, flat["skills"])
+
+    for role, fkey in _LIST_ROLE_FLATKEY.items():
+        if fkey not in flat:
+            continue
+        sect = _section_by_role(tree, role)
+        if not sect or not sect.children or not isinstance(sect.children[0], ListNode):
+            continue
+        lst = sect.children[0]
+        rows = [_row_for_role(role, r) for r in (flat.get(fkey) or [])]
+        for i, row in enumerate(rows):
+            if i < len(lst.children):
+                _overlay_group(lst.children[i], row)
+            else:
+                lst.children.append(_new_item_from_template(lst.item_template, row))
+        if len(rows) < len(lst.children):
+            del lst.children[len(rows):]
+
+    return tree
+
+
 def tree_to_legacy(root: "RootNode") -> dict:
     """Project a profile tree into the legacy flat document-section dict.
 
