@@ -10,7 +10,13 @@ from sqlalchemy.orm import Session
 
 from db.database import Base
 import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp registered with Base.metadata
-
+from core.profile_tree import (
+    legacy_to_tree,
+    tree_to_legacy,
+    validate_tree,
+    RootNode,
+    with_rebuilt_tree,
+)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPTS_DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
@@ -89,6 +95,18 @@ class User(Base):
         Returns True if legacy text-blob prompts were migrated to files (caller should save).
         """
         raw = json.loads(self.data or "{}")
+
+        tree_raw = raw.get("profile_tree")
+        migrated_tree = False
+        if tree_raw:
+            self.profile_tree = RootNode.model_validate(tree_raw)
+        else:
+            self.profile_tree = legacy_to_tree(raw)
+            migrated_tree = True
+        validate_tree(self.profile_tree)
+        derived = tree_to_legacy(self.profile_tree)
+        raw = {**raw, **derived}  # tree is source of truth for document sections
+
         self.first_name = raw.get("first_name", "")
         self.last_name = raw.get("last_name", "")
         self.hero = raw.get("hero", "")
@@ -110,6 +128,7 @@ class User(Base):
 
         # Initialize model attrs for all 9 prompt types (populated from DB rows in load()).
         from db.seed import PROMPT_TYPE_KEYS  # deferred: db.seed imports core.user
+
         for type_key in PROMPT_TYPE_KEYS:
             setattr(self, f"prompt_{type_key}_model", "")
         # Refinement config — resume
@@ -120,7 +139,7 @@ class User(Base):
         self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
         self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 3))
         self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
-        return False
+        return migrated_tree
 
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
@@ -150,6 +169,7 @@ class User(Base):
         d["cover_refine_enabled"] = self.cover_refine_enabled
         d["cover_refine_max_turns"] = self.cover_refine_max_turns
         d["cover_refine_pass_score"] = self.cover_refine_pass_score
+        d = with_rebuilt_tree(d)
         return d
 
     @classmethod
@@ -179,8 +199,11 @@ class User(Base):
             if row is None:
                 raise RuntimeError("No user profile found. Add one via /config.")
 
-        migrated = row._hydrate()  # always False post prompts-to-DB; branch kept for future migration hooks
+        migrated = (
+            row._hydrate()
+        )  # always False post prompts-to-DB; branch kept for future migration hooks
         from db.database import Prompt
+
         for r in db.query(Prompt).filter_by(profile_id=row.id).all():
             setattr(row, f"prompt_{r.type_key}_model", r.model or "")
         if migrated:
@@ -200,7 +223,12 @@ class User(Base):
         """
         with open(path) as f:
             data = json.load(f)
-        name = data.get("name", "") or f"{data.get('first_name', '')} {data.get('last_name', '')}".strip() or "Default"
+        data = with_rebuilt_tree(data)
+        name = (
+            data.get("name", "")
+            or f"{data.get('first_name', '')} {data.get('last_name', '')}".strip()
+            or "Default"
+        )
         row = db.query(cls).first()
         if row:
             row.name = name
@@ -210,7 +238,9 @@ class User(Base):
         db.commit()
 
     @classmethod
-    def from_markdown(cls, md_text: str, db: Session, profile_id: Optional[int] = None) -> dict:
+    def from_markdown(
+        cls, md_text: str, db: Session, profile_id: Optional[int] = None
+    ) -> dict:
         """Parse resume markdown into a structured profile dict via LLM.
 
         Does not persist — caller decides what to do with the result.
@@ -236,7 +266,9 @@ class User(Base):
         except PromptNotConfiguredError:
             raise
         try:
-            client, model = get_client_for_profile(active_user, active_user.prompt_resume_parse_model)
+            client, model = get_client_for_profile(
+                active_user, active_user.prompt_resume_parse_model
+            )
         except RuntimeError:
             raise
         response = client.chat.completions.create(
@@ -260,7 +292,9 @@ class User(Base):
         return {**defaults, **parsed}
 
     @classmethod
-    def from_pdf(cls, pdf_bytes: bytes, db: Session, profile_id: Optional[int] = None) -> dict:
+    def from_pdf(
+        cls, pdf_bytes: bytes, db: Session, profile_id: Optional[int] = None
+    ) -> dict:
         """Convert raw PDF bytes into a structured profile dict via LLM.
 
         Does not persist — caller decides what to do with the result.
@@ -330,9 +364,7 @@ class User(Base):
         """Formatted degree list for hallucination-detection context in eval prompts."""
         if not self.education:
             return "none listed"
-        return ", ".join(
-            f"{e.degree} {e.field}" for e in self.education
-        )
+        return ", ".join(f"{e.degree} {e.field}" for e in self.education)
 
     def render_for_prompt(self) -> str:
         """Format the user profile as a human-readable string for LLM prompt injection.
@@ -356,7 +388,8 @@ class User(Base):
         )
         salary_str = (
             f"${self.target_salary_min}–${self.target_salary_max}"
-            if self.target_salary_min is not None else "Not specified"
+            if self.target_salary_min is not None
+            else "Not specified"
         )
         result = (
             f"Name: {self.full_name()}\n"
@@ -430,12 +463,16 @@ class User(Base):
         if sess is None:
             raise PromptNotConfiguredError(f"{label} not configured")
 
-        row = sess.query(Prompt).filter_by(profile_id=self.id, type_key=type_key).first()
+        row = (
+            sess.query(Prompt).filter_by(profile_id=self.id, type_key=type_key).first()
+        )
         invalid_reason: Optional[str] = None
         if row is None or not row.content:
             invalid_reason = "the prompt is unset"
         elif len(row.content.split()) <= self._MIN_PROMPT_WORDS:
-            invalid_reason = f"the prompt is too short (must exceed {self._MIN_PROMPT_WORDS} words)"
+            invalid_reason = (
+                f"the prompt is too short (must exceed {self._MIN_PROMPT_WORDS} words)"
+            )
 
         if invalid_reason is None:
             return row.content
@@ -457,15 +494,24 @@ class User(Base):
 
         sess = object_session(self)
         if sess is not None:
-            row = sess.query(Prompt).filter_by(profile_id=self.id, type_key=type_key).first()
+            row = (
+                sess.query(Prompt)
+                .filter_by(profile_id=self.id, type_key=type_key)
+                .first()
+            )
             now = datetime.now(timezone.utc).isoformat()
             try:
                 with sess.begin_nested():
                     if row is None:
-                        sess.add(Prompt(
-                            profile_id=self.id, type_key=type_key,
-                            content=default_content, model="", updated_at=now,
-                        ))
+                        sess.add(
+                            Prompt(
+                                profile_id=self.id,
+                                type_key=type_key,
+                                content=default_content,
+                                model="",
+                                updated_at=now,
+                            )
+                        )
                     else:
                         row.content = default_content
                         row.updated_at = now
@@ -473,9 +519,15 @@ class User(Base):
                 pass  # repair is best-effort; outer transaction is untouched
         try:
             from web.sse import send
-            send("prompt_reset", {
-                "type_key": type_key, "label": label, "reason": reason,
-                "message": f"{label} prompt was reset to default because {reason}.",
-            })
+
+            send(
+                "prompt_reset",
+                {
+                    "type_key": type_key,
+                    "label": label,
+                    "reason": reason,
+                    "message": f"{label} prompt was reset to default because {reason}.",
+                },
+            )
         except Exception:
             pass

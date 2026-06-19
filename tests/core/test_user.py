@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 def db_session():
     from db.database import Base
     import core.user  # noqa: F401
+
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -32,13 +33,30 @@ SAMPLE_DATA = {
     "location": "Remote",
     "skills": ["Python", "SQL"],
     "work_history": [
-        {"company": "Acme", "title": "SWE", "start": "2022-01", "end": "Present", "summary": "Built things."}
+        {
+            "company": "Acme",
+            "title": "SWE",
+            "start": "2022-01",
+            "end": "Present",
+            "summary": "Built things.",
+        }
     ],
     "education": [
-        {"institution": "Columbia", "degree": "B.S.", "field": "EE", "graduated": "2018", "gpa": 3.5}
+        {
+            "institution": "Columbia",
+            "degree": "B.S.",
+            "field": "EE",
+            "graduated": "2018",
+            "gpa": 3.5,
+        }
     ],
     "projects": [
-        {"name": "auto_apply", "description": "Job pipeline", "url": "https://github.com/x", "technologies": ["Python"]}
+        {
+            "name": "auto_apply",
+            "description": "Job pipeline",
+            "url": "https://github.com/x",
+            "technologies": ["Python"],
+        }
     ],
     "target_salary_min": 120000,
     "target_salary_max": 160000,
@@ -53,6 +71,7 @@ SAMPLE_DATA = {
 
 def test_user_load_hydrates_fields(db_session):
     from core.user import User
+
     db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
     db_session.commit()
 
@@ -67,6 +86,7 @@ def test_user_load_hydrates_fields(db_session):
 
 def test_user_load_raises_when_no_profile(db_session):
     from core.user import User
+
     with pytest.raises(RuntimeError, match="No user profile found"):
         User.load(db_session)
 
@@ -74,12 +94,30 @@ def test_user_load_raises_when_no_profile(db_session):
 def test_render_work_history_indexed():
     import json
     from core.user import User
-    u = User(name="X", data=json.dumps({
-        "work_history": [
-            {"company": "Acme", "title": "Eng", "start": "2020", "end": "2024", "summary": "s1"},
-            {"company": "Beta", "title": "Dev", "start": "2018", "end": "2020", "summary": "s2"},
-        ],
-    }))
+
+    u = User(
+        name="X",
+        data=json.dumps(
+            {
+                "work_history": [
+                    {
+                        "company": "Acme",
+                        "title": "Eng",
+                        "start": "2020",
+                        "end": "2024",
+                        "summary": "s1",
+                    },
+                    {
+                        "company": "Beta",
+                        "title": "Dev",
+                        "start": "2018",
+                        "end": "2020",
+                        "summary": "s2",
+                    },
+                ],
+            }
+        ),
+    )
     u._hydrate()
     out = u.render_work_history_indexed()
     assert "[0]" in out and "Acme" in out
@@ -90,12 +128,23 @@ def test_render_work_history_indexed():
 def test_render_projects_indexed():
     import json
     from core.user import User
-    u = User(name="X", data=json.dumps({
-        "projects": [
-            {"name": "P0", "description": "d0", "url": "u0", "technologies": ["Py"]},
-            {"name": "P1", "description": "d1", "url": "", "technologies": []},
-        ],
-    }))
+
+    u = User(
+        name="X",
+        data=json.dumps(
+            {
+                "projects": [
+                    {
+                        "name": "P0",
+                        "description": "d0",
+                        "url": "u0",
+                        "technologies": ["Py"],
+                    },
+                    {"name": "P1", "description": "d1", "url": "", "technologies": []},
+                ],
+            }
+        ),
+    )
     u._hydrate()
     out = u.render_projects_indexed()
     assert "[0]" in out and "P0" in out
@@ -105,6 +154,7 @@ def test_render_projects_indexed():
 def test_render_indexed_empty():
     import json
     from core.user import User
+
     u = User(name="X", data=json.dumps({}))
     u._hydrate()
     assert u.render_work_history_indexed() == ""
@@ -113,6 +163,7 @@ def test_render_indexed_empty():
 
 def test_user_save_persists_changes(db_session):
     from core.user import User
+
     db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
     db_session.commit()
 
@@ -126,6 +177,7 @@ def test_user_save_persists_changes(db_session):
 
 def test_user_full_name_uses_name_column(db_session):
     from core.user import User
+
     db_session.add(User(name="Matt Barlow", data=json.dumps(SAMPLE_DATA)))
     db_session.commit()
     user = User.load(db_session)
@@ -134,6 +186,7 @@ def test_user_full_name_uses_name_column(db_session):
 
 def test_user_full_name_falls_back_to_first_last(db_session):
     from core.user import User
+
     data = {**SAMPLE_DATA, "first_name": "Matt", "last_name": "Barlow"}
     db_session.add(User(name="", data=json.dumps(data)))
     db_session.commit()
@@ -147,27 +200,49 @@ def test_user_from_markdown_returns_profile_dict(db_session):
     from db.seed import PROMPT_TYPE_KEYS
     import unittest.mock as mock
 
-    u = User(name="Matt", data=json.dumps({
-        **SAMPLE_DATA,
-    }))
+    u = User(
+        name="Matt",
+        data=json.dumps(
+            {
+                **SAMPLE_DATA,
+            }
+        ),
+    )
     db_session.add(u)
     db_session.commit()
     for tk in PROMPT_TYPE_KEYS:
         db_session.add(PromptDefault(type_key=tk, content="default " * 20))
-    db_session.add(Prompt(
-        profile_id=u.id, type_key="resume_parse",
-        content="Parse this resume carefully and extract all structured information.", model="", updated_at="t",
-    ))
+    db_session.add(
+        Prompt(
+            profile_id=u.id,
+            type_key="resume_parse",
+            content="Parse this resume carefully and extract all structured information.",
+            model="",
+            updated_at="t",
+        )
+    )
     db_session.commit()
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = json.dumps({
-        "name": "Matt Barlow", "email": "matt@x.com", "phone": "", "location": "",
-        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
-        "target_roles": [],
-    })
+    mock_client.chat.completions.create.return_value.choices[0].message.content = (
+        json.dumps(
+            {
+                "name": "Matt Barlow",
+                "email": "matt@x.com",
+                "phone": "",
+                "location": "",
+                "skills": ["Python"],
+                "work_history": [],
+                "education": [],
+                "projects": [],
+                "target_roles": [],
+            }
+        )
+    )
 
-    with mock.patch("core.llm.get_client_for_profile", return_value=(mock_client, "gpt-4o")):
+    with mock.patch(
+        "core.llm.get_client_for_profile", return_value=(mock_client, "gpt-4o")
+    ):
         result = User.from_markdown("resume text here", db_session)
 
     assert result["email"] == "matt@x.com"
@@ -176,6 +251,7 @@ def test_user_from_markdown_returns_profile_dict(db_session):
 
 def test_user_render_for_prompt_contains_skills(db_session):
     from core.user import User
+
     db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
     db_session.commit()
     user = User.load(db_session)
@@ -187,6 +263,7 @@ def test_user_render_for_prompt_contains_skills(db_session):
 
 def test_user_master_resume_falls_back_to_render(db_session):
     from core.user import User
+
     db_session.add(User(name="Matt", data=json.dumps({**SAMPLE_DATA, "md_path": ""})))
     db_session.commit()
     user = User.load(db_session)
@@ -196,6 +273,7 @@ def test_user_master_resume_falls_back_to_render(db_session):
 
 def test_user_hydrates_new_fields_from_data(db_session):
     from core.user import User
+
     data = {
         **SAMPLE_DATA,
         "website": "https://example.com",
@@ -213,6 +291,7 @@ def test_user_hydrates_new_fields_from_data(db_session):
 
 def test_user_hydrates_new_fields_default_to_empty(db_session):
     from core.user import User
+
     db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
     db_session.commit()
     user = User.load(db_session)
@@ -226,6 +305,7 @@ def test_user_hydrates_new_fields_default_to_empty(db_session):
 
 def test_user_to_dict_includes_new_fields(db_session):
     from core.user import User
+
     data = {**SAMPLE_DATA, "website": "https://portfolio.dev"}
     db_session.add(User(name="Matt", data=json.dumps(data)))
     db_session.commit()
@@ -242,17 +322,22 @@ def test_user_prompt_resume_parse_round_trips(db_session):
     from db.database import Prompt, PromptDefault
     from db.seed import PROMPT_TYPE_KEYS
     import json as _json
+
     # Prompts live in DB now — seed a Prompt row directly.
     u = User(name="Matt", data=_json.dumps(SAMPLE_DATA))
     db_session.add(u)
     db_session.commit()
     for tk in PROMPT_TYPE_KEYS:
         db_session.add(PromptDefault(type_key=tk, content="default " * 20))
-    db_session.add(Prompt(
-        profile_id=u.id, type_key="resume_parse",
-        content="Custom parse prompt: {user.first_name} " * 5,
-        model="", updated_at="t",
-    ))
+    db_session.add(
+        Prompt(
+            profile_id=u.id,
+            type_key="resume_parse",
+            content="Custom parse prompt: {user.first_name} " * 5,
+            model="",
+            updated_at="t",
+        )
+    )
     db_session.commit()
     user = User.load(db_session)
     assert user.resolve_prompt("resume_parse").startswith("Custom parse prompt:")
@@ -271,19 +356,33 @@ def test_from_markdown_uses_custom_system_prompt(db_session):
     db_session.commit()
     for tk in PROMPT_TYPE_KEYS:
         db_session.add(PromptDefault(type_key=tk, content="default " * 20))
-    db_session.add(Prompt(
-        profile_id=u.id, type_key="resume_parse",
-        content="You parse resumes for {user.first_name} and extract every detail with great care and precision.",
-        model="", updated_at="t",
-    ))
+    db_session.add(
+        Prompt(
+            profile_id=u.id,
+            type_key="resume_parse",
+            content="You parse resumes for {user.first_name} and extract every detail with great care and precision.",
+            model="",
+            updated_at="t",
+        )
+    )
     db_session.commit()
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = _json.dumps({
-        "name": "Ada L", "email": "ada@x.com", "phone": "", "location": "",
-        "skills": ["Python"], "work_history": [], "education": [], "projects": [],
-        "target_roles": [],
-    })
+    mock_client.chat.completions.create.return_value.choices[0].message.content = (
+        _json.dumps(
+            {
+                "name": "Ada L",
+                "email": "ada@x.com",
+                "phone": "",
+                "location": "",
+                "skills": ["Python"],
+                "work_history": [],
+                "education": [],
+                "projects": [],
+                "target_roles": [],
+            }
+        )
+    )
 
     captured = {}
     configured_return = mock_client.chat.completions.create.return_value
@@ -294,19 +393,26 @@ def test_from_markdown_uses_custom_system_prompt(db_session):
 
     mock_client.chat.completions.create.side_effect = capture_create
 
-    with mock.patch("core.llm.get_client_for_profile", return_value=(mock_client, "gpt-4o")):
+    with mock.patch(
+        "core.llm.get_client_for_profile", return_value=(mock_client, "gpt-4o")
+    ):
         User.from_markdown("resume text here", db_session)
 
     system_msg = next(m for m in captured["messages"] if m["role"] == "system")
-    assert "You parse resumes for Matt and extract every detail with great care and precision." == system_msg["content"]
+    assert (
+        "You parse resumes for Matt and extract every detail with great care and precision."
+        == system_msg["content"]
+    )
 
 
 # ── resolve_prompt validation / auto-reset (DB-based) ───────────────────────
+
 
 def _make_user_with_scoring(db_session, scoring_content, monkeypatch):
     from core.user import User
     from db.database import Config, Prompt, PromptDefault
     from db.seed import PROMPT_TYPE_KEYS
+
     sent = []
     monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
     u = User(name="Matt", data=json.dumps(SAMPLE_DATA))
@@ -314,8 +420,18 @@ def _make_user_with_scoring(db_session, scoring_content, monkeypatch):
     db_session.commit()
     db_session.add(Config(key="active_profile_id", value=str(u.id)))
     for tk in PROMPT_TYPE_KEYS:
-        db_session.add(PromptDefault(type_key=tk, content="default scoring prompt word " * 5))
-    db_session.add(Prompt(profile_id=u.id, type_key="scoring", content=scoring_content, model="", updated_at="t"))
+        db_session.add(
+            PromptDefault(type_key=tk, content="default scoring prompt word " * 5)
+        )
+    db_session.add(
+        Prompt(
+            profile_id=u.id,
+            type_key="scoring",
+            content=scoring_content,
+            model="",
+            updated_at="t",
+        )
+    )
     db_session.commit()
     return User.load(db_session), sent
 
@@ -340,6 +456,7 @@ def test_resolve_prompt_resets_when_missing(db_session, monkeypatch):
     from core.user import User
     from db.database import Config, PromptDefault
     from db.seed import PROMPT_TYPE_KEYS
+
     sent = []
     monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
     u = User(name="Matt", data=json.dumps(SAMPLE_DATA))
@@ -347,7 +464,9 @@ def test_resolve_prompt_resets_when_missing(db_session, monkeypatch):
     db_session.commit()
     db_session.add(Config(key="active_profile_id", value=str(u.id)))
     for tk in PROMPT_TYPE_KEYS:
-        db_session.add(PromptDefault(type_key=tk, content="default scoring prompt word " * 5))
+        db_session.add(
+            PromptDefault(type_key=tk, content="default scoring prompt word " * 5)
+        )
     db_session.commit()
     user = User.load(db_session)
     result = user.resolve_prompt("scoring")
@@ -358,23 +477,34 @@ def test_resolve_prompt_resets_when_missing(db_session, monkeypatch):
 
 # ── DB-based resolve_prompt (Task 4) ────────────────────────────────────────
 
+
 def _make_profile_with_prompts(db, *, content="word " * 20, model=""):
     from core.user import User
     from db.database import Config, Prompt, PromptDefault
     from db.seed import PROMPT_TYPE_KEYS
+
     u = User(name="P", data=json.dumps(SAMPLE_DATA))
     db.add(u)
     db.commit()
     db.add(Config(key="active_profile_id", value=str(u.id)))
     for tk in PROMPT_TYPE_KEYS:
         db.add(PromptDefault(type_key=tk, content="default " * 20))
-        db.add(Prompt(profile_id=u.id, type_key=tk, content=content, model=model, updated_at="t"))
+        db.add(
+            Prompt(
+                profile_id=u.id,
+                type_key=tk,
+                content=content,
+                model=model,
+                updated_at="t",
+            )
+        )
     db.commit()
     return u
 
 
 def test_resolve_prompt_returns_db_content(db_session):
     from core.user import User
+
     _make_profile_with_prompts(db_session, content="custom scoring " * 10)
     user = User.load(db_session)
     assert user.resolve_prompt("scoring").startswith("custom scoring")
@@ -383,20 +513,26 @@ def test_resolve_prompt_returns_db_content(db_session):
 def test_resolve_prompt_autoresets_when_too_short(db_session):
     from core.user import User
     from db.database import Prompt
+
     u = _make_profile_with_prompts(db_session)
-    row = db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").first()
+    row = (
+        db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").first()
+    )
     row.content = "too short"
     db_session.commit()
     user = User.load(db_session)
     result = user.resolve_prompt("scoring")
     assert result.startswith("default")
-    repaired = db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").first()
+    repaired = (
+        db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").first()
+    )
     assert repaired.content.startswith("default")
 
 
 def test_resolve_prompt_raises_without_default(db_session):
     from core.user import User, PromptNotConfiguredError
     from db.database import Prompt, PromptDefault
+
     u = _make_profile_with_prompts(db_session)
     db_session.query(Prompt).filter_by(profile_id=u.id, type_key="scoring").delete()
     db_session.query(PromptDefault).filter_by(type_key="scoring").delete()
@@ -408,6 +544,98 @@ def test_resolve_prompt_raises_without_default(db_session):
 
 def test_hydrate_populates_model_from_rows(db_session):
     from core.user import User
+
     _make_profile_with_prompts(db_session, model="gpt-x")
     user = User.load(db_session)
     assert user.prompt_scoring_model == "gpt-x"
+
+
+def test_load_migrates_legacy_profile_to_tree(db_session):
+    from core.user import User
+
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    user = User.load(db_session)
+    assert getattr(user, "profile_tree", None) is not None
+    assert [s.role for s in user.profile_tree.children][0] == "header"
+    # Derived legacy attrs survive the round-trip.
+    assert user.email == "matt@example.com"
+    assert user.skills == ["Python", "SQL"]
+    assert user.work_history[0].company == "Acme"
+    # Migration persisted the tree.
+    stored = json.loads(db_session.query(User).first().data)
+    assert "profile_tree" in stored
+
+
+def test_edit_then_reload_reflects_change_when_tree_rebuilt(db_session):
+    import json as _json
+    from core.profile_tree import with_rebuilt_tree
+    from core.user import User
+
+    db_session.add(User(name="Matt", data=_json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+    User.load(db_session)  # migrates: persists a profile_tree
+
+    # Simulate the edit endpoint: change a flat field, rebuild the tree, store.
+    row = db_session.query(User).first()
+    stored = _json.loads(row.data)
+    assert "profile_tree" in stored  # stale tree is present
+    stored["email"] = "edited@x.com"
+    row.data = _json.dumps(with_rebuilt_tree(stored))
+    db_session.commit()
+
+    reloaded = User.load(db_session)
+    assert reloaded.email == "edited@x.com"
+
+
+def test_migration_is_idempotent(db_session):
+    from core.user import User
+
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    User.load(db_session)
+    data_after_first = db_session.query(User).first().data
+    User.load(db_session)
+    data_after_second = db_session.query(User).first().data
+    assert data_after_first == data_after_second
+
+    # Migration must not re-trigger on an already-migrated profile: _hydrate()
+    # returns True only when it performed a legacy→tree migration, False otherwise.
+    row = db_session.query(User).first()
+    assert (
+        row._hydrate() is False
+    ), "_hydrate() must return False on an already-migrated profile (no spurious re-save)"
+
+
+def test_skills_mutation_survives_save_reload(db_session):
+    from core.user import User
+
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    u = User.load(db_session)
+    u.skills = ["Rust", "Go"]
+    u.save(db_session)
+
+    reloaded = User.load(db_session)
+    assert reloaded.skills == ["Rust", "Go"]
+
+
+def test_work_history_mutation_survives_save_reload(db_session):
+    from core.user import User, WorkHistoryEntry
+
+    db_session.add(User(name="Matt", data=json.dumps(SAMPLE_DATA)))
+    db_session.commit()
+
+    u = User.load(db_session)
+    u.work_history.append(
+        WorkHistoryEntry(
+            company="NewCo", title="Lead", start="2024", end="Now", summary="Led."
+        )
+    )
+    u.save(db_session)
+
+    reloaded = User.load(db_session)
+    assert "NewCo" in [w.company for w in reloaded.work_history]
