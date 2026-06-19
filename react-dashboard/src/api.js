@@ -66,6 +66,16 @@ export const updateProfile = (id, body) =>
     body: JSON.stringify(body),
   })
 
+export const getProfileTree = (id) =>
+  _fetch(`/api/config/profiles/${id}/tree`)
+
+export const putProfileTree = (id, tree) =>
+  _fetch(`/api/config/profiles/${id}/tree`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tree }),
+  })
+
 export const deleteProfile = (id) =>
   _fetch(`/api/config/profiles/${id}`, { method: 'DELETE' })
 
