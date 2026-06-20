@@ -1266,7 +1266,7 @@ function CreateProfile({ onBack, onCreated }) {
 const TABS = ['User', 'Preview']
 
 export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {}, jobActionsInFlight = new Set(), onJobDeleted, onSkillFilter, activeSkill }) {
-  const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
+  const [view, setView] = useState('main') // 'main' | 'createProfile' (profile editor opens as a modal)
   const [detailProfileId, setDetailProfileId] = useState(null)
 
   // Wizard "Manual Entry → Try it out" opens the active profile's editor directly.
@@ -1277,7 +1277,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
           const id = active_id ?? profiles?.[0]?.id
           if (id == null) return
           setDetailProfileId(id)
-          setView('profileDetail')
+          setView('main') // editor now opens as a modal over the main view
         })
         .catch(() => {})
     }
