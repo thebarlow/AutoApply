@@ -1,16 +1,19 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { FieldWidget } from './fieldWidgets'
+import * as api from '../../../api'
 
 vi.mock('../../../api', () => ({
   getSkillAliases: vi.fn(async () => ({
     groups: [{ canonical: 'Python', members: ['python', 'py'] }],
   })),
-  assignSkillAlias: vi.fn(async (skill) => ({
-    canonical: 'Python', members: ['python', 'py', skill.toLowerCase()],
+  assignSkillAlias: vi.fn(async (skill, canonical) => ({
+    canonical, members: ['python', 'py', skill.toLowerCase()],
   })),
   removeSkillAliasMember: vi.fn(async () => {}),
 }))
+
+beforeEach(() => { vi.clearAllMocks() })
 
 const field = (over) => ({
   type: 'field', id: 'f', name: 'X', key: 'x', kind: 'text', value: '',
@@ -90,6 +93,42 @@ describe('FieldWidget', () => {
     // rename the chip
     fireEvent.change(screen.getByDisplayValue('Python'), { target: { value: 'Python 3' } })
     fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(['Python 3']))
+  })
+
+  it('taglist modal: renaming the canonical migrates the whole alias group', async () => {
+    const onChange = vi.fn()
+    render(<FieldWidget field={field({ kind: 'taglist', value: ['Python'] })} onChange={onChange} />)
+    fireEvent.click(screen.getByText('Python'))
+    expect(await screen.findByText('py')).toBeInTheDocument()
+    fireEvent.change(screen.getByDisplayValue('Python'), { target: { value: 'Python 3' } })
+    fireEvent.click(screen.getByText('Save'))
+    // canonical 'Python' + member 'py' both re-assigned to the new canonical
+    await waitFor(() => {
+      expect(api.assignSkillAlias).toHaveBeenCalledWith('Python', 'Python 3')
+      expect(api.assignSkillAlias).toHaveBeenCalledWith('py', 'Python 3')
+    })
     expect(onChange).toHaveBeenLastCalledWith(['Python 3'])
+  })
+
+  it('taglist modal: clicking an alias swaps focus so it can be renamed', async () => {
+    const onChange = vi.fn()
+    render(<FieldWidget field={field({ kind: 'taglist', value: ['Python'] })} onChange={onChange} />)
+    fireEvent.click(screen.getByText('Python'))
+    // Name field starts on the canonical
+    expect(screen.getByDisplayValue('Python')).toBeInTheDocument()
+    // click the alias to focus it
+    fireEvent.click(await screen.findByText('py'))
+    expect(screen.getByDisplayValue('py')).toBeInTheDocument()
+    expect(screen.getByText(/Renaming alias of/)).toBeInTheDocument()
+    // rename the alias in place: remove old + assign new under same canonical
+    fireEvent.change(screen.getByDisplayValue('py'), { target: { value: 'py3' } })
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => {
+      expect(api.removeSkillAliasMember).toHaveBeenCalledWith('py')
+      expect(api.assignSkillAlias).toHaveBeenCalledWith('py3', 'Python')
+    })
+    // renaming an alias does NOT touch the field-value chip
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

@@ -102,21 +102,30 @@ export function TagListField({ value, onChange }) {
   )
 }
 
-// Modal opened by clicking a tag chip: rename the tag (edits the field value)
-// and manage its alias group via the skills alias backend. Closing the ✕ on a
-// chip still deletes it (handled in TagListField); this modal never deletes.
+// Modal opened by clicking a tag chip: rename the focused term and manage the
+// chip's alias group via the skills alias backend. The ✕ on a chip still
+// deletes it (handled in TagListField); this modal never deletes the chip.
+//
+// `subject` is the term the Name field edits; `canonical` is the alias group's
+// anchor (initially the chip itself). Clicking an alias swaps `subject` to it so
+// it can be renamed in place. Renaming the canonical migrates the whole group to
+// the new name and updates the field-value chip via `onRename`.
 export function TagChipModal({ tag, onRename, onClose }) {
+  const [canonical, setCanonical] = useState(tag)
+  const [subject, setSubject] = useState(tag)
   const [name, setName] = useState(tag)
   const [members, setMembers] = useState(null)
   const [aliasDraft, setAliasDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  const loadMembers = useCallback(async (canonical) => {
+  const isCanonical = subject.toLowerCase() === canonical.toLowerCase()
+
+  const loadMembers = useCallback(async (anchor) => {
     try {
       const { groups } = await getSkillAliases()
       const g = (groups || []).find(
-        (x) => x.canonical.toLowerCase() === canonical.toLowerCase(),
+        (x) => x.canonical.toLowerCase() === anchor.toLowerCase(),
       )
       setMembers(g ? g.members.filter((m) => m !== g.canonical.toLowerCase()) : [])
     } catch {
@@ -125,15 +134,21 @@ export function TagChipModal({ tag, onRename, onClose }) {
     }
   }, [])
 
-  useEffect(() => { loadMembers(tag) }, [tag, loadMembers])
+  useEffect(() => { loadMembers(canonical) }, [canonical, loadMembers])
+
+  // Switch the Name field to edit an alias member (so the user can rename it).
+  const focusAlias = (member) => {
+    setSubject(member)
+    setName(member)
+  }
 
   const addAlias = async () => {
     const a = aliasDraft.trim()
     if (!a) return
     setBusy(true); setError(null)
     try {
-      const { canonical, members: m } = await assignSkillAlias(a, tag)
-      setMembers((m || []).filter((x) => x !== canonical.toLowerCase()))
+      const { canonical: c, members: m } = await assignSkillAlias(a, canonical)
+      setMembers((m || []).filter((x) => x !== c.toLowerCase()))
       setAliasDraft('')
     } catch {
       setError('Could not add alias')
@@ -144,16 +159,38 @@ export function TagChipModal({ tag, onRename, onClose }) {
     setBusy(true); setError(null)
     try {
       await removeSkillAliasMember(member)
-      await loadMembers(tag)
+      if (subject.toLowerCase() === member.toLowerCase()) {
+        setSubject(canonical); setName(canonical)
+      }
+      await loadMembers(canonical)
     } catch {
       setError('Could not remove alias')
     } finally { setBusy(false) }
   }
 
-  const saveName = () => {
+  const saveName = async () => {
     const t = name.trim()
-    if (t && t !== tag) onRename(t)
-    onClose()
+    if (!t || t === subject) return
+    setBusy(true); setError(null)
+    try {
+      if (isCanonical) {
+        // Re-key the whole group (canonical + every member) to the new name,
+        // then rename the field-value chip.
+        for (const token of [canonical, ...(members || [])]) {
+          await assignSkillAlias(token, t)
+        }
+        onRename(t)
+        setCanonical(t); setSubject(t)
+      } else {
+        // Rename a single alias member in place.
+        await removeSkillAliasMember(subject)
+        await assignSkillAlias(t, canonical)
+        setSubject(t)
+        await loadMembers(canonical)
+      }
+    } catch {
+      setError('Could not rename')
+    } finally { setBusy(false) }
   }
 
   return (
@@ -173,7 +210,9 @@ export function TagChipModal({ tag, onRename, onClose }) {
           >×</button>
         </div>
 
-        <label className="text-xs text-space-dim">Name</label>
+        <label className="text-xs text-space-dim">
+          {isCanonical ? 'Name' : `Renaming alias of “${canonical}”`}
+        </label>
         <div className="flex gap-2 mt-1 mb-4">
           <input
             type="text" className={inputClass} value={name}
@@ -181,8 +220,8 @@ export function TagChipModal({ tag, onRename, onClose }) {
             onKeyDown={(e) => { if (e.key === 'Enter') saveName() }}
           />
           <button
-            type="button" onClick={saveName}
-            className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors"
+            type="button" onClick={saveName} disabled={busy}
+            className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
           >Save</button>
         </div>
 
@@ -195,9 +234,17 @@ export function TagChipModal({ tag, onRename, onClose }) {
           {(members || []).map((m) => (
             <span
               key={m}
-              className="inline-flex items-center gap-1 bg-white/5 text-space-text text-xs rounded-full px-2 py-0.5"
+              className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${
+                subject.toLowerCase() === m.toLowerCase()
+                  ? 'bg-purple-500/25 text-purple-100'
+                  : 'bg-white/5 text-space-text'
+              }`}
             >
-              {m}
+              <button
+                type="button" title="Rename this alias"
+                className="hover:text-purple-200 transition-colors"
+                onClick={() => focusAlias(m)}
+              >{m}</button>
               <button
                 type="button" aria-label={`Remove alias ${m}`} disabled={busy}
                 className="hover:text-red-300 px-0.5 disabled:opacity-50"
