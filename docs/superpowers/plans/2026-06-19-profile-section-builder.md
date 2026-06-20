@@ -10,20 +10,45 @@
 
 ## Roadmap Context (read first — this plan starts a fresh session)
 
-This is **sub-project 2C** of the "user-defined resume sections" initiative.
-Spec: `docs/superpowers/specs/2026-06-19-profile-section-builder-design.md`.
-2A (tree API) and 2B (tree-driven editor) are DONE and merged to local `main`.
-2C adds the drag-drop builder + gallery that 2B deliberately deferred. After 2C
-come #3 (schema-driven LLM generation), #4 (schema-driven rendering — until it
-ships custom sections do NOT appear on generated documents), #5 (onboarding
-parse).
+This is **sub-project 2C** of the "user-defined resume sections" initiative:
+replace the hardcoded 5-section résumé model with a user-definable schema tree.
+The full roadmap + cold-start facts live in the auto-memory
+`project-profile-schema-engine` (load it first) and in `core/CONTEXT.md` →
+"Profile Schema Engine". The recursive tree (`root → section → list/group →
+field`) is the profile source of truth in `core/profile_tree.py`.
 
-**RELEASE CONSTRAINT:** do NOT push `main` until the whole initiative (through
+**Sub-project sequence (each gets its own spec → plan → impl → merge-to-local-`main` cycle):**
+1. **Schema engine** — DONE, merged to local `main`.
+2. **Builder UI** — phased:
+   - **2A** (write-path + tree `GET`/`PUT /api/config/profiles/{id}/tree`) — DONE, merged.
+   - **2B** (tree-driven profile editor) — DONE, merged. Generic editor in
+     `react-dashboard/src/components/widgets/profile-tree/`; sections collapse by
+     default; `↑`/`↓` reorder buttons; tag-chip alias modal. First frontend test
+     suite (Vitest + RTL, `npm run test` from `react-dashboard/`).
+   - **2C** (THIS PLAN) — drag-drop reorder (sections + list items) + recommended-
+     section gallery, on the 2B editor. Spec:
+     `docs/superpowers/specs/2026-06-19-profile-section-builder-design.md`.
+3. **Schema-driven LLM generation** against custom sections (next after 2C).
+4. **Schema-driven rendering** of custom sections on documents. **Until #4 ships,
+   custom sections are storable/editable but do NOT appear on generated
+   résumés/cover letters.**
+5. **Onboarding parse** that maps novel sections.
+
+**RELEASE CONSTRAINT:** do NOT push `main` until the ENTIRE initiative (through
 #5) is complete. Each sub-project merges to LOCAL `main` only.
 
 **Before starting 2C:** create a feature branch off `main`
 (`git checkout -b feat/profile-section-builder`). On completion, use
 `superpowers:finishing-a-development-branch` → merge to local `main` (no push).
+
+**After 2C lands (do this before context-clearing for #3):**
+1. Update the `project-profile-schema-engine` auto-memory: mark 2C DONE (with its
+   commit range), set CURRENT STATE to "2C done, NEXT: brainstorm→spec→plan→impl
+   #3 (schema-driven LLM generation)".
+2. Then continue the roadmap in order: **#3 → #4 → #5**, each via
+   brainstorm (superpowers:brainstorming) → spec → writing-plans → subagent-driven
+   -development, all on a fresh feature branch off `main`, merged to local `main`
+   only. Do not push until #5 is done.
 
 ## Global Constraints
 
