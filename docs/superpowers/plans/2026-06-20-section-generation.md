@@ -20,6 +20,22 @@ This is **sub-project #3** of the "user-defined resume sections" initiative (rep
 
 **After this lands (before context-clearing for #4):** update the `project-profile-schema-engine` auto-memory: mark #3 DONE (with commit range), set CURRENT STATE to "#3 done, comparison harness live; NEXT: user picks Model1/Model2 winner, then brainstorm→spec→plan→impl #4 (schema-driven rendering)".
 
+### Cold-start facts (a fresh session needs these; verify before relying on them)
+
+- **Where you are in git:** sub-projects #1, #2A/2B/2C are merged to **local `main`** (latest 2C work + follow-ups: entry-collapse, drag activation distance, dev-OAuth proxy fix). `main` is **ahead of `origin/main` and intentionally NOT pushed** — do not push. Start this work on a new branch `feat/section-generation` off `main`.
+- **Read first:** root `CLAUDE.md` (routing table + SaaS/multi-tenancy context), `core/CONTEXT.md` (→ "Profile Schema Engine" and "Structured Résumé / Cover Generation"), `web/CONTEXT.md` (route surface + Auth), and `react-dashboard/CONTEXT.md` (per-file routing, profile-tree rows). Read a target dir's `CONTEXT.md` before editing it.
+- **The tree is already hydrated on `User`:** `User.load(db, profile_id)` sets `self.profile_tree` as a validated `RootNode` (legacy profiles migrated on load). So `User.profile_tree_root()` in Task 3 just returns `self.profile_tree`; the section generator walks that, NOT the legacy-flattened attrs.
+- **Field attrs already persist with no backend change:** `FieldNode` carries `llm_input`/`llm_output`/`llm_instructions`/`regen_lock` (`core/profile_tree.py`); the whole-tree `PUT /api/config/profiles/{id}/tree` validates and stores them, and the frontend `makeField` already seeds their defaults. Tasks 1–2 only surface controls that mutate them.
+- **LLM stubbing in tests:** `core.job` exposes module-level `call_llm`; `_llm_json_with_retry` calls it. Tests `monkeypatch.setattr(jobmod, "call_llm", stub)` (see `tests/core/test_llm_json_retry.py`). The section generator reuses `core.job._llm_json_with_retry`, so its tests monkeypatch `core.job.call_llm` — that is why the Task 3 tests patch `jobmod`.
+- **Prompt keys:** résumé prompt = `user.resolve_prompt("resume")`, eval prompt = `user.resolve_prompt("resume_eval")`. Client/model = `get_client_for_profile(user, user.prompt_resume_model)`.
+- **Admin gate:** `require_admin` lives in `web/routers/credits.py` (raises 403 if the active account isn't admin). The dev endpoint depends on it. The Admin React page (`AdminPage.jsx`) gates on `me.is_admin` and uses a `FUNCTIONS` switcher — add the compare view as a new function entry, not a new route.
+- **Docs are git-ignored but tracked by force:** `docs/superpowers/*` is in `.gitignore`; specs/plans are committed with `git add -f` (this plan and the 2C spec/plan were added that way). The plan/spec files for #3 are already committed (`0b9c72a` spec, `102d328` plan).
+- **Frontend deps already present:** `react-markdown` and `react-router-dom` are in `react-dashboard/package.json` — no install needed for the compare page.
+
+### Manual verification after merge (jsdom/pytest can't cover this)
+
+The automated tests stub the LLM, so Model 2 is never exercised end-to-end against a real model. After merge, to actually compare outputs: (1) on a test profile, open the tree editor and set some fields to **LLM-written** (and optionally add a custom section from the 2C gallery with an outputable field); save. (2) As an **admin** account, open Admin → **Résumé Compare**, enter a real `job_key` that has an extracted description, and Compare. (3) Eyeball the two columns + eval scores. This is the whole point of the sub-project — the user decides Model 1 vs Model 2 from real output. Note it costs real LLM tokens (unmetered) and needs an admin account + a job with a description.
+
 ## Global Constraints
 
 - **RELEASE CONSTRAINT:** do NOT push `main` until the ENTIRE initiative (through #5) is complete. Each sub-project merges to LOCAL `main` only.
