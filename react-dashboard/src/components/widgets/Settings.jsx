@@ -20,6 +20,29 @@ function BackArrow() {
   )
 }
 
+// Copies the job's stable key to the clipboard (e.g. for the Admin résumé
+// comparison tool, which takes a job_key the UI otherwise doesn't surface).
+function CopyKeyButton({ jobKey }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(jobKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* clipboard unavailable (e.g. insecure context) — ignore */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={`Copy job key: ${jobKey}`}
+      className="text-xs text-space-dim hover:text-purple-400 border border-space-border rounded px-1.5 py-0.5 transition-colors"
+    >{copied ? 'Copied!' : 'Copy key'}</button>
+  )
+}
+
 function FlagButton({ flagged, onClick }) {
   return (
     <button
@@ -689,6 +712,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
                 <option key={s} value={s} className="bg-[#0f0f1a]">{STATE_LABELS[s]}</option>
               ))}
             </select>
+            <CopyKeyButton jobKey={job.job_key} />
           </div>
         </div>
         <div className="flex flex-col gap-1 shrink-0">
