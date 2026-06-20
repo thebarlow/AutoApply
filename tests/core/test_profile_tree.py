@@ -366,13 +366,13 @@ def test_integer_gpa_round_trips():
 
 
 def _tree_with_custom_and_lock():
-    """A migrated tree plus a custom section and a regen-locked experience item."""
+    """A migrated tree plus a custom section and a locked experience item."""
     from core.profile_tree import FieldNode, GroupNode, ListNode, SectionNode, legacy_to_tree
 
     tree = legacy_to_tree(LEGACY)  # header/summary/experience/education/projects/skills
-    # lock the first experience item
+    # lock the first experience item (GroupNode uses locked, not regen_lock)
     exp = next(s for s in tree.children if s.role == "experience")
-    exp.children[0].children[0].regen_lock = True
+    exp.children[0].children[0].locked = True
     # add a custom (role=None) section with a single text field
     tree.children.append(
         SectionNode(
@@ -431,9 +431,9 @@ def test_apply_flat_overlay_preserves_custom_section_and_lock():
     awards = next((s for s in tree.children if s.role is None and s.name == "Awards"), None)
     assert awards is not None
     assert awards.children[0].children[0].value == "Hackathon Winner"
-    # regen lock survived
+    # lock survived
     exp = _section_by_role(tree, "experience")
-    assert exp.children[0].children[0].regen_lock is True
+    assert exp.children[0].children[0].locked is True
 
 
 def test_apply_flat_overlay_education_gpa_coerced_to_str():
@@ -446,6 +446,48 @@ def test_apply_flat_overlay_education_gpa_coerced_to_str():
     item = _section_by_role(tree, "education").children[0].children[0]
     gpa = next(f.value for f in item.children if f.key == "gpa")
     assert gpa == "4.0" and isinstance(gpa, str)
+
+
+def test_section_and_group_have_lock_and_prompt_defaults():
+    from core.profile_tree import GroupNode, SectionNode
+
+    s = SectionNode(name="X")
+    assert s.locked is False and s.prompt == ""
+    g = GroupNode(name="G")
+    assert g.locked is False and g.prompt == ""
+
+
+def test_group_legacy_regen_lock_migrates_to_locked():
+    from core.profile_tree import GroupNode
+
+    g = GroupNode.model_validate({"type": "group", "name": "G", "regen_lock": True})
+    assert g.locked is True
+
+
+def test_group_explicit_locked_wins_over_legacy_regen_lock():
+    from core.profile_tree import GroupNode
+
+    g = GroupNode.model_validate(
+        {"type": "group", "name": "G", "regen_lock": True, "locked": False}
+    )
+    assert g.locked is False
+
+
+def test_tree_with_locks_and_prompts_validates():
+    from core.profile_tree import GroupNode, RootNode, SectionNode, validate_tree
+
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="S",
+                order=0,
+                locked=True,
+                prompt="Tailor S",
+                children=[GroupNode(name="G", locked=True, prompt="Tailor G")],
+            ),
+        ]
+    )
+    validate_tree(root)  # must not raise
 
 
 class _StubDB:

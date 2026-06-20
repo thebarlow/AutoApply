@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Callable
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _new_id() -> str:
@@ -61,8 +61,19 @@ class GroupNode(BaseModel):
     name: str = ""
     order: int = 0
     visible: bool = True
-    regen_lock: bool = False
+    locked: bool = False
+    prompt: str = ""
     children: list[FieldNode] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_regen_lock(cls, data):
+        """Legacy trees stored a group's pin as ``regen_lock``; fold it into the
+        new ``locked`` gate unless ``locked`` is already given explicitly.
+        """
+        if isinstance(data, dict) and "locked" not in data and data.get("regen_lock"):
+            data = {**data, "locked": True}
+        return data
 
 
 class ListNode(BaseModel):
@@ -90,6 +101,8 @@ class SectionNode(BaseModel):
     role: Optional[str] = None
     order: int = 0
     visible: bool = True
+    locked: bool = False
+    prompt: str = ""
     children: list[SectionChild] = Field(default_factory=list)
 
 
