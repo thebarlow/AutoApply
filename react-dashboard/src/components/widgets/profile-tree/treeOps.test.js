@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   PRESET_ROLES, isPresetSection, renumber, updateNode, removeNode,
   moveNode, makeField, addField, addListItem, addCustomSection,
+  cloneWithFreshIds, addSection, reorderSiblings,
 } from './treeOps'
 
 // Minimal tree: skills (preset, single field) + experience (preset list).
@@ -153,5 +154,96 @@ describe('addCustomSection', () => {
     expect(sec.children[0].type).toBe('group')
     expect(sec.children[0].children).toHaveLength(0)
     expect(tree.children.map(c => c.order)).toEqual([0, 1, 2])
+  })
+})
+
+describe('cloneWithFreshIds', () => {
+  it('deep-clones with fresh ids and preserves values + item_template', () => {
+    const node = {
+      type: 'list', id: 'l', name: 'L', order: 0, visible: true, bullet_style: 'none',
+      item_template: { type: 'group', id: 'tmpl', name: 'I', order: 0, visible: true,
+        regen_lock: false, children: [
+          { type: 'field', id: 'tf', name: 'A', key: 'a', order: 0, visible: true,
+            kind: 'text', value: '' }] },
+      children: [{ type: 'group', id: 'g0', name: 'I', order: 0, visible: true,
+        regen_lock: false, children: [
+          { type: 'field', id: 'f0', name: 'A', key: 'a', order: 0, visible: true,
+            kind: 'text', value: 'keep' }] }],
+    }
+    const clone = cloneWithFreshIds(node)
+    expect(clone.id).not.toBe('l')
+    expect(clone.item_template.id).not.toBe('tmpl')
+    expect(clone.children[0].id).not.toBe('g0')
+    expect(clone.children[0].children[0].id).not.toBe('f0')
+    expect(clone.children[0].children[0].value).toBe('keep') // values preserved
+  })
+})
+
+describe('addSection', () => {
+  it('appends a prebuilt section and renumbers root children', () => {
+    const tree = { type: 'root', id: 'r', children: [
+      { type: 'section', id: 's0', name: 'A', role: 'skills', order: 0, visible: true, children: [] },
+    ] }
+    const sec = { type: 'section', id: 's1', name: 'B', role: null, order: 99, visible: true, children: [] }
+    const next = addSection(tree, sec)
+    expect(next.children).toHaveLength(2)
+    expect(next.children[1].id).toBe('s1')
+    expect(next.children.map((c) => c.order)).toEqual([0, 1])
+  })
+})
+
+describe('addCustomSection (via addSection)', () => {
+  it('still appends a role:null section with one empty group', () => {
+    const tree = { type: 'root', id: 'r', children: [] }
+    const next = addCustomSection(tree, 'Awards')
+    expect(next.children).toHaveLength(1)
+    const sec = next.children[0]
+    expect(sec.role).toBeNull()
+    expect(sec.name).toBe('Awards')
+    expect(sec.children).toHaveLength(1)
+    expect(sec.children[0].type).toBe('group')
+    expect(sec.children[0].children).toHaveLength(0)
+    expect(sec.order).toBe(0)
+  })
+})
+
+describe('reorderSiblings', () => {
+  function tree() {
+    return { type: 'root', id: 'r', children: [
+      { type: 'section', id: 'a', name: 'A', role: null, order: 0, visible: true, children: [
+        { type: 'list', id: 'la', name: 'L', order: 0, visible: true, bullet_style: 'none',
+          item_template: { type: 'group', id: 't', name: 'I', order: 0, visible: true, regen_lock: false, children: [] },
+          children: [
+            { type: 'group', id: 'i0', name: 'I', order: 0, visible: true, regen_lock: false, children: [] },
+            { type: 'group', id: 'i1', name: 'I', order: 1, visible: true, regen_lock: false, children: [] },
+            { type: 'group', id: 'i2', name: 'I', order: 2, visible: true, regen_lock: false, children: [] },
+          ] }] },
+      { type: 'section', id: 'b', name: 'B', role: null, order: 1, visible: true, children: [] },
+      { type: 'section', id: 'c', name: 'C', role: null, order: 2, visible: true, children: [] },
+    ] }
+  }
+
+  it('reorders root sections and renumbers', () => {
+    const next = reorderSiblings(tree(), 'c', 'a') // move C to A's slot
+    expect(next.children.map((s) => s.id)).toEqual(['c', 'a', 'b'])
+    expect(next.children.map((s) => s.order)).toEqual([0, 1, 2])
+  })
+
+  it('reorders list items within their list', () => {
+    const next = reorderSiblings(tree(), 'i2', 'i0') // move last item to front
+    const list = next.children[0].children[0]
+    expect(list.children.map((c) => c.id)).toEqual(['i2', 'i0', 'i1'])
+    expect(list.children.map((c) => c.order)).toEqual([0, 1, 2])
+  })
+
+  it('is a no-op across containers (section id vs list-item id)', () => {
+    const t = tree()
+    expect(reorderSiblings(t, 'b', 'i0')).toBe(t)
+  })
+
+  it('is a no-op for unknown ids and for active === over', () => {
+    const t = tree()
+    expect(reorderSiblings(t, 'nope', 'a')).toBe(t)
+    expect(reorderSiblings(t, 'a', 'a')).toBe(t)
   })
 })
