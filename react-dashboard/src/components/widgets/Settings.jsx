@@ -5,6 +5,7 @@ import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile
 import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'
 import ProfileDetailView from './ProfileDetail'
+import ProfileEditorModal from './ProfileEditorModal'
 import UserHome from './UserHome'
 import { WarningIcon } from '../shared/JobCard'
 import GatedButton from '../shared/GatedButton'
@@ -1356,7 +1357,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
           >
             {view === 'main' && activeTab === 'User' && (
               <UserHome
-                onSelect={(id) => { setDetailProfileId(id); setView('profileDetail') }}
+                onSelect={(id) => { setDetailProfileId(id); setView('main') }}
                 onCreateProfile={() => setView('createProfile')}
                 onSkillFilter={onSkillFilter}
                 activeSkill={activeSkill}
@@ -1372,12 +1373,17 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
                 onCreated={() => setView('main')}
               />
             )}
-            {view === 'profileDetail' && detailProfileId != null && (
-              <ProfileDetailView profileId={detailProfileId} onDelete={() => setView('main')} />
-            )}
           </motion.div>
         </AnimatePresence>
       </div>
+      {detailProfileId != null && (
+        <ProfileEditorModal onClose={() => setDetailProfileId(null)}>
+          <ProfileDetailView
+            profileId={detailProfileId}
+            onDelete={() => setDetailProfileId(null)}
+          />
+        </ProfileEditorModal>
+      )}
     </motion.div>
   )
 }
