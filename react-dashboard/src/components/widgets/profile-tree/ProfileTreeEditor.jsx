@@ -3,7 +3,7 @@ import { getProfileTree, putProfileTree } from '../../../api'
 import { SectionView } from './TreeNode'
 import {
   updateNode, removeNode, moveNode, addField, addListItem, addSection, reorderSiblings,
-  setLlmInstructions, toggleLlmWritten, deepEqual,
+  setLlmInstructions, toggleLlmWritten, deepEqual, toggleLocked, setNodePrompt,
 } from './treeOps'
 import { SectionGallery } from './SectionGallery'
 import { SECTION_TEMPLATES, buildSectionFromTemplate } from './sectionCatalog'
@@ -50,6 +50,8 @@ export default function ProfileTreeEditor({ profileId }) {
     reorder: useCallback((activeId, overId) => setTree((t) => reorderSiblings(t, activeId, overId)), []),
     setInstructions: useCallback((id, text) => setTree((t) => setLlmInstructions(t, id, text)), []),
     toggleWritten: useCallback((id) => setTree((t) => toggleLlmWritten(t, id)), []),
+    toggleLocked: useCallback((id) => setTree((t) => toggleLocked(t, id)), []),
+    setPrompt: useCallback((id, text) => setTree((t) => setNodePrompt(t, id, text)), []),
   }
 
   const sensors = useSensors(
@@ -90,7 +92,7 @@ export default function ProfileTreeEditor({ profileId }) {
         <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           {sections.map((section, i) => (
             <SortableSection
-              key={section.id} section={section}
+              key={section.id} section={section} tree={tree}
               isFirst={i === 0} isLast={i === sections.length - 1} ops={ops}
               initialCollapsed={section.id !== expandSectionId}
             />
@@ -126,7 +128,7 @@ export default function ProfileTreeEditor({ profileId }) {
   )
 }
 
-function SortableSection({ section, isFirst, isLast, ops, initialCollapsed }) {
+function SortableSection({ section, isFirst, isLast, ops, initialCollapsed, tree }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: section.id })
   const style = {
@@ -146,7 +148,7 @@ function SortableSection({ section, isFirst, isLast, ops, initialCollapsed }) {
     <div ref={setNodeRef} style={style}>
       <SectionView
         section={section} isFirst={isFirst} isLast={isLast} ops={ops}
-        dragHandle={handle} initialCollapsed={initialCollapsed}
+        dragHandle={handle} initialCollapsed={initialCollapsed} tree={tree}
       />
     </div>
   )

@@ -1,13 +1,19 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { SectionView } from './TreeNode'
+import { buildChipGroups } from './PromptField' // ensures module wired
 
 function noopOps(over = {}) {
   return {
     setValue: vi.fn(), rename: vi.fn(), toggleVisible: vi.fn(), remove: vi.fn(),
     move: vi.fn(), addItem: vi.fn(), addField: vi.fn(),
-    setInstructions: vi.fn(), toggleWritten: vi.fn(), ...over,
+    setInstructions: vi.fn(), toggleWritten: vi.fn(),
+    toggleLocked: vi.fn(), setPrompt: vi.fn(), ...over,
   }
+}
+
+function rootOf(section) {
+  return { type: 'root', id: 'r', children: [section] }
 }
 
 const presetListSection = {
@@ -143,5 +149,40 @@ describe('SectionView custom', () => {
     fireEvent.click(screen.getByLabelText('Expand section'))
     expect(screen.getByLabelText('LLM instructions')).toBeInTheDocument()
     expect(screen.getByLabelText('Lock from LLM (keep as typed)')).toBeInTheDocument()
+  })
+})
+
+describe('SectionView lock + prompt', () => {
+  it('shows a section lock toggle and a prompt editor when unlocked', () => {
+    const ops = noopOps()
+    render(<SectionView section={customSection} isFirst isLast={false} ops={ops} tree={rootOf(customSection)} />)
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    // section unlocked by default → lock offers to lock, prompt editor present
+    expect(screen.getByLabelText('Lock section from LLM')).toBeInTheDocument()
+    expect(screen.getByLabelText('Section prompt')).toBeInTheDocument()
+  })
+
+  it('hides the section prompt editor when the section is locked', () => {
+    const locked = { ...customSection, locked: true }
+    render(<SectionView section={locked} isFirst isLast={false} ops={noopOps()} tree={rootOf(locked)} />)
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    expect(screen.queryByLabelText('Section prompt')).toBeNull()
+    expect(screen.getByLabelText('Unlock section for LLM')).toBeInTheDocument()
+  })
+
+  it('toggles section lock by id', () => {
+    const ops = noopOps()
+    render(<SectionView section={customSection} isFirst isLast={false} ops={ops} tree={rootOf(customSection)} />)
+    fireEvent.click(screen.getByLabelText('Lock section from LLM'))
+    expect(ops.toggleLocked).toHaveBeenCalledWith('sec-c')
+  })
+
+  it('shows an item lock + item prompt on a list entry when unlocked', () => {
+    const ops = noopOps()
+    render(<SectionView section={presetListSection} isFirst={false} isLast ops={ops} tree={rootOf(presetListSection)} />)
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    fireEvent.click(screen.getByLabelText('Expand item'))
+    expect(screen.getByLabelText('Lock item from LLM')).toBeInTheDocument()
+    expect(screen.getByLabelText('Item prompt')).toBeInTheDocument()
   })
 })
