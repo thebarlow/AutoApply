@@ -35,7 +35,7 @@ describe('ProfileTreeEditor', () => {
   it('an edit sets dirty; Save PUTs the tree and clears dirty', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
-    expect(screen.getByText('Save').closest('button')).toBeDisabled()
+    expect(screen.queryByText('Save')).toBeNull() // no bar when clean
     fireEvent.click(screen.getByLabelText('Expand section'))
     fireEvent.click(screen.getByLabelText('Remove Python'))
     expect(screen.getByText('Save').closest('button')).not.toBeDisabled()
@@ -44,17 +44,27 @@ describe('ProfileTreeEditor', () => {
     const [, sentTree] = api.putProfileTree.mock.calls[0]
     const skills = sentTree.children[0].children[0]
     expect(skills.value).toEqual([])
-    await waitFor(() => expect(screen.getByText('Save').closest('button')).toBeDisabled())
+    await waitFor(() => expect(screen.queryByText('Save')).toBeNull()) // bar hides again
   })
 
-  it('Discard reverts edits', async () => {
+  it('Discard reverts edits and hides the bar', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
     fireEvent.click(screen.getByLabelText('Expand section'))
     fireEvent.click(screen.getByLabelText('Remove Python'))
     fireEvent.click(screen.getByText('Discard'))
     expect(screen.getByText('Python')).toBeInTheDocument()
-    expect(screen.getByText('Save').closest('button')).toBeDisabled()
+    expect(screen.queryByText('Save')).toBeNull()
+  })
+
+  it('reverting an edit to its original value hides the bar (effective change)', async () => {
+    render(<ProfileTreeEditor profileId={1} />)
+    await screen.findByText('Skills')
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    fireEvent.click(screen.getByLabelText('Hide section')) // edit: toggle visibility
+    expect(screen.getByText('Save')).toBeInTheDocument() // dirty
+    fireEvent.click(screen.getByLabelText('Show section')) // revert it
+    expect(screen.queryByText('Save')).toBeNull() // value-equal to saved → clean
   })
 
   it('surfaces a 422 message and keeps edits', async () => {

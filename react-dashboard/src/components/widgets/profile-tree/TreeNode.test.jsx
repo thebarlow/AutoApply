@@ -5,7 +5,8 @@ import { SectionView } from './TreeNode'
 function noopOps(over = {}) {
   return {
     setValue: vi.fn(), rename: vi.fn(), toggleVisible: vi.fn(), remove: vi.fn(),
-    move: vi.fn(), addItem: vi.fn(), addField: vi.fn(), ...over,
+    move: vi.fn(), addItem: vi.fn(), addField: vi.fn(),
+    setInstructions: vi.fn(), toggleWritten: vi.fn(), ...over,
   }
 }
 
@@ -103,14 +104,44 @@ describe('SectionView custom', () => {
     expect(screen.queryByDisplayValue('Winner')).toBeNull()
   })
 
-  it('shows a field role selector and reveals instructions for outputable', () => {
-    const ops = noopOps({ setRole: vi.fn(), setInstructions: vi.fn(), toggleLock: vi.fn() })
+  it('expands when the section bar (name) is single-clicked', () => {
+    render(<SectionView section={customSection} isFirst isLast={false} ops={noopOps()} />)
+    expect(screen.queryByDisplayValue('Winner')).toBeNull()
+    fireEvent.click(screen.getByText('Awards')) // click the name, not the caret
+    expect(screen.getByDisplayValue('Winner')).toBeInTheDocument()
+  })
+
+  it('renames the section only on double-click of the name', () => {
+    const ops = noopOps()
+    render(<SectionView section={customSection} isFirst isLast={false} ops={ops} />)
+    fireEvent.doubleClick(screen.getByText('Awards'))
+    const input = screen.getByDisplayValue('Awards')
+    fireEvent.change(input, { target: { value: 'Honors' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(ops.rename).toHaveBeenCalledWith('sec-c', 'Honors')
+  })
+
+  it('locks a field from the LLM by default and toggles via the lock control', () => {
+    const ops = noopOps()
     render(<SectionView section={customSection} isFirst isLast={false} ops={ops} />)
     fireEvent.click(screen.getByLabelText('Expand section'))
-    // immutable by default → no instructions box
+    // locked by default → no instructions box, lock offers to unlock
     expect(screen.queryByLabelText('LLM instructions')).toBeNull()
-    const select = screen.getByLabelText('Field role')
-    fireEvent.change(select, { target: { value: 'output' } })
-    expect(ops.setRole).toHaveBeenCalledWith('fa', 'output')
+    fireEvent.click(screen.getByLabelText('Unlock for LLM to write'))
+    expect(ops.toggleWritten).toHaveBeenCalledWith('fa')
+  })
+
+  it('shows the instructions box when a field is LLM-written', () => {
+    const written = {
+      ...customSection,
+      children: [{
+        ...customSection.children[0],
+        children: [{ ...customSection.children[0].children[0], llm_output: true }],
+      }],
+    }
+    render(<SectionView section={written} isFirst isLast={false} ops={noopOps()} />)
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    expect(screen.getByLabelText('LLM instructions')).toBeInTheDocument()
+    expect(screen.getByLabelText('Lock from LLM (keep as typed)')).toBeInTheDocument()
   })
 })

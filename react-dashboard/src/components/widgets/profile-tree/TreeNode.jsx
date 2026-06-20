@@ -7,16 +7,18 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FieldWidget } from './fieldWidgets'
-import { MoveButtons, VisibleToggle, RenameLabel, RemoveButton, AddButton } from './structuralControls'
-import { isPresetSection, fieldRole } from './treeOps'
+import { MoveButtons, VisibleToggle, RenameLabel, RemoveButton, AddButton, LlmWriteToggle } from './structuralControls'
+import { isPresetSection } from './treeOps'
 
 const rowWrap = 'flex flex-col gap-1'
 const headerRow = 'flex items-center justify-between gap-2'
 
-// A single field: label (renamable only on custom groups) + visible + widget,
-// then a role row (context/immutable/LLM-outputable + regen-lock + instructions).
+// A single field: label (renamable only on custom groups) + eye (render) +
+// lock (LLM may write) + widget, then the LLM instructions box when unlocked.
+// The lock and eye are the two field controls: lock = "can the LLM change this
+// value?", eye = "does this value appear in the output document?".
 function FieldView({ field, fieldsEditable, ops }) {
-  const role = fieldRole(field)
+  const written = !!field.llm_output
   return (
     <div className={rowWrap}>
       <div className={headerRow}>
@@ -24,33 +26,15 @@ function FieldView({ field, fieldsEditable, ops }) {
           name={field.name} editable={fieldsEditable}
           onRename={(n) => ops.rename(field.id, n)}
         />
-        <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} />
+        <span className="inline-flex items-center">
+          <LlmWriteToggle written={written} onToggle={() => ops.toggleWritten(field.id)} />
+          <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} label="in output" />
+        </span>
       </div>
       <div className={field.visible ? '' : 'opacity-50'}>
         <FieldWidget field={field} onChange={(v) => ops.setValue(field.id, v)} />
       </div>
-      <div className="flex items-center gap-3 flex-wrap text-xs text-space-dim">
-        <label className="inline-flex items-center gap-1">
-          <span>Role</span>
-          <select
-            aria-label="Field role" value={role}
-            className="bg-white text-black border border-space-border rounded px-1 py-0.5"
-            onChange={(e) => ops.setRole(field.id, e.target.value)}
-          >
-            <option className="bg-white text-black" value="immutable">Verbatim</option>
-            <option className="bg-white text-black" value="context">Context only</option>
-            <option className="bg-white text-black" value="output">LLM-written</option>
-          </select>
-        </label>
-        <label className="inline-flex items-center gap-1">
-          <input
-            type="checkbox" checked={!!field.regen_lock}
-            onChange={() => ops.toggleLock(field.id)}
-          />
-          <span>Lock</span>
-        </label>
-      </div>
-      {role === 'output' && (
+      {written && (
         <textarea
           aria-label="LLM instructions" rows={2}
           placeholder="How should the LLM write this field?"
@@ -207,27 +191,30 @@ function SectionChild({ child, preset, ops }) {
   return <FieldView field={child} fieldsEditable={false} ops={ops} />
 }
 
-export function SectionView({ section, isFirst, isLast, ops, dragHandle }) {
+export function SectionView({ section, isFirst, isLast, ops, dragHandle, initialCollapsed = true }) {
   const preset = isPresetSection(section)
   const child = section.children[0]
-  const [collapsed, setCollapsed] = useState(true)
+  const [collapsed, setCollapsed] = useState(initialCollapsed)
+  const toggle = () => setCollapsed((c) => !c)
   return (
     <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
-      <div className={headerRow}>
+      {/* Clicking anywhere on the bar (name included) toggles collapse; the name
+          edits only on double-click; action buttons stop propagation. */}
+      <div className={`${headerRow} cursor-pointer`} onClick={toggle}>
         <span className="inline-flex items-center gap-2">
           {dragHandle}
           <button
             type="button"
             aria-label={collapsed ? 'Expand section' : 'Collapse section'}
             className="px-1 text-space-dim hover:text-space-text transition-colors"
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={(e) => { e.stopPropagation(); toggle() }}
           >{collapsed ? '▸' : '▾'}</button>
           <RenameLabel
             name={section.name} editable
             onRename={(n) => ops.rename(section.id, n)}
           />
         </span>
-        <span className="inline-flex items-center gap-1">
+        <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <MoveButtons
             canUp={!isFirst} canDown={!isLast}
             onUp={() => ops.move(section.id, -1)} onDown={() => ops.move(section.id, 1)}

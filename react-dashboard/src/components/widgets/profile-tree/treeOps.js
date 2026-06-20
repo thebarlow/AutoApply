@@ -200,3 +200,31 @@ export function setLlmInstructions(tree, fieldId, text) {
 export function toggleRegenLock(tree, fieldId) {
   return updateNode(tree, fieldId, (f) => ({ ...f, regen_lock: !f.regen_lock }))
 }
+
+// Whether the LLM may (re)write this field: the lock control's open state.
+export const isLlmWritten = (field) => !!field.llm_output
+
+// Flip whether the LLM may write `fieldId` (the lock icon). Locked → the LLM
+// leaves the value alone (llm_output=false); unlocked → the LLM rewrites it.
+// Context-injection is a section-prompt concern, so llm_input stays false.
+export function toggleLlmWritten(tree, fieldId) {
+  return updateNode(tree, fieldId, (f) => ({ ...f, llm_output: !f.llm_output, llm_input: false }))
+}
+
+// Order-insensitive deep equality, used to tell whether the working tree
+// differs *in value* from the last-saved snapshot (so reverting an edit clears
+// the dirty state even though object identity changed).
+export function deepEqual(a, b) {
+  if (a === b) return true
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((x, i) => deepEqual(x, b[i]))
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object'
+      && !Array.isArray(a) && !Array.isArray(b)) {
+    const ka = Object.keys(a)
+    const kb = Object.keys(b)
+    return ka.length === kb.length
+      && ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]))
+  }
+  return false
+}

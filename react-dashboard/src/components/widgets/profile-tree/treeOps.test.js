@@ -4,6 +4,7 @@ import {
   moveNode, makeField, addField, addListItem, addCustomSection,
   cloneWithFreshIds, addSection, reorderSiblings,
   fieldRole, setFieldRole, setLlmInstructions, toggleRegenLock,
+  isLlmWritten, toggleLlmWritten, deepEqual,
 } from './treeOps'
 
 // Minimal tree: skills (preset, single field) + experience (preset list).
@@ -292,5 +293,33 @@ describe('field role helpers', () => {
   it('toggleRegenLock flips the lock', () => {
     const f = toggleRegenLock(tree(), 'f').children[0].children[0].children[0]
     expect(f.regen_lock).toBe(true)
+  })
+
+  it('toggleLlmWritten flips llm_output and clears llm_input, immutably', () => {
+    const t = tree()
+    const out = toggleLlmWritten(t, 'f')
+    expect(out).not.toBe(t)
+    const f = out.children[0].children[0].children[0]
+    expect(f.llm_output).toBe(true)
+    expect(f.llm_input).toBe(false)
+    expect(isLlmWritten(f)).toBe(true)
+    // toggling back locks it again
+    const back = toggleLlmWritten(out, 'f').children[0].children[0].children[0]
+    expect(back.llm_output).toBe(false)
+    expect(isLlmWritten(back)).toBe(false)
+  })
+})
+
+describe('deepEqual', () => {
+  it('is true for value-equal trees regardless of identity or key order', () => {
+    const a = { type: 'field', id: 'f', value: ['x', 'y'], meta: { a: 1, b: 2 } }
+    const b = { id: 'f', type: 'field', meta: { b: 2, a: 1 }, value: ['x', 'y'] }
+    expect(deepEqual(a, b)).toBe(true)
+  })
+
+  it('is false when a value differs, an array reorders, or a key is missing', () => {
+    expect(deepEqual({ v: 1 }, { v: 2 })).toBe(false)
+    expect(deepEqual({ v: ['a', 'b'] }, { v: ['b', 'a'] })).toBe(false)
+    expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false)
   })
 })
