@@ -102,4 +102,15 @@ describe('SectionView custom', () => {
     fireEvent.click(screen.getByLabelText('Collapse section'))
     expect(screen.queryByDisplayValue('Winner')).toBeNull()
   })
+
+  it('shows a field role selector and reveals instructions for outputable', () => {
+    const ops = noopOps({ setRole: vi.fn(), setInstructions: vi.fn(), toggleLock: vi.fn() })
+    render(<SectionView section={customSection} isFirst isLast={false} ops={ops} />)
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    // immutable by default → no instructions box
+    expect(screen.queryByLabelText('LLM instructions')).toBeNull()
+    const select = screen.getByLabelText('Field role')
+    fireEvent.change(select, { target: { value: 'output' } })
+    expect(ops.setRole).toHaveBeenCalledWith('fa', 'output')
+  })
 })

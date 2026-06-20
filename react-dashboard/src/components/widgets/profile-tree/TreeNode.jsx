@@ -8,13 +8,15 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { FieldWidget } from './fieldWidgets'
 import { MoveButtons, VisibleToggle, RenameLabel, RemoveButton, AddButton } from './structuralControls'
-import { isPresetSection } from './treeOps'
+import { isPresetSection, fieldRole } from './treeOps'
 
 const rowWrap = 'flex flex-col gap-1'
 const headerRow = 'flex items-center justify-between gap-2'
 
-// A single field: label (renamable only on custom groups) + visible + widget.
+// A single field: label (renamable only on custom groups) + visible + widget,
+// then a role row (context/immutable/LLM-outputable + regen-lock + instructions).
 function FieldView({ field, fieldsEditable, ops }) {
+  const role = fieldRole(field)
   return (
     <div className={rowWrap}>
       <div className={headerRow}>
@@ -27,6 +29,36 @@ function FieldView({ field, fieldsEditable, ops }) {
       <div className={field.visible ? '' : 'opacity-50'}>
         <FieldWidget field={field} onChange={(v) => ops.setValue(field.id, v)} />
       </div>
+      <div className="flex items-center gap-3 flex-wrap text-xs text-space-dim">
+        <label className="inline-flex items-center gap-1">
+          <span>Role</span>
+          <select
+            aria-label="Field role" value={role}
+            className="bg-white text-black border border-space-border rounded px-1 py-0.5"
+            onChange={(e) => ops.setRole(field.id, e.target.value)}
+          >
+            <option className="bg-white text-black" value="immutable">Verbatim</option>
+            <option className="bg-white text-black" value="context">Context only</option>
+            <option className="bg-white text-black" value="output">LLM-written</option>
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="checkbox" checked={!!field.regen_lock}
+            onChange={() => ops.toggleLock(field.id)}
+          />
+          <span>Lock</span>
+        </label>
+      </div>
+      {role === 'output' && (
+        <textarea
+          aria-label="LLM instructions" rows={2}
+          placeholder="How should the LLM write this field?"
+          value={field.llm_instructions || ''}
+          className="bg-white/5 border border-space-border rounded px-2 py-1 text-sm text-space-text"
+          onChange={(e) => ops.setInstructions(field.id, e.target.value)}
+        />
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { getProfileTree, putProfileTree } from '../../../api'
 import { SectionView } from './TreeNode'
 import {
   updateNode, removeNode, moveNode, addField, addListItem, addSection, reorderSiblings,
+  setFieldRole, setLlmInstructions, toggleRegenLock,
 } from './treeOps'
 import { SectionGallery } from './SectionGallery'
 import { SECTION_TEMPLATES, buildSectionFromTemplate } from './sectionCatalog'
@@ -44,6 +45,9 @@ export default function ProfileTreeEditor({ profileId }) {
     addItem: useCallback((listId) => setTree((t) => addListItem(t, listId)), []),
     addField: useCallback((groupId, spec) => setTree((t) => addField(t, groupId, spec)), []),
     reorder: useCallback((activeId, overId) => setTree((t) => reorderSiblings(t, activeId, overId)), []),
+    setRole: useCallback((id, role) => setTree((t) => setFieldRole(t, id, role)), []),
+    setInstructions: useCallback((id, text) => setTree((t) => setLlmInstructions(t, id, text)), []),
+    toggleLock: useCallback((id) => setTree((t) => toggleRegenLock(t, id)), []),
   }
 
   const sensors = useSensors(
