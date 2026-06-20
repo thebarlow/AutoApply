@@ -74,6 +74,11 @@ def resume_compare(
     job = Job.get(job_key, db, profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
+    if not job.ext_seniority:
+        raise HTTPException(
+            status_code=400,
+            detail="job has not been extracted yet; run extraction before using the compare harness",
+        )
     user = User.load(db, profile_id=profile_id)
     client, model = get_client_for_profile(user, user.prompt_resume_model)
     eval_prompt = user.resolve_prompt("resume_eval")
