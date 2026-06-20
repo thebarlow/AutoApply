@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import Navbar from './Navbar'
 import { getMe } from '../api'
 import ManageUsers from './admin/ManageUsers'
+import ResumeCompare from './admin/ResumeCompare'
 
 const FUNCTIONS = [
   { key: 'users', label: 'Manage Users' },
+  { key: 'resume-compare', label: 'Résumé Compare' },
 ]
 
 export default function AdminPage() {
@@ -50,6 +52,7 @@ export default function AdminPage() {
 
           <section className="flex-1 min-w-0 overflow-y-auto">
             {active === 'users' && <ManageUsers />}
+            {active === 'resume-compare' && <ResumeCompare />}
           </section>
         </div>
       </div>

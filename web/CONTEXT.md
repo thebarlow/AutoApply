@@ -198,6 +198,14 @@ web/
 | `POST` | `/auth/ext/revoke` | Bearer-authed; revoke the presented extension token |
 | `GET` | `/api/ext/me` | Bearer-authed; `{email}` of the token's account; 401 if invalid |
 
+## Dev Endpoints (`web/routers/dev.py`)
+
+Admin-gated, dev-only endpoints not intended for production user flows.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/dev/resume-compare/{job_key}` | Run Model 1 (dry, single-call, existing `generate_resume_md` code path) and Model 2 (per-section, `core/section_generator`) against the same job; eval each result with `Job.evaluate_resume_body`; return `{model1, model2}` where each is `{markdown, score, issues}` or `{error}` if that model failed. Not metered, no ATS check, no document persistence. Per-model errors are isolated — one model failing does not prevent the other from running. |
+
 ## Known Issues
 
 - `_serialize()` in `jobs.py` calls `Path.exists()` twice per job (resume_md_exists, cover_md_exists) on every `GET /api/jobs`. At current scale (<100 jobs) this is negligible. If job count grows, move to a per-job detail endpoint.

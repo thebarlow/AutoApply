@@ -37,6 +37,8 @@ metadata (target roles/salary, resume/md paths) stays as flat `data` keys, not
 in the tree. **Known gap:** custom (non-`role`) sections are storable but do not
 appear on generated documents until sub-project #4.
 
+**Sub-project #3 (per-section generation engine) is DONE:** ships `core/section_generator.py` — a schema-driven, per-section LLM generation engine. One call per section; `regen_lock` fields are carried through verbatim; sections with no `llm_output`-role fields are skipped (no LLM call); per-section failures fall back gracefully without crashing the whole document. Field roles (`llm_output` / `llm_input` / `regen_lock`) are used to decide which fields the model should fill vs. receive as context vs. carry through unchanged. Also ships `core/tree_render.py` — a **throwaway** renderer used only by the dev comparison harness (`web/routers/dev.py`); it overlays authored values, omits `context_only`-role fields, skips hidden nodes, and handles custom sections. Real schema-driven rendering of custom sections on generated documents is sub-project #4.
+
 **Sub-project 2C (graphical builder) is DONE:** ships drag-drop reorder of sections and list items (via `dnd-kit`) on top of the 2B editor, plus a recommended-section gallery (`SectionGallery.jsx` + `sectionCatalog.js`, 7 templates + Blank) replacing the old "+ Add section" button. `↑`/`↓` buttons are retained as the a11y fallback. No document rendering of custom sections — that is sub-project #4.
 
 **Sub-project 2B (tree-driven editor) is DONE:** the React dashboard now renders

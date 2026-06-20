@@ -22,6 +22,9 @@ async function _fetch(url, options) {
 
 export const getJobs = () => _fetch('/api/jobs')
 
+export const resumeCompare = (jobKey) =>
+  _fetch(`/api/dev/resume-compare/${jobKey}`, { method: 'POST' })
+
 export const deleteJob = (jobKey) =>
   _fetch(`/api/jobs/${jobKey}`, { method: 'DELETE' })
 
