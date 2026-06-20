@@ -1,4 +1,11 @@
 import { useState } from 'react'
+import {
+  DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { FieldWidget } from './fieldWidgets'
 import { MoveButtons, VisibleToggle, RenameLabel, RemoveButton, AddButton } from './structuralControls'
 import { isPresetSection } from './treeOps'
@@ -76,26 +83,63 @@ function AddFieldForm({ groupId, ops }) {
   )
 }
 
+// One list entry, made sortable. Keeps the ↑/↓ buttons as the a11y fallback.
+function SortableEntry({ item, index, count, ops }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+  return (
+    <div
+      ref={setNodeRef} style={style}
+      className="border border-space-border/50 rounded-lg p-3 flex flex-col gap-2"
+    >
+      <div className={headerRow}>
+        <span className="inline-flex items-center gap-2">
+          <button
+            type="button" aria-label="Drag to reorder item"
+            className="cursor-grab active:cursor-grabbing px-1 text-space-dim hover:text-space-text"
+            {...attributes} {...listeners}
+          >⋮⋮</button>
+          <span className="text-xs text-space-dim">Entry {index + 1}</span>
+        </span>
+        <span className="inline-flex items-center">
+          <MoveButtons
+            canUp={index > 0} canDown={index < count - 1}
+            onUp={() => ops.move(item.id, -1)} onDown={() => ops.move(item.id, 1)}
+          />
+          <RemoveButton onRemove={() => ops.remove(item.id)} label="Remove item" />
+        </span>
+      </div>
+      <GroupView group={item} fieldsEditable={false} ops={ops} />
+    </div>
+  )
+}
+
 // A repeating list: each item is a fixed-shape group (no field add/remove);
-// items can be added (clone template), removed, and reordered.
+// items can be added (clone template), removed, reordered (drag or ↑/↓).
 function ListView({ list, ops }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  const handleDragEnd = ({ active, over }) => {
+    if (over && active.id !== over.id) ops.reorder(active.id, over.id)
+  }
   return (
     <div className="flex flex-col gap-4">
-      {list.children.map((item, i) => (
-        <div key={item.id} className="border border-space-border/50 rounded-lg p-3 flex flex-col gap-2">
-          <div className={headerRow}>
-            <span className="text-xs text-space-dim">Entry {i + 1}</span>
-            <span className="inline-flex items-center">
-              <MoveButtons
-                canUp={i > 0} canDown={i < list.children.length - 1}
-                onUp={() => ops.move(item.id, -1)} onDown={() => ops.move(item.id, 1)}
-              />
-              <RemoveButton onRemove={() => ops.remove(item.id)} label="Remove item" />
-            </span>
-          </div>
-          <GroupView group={item} fieldsEditable={false} ops={ops} />
-        </div>
-      ))}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={list.children.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+          {list.children.map((item, i) => (
+            <SortableEntry
+              key={item.id} item={item} index={i} count={list.children.length} ops={ops}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
       <AddButton label="+ Add entry" onClick={() => ops.addItem(list.id)} />
     </div>
   )

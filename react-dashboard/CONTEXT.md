@@ -122,16 +122,18 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Remaining responsibilities: Prompts accordion (scoring/resume/cover/extraction/resume_parse prompt slots + refinement), Export Master button, Reset Profile flow
 - The flat `update_profile` endpoint is retained for name/job-preferences/onboarding writes; only the doc-section editor UI was retired
 
-### profile-tree/ (new in 2B)
-- `ProfileTreeEditor.jsx` — root component; loads tree via `GET /api/config/profiles/{id}/tree`, manages dirty state, explicit Save (`PUT /api/config/profiles/{id}/tree`), Discard, and 422 error surfacing
-- `TreeNode.jsx` — recursive node renderer; dispatches ops (setValue, rename, toggleVisible, remove, move, addItem, addField) to parent
+### profile-tree/ (new in 2B, extended in 2C)
+- `ProfileTreeEditor.jsx` — root component; loads tree via `GET /api/config/profiles/{id}/tree`, manages dirty state, explicit Save (`PUT /api/config/profiles/{id}/tree`), Discard, and 422 error surfacing. **2C:** owns the section-level `DndContext` (drag-drop reorder of sections via `dnd-kit`); `↑`/`↓` buttons retained as a11y fallback.
+- `TreeNode.jsx` — recursive node renderer; dispatches ops (setValue, rename, toggleVisible, remove, move, addItem, addField, reorder) to parent. **2C:** `ListView` owns a per-list `DndContext` (drag-drop reorder of list entries); each entry gets a `"Drag to reorder item"` handle; `↑`/`↓` `MoveButtons` retained as a11y fallback. `SectionView` accepts an optional `dragHandle` prop so `ProfileTreeEditor` can inject the section drag handle without breaking 2B unit tests.
+- `SectionGallery.jsx` — **2C:** recommended-section gallery (7 templates + Blank) that replaces the old "+ Add section" button; consumed by `ProfileTreeEditor`.
+- `sectionCatalog.js` — **2C:** catalog of the 7 section templates + Blank; each entry has a `type`, `label`, and `buildFn` that calls `buildSectionFromTemplate`.
 - `fieldWidgets.jsx` — per-kind field renderers: `TextWidget`, `MarkdownWidget`, `BulletsWidget`, `TaglistWidget`
 - `structuralControls.jsx` — structural mutation controls: add list item, add custom section + fields, rename, reorder, remove, visibility toggle
-- `treeOps.js` — pure tree mutation helpers: `updateNode`, `removeNode`, `moveNode`, `addField`, `addListItem`, `addCustomSection`, `renumber`, `isPresetSection`, `makeField`, `cloneWithFreshIds`
+- `treeOps.js` — pure tree mutation helpers: `updateNode`, `removeNode`, `moveNode`, `addField`, `addListItem`, `addCustomSection`, `reorderSiblings`, `renumber`, `isPresetSection`, `makeField`, `cloneWithFreshIds`
 
 ### Test suite
 - Vitest + React Testing Library + jsdom; run `npm run test` from `react-dashboard/`
-- 7 test files, 34 tests covering: API wrappers, treeOps helpers, TreeNode rendering, fieldWidgets, structuralControls, ProfileTreeEditor integration
+- 9 test files, 57 tests covering: API wrappers, treeOps helpers, sectionCatalog, SectionGallery, TreeNode rendering (including drag handle), fieldWidgets, structuralControls, ProfileTreeEditor integration, smoke
 
 ---
 
