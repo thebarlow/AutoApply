@@ -518,19 +518,18 @@ class Job(Base):
             FileNotFoundError: If the document markdown file does not exist.
             RuntimeError: If the LLM returns unparseable or malformed JSON.
         """
-        from core.llm import call_llm
-
         md_path = _OUTPUTS_DIR / f"{self.job_key}_{doc_type}.md"
         if not md_path.exists():
             raise FileNotFoundError(
                 f"{doc_type.capitalize()} markdown not found: {md_path}"
             )
-
         _, body = _strip_yaml_frontmatter(md_path.read_text(encoding="utf-8"))
+        return self._evaluate_body(doc_type, body, eval_prompt, user, client, model)
 
-        # An empty document body (e.g. a generation that hit the token limit and
-        # produced only frontmatter) must never be scored by the LLM — it
-        # hallucinates a passing grade. Short-circuit to a hard failure.
+    def _evaluate_body(
+        self, doc_type: str, body: str, eval_prompt: str, user: Any, client: Any, model: str
+    ) -> dict:
+        """Evaluate a Markdown body string. Empty body → hard fail (never scored)."""
         if not body.strip():
             return {
                 "score": 0.0,
@@ -539,17 +538,20 @@ class Job(Base):
                     "description": "Document body is empty — nothing to evaluate.",
                 }],
             }
-
         prompt = eval_prompt.replace("{current_document}", body)
         prompt = _apply_template(prompt, {"job": self, "user": user})
-
         raw = call_llm(prompt, client, model, max_tokens=8192)
-
         parsed = parse_llm_json(raw, EvalResponse)
         return {
             "score": parsed.score,
             "issues": [i.model_dump() for i in parsed.issues],
         }
+
+    def evaluate_resume_body(
+        self, body: str, eval_prompt: str, user: Any, client: Any, model: str
+    ) -> dict:
+        """Public: evaluate an arbitrary résumé Markdown body (comparison harness)."""
+        return self._evaluate_body("resume", body, eval_prompt, user, client, model)
 
     def evaluate_resume_md(
         self,

@@ -514,10 +514,9 @@ def test_evaluate_resume_md_returns_score_and_issues(db_session, tmp_path, monke
     (tmp_path / "ev_1_resume.md").write_text(
         "---\nname: X\n---\n\n## Profile\nReal body here.", encoding="utf-8"
     )
-    # Patch target is core.llm (not core.job) because _evaluate_doc_md imports
-    # call_llm locally inside the method body.
+    # Patch the module-level call_llm in core.job (used by _evaluate_body).
     monkeypatch.setattr(
-        "core.llm.call_llm",
+        "core.job.call_llm",
         lambda *a, **k: '{"score": 0.9, "issues": [{"category": "structure", "description": "fix"}]}',
     )
     out = job.evaluate_resume_md("eval prompt {current_document}", object(), object(), "m")
