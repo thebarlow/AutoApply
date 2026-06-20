@@ -60,9 +60,20 @@ describe('SectionView preset', () => {
   it('edits a field value through ops.setValue', () => {
     const ops = noopOps()
     render(<SectionView section={presetListSection} isFirst={false} isLast ops={ops} />)
-    fireEvent.click(screen.getByLabelText('Expand section')) // collapsed by default
+    fireEvent.click(screen.getByLabelText('Expand section')) // section collapsed by default
+    fireEvent.click(screen.getByLabelText('Expand item')) // entry collapsed by default
     fireEvent.change(screen.getByDisplayValue('Acme'), { target: { value: 'Acme2' } })
     expect(ops.setValue).toHaveBeenLastCalledWith('i0', 'Acme2')
+  })
+
+  it('collapses list entries by default, showing a field-value summary', () => {
+    render(<SectionView section={presetListSection} isFirst={false} isLast ops={noopOps()} />)
+    fireEvent.click(screen.getByLabelText('Expand section'))
+    // entry body (field) hidden; summary from first non-empty field shown
+    expect(screen.queryByDisplayValue('Acme')).toBeNull()
+    expect(screen.getByText('— Acme')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Expand item'))
+    expect(screen.getByDisplayValue('Acme')).toBeInTheDocument()
   })
 })
 

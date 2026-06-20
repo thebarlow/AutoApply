@@ -83,28 +83,50 @@ function AddFieldForm({ groupId, ops }) {
   )
 }
 
-// One list entry, made sortable. Keeps the ↑/↓ buttons as the a11y fallback.
+// First non-empty field value, used as a collapsed entry's preview label so it
+// stays identifiable while reordering.
+function entrySummary(item) {
+  for (const f of item.children) {
+    if (typeof f.value === 'string' && f.value.trim()) return f.value.trim()
+    if (Array.isArray(f.value) && f.value.length) return f.value.join(', ')
+  }
+  return ''
+}
+
+// One list entry, made sortable. Collapsed by default (so multiple entries fit
+// on screen for drag-reorder); ↑/↓ buttons remain the a11y fallback.
 function SortableEntry({ item, index, count, ops }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id })
+  const [collapsed, setCollapsed] = useState(true)
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   }
+  const summary = entrySummary(item)
   return (
     <div
       ref={setNodeRef} style={style}
       className="border border-space-border/50 rounded-lg p-3 flex flex-col gap-2"
     >
       <div className={headerRow}>
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-2 min-w-0">
           <button
             type="button" aria-label="Drag to reorder item"
             className="cursor-grab active:cursor-grabbing px-1 text-space-dim hover:text-space-text"
             {...attributes} {...listeners}
           >⋮⋮</button>
-          <span className="text-xs text-space-dim">Entry {index + 1}</span>
+          <button
+            type="button"
+            aria-label={collapsed ? 'Expand item' : 'Collapse item'}
+            className="px-1 text-space-dim hover:text-space-text transition-colors"
+            onClick={() => setCollapsed((c) => !c)}
+          >{collapsed ? '▸' : '▾'}</button>
+          <span className="text-xs text-space-dim shrink-0">Entry {index + 1}</span>
+          {collapsed && summary && (
+            <span className="text-xs text-space-text truncate">— {summary}</span>
+          )}
         </span>
         <span className="inline-flex items-center">
           <MoveButtons
@@ -114,7 +136,7 @@ function SortableEntry({ item, index, count, ops }) {
           <RemoveButton onRemove={() => ops.remove(item.id)} label="Remove item" />
         </span>
       </div>
-      <GroupView group={item} fieldsEditable={false} ops={ops} />
+      {!collapsed && <GroupView group={item} fieldsEditable={false} ops={ops} />}
     </div>
   )
 }
