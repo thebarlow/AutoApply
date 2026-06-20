@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { FieldWidget } from './fieldWidgets'
+import { FieldWidget, MarkdownField } from './fieldWidgets'
 import * as api from '../../../api'
 
 vi.mock('../../../api', () => ({
@@ -130,5 +130,18 @@ describe('FieldWidget', () => {
     })
     // renaming an alias does NOT touch the field-value chip
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('MarkdownField pop-out', () => {
+  it('expands to a large editor and edits there', () => {
+    const onChange = vi.fn()
+    render(<MarkdownField value="hello" onChange={onChange} />)
+    fireEvent.click(screen.getByLabelText('Expand field editor'))
+    const big = screen.getByLabelText('Expanded field editor')
+    fireEvent.change(big, { target: { value: 'hello world' } })
+    expect(onChange).toHaveBeenLastCalledWith('hello world')
+    fireEvent.click(screen.getByLabelText('Close field editor'))
+    expect(screen.queryByLabelText('Expanded field editor')).toBeNull()
   })
 })

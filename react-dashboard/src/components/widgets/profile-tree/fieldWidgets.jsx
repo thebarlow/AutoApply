@@ -14,11 +14,39 @@ export function TextField({ value, onChange }) {
 }
 
 export function MarkdownField({ value, onChange }) {
+  const [popOut, setPopOut] = useState(false)
   return (
-    <textarea
-      className={`${inputClass} min-h-[80px] resize-y`} value={value ?? ''}
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <div className="flex items-start gap-1.5">
+      <textarea
+        className={`${inputClass} min-h-[80px] resize-y`} value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button" aria-label="Expand field editor" title="Pop out"
+        className="px-1.5 py-0.5 text-space-dim hover:text-space-text"
+        onClick={() => setPopOut(true)}
+      >⤢</button>
+      {popOut && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60" onClick={() => setPopOut(false)}>
+          <div
+            className="bg-[#0f0f1a] border border-space-border rounded-2xl p-5 w-[48rem] max-w-[92vw] flex flex-col gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-end">
+              <button
+                type="button" aria-label="Close field editor" onClick={() => setPopOut(false)}
+                className="text-space-dim hover:text-space-text text-xl leading-none"
+              >×</button>
+            </div>
+            <textarea
+              aria-label="Expanded field editor" rows={16} value={value ?? ''}
+              className="bg-white/5 border border-space-border rounded px-3 py-2 text-sm text-space-text resize-y"
+              onChange={(e) => onChange(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
