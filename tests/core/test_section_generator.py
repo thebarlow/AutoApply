@@ -82,6 +82,65 @@ def test_regen_lock_excludes_field_and_skips_call_when_all_locked(monkeypatch):
     assert state["i"] == 0  # no outputable-unlocked fields → no LLM call
 
 
+def test_locked_section_is_skipped(monkeypatch):
+    import core.section_generator as sg
+
+    captured = []
+
+    def _capture_stub(prompt, client, model, schema, **kw):
+        captured.append(prompt)
+        return sg.SectionOutput(fields={}, entries={})
+
+    monkeypatch.setattr(sg, "_llm_json_with_retry", _capture_stub, raising=False)
+    import core.job
+    monkeypatch.setattr(core.job, "_llm_json_with_retry", _capture_stub)
+    root = RootNode(children=[
+        SectionNode(name="Sum", order=0, locked=True, children=[
+            FieldNode(name="Hero", key="hero", kind="markdown", value="x", llm_output=True)]),
+    ])
+    out = generate_resume_by_section(root, "JOB", object(), "m")
+    assert out == {}
+    assert captured == []  # no call for a locked section
+
+
+def test_section_and_item_prompts_appear_in_prompt(monkeypatch):
+    import core.section_generator as sg
+
+    captured = []
+    import core.job
+    monkeypatch.setattr(core.job, "_llm_json_with_retry", lambda prompt, client, model, schema, **kw: (captured.append(prompt), sg.SectionOutput(fields={}, entries={}))[1])
+    root = RootNode(children=[
+        SectionNode(name="Exp", order=0, prompt="SECTION_GUIDE", children=[
+            ListNode(name="Exp", item_template=GroupNode(children=[
+                FieldNode(name="Bul", key="bul", kind="markdown", value="", llm_output=True)]),
+                children=[GroupNode(name="E", prompt="ITEM_GUIDE", children=[
+                    FieldNode(name="Bul", key="bul", kind="markdown", value="", llm_output=True)])])]),
+    ])
+    generate_resume_by_section(root, "JOB", object(), "m", resolve=lambda s: s.replace("GUIDE", "G!"))
+    assert len(captured) == 1
+    assert "SECTION_G!" in captured[0]
+    assert "ITEM_G!" in captured[0]
+
+
+def test_locked_item_not_authored(monkeypatch):
+    import core.section_generator as sg
+    import core.job
+
+    def _stub(prompt, client, model, schema, **kw):
+        return sg.SectionOutput(entries={"keep": {"bul": "NEW"}, "lock": {"bul": "NEW"}})
+
+    monkeypatch.setattr(core.job, "_llm_json_with_retry", _stub)
+    tmpl = GroupNode(children=[FieldNode(name="Bul", key="bul", kind="markdown", llm_output=True)])
+    keep = GroupNode(id="keep", name="E", children=[
+        FieldNode(id="kf", name="Bul", key="bul", kind="markdown", value="", llm_output=True)])
+    lock = GroupNode(id="lock", name="E", locked=True, children=[
+        FieldNode(id="lf", name="Bul", key="bul", kind="markdown", value="", llm_output=True)])
+    root = RootNode(children=[SectionNode(name="Exp", order=0, children=[
+        ListNode(name="Exp", item_template=tmpl, children=[keep, lock])])])
+    out = generate_resume_by_section(root, "JOB", object(), "m")
+    assert out == {"kf": "NEW"}  # locked entry's field never authored
+
+
 def test_section_failure_falls_back_and_continues(monkeypatch):
     root = RootNode(children=[_scalar_section(), _list_section()])
     s0 = root.children[1].children[0].children[0].children[1].id
