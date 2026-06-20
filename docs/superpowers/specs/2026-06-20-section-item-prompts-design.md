@@ -83,12 +83,16 @@ migrations.
 
 - **Job tokens:** existing `{job.<field>}` (description, company, title, …), resolved by
   the current `_apply_template` against the `job` source.
-- **Profile-tree tokens:** `{profile.<section_key>.<field_key>}`.
-  - `{profile.<section_key>}` (section-level) injects all of that section's rendered
-    field values.
-  - `{profile.<section_key>.<field_key>}` injects a single field's value.
-  - `<section_key>` is the section's `role` when present, else a slugified `name`;
-    `<field_key>` is the field's `key`. Keys are stable identifiers already on the nodes.
+- **Profile-tree tokens:** `{profile:<nodeId>}` — a **node-id** reference (rename-safe).
+  - A section/group node id injects all of that node's rendered field values.
+  - A field node id injects that single field's value.
+  - Node ids are the tree's stable `id` field; they survive renames and reordering, so
+    a prompt's injected context never orphans when the user renames a section/field.
+- **Editor display:** the editing surface is a **contenteditable** editor where each
+  token renders as a non-editable **pill** showing a human-readable label
+  (e.g. `Skills › Tech`, `Job: description`); the stored/sent value uses the raw
+  `{profile:<id>}` / `{job.<field>}` tokens. The frontend maps id → label from the
+  live tree for display.
 
 ### Resolver
 
@@ -189,10 +193,13 @@ F. **Modalization** — `ProfileEditorModal` opened from the user name in `UserH
 
 ## Risks / Open Notes
 
-- **Token key stability:** section keys derive from `role`/slug(`name`). Renaming a custom
-  section changes its slug and could orphan tokens already typed into other prompts.
-  Mitigation: prefer a stable node-id-based key if slugs prove fragile during impl; flagged
-  for the plan.
+- **Token key stability:** RESOLVED — profile tokens are node-id based
+  (`{profile:<nodeId>}`), so renames/reorders never orphan injected context. The
+  contenteditable pill editor maps id → human-readable label for display.
+- **Contenteditable complexity:** the pill editor must serialize DOM → token string and
+  back; caret/selection handling is browser-dependent and thinly supported in jsdom, so
+  tests target the pure helpers (`splitSegments`, `serializeNode`, `renderHtml`,
+  `buildChipGroups`, `buildLabelMap`) plus chip-insert behavior, not raw caret movement.
 - **Verbatim source for locked nodes:** generation merges locked fields from current tree
   values; ensure the compare harness reads current tree state, not a stale snapshot.
 - Still dev-only: no production wiring of Model 2; no remote push (initiative release
