@@ -228,3 +228,16 @@ export function deepEqual(a, b) {
   }
   return false
 }
+
+// Whether a node (section or group) forbids LLM writes to its subtree.
+export const isLocked = (node) => !!node.locked
+
+// Flip the `locked` gate on a section or list-entry group by id.
+export function toggleLocked(tree, id) {
+  return updateNode(tree, id, (n) => ({ ...n, locked: !n.locked }))
+}
+
+// Set the authoring prompt on a section or list-entry group by id.
+export function setNodePrompt(tree, id, text) {
+  return updateNode(tree, id, (n) => ({ ...n, prompt: text }))
+}

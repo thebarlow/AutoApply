@@ -4,7 +4,7 @@ import {
   moveNode, makeField, addField, addListItem, addCustomSection,
   cloneWithFreshIds, addSection, reorderSiblings,
   fieldRole, setFieldRole, setLlmInstructions, toggleRegenLock,
-  isLlmWritten, toggleLlmWritten, deepEqual,
+  isLlmWritten, toggleLlmWritten, deepEqual, toggleLocked, setNodePrompt, isLocked,
 } from './treeOps'
 
 // Minimal tree: skills (preset, single field) + experience (preset list).
@@ -321,5 +321,40 @@ describe('deepEqual', () => {
     expect(deepEqual({ v: 1 }, { v: 2 })).toBe(false)
     expect(deepEqual({ v: ['a', 'b'] }, { v: ['b', 'a'] })).toBe(false)
     expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false)
+  })
+})
+
+describe('toggleLocked / setNodePrompt', () => {
+  function tree() {
+    return {
+      type: 'root', id: 'r', children: [{
+        type: 'section', id: 's', name: 'S', role: null, order: 0, visible: true,
+        locked: false, prompt: '', children: [{
+          type: 'group', id: 'g', name: 'G', order: 0, visible: true,
+          locked: false, prompt: '', children: [] }],
+      }],
+    }
+  }
+
+  it('toggles locked on a section', () => {
+    const t = toggleLocked(tree(), 's')
+    expect(t.children[0].locked).toBe(true)
+  })
+
+  it('toggles locked on a group', () => {
+    const t = toggleLocked(tree(), 'g')
+    expect(t.children[0].children[0].locked).toBe(true)
+  })
+
+  it('sets a section prompt without mutating input', () => {
+    const orig = tree()
+    const t = setNodePrompt(orig, 's', 'Tailor it')
+    expect(t.children[0].prompt).toBe('Tailor it')
+    expect(orig.children[0].prompt).toBe('')
+  })
+
+  it('isLocked reads the flag', () => {
+    expect(isLocked({ locked: true })).toBe(true)
+    expect(isLocked({})).toBe(false)
   })
 })
