@@ -47,7 +47,7 @@ export default function ProfileTreeEditor({ profileId }) {
   }
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
   const handleDragEnd = ({ active, over }) => {

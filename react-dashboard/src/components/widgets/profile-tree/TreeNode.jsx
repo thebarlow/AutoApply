@@ -123,7 +123,7 @@ function SortableEntry({ item, index, count, ops }) {
 // items can be added (clone template), removed, reordered (drag or ↑/↓).
 function ListView({ list, ops }) {
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
   const handleDragEnd = ({ active, over }) => {
