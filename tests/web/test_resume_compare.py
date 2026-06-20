@@ -69,18 +69,17 @@ def test_resume_compare_rejects_unextracted_job(monkeypatch):
 
 
 def test_combined_resolver_substitutes_job_and_profile():
-    """Resolver contract: {job.*} and {profile.*} tokens are both substituted."""
+    """Resolver contract: {job.*} and {profile:<id>} tokens are both substituted."""
+    skills_field = FieldNode(
+        name="T", key="skills", kind="taglist", value=["Python"]
+    )
     root = RootNode(
         children=[
             SectionNode(
                 name="Skills",
                 role="skills",
                 order=0,
-                children=[
-                    FieldNode(
-                        name="T", key="skills", kind="taglist", value=["Python"]
-                    )
-                ],
+                children=[skills_field],
             )
         ]
     )
@@ -92,4 +91,7 @@ def test_combined_resolver_substitutes_job_and_profile():
         text = resolve_profile_tokens(root, text)
         return _apply_template(text, {"job": _Job()})
 
-    assert resolve("{job.title} knows {profile.skills.skills}") == "Engineer knows Python"
+    assert (
+        resolve("{job.title} knows {profile:%s}" % skills_field.id)
+        == "Engineer knows Python"
+    )

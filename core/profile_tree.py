@@ -566,20 +566,6 @@ def tree_to_legacy(root: "RootNode") -> dict:
     return out
 
 
-def _section_key(section: SectionNode) -> str:
-    """Stable injection key for a section: its role, else a slug of its name.
-
-    Args:
-        section: The section to generate a key for.
-
-    Returns:
-        The section's role if set, otherwise a slugified version of its name.
-    """
-    if section.role:
-        return section.role
-    return re.sub(r"[^a-z0-9]+", "_", section.name.lower()).strip("_")
-
-
 def _field_value_str(field: FieldNode) -> str:
     """Render a field value for prompt injection.
 
@@ -594,59 +580,81 @@ def _field_value_str(field: FieldNode) -> str:
     return "" if field.value is None else str(field.value)
 
 
-def _section_fields(section: SectionNode) -> list[FieldNode]:
-    """All FieldNodes anywhere under a section (groups, list entries, bare).
+def _collect_fields(node: object) -> list[FieldNode]:
+    """All FieldNodes anywhere under ``node`` (groups, list entries, bare).
+
+    The item_template of a list is intentionally not traversed.
 
     Args:
-        section: The section to extract fields from.
+        node: The node to extract fields from.
 
     Returns:
-        A list of all FieldNode instances found in the section's tree.
+        A list of all FieldNode instances found in the node's tree.
     """
-    fields: list[FieldNode] = []
+    out: list[FieldNode] = []
 
-    def walk(node: object) -> None:
-        if isinstance(node, FieldNode):
-            fields.append(node)
+    def walk(n: object) -> None:
+        if isinstance(n, FieldNode):
+            out.append(n)
             return
-        for c in getattr(node, "children", None) or []:
+        for c in getattr(n, "children", None) or []:
             walk(c)
 
-    for child in section.children:
-        walk(child)
-    return fields
+    walk(node)
+    return out
+
+
+def _node_by_id(root: "RootNode", node_id: str) -> object | None:
+    """Return the first node whose ``id`` matches, searching the whole tree.
+
+    Args:
+        root: The root of the tree to search.
+        node_id: The id to search for.
+
+    Returns:
+        The first node with matching id, or None if not found.
+    """
+    found: object | None = None
+
+    def walk(n: object) -> None:
+        nonlocal found
+        if found is not None:
+            return
+        if getattr(n, "id", None) == node_id:
+            found = n
+            return
+        for c in getattr(n, "children", None) or []:
+            walk(c)
+        if isinstance(n, ListNode):
+            # item_template is structural; do not match against it.
+            return
+
+    walk(root)
+    return found
 
 
 def resolve_profile_tokens(root: "RootNode", text: str) -> str:
-    """Substitute ``{profile.<section>}`` / ``{profile.<section>.<field>}`` tokens.
+    """Substitute ``{profile:<nodeId>}`` tokens with the node's rendered value.
 
-    ``<section>`` is a section's role or slugified name; ``<field>`` is a field
-    key. A section token expands to ``"<name>: <value>"`` lines for that
-    section's fields. Unknown sections/fields are left untouched. First section
-    matching a key wins.
+    A field node id resolves to that field's value; a section/group/list node id
+    resolves to ``"<name>: <value>"`` lines for every field under it. Unknown ids
+    are left untouched.
 
     Args:
         root: The profile tree.
-        text: A prompt string possibly containing profile tokens.
+        text: A prompt string possibly containing ``{profile:<id>}`` tokens.
 
     Returns:
         ``text`` with recognized profile tokens substituted.
     """
-    by_key: dict[str, SectionNode] = {}
-    for s in root.children:
-        by_key.setdefault(_section_key(s), s)
 
     def _replace(m: "re.Match[str]") -> str:
-        sec_key, field_key = m.group(1), m.group(2)
-        sec = by_key.get(sec_key)
-        if sec is None:
+        node = _node_by_id(root, m.group(1))
+        if node is None:
             return m.group(0)
-        if field_key is None:
-            lines = [f"{f.name}: {_field_value_str(f)}" for f in _section_fields(sec)]
-            return "\n".join(lines)
-        for f in _section_fields(sec):
-            if f.key == field_key:
-                return _field_value_str(f)
-        return m.group(0)
+        if isinstance(node, FieldNode):
+            return _field_value_str(node)
+        lines = [f"{f.name}: {_field_value_str(f)}" for f in _collect_fields(node)]
+        return "\n".join(lines)
 
-    return re.sub(r"\{profile\.(\w+)(?:\.(\w+))?\}", _replace, text)
+    return re.sub(r"\{profile:([\w-]+)\}", _replace, text)

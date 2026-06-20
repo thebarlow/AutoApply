@@ -505,25 +505,53 @@ def _sample_root():
     ])
 
 
-def test_resolve_field_token():
-    from core.profile_tree import resolve_profile_tokens
+def test_resolve_field_token_by_id():
+    from core.profile_tree import FieldNode, SectionNode, resolve_profile_tokens
 
-    out = resolve_profile_tokens(_sample_root(), "Have: {profile.skills.skills}")
-    assert out == "Have: Python, Go"
+    f = FieldNode(
+        name="Tech", key="skills", kind="taglist", value=["Python", "Go"]
+    )
+    root = RootNode(
+        children=[SectionNode(name="Skills", role="skills", order=0, children=[f])]
+    )
+    assert resolve_profile_tokens(root, "Have: {profile:%s}" % f.id) == "Have: Python, Go"
 
 
-def test_resolve_section_token_joins_fields():
-    from core.profile_tree import resolve_profile_tokens
+def test_resolve_section_token_by_id_joins_fields():
+    from core.profile_tree import FieldNode, GroupNode, SectionNode, resolve_profile_tokens
 
-    out = resolve_profile_tokens(_sample_root(), "{profile.my_awards}")
+    sec = SectionNode(
+        name="Awards",
+        role=None,
+        order=0,
+        children=[
+            GroupNode(
+                name="Awards",
+                children=[FieldNode(name="Award", key="award", kind="text", value="Winner")],
+            )
+        ],
+    )
+    root = RootNode(children=[sec])
+    out = resolve_profile_tokens(root, "{profile:%s}" % sec.id)
     assert "Award: Winner" in out
 
 
-def test_resolve_unknown_token_left_as_is():
-    from core.profile_tree import resolve_profile_tokens
+def test_resolve_unknown_id_left_as_is():
+    from core.profile_tree import FieldNode, SectionNode, resolve_profile_tokens
 
-    out = resolve_profile_tokens(_sample_root(), "{profile.nope.x} {job.title}")
-    assert out == "{profile.nope.x} {job.title}"
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="S",
+                order=0,
+                children=[FieldNode(name="A", key="a", kind="text", value="x")],
+            )
+        ]
+    )
+    assert (
+        resolve_profile_tokens(root, "{profile:nope} {job.title}")
+        == "{profile:nope} {job.title}"
+    )
 
 
 class _StubDB:
