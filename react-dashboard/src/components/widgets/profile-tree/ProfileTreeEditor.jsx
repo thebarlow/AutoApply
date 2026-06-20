@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { getProfileTree, putProfileTree } from '../../../api'
 import { SectionView } from './TreeNode'
 import {
-  updateNode, removeNode, moveNode, addField, addListItem, addCustomSection,
+  updateNode, removeNode, moveNode, addField, addListItem, addSection, reorderSiblings,
 } from './treeOps'
+import { SectionGallery } from './SectionGallery'
+import { SECTION_TEMPLATES, buildSectionFromTemplate } from './sectionCatalog'
 
 export default function ProfileTreeEditor({ profileId }) {
   const [tree, setTree] = useState(null)
@@ -34,6 +36,7 @@ export default function ProfileTreeEditor({ profileId }) {
     move: useCallback((id, delta) => setTree((t) => moveNode(t, id, delta)), []),
     addItem: useCallback((listId) => setTree((t) => addListItem(t, listId)), []),
     addField: useCallback((groupId, spec) => setTree((t) => addField(t, groupId, spec)), []),
+    reorder: useCallback((activeId, overId) => setTree((t) => reorderSiblings(t, activeId, overId)), []),
   }
 
   const handleSave = async () => {
@@ -69,11 +72,10 @@ export default function ProfileTreeEditor({ profileId }) {
         />
       ))}
 
-      <button
-        type="button"
-        className="self-start text-xs text-purple-400 hover:text-purple-300 mt-1"
-        onClick={() => setTree((t) => addCustomSection(t, 'New section'))}
-      >+ Add section</button>
+      <SectionGallery
+        templates={SECTION_TEMPLATES}
+        onAdd={(tpl) => setTree((t) => addSection(t, buildSectionFromTemplate(tpl)))}
+      />
 
       {saveError && <p className="text-xs text-red-400">{saveError}</p>}
 
