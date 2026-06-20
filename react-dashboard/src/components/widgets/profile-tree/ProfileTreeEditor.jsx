@@ -6,6 +6,13 @@ import {
 } from './treeOps'
 import { SectionGallery } from './SectionGallery'
 import { SECTION_TEMPLATES, buildSectionFromTemplate } from './sectionCatalog'
+import {
+  DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 export default function ProfileTreeEditor({ profileId }) {
   const [tree, setTree] = useState(null)
@@ -39,6 +46,14 @@ export default function ProfileTreeEditor({ profileId }) {
     reorder: useCallback((activeId, overId) => setTree((t) => reorderSiblings(t, activeId, overId)), []),
   }
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  const handleDragEnd = ({ active, over }) => {
+    if (over && active.id !== over.id) ops.reorder(active.id, over.id)
+  }
+
   const handleSave = async () => {
     setSaving(true); setSaveError(null)
     try {
@@ -65,12 +80,16 @@ export default function ProfileTreeEditor({ profileId }) {
   const sections = tree.children
   return (
     <div className="flex flex-col gap-3">
-      {sections.map((section, i) => (
-        <SectionView
-          key={section.id} section={section}
-          isFirst={i === 0} isLast={i === sections.length - 1} ops={ops}
-        />
-      ))}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+          {sections.map((section, i) => (
+            <SortableSection
+              key={section.id} section={section}
+              isFirst={i === 0} isLast={i === sections.length - 1} ops={ops}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
 
       <SectionGallery
         templates={SECTION_TEMPLATES}
@@ -90,6 +109,30 @@ export default function ProfileTreeEditor({ profileId }) {
         >Discard</button>
         {dirty && <span className="text-xs text-space-dim">Unsaved changes</span>}
       </div>
+    </div>
+  )
+}
+
+function SortableSection({ section, isFirst, isLast, ops }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: section.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+  const handle = (
+    <button
+      type="button" aria-label="Drag to reorder section"
+      className="cursor-grab active:cursor-grabbing px-1 text-space-dim hover:text-space-text"
+      {...attributes} {...listeners}
+    >⋮⋮</button>
+  )
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SectionView
+        section={section} isFirst={isFirst} isLast={isLast} ops={ops} dragHandle={handle}
+      />
     </div>
   )
 }

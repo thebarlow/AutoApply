@@ -109,7 +109,7 @@ function SectionChild({ child, preset, ops }) {
   return <FieldView field={child} fieldsEditable={false} ops={ops} />
 }
 
-export function SectionView({ section, isFirst, isLast, ops }) {
+export function SectionView({ section, isFirst, isLast, ops, dragHandle }) {
   const preset = isPresetSection(section)
   const child = section.children[0]
   const [collapsed, setCollapsed] = useState(true)
@@ -117,6 +117,7 @@ export function SectionView({ section, isFirst, isLast, ops }) {
     <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
       <div className={headerRow}>
         <span className="inline-flex items-center gap-2">
+          {dragHandle}
           <button
             type="button"
             aria-label={collapsed ? 'Expand section' : 'Collapse section'}

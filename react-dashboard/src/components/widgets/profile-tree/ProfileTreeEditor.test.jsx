@@ -84,4 +84,10 @@ describe('ProfileTreeEditor', () => {
     fireEvent.click(screen.getByText('Certifications'))
     expect(await screen.findByText('Certifications')).toBeInTheDocument()
   })
+
+  it('renders a drag handle for each section', async () => {
+    render(<ProfileTreeEditor profileId={1} />)
+    await screen.findByText('Skills')
+    expect(screen.getAllByLabelText('Drag to reorder section')).toHaveLength(1)
+  })
 })
