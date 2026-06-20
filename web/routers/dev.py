@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 
 from core.document_assembler import assemble_resume_markdown
 from core.document_builder import build_resume_document
-from core.job import Job, _llm_json_with_retry
+from core.job import Job, _apply_template, _llm_json_with_retry
 from core.llm import get_client_for_profile
+from core.profile_tree import resolve_profile_tokens
 from core.schemas import ResumeGeneration
 from core.section_generator import generate_resume_by_section
 from core.tree_render import render_tree_markdown
@@ -37,10 +38,19 @@ def _model1_markdown(job: Job, user: Any, client: Any, model: str, db: Session) 
 
 
 def _model2_markdown(job: Job, user: Any, client: Any, model: str, db: Session) -> str:
-    """Model 2 (per-section) résumé Markdown via the schema-driven generator."""
+    """Model 2 (per-section) résumé Markdown via the schema-driven generator.
+
+    Section/item prompts may inject ``{job.*}`` and ``{profile.*}`` tokens; both
+    are resolved against this job and the live profile tree before each call.
+    """
     root = user.profile_tree_root()
     prompt = job.build_resume_prompt(user, "{job.extracted_description}", db)
-    authored = generate_resume_by_section(root, prompt, client, model)
+
+    def resolve(text: str) -> str:
+        text = resolve_profile_tokens(root, text)
+        return _apply_template(text, {"job": job})
+
+    authored = generate_resume_by_section(root, prompt, client, model, resolve=resolve)
     return render_tree_markdown(root, authored)
 
 

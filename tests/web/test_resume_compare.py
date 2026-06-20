@@ -4,6 +4,8 @@ import pytest
 from fastapi import HTTPException
 
 import web.routers.dev as devmod
+from core.job import _apply_template
+from core.profile_tree import RootNode, SectionNode, FieldNode, resolve_profile_tokens
 
 
 class _Job:
@@ -64,3 +66,30 @@ def test_resume_compare_rejects_unextracted_job(monkeypatch):
 
     assert exc_info.value.status_code == 400
     assert not comparison_ran, "run_comparison must not be called for an unextracted job"
+
+
+def test_combined_resolver_substitutes_job_and_profile():
+    """Resolver contract: {job.*} and {profile.*} tokens are both substituted."""
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="Skills",
+                role="skills",
+                order=0,
+                children=[
+                    FieldNode(
+                        name="T", key="skills", kind="taglist", value=["Python"]
+                    )
+                ],
+            )
+        ]
+    )
+
+    class _Job:
+        title = "Engineer"
+
+    def resolve(text: str) -> str:
+        text = resolve_profile_tokens(root, text)
+        return _apply_template(text, {"job": _Job()})
+
+    assert resolve("{job.title} knows {profile.skills.skills}") == "Engineer knows Python"
