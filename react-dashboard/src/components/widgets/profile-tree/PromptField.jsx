@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 
 const JOB_CHIPS = [
   { label: 'title', token: '{job.title}' },
@@ -8,9 +8,6 @@ const JOB_CHIPS = [
   { label: 'description', token: '{job.description}' },
   { label: 'processed description', token: '{job.extracted_description}' },
 ]
-
-const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-const sectionKey = (section) => section.role || slug(section.name)
 
 function sectionFields(section) {
   const out = []
@@ -22,19 +19,109 @@ function sectionFields(section) {
   return out
 }
 
-// A Job group plus one folder per profile section (section-level chip + a chip
-// per field). Mirrors the backend token scheme in resolve_profile_tokens.
+// Chip groups. Profile chips carry a node-id token ({profile:<id>}) so they are
+// rename-safe; `display` is the human-readable label shown in the editor pill.
 export function buildChipGroups(tree) {
-  const groups = [{ label: 'Job', chips: JOB_CHIPS }]
+  const groups = [{
+    label: 'Job',
+    chips: JOB_CHIPS.map((c) => ({ token: c.token, label: c.label, display: `Job: ${c.label}` })),
+  }]
   for (const section of tree?.children || []) {
-    const key = sectionKey(section)
-    const chips = [{ label: `(whole section)`, token: `{profile.${key}}` }]
+    const name = section.name || 'Section'
+    const chips = [{ token: `{profile:${section.id}}`, label: '(whole section)', display: name }]
     for (const f of sectionFields(section)) {
-      chips.push({ label: f.name || f.key, token: `{profile.${key}.${f.key}}` })
+      const fname = f.name || f.key
+      chips.push({ token: `{profile:${f.id}}`, label: fname, display: `${name} › ${fname}` })
     }
-    groups.push({ label: section.name || key, chips })
+    groups.push({ label: name, chips })
   }
   return groups
+}
+
+// token -> display label, for rendering stored tokens as pills.
+export function buildLabelMap(tree) {
+  const map = {}
+  for (const g of buildChipGroups(tree)) {
+    for (const c of g.chips) map[c.token] = c.display
+  }
+  return map
+}
+
+const TOKEN_RE = /\{profile:[\w-]+\}|\{job\.[\w]+\}/g
+
+// Split a stored string into ordered text/token segments.
+export function splitSegments(value) {
+  const out = []
+  let last = 0
+  const s = value || ''
+  for (const m of s.matchAll(TOKEN_RE)) {
+    if (m.index > last) out.push({ type: 'text', value: s.slice(last, m.index) })
+    out.push({ type: 'token', value: m[0] })
+    last = m.index + m[0].length
+  }
+  if (last < s.length) out.push({ type: 'text', value: s.slice(last) })
+  return out
+}
+
+const escapeHtml = (s) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+function pillHtml(token, label) {
+  return `<span class="prompt-chip" contenteditable="false" data-token="${escapeHtml(token)}">${escapeHtml(label || token)}</span>`
+}
+
+// Stored string -> editor innerHTML (text + non-editable pill spans).
+export function renderHtml(value, labels) {
+  return splitSegments(value).map((seg) => (
+    seg.type === 'token'
+      ? pillHtml(seg.value, labels[seg.value] || seg.value)
+      : escapeHtml(seg.value).replace(/\n/g, '<br>')
+  )).join('')
+}
+
+// Editor DOM -> stored string (pills become their data-token, <br>/<div> -> \n).
+export function serializeNode(root) {
+  let out = ''
+  const visit = (node) => {
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === Node.TEXT_NODE) {
+        out += n.textContent
+      } else if (n.nodeType === Node.ELEMENT_NODE) {
+        const tok = n.getAttribute && n.getAttribute('data-token')
+        if (tok) { out += tok; return }
+        if (n.tagName === 'BR') { out += '\n'; return }
+        if (n.tagName === 'DIV' && out && !out.endsWith('\n')) out += '\n'
+        visit(n)
+      }
+    })
+  }
+  if (root) visit(root)
+  return out
+}
+
+// Insert a pill (+ trailing nbsp) at the caret if it is inside `root`, else append.
+function insertPillAtCaret(root, token, label) {
+  if (!root) return
+  const span = document.createElement('span')
+  span.className = 'prompt-chip'
+  span.setAttribute('contenteditable', 'false')
+  span.setAttribute('data-token', token)
+  span.textContent = label || token
+  const space = document.createTextNode(' ')
+  const sel = window.getSelection && window.getSelection()
+  if (sel && sel.rangeCount && root.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0)
+    range.deleteContents()
+    range.insertNode(space)
+    range.insertNode(span)
+    range.setStartAfter(space)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  } else {
+    root.appendChild(span)
+    root.appendChild(space)
+  }
 }
 
 function ChipFolder({ group, onInsert }) {
@@ -53,8 +140,11 @@ function ChipFolder({ group, onInsert }) {
               key={c.token}
               type="button"
               draggable
-              onDragStart={(e) => e.dataTransfer.setData('text/plain', c.token)}
-              onClick={() => onInsert(c.token)}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('text/plain', c.token)
+                e.dataTransfer.setData('application/x-chip-label', c.display)
+              }}
+              onClick={() => onInsert(c.token, c.display)}
               className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab active:cursor-grabbing select-none"
             >{c.label}</button>
           ))}
@@ -67,60 +157,75 @@ function ChipFolder({ group, onInsert }) {
 export function ChipTray({ groups, onInsert }) {
   return (
     <div className="flex flex-col gap-1 border border-space-border rounded-lg p-2">
-      {groups.map((g) => (
-        <ChipFolder key={g.label} group={g} onInsert={onInsert} />
-      ))}
+      {groups.map((g) => <ChipFolder key={g.label} group={g} onInsert={onInsert} />)}
     </div>
   )
 }
 
-// Insert `token` at the textarea's caret (or end), returning the new string.
-function insertAtCaret(ref, value, token) {
-  const ta = ref.current
-  // Use caret position only when the textarea is focused; otherwise append.
-  const hasFocus = ta && document.activeElement === ta
-  const offset = hasFocus && ta.selectionStart != null ? ta.selectionStart : value.length
-  const next = value.slice(0, offset) + token + value.slice(offset)
-  if (ta) {
-    requestAnimationFrame(() => {
-      ta.focus()
-      ta.setSelectionRange(offset + token.length, offset + token.length)
-    })
+// The contenteditable surface. `value` is the canonical token string; the DOM is
+// re-rendered from it only when it changes from what we last serialized, so typing
+// does not clobber the caret.
+function Editor({ value, onChange, tree, ariaLabel, editorRef, extraClass = '' }) {
+  const innerRef = useRef(null)
+  const ref = editorRef || innerRef
+  const labels = useMemo(() => buildLabelMap(tree), [tree])
+  const last = useRef(null)
+
+  useEffect(() => {
+    if (ref.current && (last.current === null || value !== last.current)) {
+      ref.current.innerHTML = renderHtml(value, labels)
+      last.current = value
+    }
+  }, [value, labels, ref])
+
+  const emit = () => {
+    const s = serializeNode(ref.current)
+    last.current = s
+    onChange(s)
   }
-  return next
-}
-
-export function PromptField({ value, onChange, tree, ariaLabel, placeholder, rows = 3 }) {
-  const ref = useRef(null)
-  const [popOut, setPopOut] = useState(false)
-  const groups = buildChipGroups(tree)
-
-  const insert = useCallback((token) => {
-    onChange(insertAtCaret(ref, value ?? '', token))
-  }, [value, onChange])
-
   const onDrop = (e) => {
     e.preventDefault()
     const token = e.dataTransfer.getData('text/plain')
-    if (token) insert(token)
+    const label = e.dataTransfer.getData('application/x-chip-label')
+    if (token) { insertPillAtCaret(ref.current, token, label || labels[token] || token); emit() }
   }
+  return (
+    <div
+      ref={ref}
+      role="textbox"
+      aria-label={ariaLabel}
+      contentEditable
+      suppressContentEditableWarning
+      onInput={emit}
+      onBlur={emit}
+      onDrop={onDrop}
+      onDragOver={(e) => e.preventDefault()}
+      className={`flex-1 bg-white/5 border border-space-border rounded px-2 py-1 text-sm text-space-text ${extraClass}`}
+      style={{ whiteSpace: 'pre-wrap', minHeight: '2.5rem' }}
+    />
+  )
+}
 
+export function PromptField({ value, onChange, tree, ariaLabel, placeholder }) {
+  const [popOut, setPopOut] = useState(false)
+  const ref = useRef(null)
+  const labels = useMemo(() => buildLabelMap(tree), [tree])
+  const groups = useMemo(() => buildChipGroups(tree), [tree])
+  const insert = (token, display) => {
+    insertPillAtCaret(ref.current, token, display || labels[token] || token)
+    onChange(serializeNode(ref.current))
+  }
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-start gap-1.5">
-        <textarea
-          ref={ref} aria-label={ariaLabel} rows={rows} placeholder={placeholder}
-          value={value ?? ''}
-          className="flex-1 bg-white/5 border border-space-border rounded px-2 py-1 text-sm text-space-text resize-y"
-          onChange={(e) => onChange(e.target.value)}
-          onDrop={onDrop} onDragOver={(e) => e.preventDefault()}
-        />
+        <Editor value={value} onChange={onChange} tree={tree} ariaLabel={ariaLabel} editorRef={ref} />
         <button
           type="button" aria-label="Expand editor" title="Pop out"
           className="px-1.5 py-0.5 text-space-dim hover:text-space-text"
           onClick={() => setPopOut(true)}
         >⤢</button>
       </div>
+      {placeholder && !value && <p className="text-xs text-space-dim/70 -mt-1">{placeholder}</p>}
       <ChipTray groups={groups} onInsert={insert} />
       {popOut && (
         <PopOutEditor
@@ -134,12 +239,11 @@ export function PromptField({ value, onChange, tree, ariaLabel, placeholder, row
 
 export function PopOutEditor({ value, onChange, tree, title, onClose }) {
   const ref = useRef(null)
-  const groups = buildChipGroups(tree)
-  const insert = (token) => onChange(insertAtCaret(ref, value ?? '', token))
-  const onDrop = (e) => {
-    e.preventDefault()
-    const token = e.dataTransfer.getData('text/plain')
-    if (token) insert(token)
+  const labels = useMemo(() => buildLabelMap(tree), [tree])
+  const groups = useMemo(() => buildChipGroups(tree), [tree])
+  const insert = (token, display) => {
+    insertPillAtCaret(ref.current, token, display || labels[token] || token)
+    onChange(serializeNode(ref.current))
   }
   return (
     <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -154,12 +258,7 @@ export function PopOutEditor({ value, onChange, tree, title, onClose }) {
             className="text-space-dim hover:text-space-text text-xl leading-none"
           >×</button>
         </div>
-        <textarea
-          ref={ref} aria-label={`${title} (expanded)`} rows={16} value={value ?? ''}
-          className="bg-white/5 border border-space-border rounded px-3 py-2 text-sm text-space-text resize-y"
-          onChange={(e) => onChange(e.target.value)}
-          onDrop={onDrop} onDragOver={(e) => e.preventDefault()}
-        />
+        <Editor value={value} onChange={onChange} tree={tree} ariaLabel={`${title} (expanded)`} editorRef={ref} extraClass="min-h-[20rem]" />
         <ChipTray groups={groups} onInsert={insert} />
       </div>
     </div>
