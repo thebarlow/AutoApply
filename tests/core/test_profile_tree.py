@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from core.profile_tree import RootNode
+
 
 def test_field_text_value_coerces_to_str():
     from core.profile_tree import FieldNode
@@ -488,6 +490,40 @@ def test_tree_with_locks_and_prompts_validates():
         ]
     )
     validate_tree(root)  # must not raise
+
+
+def _sample_root():
+    from core.profile_tree import FieldNode, GroupNode, SectionNode
+
+    return RootNode(children=[
+        SectionNode(name="Skills", role="skills", order=0, children=[
+            FieldNode(name="Technical", key="skills", kind="taglist",
+                      value=["Python", "Go"])]),
+        SectionNode(name="My Awards", role=None, order=1, children=[
+            GroupNode(name="Awards", children=[
+                FieldNode(name="Award", key="award", kind="text", value="Winner")])]),
+    ])
+
+
+def test_resolve_field_token():
+    from core.profile_tree import resolve_profile_tokens
+
+    out = resolve_profile_tokens(_sample_root(), "Have: {profile.skills.skills}")
+    assert out == "Have: Python, Go"
+
+
+def test_resolve_section_token_joins_fields():
+    from core.profile_tree import resolve_profile_tokens
+
+    out = resolve_profile_tokens(_sample_root(), "{profile.my_awards}")
+    assert "Award: Winner" in out
+
+
+def test_resolve_unknown_token_left_as_is():
+    from core.profile_tree import resolve_profile_tokens
+
+    out = resolve_profile_tokens(_sample_root(), "{profile.nope.x} {job.title}")
+    assert out == "{profile.nope.x} {job.title}"
 
 
 class _StubDB:

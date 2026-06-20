@@ -7,6 +7,7 @@ representing a structured profile/résumé tree.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Callable
 from typing import Literal, Optional, Union
@@ -563,3 +564,89 @@ def tree_to_legacy(root: "RootNode") -> dict:
         for r in _rows("projects")
     ]
     return out
+
+
+def _section_key(section: SectionNode) -> str:
+    """Stable injection key for a section: its role, else a slug of its name.
+
+    Args:
+        section: The section to generate a key for.
+
+    Returns:
+        The section's role if set, otherwise a slugified version of its name.
+    """
+    if section.role:
+        return section.role
+    return re.sub(r"[^a-z0-9]+", "_", section.name.lower()).strip("_")
+
+
+def _field_value_str(field: FieldNode) -> str:
+    """Render a field value for prompt injection.
+
+    Args:
+        field: The field whose value to render.
+
+    Returns:
+        A string representation of the field value. Lists are joined with ", ".
+    """
+    if isinstance(field.value, list):
+        return ", ".join(str(v) for v in field.value)
+    return "" if field.value is None else str(field.value)
+
+
+def _section_fields(section: SectionNode) -> list[FieldNode]:
+    """All FieldNodes anywhere under a section (groups, list entries, bare).
+
+    Args:
+        section: The section to extract fields from.
+
+    Returns:
+        A list of all FieldNode instances found in the section's tree.
+    """
+    fields: list[FieldNode] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, FieldNode):
+            fields.append(node)
+            return
+        for c in getattr(node, "children", None) or []:
+            walk(c)
+
+    for child in section.children:
+        walk(child)
+    return fields
+
+
+def resolve_profile_tokens(root: "RootNode", text: str) -> str:
+    """Substitute ``{profile.<section>}`` / ``{profile.<section>.<field>}`` tokens.
+
+    ``<section>`` is a section's role or slugified name; ``<field>`` is a field
+    key. A section token expands to ``"<name>: <value>"`` lines for that
+    section's fields. Unknown sections/fields are left untouched. First section
+    matching a key wins.
+
+    Args:
+        root: The profile tree.
+        text: A prompt string possibly containing profile tokens.
+
+    Returns:
+        ``text`` with recognized profile tokens substituted.
+    """
+    by_key: dict[str, SectionNode] = {}
+    for s in root.children:
+        by_key.setdefault(_section_key(s), s)
+
+    def _replace(m: "re.Match[str]") -> str:
+        sec_key, field_key = m.group(1), m.group(2)
+        sec = by_key.get(sec_key)
+        if sec is None:
+            return m.group(0)
+        if field_key is None:
+            lines = [f"{f.name}: {_field_value_str(f)}" for f in _section_fields(sec)]
+            return "\n".join(lines)
+        for f in _section_fields(sec):
+            if f.key == field_key:
+                return _field_value_str(f)
+        return m.group(0)
+
+    return re.sub(r"\{profile\.(\w+)(?:\.(\w+))?\}", _replace, text)
