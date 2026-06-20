@@ -84,7 +84,8 @@ describe('ProfileTreeEditor', () => {
     await screen.findByText('Skills')
     fireEvent.click(screen.getByText('+ Add section'))
     fireEvent.click(screen.getByText('Blank section'))
-    expect((await screen.findAllByText('Blank section')).length).toBeGreaterThan(0)
+    // gallery button + newly added section header
+    expect((await screen.findAllByText('Blank section')).length).toBeGreaterThanOrEqual(2)
   })
 
   it('adds a recommended template section from the gallery', async () => {
@@ -92,7 +93,8 @@ describe('ProfileTreeEditor', () => {
     await screen.findByText('Skills')
     fireEvent.click(screen.getByText('+ Add section'))
     fireEvent.click(screen.getByText('Certifications'))
-    expect((await screen.findAllByText('Certifications')).length).toBeGreaterThan(0)
+    // gallery button + newly added section header
+    expect((await screen.findAllByText('Certifications')).length).toBeGreaterThanOrEqual(2)
   })
 
   it('renders a drag handle for each section', async () => {
