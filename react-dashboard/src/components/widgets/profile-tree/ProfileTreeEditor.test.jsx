@@ -28,6 +28,7 @@ describe('ProfileTreeEditor', () => {
   it('loads and renders sections', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     expect(await screen.findByText('Skills')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Expand section')) // collapsed by default
     expect(screen.getByText('Python')).toBeInTheDocument()
   })
 
@@ -35,6 +36,7 @@ describe('ProfileTreeEditor', () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
     expect(screen.getByText('Save').closest('button')).toBeDisabled()
+    fireEvent.click(screen.getByLabelText('Expand section'))
     fireEvent.click(screen.getByLabelText('Remove Python'))
     expect(screen.getByText('Save').closest('button')).not.toBeDisabled()
     fireEvent.click(screen.getByText('Save'))
@@ -48,6 +50,7 @@ describe('ProfileTreeEditor', () => {
   it('Discard reverts edits', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
+    fireEvent.click(screen.getByLabelText('Expand section'))
     fireEvent.click(screen.getByLabelText('Remove Python'))
     fireEvent.click(screen.getByText('Discard'))
     expect(screen.getByText('Python')).toBeInTheDocument()
@@ -58,6 +61,7 @@ describe('ProfileTreeEditor', () => {
     api.putProfileTree.mockRejectedValueOnce(new Error('PUT /api/config/profiles/1/tree → 422'))
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
+    fireEvent.click(screen.getByLabelText('Expand section'))
     fireEvent.click(screen.getByLabelText('Remove Python'))
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByText(/could not be saved/i)).toBeInTheDocument()

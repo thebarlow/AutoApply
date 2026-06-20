@@ -43,6 +43,7 @@ describe('SectionView preset', () => {
   it('allows adding and removing list items on a preset list', () => {
     const ops = noopOps()
     render(<SectionView section={presetListSection} isFirst={false} isLast ops={ops} />)
+    fireEvent.click(screen.getByLabelText('Expand section')) // collapsed by default
     fireEvent.click(screen.getByText('+ Add entry'))
     expect(ops.addItem).toHaveBeenCalledWith('list-exp')
     fireEvent.click(screen.getByLabelText('Remove item'))
@@ -53,6 +54,7 @@ describe('SectionView preset', () => {
   it('edits a field value through ops.setValue', () => {
     const ops = noopOps()
     render(<SectionView section={presetListSection} isFirst={false} isLast ops={ops} />)
+    fireEvent.click(screen.getByLabelText('Expand section')) // collapsed by default
     fireEvent.change(screen.getByDisplayValue('Acme'), { target: { value: 'Acme2' } })
     expect(ops.setValue).toHaveBeenLastCalledWith('i0', 'Acme2')
   })
@@ -74,13 +76,13 @@ describe('SectionView custom', () => {
     expect(ops.toggleVisible).toHaveBeenCalledWith('sec-c')
   })
 
-  it('collapses and expands the section body', () => {
+  it('is collapsed by default and expands/collapses on toggle', () => {
     render(<SectionView section={customSection} isFirst isLast={false} ops={noopOps()} />)
-    // expanded by default: the field value is rendered
-    expect(screen.getByDisplayValue('Winner')).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Collapse section'))
+    // collapsed by default: the field value is not rendered
     expect(screen.queryByDisplayValue('Winner')).toBeNull()
     fireEvent.click(screen.getByLabelText('Expand section'))
     expect(screen.getByDisplayValue('Winner')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Collapse section'))
+    expect(screen.queryByDisplayValue('Winner')).toBeNull()
   })
 })

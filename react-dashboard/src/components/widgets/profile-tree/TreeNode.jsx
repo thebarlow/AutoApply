@@ -112,7 +112,7 @@ function SectionChild({ child, preset, ops }) {
 export function SectionView({ section, isFirst, isLast, ops }) {
   const preset = isPresetSection(section)
   const child = section.children[0]
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   return (
     <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
       <div className={headerRow}>
