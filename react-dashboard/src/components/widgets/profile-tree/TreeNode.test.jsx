@@ -51,6 +51,12 @@ describe('SectionView preset', () => {
     expect(ops.remove).toHaveBeenCalledWith('item-0')
   })
 
+  it('renders a drag handle per list entry', () => {
+    render(<SectionView section={presetListSection} isFirst={false} isLast ops={noopOps()} />)
+    fireEvent.click(screen.getByLabelText('Expand section')) // collapsed by default
+    expect(screen.getAllByLabelText('Drag to reorder item')).toHaveLength(1)
+  })
+
   it('edits a field value through ops.setValue', () => {
     const ops = noopOps()
     render(<SectionView section={presetListSection} isFirst={false} isLast ops={ops} />)

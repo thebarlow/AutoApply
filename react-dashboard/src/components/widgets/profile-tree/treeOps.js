@@ -114,7 +114,7 @@ export function addField(tree, groupId, { name, kind }) {
 }
 
 // Deep-clone a node subtree, assigning every node a fresh id.
-function cloneWithFreshIds(node) {
+export function cloneWithFreshIds(node) {
   const next = { ...node, id: newId() }
   if (Array.isArray(node.children)) {
     next.children = node.children.map(cloneWithFreshIds)
@@ -134,16 +134,45 @@ export function addListItem(tree, listId) {
   })
 }
 
+// Append a prebuilt section subtree to the root and renumber root children.
+export function addSection(tree, sectionSubtree) {
+  return { ...tree, children: renumber([...tree.children, sectionSubtree]) }
+}
+
 // Append a custom (role:null) section holding exactly one empty group (the
-// section "exactly one child" invariant), and renumber root sections.
+// section "exactly one child" invariant). Delegates to addSection.
 export function addCustomSection(tree, name) {
   const section = {
     type: 'section', id: newId(), name: name || 'Section', role: null,
-    order: tree.children.length, visible: true,
+    order: 0, visible: true,
     children: [{
       type: 'group', id: newId(), name: name || 'Section', order: 0,
       visible: true, regen_lock: false, children: [],
     }],
   }
-  return { ...tree, children: renumber([...tree.children, section]) }
+  return addSection(tree, section)
+}
+
+// Move the child `activeId` to `overId`'s index within the SAME sibling array
+// and renumber. No-op when the ids live in different containers, either id is
+// absent, or activeId === overId. Recurses through `children` only.
+export function reorderSiblings(node, activeId, overId) {
+  if (activeId === overId) return node
+  if (!Array.isArray(node.children)) return node
+  const ai = node.children.findIndex((c) => c.id === activeId)
+  const oi = node.children.findIndex((c) => c.id === overId)
+  if (ai !== -1 && oi !== -1) {
+    const arr = node.children.slice()
+    const [moved] = arr.splice(ai, 1)
+    arr.splice(oi, 0, moved)
+    return { ...node, children: renumber(arr) }
+  }
+  if (ai !== -1 || oi !== -1) return node // split across containers: no-op
+  let changed = false
+  const nc = node.children.map((c) => {
+    const r = reorderSiblings(c, activeId, overId)
+    if (r !== c) changed = true
+    return r
+  })
+  return changed ? { ...node, children: nc } : node
 }

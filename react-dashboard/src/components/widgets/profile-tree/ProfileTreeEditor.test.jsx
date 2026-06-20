@@ -69,10 +69,25 @@ describe('ProfileTreeEditor', () => {
     expect(screen.getByText('Save').closest('button')).not.toBeDisabled()
   })
 
-  it('adds a custom section', async () => {
+  it('adds a blank custom section from the gallery', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
     fireEvent.click(screen.getByText('+ Add section'))
-    expect(await screen.findByText('New section')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Blank section'))
+    expect(await screen.findByText('Blank section')).toBeInTheDocument()
+  })
+
+  it('adds a recommended template section from the gallery', async () => {
+    render(<ProfileTreeEditor profileId={1} />)
+    await screen.findByText('Skills')
+    fireEvent.click(screen.getByText('+ Add section'))
+    fireEvent.click(screen.getByText('Certifications'))
+    expect(await screen.findByText('Certifications')).toBeInTheDocument()
+  })
+
+  it('renders a drag handle for each section', async () => {
+    render(<ProfileTreeEditor profileId={1} />)
+    await screen.findByText('Skills')
+    expect(screen.getAllByLabelText('Drag to reorder section')).toHaveLength(1)
   })
 })

@@ -37,6 +37,8 @@ metadata (target roles/salary, resume/md paths) stays as flat `data` keys, not
 in the tree. **Known gap:** custom (non-`role`) sections are storable but do not
 appear on generated documents until sub-project #4.
 
+**Sub-project 2C (graphical builder) is DONE:** ships drag-drop reorder of sections and list items (via `dnd-kit`) on top of the 2B editor, plus a recommended-section gallery (`SectionGallery.jsx` + `sectionCatalog.js`, 7 templates + Blank) replacing the old "+ Add section" button. `↑`/`↓` buttons are retained as the a11y fallback. No document rendering of custom sections — that is sub-project #4.
+
 **Sub-project 2B (tree-driven editor) is DONE:** the React dashboard now renders
 `ProfileTreeEditor` (consuming the 2A `GET`/`PUT /tree` endpoints) in place of
 the flat doc-section accordions. The flat `update_profile` endpoint is retained
