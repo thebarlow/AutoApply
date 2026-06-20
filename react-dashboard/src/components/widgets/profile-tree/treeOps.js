@@ -176,3 +176,27 @@ export function reorderSiblings(node, activeId, overId) {
   })
   return changed ? { ...node, children: nc } : node
 }
+
+// Derive a field's role from its LLM flags. See the field-role taxonomy.
+export const fieldRole = (field) =>
+  field.llm_output ? 'output' : field.llm_input ? 'context' : 'immutable'
+
+// Set llm_input/llm_output for `fieldId` per the role taxonomy.
+export function setFieldRole(tree, fieldId, role) {
+  const flags = {
+    output: { llm_output: true, llm_input: false },
+    context: { llm_output: false, llm_input: true },
+    immutable: { llm_output: false, llm_input: false },
+  }[role]
+  return updateNode(tree, fieldId, (f) => ({ ...f, ...flags }))
+}
+
+// Set the per-field regeneration prompt.
+export function setLlmInstructions(tree, fieldId, text) {
+  return updateNode(tree, fieldId, (f) => ({ ...f, llm_instructions: text }))
+}
+
+// Flip the "pin current value" lock.
+export function toggleRegenLock(tree, fieldId) {
+  return updateNode(tree, fieldId, (f) => ({ ...f, regen_lock: !f.regen_lock }))
+}

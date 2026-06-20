@@ -3,6 +3,7 @@ import {
   PRESET_ROLES, isPresetSection, renumber, updateNode, removeNode,
   moveNode, makeField, addField, addListItem, addCustomSection,
   cloneWithFreshIds, addSection, reorderSiblings,
+  fieldRole, setFieldRole, setLlmInstructions, toggleRegenLock,
 } from './treeOps'
 
 // Minimal tree: skills (preset, single field) + experience (preset list).
@@ -245,5 +246,51 @@ describe('reorderSiblings', () => {
     const t = tree()
     expect(reorderSiblings(t, 'nope', 'a')).toBe(t)
     expect(reorderSiblings(t, 'a', 'a')).toBe(t)
+  })
+})
+
+describe('field role helpers', () => {
+  function tree() {
+    return { type: 'root', id: 'r', children: [
+      { type: 'section', id: 's', name: 'S', role: null, order: 0, visible: true, children: [
+        { type: 'group', id: 'g', name: 'G', order: 0, visible: true, regen_lock: false, children: [
+          { type: 'field', id: 'f', name: 'F', key: 'f', order: 0, visible: true,
+            kind: 'markdown', value: '', llm_output: false, llm_instructions: '',
+            llm_input: false, regen_lock: false, min: null, max: null },
+        ] },
+      ] },
+    ] }
+  }
+
+  it('derives role from flags', () => {
+    expect(fieldRole({ llm_output: true, llm_input: false })).toBe('output')
+    expect(fieldRole({ llm_output: false, llm_input: true })).toBe('context')
+    expect(fieldRole({ llm_output: false, llm_input: false })).toBe('immutable')
+  })
+
+  it('setFieldRole sets the flag pair and is immutable', () => {
+    const t = tree()
+    const out = setFieldRole(t, 'f', 'output')
+    expect(out).not.toBe(t)
+    const f = out.children[0].children[0].children[0]
+    expect(f.llm_output).toBe(true)
+    expect(f.llm_input).toBe(false)
+    const ctx = setFieldRole(t, 'f', 'context').children[0].children[0].children[0]
+    expect(ctx.llm_output).toBe(false)
+    expect(ctx.llm_input).toBe(true)
+    const imm = setFieldRole(t, 'f', 'immutable').children[0].children[0].children[0]
+    expect(imm.llm_output).toBe(false)
+    expect(imm.llm_input).toBe(false)
+  })
+
+  it('setLlmInstructions writes the text', () => {
+    const f = setLlmInstructions(tree(), 'f', 'Rewrite punchier')
+      .children[0].children[0].children[0]
+    expect(f.llm_instructions).toBe('Rewrite punchier')
+  })
+
+  it('toggleRegenLock flips the lock', () => {
+    const f = toggleRegenLock(tree(), 'f').children[0].children[0].children[0]
+    expect(f.regen_lock).toBe(true)
   })
 })
