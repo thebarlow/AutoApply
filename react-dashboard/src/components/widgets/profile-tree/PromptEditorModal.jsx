@@ -25,7 +25,7 @@ export function PromptEditorModal({ node, isSection, label, value, tree, onChang
       onClick={onClose}
     >
       <div
-        className="bg-[#0f0f1a] border border-space-border rounded-2xl p-5 w-[48rem] max-w-[92vw] flex flex-col gap-3"
+        className="bg-[#0f0f1a] border border-space-border rounded-2xl p-5 w-[60rem] max-w-[94vw] flex flex-col gap-3"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

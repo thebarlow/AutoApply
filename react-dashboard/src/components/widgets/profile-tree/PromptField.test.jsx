@@ -20,7 +20,8 @@ describe('buildChipGroups', () => {
     const job = groups.find((g) => g.label === 'Job')
     expect(job.chips.some((c) => c.token === '{job.description}' && c.display === 'Job: description')).toBe(true)
     const sec = groups.find((g) => g.label === 'My Skills')
-    expect(sec.chips.some((c) => c.token === '{profile:sec1}')).toBe(true)
+    expect(sec.token).toBe('{profile:sec1}') // folder itself is draggable
+    expect(sec.chips.some((c) => c.token === '{profile:sec1}')).toBe(false) // no whole-section pill
     const fieldChip = sec.chips.find((c) => c.token === '{profile:fld1}')
     expect(fieldChip.display).toBe('My Skills › Tech')
   })
@@ -74,13 +75,21 @@ const listSection = {
 }
 const listTree = { type: 'root', id: 'r', children: [listSection] }
 
-it('builds one sub-folder per entry with whole-entry + field pills', () => {
+it('builds one draggable sub-folder per entry with field pills', () => {
   const groups = buildChipGroups(listTree)
   const exp = groups.find((g) => g.label === 'Experience')
+  expect(exp.token).toBe('{profile:sec1}') // section folder is draggable
   expect(exp.subfolders).toHaveLength(2)
   const first = exp.subfolders[0]
   expect(first.label).toBe('Research Assistant')
-  expect(first.chips.map((c) => c.token)).toEqual(['{profile:e1}', '{profile:f1}'])
+  expect(first.token).toBe('{profile:e1}') // entry folder is draggable
+  expect(first.chips.map((c) => c.token)).toEqual(['{profile:f1}']) // field pills only
+})
+
+it('maps folder tokens to their display label', () => {
+  const map = buildLabelMap(listTree)
+  expect(map['{profile:sec1}']).toBe('Experience')
+  expect(map['{profile:e1}']).toBe('Experience › Research Assistant')
 })
 
 it('labels an unnamed entry from its first field value', () => {
@@ -133,11 +142,14 @@ describe('PromptField', () => {
     expect(onChange.mock.calls.at(-1)[0]).toContain('{job.title}')
   })
 
-  it('opens and closes the pop-out editor', () => {
+  it('has no pop-out button — the modal is the full editor surface', () => {
     render(<PromptField value="x" onChange={vi.fn()} tree={tree} ariaLabel="Section prompt" />)
-    fireEvent.click(screen.getByLabelText('Expand editor'))
-    expect(screen.getByLabelText('Section prompt (expanded)')).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Close editor'))
-    expect(screen.queryByLabelText('Section prompt (expanded)')).toBeNull()
+    expect(screen.queryByLabelText('Expand editor')).toBeNull()
+  })
+
+  it('marks a profile section folder as draggable carrying its node token', () => {
+    render(<PromptField value="" onChange={vi.fn()} tree={tree} ariaLabel="Section prompt" />)
+    const folder = screen.getByText('My Skills').closest('button')
+    expect(folder).toHaveAttribute('draggable', 'true')
   })
 })

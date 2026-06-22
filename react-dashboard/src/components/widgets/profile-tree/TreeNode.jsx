@@ -222,6 +222,15 @@ function SectionChild({ child, ops, tree, sectionLocked }) {
   return <FieldView field={child} fieldsEditable={false} ops={ops} tree={tree} />
 }
 
+// A list section with at least one entry, all of whose entries are locked, is
+// effectively locked: the LLM would tailor nothing in it.
+function allEntriesLocked(section) {
+  const child = section.children?.[0]
+  if (!child || child.type !== 'list') return false
+  const entries = child.children || []
+  return entries.length > 0 && entries.every((e) => e.locked)
+}
+
 export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, initialCollapsed = true }) {
   const preset = isPresetSection(section)
   const child = section.children[0]
@@ -229,6 +238,9 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
   const [promptOpen, setPromptOpen] = useState(false)
   const toggle = () => setCollapsed((c) => !c)
   const locked = !!section.locked
+  // Glyph reflects effective lock (explicit OR every entry locked); the toggle
+  // and its aria-label stay bound to the explicit section.locked flag.
+  const effLocked = locked || allEntriesLocked(section)
   return (
     <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
       <div className={`${headerRow} cursor-pointer`} onClick={toggle}>
@@ -240,10 +252,14 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
           <button
             type="button"
             aria-label={locked ? 'Unlock section for LLM' : 'Lock section from LLM'}
-            title={locked ? 'Locked — LLM leaves this section as typed' : 'LLM may tailor this section'}
+            title={
+              locked ? 'Locked — LLM leaves this section as typed'
+                : effLocked ? 'All entries are locked — section is effectively locked'
+                  : 'LLM may tailor this section'
+            }
             className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
             onClick={() => ops.toggleLocked(section.id)}
-          >{locked ? '🔒' : '🔓'}</button>
+          >{effLocked ? '🔒' : '🔓'}</button>
           <VisibleToggle visible={section.visible} onToggle={() => ops.toggleVisible(section.id)} label="section" />
           <button
             type="button" aria-label="Edit section prompt" title="Section prompt"

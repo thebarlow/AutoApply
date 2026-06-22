@@ -198,6 +198,19 @@ describe('SectionView lock + prompt', () => {
     expect(screen.getByLabelText('Lock item from LLM')).toBeInTheDocument()
     expect(screen.queryByLabelText('Item prompt')).toBeNull()
   })
+
+  it('shows the section as effectively locked (🔒) when every entry is locked', () => {
+    const sec = {
+      type: 'section', id: 'exp', name: 'Experience', role: 'experience', visible: true, prompt: '',
+      children: [{ type: 'list', id: 'l', name: 'Experience', children: [
+        { type: 'group', id: 'e1', name: 'A', visible: true, locked: true, prompt: '', children: [] },
+        { type: 'group', id: 'e2', name: 'B', visible: true, locked: true, prompt: '', children: [] },
+      ] }],
+    }
+    render(<SectionView section={sec} isFirst isLast ops={noopOps()} tree={rootOf(sec)} />)
+    // section.locked is false, so the toggle's aria stays "Lock…", but its glyph is 🔒
+    expect(screen.getByLabelText('Lock section from LLM').textContent).toContain('🔒')
+  })
 })
 
 // --- New cases from task-7 brief ---

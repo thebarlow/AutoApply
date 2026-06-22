@@ -46,6 +46,9 @@ export function buildFoldedPreview(section) {
 
 // Chip groups. Profile chips carry a node-id token ({profile:<id>}) so they are
 // rename-safe; `display` is the human-readable label shown in the editor pill.
+// A profile folder (section or list entry) carries its own `token`, so the folder
+// header itself is draggable to inject the whole node's data — there is no
+// separate "(whole section)" / "(whole entry)" pill.
 export function buildChipGroups(tree) {
   const groups = [{
     label: 'Job',
@@ -57,33 +60,35 @@ export function buildChipGroups(tree) {
     if (child && child.type === 'list') {
       const subfolders = (child.children || []).map((entry) => {
         const elabel = entryLabel(entry)
-        const chips = [{ token: `{profile:${entry.id}}`, label: '(whole entry)', display: `${name} › ${elabel}` }]
-        for (const f of entry.children || []) {
-          const fname = f.name || f.key
-          chips.push({ token: `{profile:${f.id}}`, label: fname, display: `${name} › ${elabel} › ${fname}` })
-        }
-        return { label: elabel, chips }
+        const chips = (entry.children || []).map((f) => ({
+          token: `{profile:${f.id}}`, label: f.name || f.key,
+          display: `${name} › ${elabel} › ${f.name || f.key}`,
+        }))
+        return { label: elabel, token: `{profile:${entry.id}}`, display: `${name} › ${elabel}`, chips }
       })
-      groups.push({ label: name, subfolders })
+      groups.push({ label: name, token: `{profile:${section.id}}`, display: name, subfolders })
     } else {
-      const chips = [{ token: `{profile:${section.id}}`, label: '(whole section)', display: name }]
-      for (const f of sectionFields(section)) {
-        const fname = f.name || f.key
-        chips.push({ token: `{profile:${f.id}}`, label: fname, display: `${name} › ${fname}` })
-      }
-      groups.push({ label: name, chips })
+      const chips = sectionFields(section).map((f) => ({
+        token: `{profile:${f.id}}`, label: f.name || f.key, display: `${name} › ${f.name || f.key}`,
+      }))
+      groups.push({ label: name, token: `{profile:${section.id}}`, display: name, chips })
     }
   }
   return groups
 }
 
-// token -> display label, for rendering stored tokens as pills.
+// token -> display label, for rendering stored tokens as pills. Includes the
+// folder tokens (so a dragged-in section/entry folder renders as a labelled pill).
 export function buildLabelMap(tree) {
   const map = {}
   const add = (chips) => { for (const c of chips || []) map[c.token] = c.display }
   for (const g of buildChipGroups(tree)) {
+    if (g.token) map[g.token] = g.display
     add(g.chips)
-    for (const sf of g.subfolders || []) add(sf.chips)
+    for (const sf of g.subfolders || []) {
+      if (sf.token) map[sf.token] = sf.display
+      add(sf.chips)
+    }
   }
   return map
 }
@@ -167,11 +172,18 @@ function insertPillAtCaret(root, token, label) {
 
 function ChipFolder({ group, onInsert }) {
   const [open, setOpen] = useState(false)
+  const draggable = !!group.token
   return (
     <div className="flex flex-col">
       <button
         type="button"
-        className="text-left text-xs font-semibold text-space-dim hover:text-space-text"
+        draggable={draggable}
+        title={draggable ? `Drag to inject all of ${group.label}` : undefined}
+        onDragStart={draggable ? (e) => {
+          e.dataTransfer.setData('text/plain', group.token)
+          e.dataTransfer.setData('application/x-chip-label', group.display)
+        } : undefined}
+        className={`text-left text-xs font-semibold text-space-dim hover:text-space-text ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
         onClick={() => setOpen((o) => !o)}
       ><span aria-hidden="true">{open ? '▾' : '▸'} </span>{group.label}</button>
       {open && group.chips && (
@@ -269,8 +281,10 @@ function Editor({ value, onChange, tree, ariaLabel, editorRef, extraClass = '' }
   )
 }
 
+// Two-column prompt editor (3:1): the contenteditable surface on the left, the
+// context-injection folder tray on the right. No pop-out — the host modal is the
+// full-size surface. Chips/folders insert on click or drag into the editor.
 export function PromptField({ value, onChange, tree, ariaLabel, placeholder }) {
-  const [popOut, setPopOut] = useState(false)
   const ref = useRef(null)
   const labels = useMemo(() => buildLabelMap(tree), [tree])
   const groups = useMemo(() => buildChipGroups(tree), [tree])
@@ -279,49 +293,15 @@ export function PromptField({ value, onChange, tree, ariaLabel, placeholder }) {
     onChange(serializeNode(ref.current))
   }
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-start gap-1.5">
-        <Editor value={value} onChange={onChange} tree={tree} ariaLabel={ariaLabel} editorRef={ref} />
-        <button
-          type="button" aria-label="Expand editor" title="Pop out"
-          className="px-1.5 py-0.5 text-space-dim hover:text-space-text"
-          onClick={() => setPopOut(true)}
-        >⤢</button>
-      </div>
-      {placeholder && !value && <p className="text-xs text-space-dim/70 -mt-1">{placeholder}</p>}
-      <ChipTray groups={groups} onInsert={insert} />
-      {popOut && (
-        <PopOutEditor
+    <div className="grid grid-cols-4 gap-3 items-start">
+      <div className="col-span-3 flex flex-col gap-1.5">
+        <Editor
           value={value} onChange={onChange} tree={tree}
-          title={ariaLabel} onClose={() => setPopOut(false)}
+          ariaLabel={ariaLabel} editorRef={ref} extraClass="min-h-[16rem]"
         />
-      )}
-    </div>
-  )
-}
-
-export function PopOutEditor({ value, onChange, tree, title, onClose }) {
-  const ref = useRef(null)
-  const labels = useMemo(() => buildLabelMap(tree), [tree])
-  const groups = useMemo(() => buildChipGroups(tree), [tree])
-  const insert = (token, display) => {
-    insertPillAtCaret(ref.current, token, display || labels[token] || token)
-    onChange(serializeNode(ref.current))
-  }
-  return (
-    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div
-        className="bg-[#0f0f1a] border border-space-border rounded-2xl p-5 w-[48rem] max-w-[92vw] flex flex-col gap-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-space-text">{title}</h2>
-          <button
-            type="button" aria-label="Close editor" onClick={onClose}
-            className="text-space-dim hover:text-space-text text-xl leading-none"
-          >×</button>
-        </div>
-        <Editor value={value} onChange={onChange} tree={tree} ariaLabel={`${title} (expanded)`} editorRef={ref} extraClass="min-h-[20rem]" />
+        {placeholder && !value && <p className="text-xs text-space-dim/70">{placeholder}</p>}
+      </div>
+      <div className="col-span-1">
         <ChipTray groups={groups} onInsert={insert} />
       </div>
     </div>
