@@ -53,12 +53,28 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Features
 
-- [ ] **Per-section resume content/format control + section-paired prompts.** SPEC IN
-  PROGRESS (umbrella spec decomposes into three sub-projects sharing a per-section config
-  on the profile: A=rewrite behavior, B=content structure/order, C=visual layout). Per-item
-  rewrite toggles, per-section prompts with per-section eval/refine + final ATS gate,
-  user-creatable/renamable sections. Ship rewrite behavior first. See
-  `docs/superpowers/specs/` once written.
+- **Profile Schema Engine (user-defined résumé sections).** Replace the hardcoded 5-section
+  résumé model with a user-definable recursive tree. Decomposed into 5 sub-projects, each
+  with its own spec → plan → impl cycle. **RELEASE CONSTRAINT: each sub-project merges to
+  LOCAL `main` only — do NOT push `main` until the whole swap (#1–#5) is complete.**
+  - [x] **#1 Schema engine** — recursive closed-vocabulary tree (`core/profile_tree.py`) as
+    profile source of truth; `legacy_to_tree`/`tree_to_legacy`. DONE (local main).
+  - [x] **#2 Builder UI** — React tree editor (`react-dashboard/src/components/widgets/profile-tree/`):
+    render/rename/reorder/add/remove sections + fields, section gallery, lock/visibility.
+    DONE (local main; phased 2A/2B/2C).
+  - [x] **#3 Schema-driven LLM generation + section/item prompts** — `core/section_generator.py`
+    Model 2 (per-section gen); `build_section_prompt` folded prompts; node-id `{profile:<id>}`
+    /`{job.}` context tokens; `PromptEditorModal` two-column pill editor w/ draggable context
+    folders; visibility-aware `tree_to_legacy`. Dev-only compare harness
+    (`POST /api/dev/resume-compare/{job_key}`). DONE (local main, 2026-06-22).
+  - [ ] **#4 Schema-driven RENDERING of custom sections — NEXT.** Until this ships, custom/added
+    sections + fields are storable and editable but do **NOT** appear on generated
+    résumés/cover letters (`tree_to_legacy` only projects the known legacy keys; the
+    document assembler/templates render the fixed sections). Make the document pipeline
+    render the tree's sections/fields generically. Start: brainstorm → spec → plan →
+    subagent-driven impl on a fresh branch off `main`.
+  - [ ] **#5 Onboarding parse** — map novel/uploaded résumé sections onto the schema during
+    first-run onboarding. After #4.
 
 - [ ] **High-effort toggle.** A toggle (per-prompt and/or a general switch) that swaps to a
   more capable model for a request, consuming more credits in exchange for higher quality.
