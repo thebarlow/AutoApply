@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import {
   buildChipGroups, buildLabelMap, splitSegments, serializeNode, renderHtml,
-  ChipTray, PromptField,
+  ChipTray, PromptField, buildFoldedPreview, entryLabel,
 } from './PromptField'
 
 const tree = {
@@ -57,6 +57,44 @@ describe('ChipTray', () => {
     fireEvent.click(screen.getByText('description'))
     expect(onInsert).toHaveBeenCalledWith('{job.description}', 'Job: description')
   })
+})
+
+const listSection = {
+  type: 'section', id: 'sec1', name: 'Experience', role: 'experience',
+  prompt: 'Lead with impact',
+  children: [{
+    type: 'list', id: 'lst1', name: 'Experience',
+    children: [
+      { type: 'group', id: 'e1', name: 'Research Assistant', prompt: 'stress ML pubs',
+        children: [{ type: 'field', id: 'f1', name: 'Title', key: 'title', value: 'RA' }] },
+      { type: 'group', id: 'e2', name: '', prompt: '',
+        children: [{ type: 'field', id: 'f2', name: 'Title', key: 'title', value: 'Barista' }] },
+    ],
+  }],
+}
+const listTree = { type: 'root', id: 'r', children: [listSection] }
+
+it('builds one sub-folder per entry with whole-entry + field pills', () => {
+  const groups = buildChipGroups(listTree)
+  const exp = groups.find((g) => g.label === 'Experience')
+  expect(exp.subfolders).toHaveLength(2)
+  const first = exp.subfolders[0]
+  expect(first.label).toBe('Research Assistant')
+  expect(first.chips.map((c) => c.token)).toEqual(['{profile:e1}', '{profile:f1}'])
+})
+
+it('labels an unnamed entry from its first field value', () => {
+  expect(entryLabel({ name: '', children: [{ value: 'Barista' }] })).toBe('Barista')
+})
+
+it('buildFoldedPreview mirrors the Python format', () => {
+  expect(buildFoldedPreview(listSection)).toBe(
+    '[Experience: Lead with impact [Research Assistant: stress ML pubs]]',
+  )
+})
+
+it('buildFoldedPreview returns empty when nothing authored', () => {
+  expect(buildFoldedPreview({ name: 'Skills', prompt: '', children: [] })).toBe('')
 })
 
 describe('PromptField', () => {

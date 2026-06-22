@@ -19,6 +19,30 @@ function sectionFields(section) {
   return out
 }
 
+export function entryLabel(entry) {
+  if (entry?.name && entry.name.trim()) return entry.name.trim()
+  for (const f of entry?.children || []) {
+    if (typeof f.value === 'string' && f.value.trim()) return f.value.trim()
+    if (Array.isArray(f.value) && f.value.length) return f.value.join(', ')
+  }
+  return 'Entry'
+}
+
+export function buildFoldedPreview(section) {
+  if (!section || section.locked) return ''
+  const parts = []
+  if (section.prompt && section.prompt.trim()) parts.push(section.prompt.trim())
+  const child = (section.children || [])[0]
+  if (child && child.type === 'list') {
+    for (const entry of child.children || []) {
+      if (entry.locked || !(entry.prompt && entry.prompt.trim())) continue
+      parts.push(`[${entryLabel(entry)}: ${entry.prompt.trim()}]`)
+    }
+  }
+  if (!parts.length) return ''
+  return `[${section.name}: ${parts.join(' ')}]`
+}
+
 // Chip groups. Profile chips carry a node-id token ({profile:<id>}) so they are
 // rename-safe; `display` is the human-readable label shown in the editor pill.
 export function buildChipGroups(tree) {
@@ -28,12 +52,26 @@ export function buildChipGroups(tree) {
   }]
   for (const section of tree?.children || []) {
     const name = section.name || 'Section'
-    const chips = [{ token: `{profile:${section.id}}`, label: '(whole section)', display: name }]
-    for (const f of sectionFields(section)) {
-      const fname = f.name || f.key
-      chips.push({ token: `{profile:${f.id}}`, label: fname, display: `${name} › ${fname}` })
+    const child = (section.children || [])[0]
+    if (child && child.type === 'list') {
+      const subfolders = (child.children || []).map((entry) => {
+        const elabel = entryLabel(entry)
+        const chips = [{ token: `{profile:${entry.id}}`, label: '(whole entry)', display: `${name} › ${elabel}` }]
+        for (const f of entry.children || []) {
+          const fname = f.name || f.key
+          chips.push({ token: `{profile:${f.id}}`, label: fname, display: `${name} › ${elabel} › ${fname}` })
+        }
+        return { label: elabel, chips }
+      })
+      groups.push({ label: name, subfolders })
+    } else {
+      const chips = [{ token: `{profile:${section.id}}`, label: '(whole section)', display: name }]
+      for (const f of sectionFields(section)) {
+        const fname = f.name || f.key
+        chips.push({ token: `{profile:${f.id}}`, label: fname, display: `${name} › ${fname}` })
+      }
+      groups.push({ label: name, chips })
     }
-    groups.push({ label: name, chips })
   }
   return groups
 }
@@ -41,8 +79,10 @@ export function buildChipGroups(tree) {
 // token -> display label, for rendering stored tokens as pills.
 export function buildLabelMap(tree) {
   const map = {}
+  const add = (chips) => { for (const c of chips || []) map[c.token] = c.display }
   for (const g of buildChipGroups(tree)) {
-    for (const c of g.chips) map[c.token] = c.display
+    add(g.chips)
+    for (const sf of g.subfolders || []) add(sf.chips)
   }
   return map
 }
