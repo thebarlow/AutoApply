@@ -9,7 +9,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { FieldWidget } from './fieldWidgets'
 import { MoveButtons, VisibleToggle, RenameLabel, RemoveButton, AddButton, LlmWriteToggle } from './structuralControls'
 import { isPresetSection } from './treeOps'
-import { PromptField } from './PromptField'
+
 
 const rowWrap = 'flex flex-col gap-1'
 const headerRow = 'flex items-center justify-between gap-2'
@@ -163,13 +163,7 @@ function SortableEntry({ item, index, count, ops, tree, sectionLocked }) {
           <RemoveButton onRemove={() => ops.remove(item.id)} label="Remove item" />
         </span>
       </div>
-      {!collapsed && !sectionLocked && !locked && (
-        <PromptField
-          ariaLabel="Item prompt" placeholder="How should the LLM tailor this entry?"
-          value={item.prompt || ''} tree={tree}
-          onChange={(t) => ops.setPrompt(item.id, t)}
-        />
-      )}
+
       {!collapsed && <GroupView group={item} fieldsEditable={false} ops={ops} />}
     </div>
   )
@@ -247,13 +241,7 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
           {!preset && <RemoveButton onRemove={() => ops.remove(section.id)} label="Remove section" />}
         </span>
       </div>
-      {!collapsed && !locked && (
-        <PromptField
-          ariaLabel="Section prompt" placeholder="How should the LLM tailor this whole section?"
-          value={section.prompt || ''} tree={tree}
-          onChange={(t) => ops.setPrompt(section.id, t)}
-        />
-      )}
+
       {!collapsed && child && (
         <SectionChild child={child} preset={preset} ops={ops} tree={tree} sectionLocked={locked} />
       )}

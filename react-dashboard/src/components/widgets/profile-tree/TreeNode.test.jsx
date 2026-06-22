@@ -153,13 +153,13 @@ describe('SectionView custom', () => {
 })
 
 describe('SectionView lock + prompt', () => {
-  it('shows a section lock toggle and a prompt editor when unlocked', () => {
+  it('shows a section lock toggle when unlocked (inline prompt retired to modal)', () => {
     const ops = noopOps()
     render(<SectionView section={customSection} isFirst isLast={false} ops={ops} tree={rootOf(customSection)} />)
     fireEvent.click(screen.getByLabelText('Expand section'))
-    // section unlocked by default → lock offers to lock, prompt editor present
+    // section unlocked by default → lock offers to lock; inline prompt removed (now in PromptEditorModal)
     expect(screen.getByLabelText('Lock section from LLM')).toBeInTheDocument()
-    expect(screen.getByLabelText('Section prompt')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Section prompt')).toBeNull()
   })
 
   it('hides the section prompt editor when the section is locked', () => {
@@ -177,12 +177,12 @@ describe('SectionView lock + prompt', () => {
     expect(ops.toggleLocked).toHaveBeenCalledWith('sec-c')
   })
 
-  it('shows an item lock + item prompt on a list entry when unlocked', () => {
+  it('shows an item lock on a list entry when unlocked (inline prompt retired to modal)', () => {
     const ops = noopOps()
     render(<SectionView section={presetListSection} isFirst={false} isLast ops={ops} tree={rootOf(presetListSection)} />)
     fireEvent.click(screen.getByLabelText('Expand section'))
     fireEvent.click(screen.getByLabelText('Expand item'))
     expect(screen.getByLabelText('Lock item from LLM')).toBeInTheDocument()
-    expect(screen.getByLabelText('Item prompt')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Item prompt')).toBeNull()
   })
 })
