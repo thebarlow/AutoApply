@@ -67,14 +67,43 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
     /`{job.}` context tokens; `PromptEditorModal` two-column pill editor w/ draggable context
     folders; visibility-aware `tree_to_legacy`. Dev-only compare harness
     (`POST /api/dev/resume-compare/{job_key}`). DONE (local main, 2026-06-22).
-  - [ ] **#4 Schema-driven RENDERING of custom sections — NEXT.** Until this ships, custom/added
-    sections + fields are storable and editable but do **NOT** appear on generated
-    résumés/cover letters (`tree_to_legacy` only projects the known legacy keys; the
-    document assembler/templates render the fixed sections). Make the document pipeline
-    render the tree's sections/fields generically. Start: brainstorm → spec → plan →
-    subagent-driven impl on a fresh branch off `main`.
+  - [ ] **#4 Schema-driven RENDERING of custom sections — IN PROGRESS (full tree swap).**
+    Spec `docs/superpowers/specs/2026-06-22-schema-driven-document-rendering-design.md`.
+    Retires the typed `ResumeDocument` résumé pipeline; the **document tree** (profile tree
+    snapshot w/ authored values baked in, invisible/`context_only` nodes pruned) becomes the
+    résumé source of truth in `documents.structured_json` under a `schema:"tree-v1"`
+    discriminator (legacy rows render via the old assembler — no data migration). Cover letter
+    stays typed. **Frontmatter retired:** contact + education are no longer protected via a YAML
+    data channel (the LLM never authors them anyway — they aren't `llm_output` fields), so they
+    render as ordinary tree sections via default templates; presentation is template-driven, not
+    frontmatter-driven. Phased into FOUR (the generation switch cascades into the refine loop, so
+    the pure engine is isolated from the risky wiring); each phase = own plan → subagent impl,
+    merged to LOCAL `main`:
+    - [ ] **4A — Pure foundation (NEXT, plan being written).** `core/document_tree.py`
+      (`build_resume_document_tree(root, authored)` — prune invisible + `context_only` nodes,
+      bake authored values, keep locked verbatim) + promote `core/tree_render.py` to a generic
+      template-composed section renderer with default contact + education templates (no
+      frontmatter). Pure functions + golden tests; running app unchanged.
+    - [ ] **4B — Wire tree-v1 into production (headline win).** `generate_resume_md` →
+      `section_generator` → document tree → store `schema:"tree-v1"`; `_render_meta` /
+      `write_resume_markdown` branch on the discriminator; PDF/template rework (frontmatter
+      retired, Education special-casing removed from `render_pdf`/`resume_template.html`); make
+      the auto-refine loop + feedback-refine tree-aware. Custom sections appear on generated PDFs.
+    - [ ] **4C — ATS gate rework.** Drop the required-fixed-heading hard-block + literal heading
+      matching from `check_mechanical`; keep contact-at-top / text-layer / glyph-junk / per-job
+      `ext_required_skills`-survive checks + the semantic LLM roundtrip. No roles, no synonym map
+      (vendor synonym dicts are proprietary; no section is universally required — freshers/
+      career-changers lack work history).
+    - [ ] **4D — DocumentModal generic rebuild + feedback-on-tree.** Rebuild
+      `react-dashboard/src/components/widgets/document/` to render/edit the document tree
+      generically (reuse `profile-tree/` patterns); retarget `POST /{doc_type}/feedback` refine
+      to tree nodes. Largest, mostly frontend. Cover editing unchanged.
+- [ ] **Profile Schema Engine #6 — User-formatted PDF + live preview (NEW; sequenced #4 → #6 → #5).**
+  Live in-dashboard PDF render + a constrained, user-customizable template system: the user
+  controls how each section/item renders (templates), with ATS-safety enforced by the templates
+  themselves. Depends on #4 (not #5); the 4D DocumentModal is its UI home. Own spec when reached.
   - [ ] **#5 Onboarding parse** — map novel/uploaded résumé sections onto the schema during
-    first-run onboarding. After #4.
+    first-run onboarding. After #6.
 
 - [ ] **High-effort toggle.** A toggle (per-prompt and/or a general switch) that swaps to a
   more capable model for a request, consuming more credits in exchange for higher quality.
