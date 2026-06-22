@@ -173,7 +173,7 @@ function ChipFolder({ group, onInsert }) {
         className="text-left text-xs font-semibold text-space-dim hover:text-space-text"
         onClick={() => setOpen((o) => !o)}
       ><span aria-hidden="true">{open ? '▾' : '▸'} </span>{group.label}</button>
-      {open && (
+      {open && group.chips && (
         <div className="flex flex-wrap gap-1.5 pl-3 py-1">
           {group.chips.map((c) => (
             <button
@@ -185,8 +185,15 @@ function ChipFolder({ group, onInsert }) {
                 e.dataTransfer.setData('application/x-chip-label', c.display)
               }}
               onClick={() => onInsert(c.token, c.display)}
-              className="px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-xs text-purple-300 cursor-grab active:cursor-grabbing select-none"
+              className="px-2 py-0.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-xs text-emerald-300 cursor-grab active:cursor-grabbing select-none"
             >{c.label}</button>
+          ))}
+        </div>
+      )}
+      {open && group.subfolders && (
+        <div className="flex flex-col pl-3">
+          {group.subfolders.map((sf) => (
+            <ChipFolder key={sf.label} group={sf} onInsert={onInsert} />
           ))}
         </div>
       )}
@@ -227,7 +234,22 @@ function Editor({ value, onChange, tree, ariaLabel, editorRef, extraClass = '' }
     e.preventDefault()
     const token = e.dataTransfer.getData('text/plain')
     const label = e.dataTransfer.getData('application/x-chip-label')
-    if (token) { insertPillAtCaret(ref.current, token, label || labels[token] || token); emit() }
+    if (!token) return
+    const root = ref.current
+    let range = null
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(e.clientX, e.clientY)
+    } else if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(e.clientX, e.clientY)
+      if (pos) { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); range.collapse(true) }
+    }
+    if (range && root && root.contains(range.startContainer)) {
+      const sel = window.getSelection()
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
+    insertPillAtCaret(root, token, label || labels[token] || token)
+    emit()
   }
   return (
     <div

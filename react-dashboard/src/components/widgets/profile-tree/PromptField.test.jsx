@@ -97,6 +97,19 @@ it('buildFoldedPreview returns empty when nothing authored', () => {
   expect(buildFoldedPreview({ name: 'Skills', prompt: '', children: [] })).toBe('')
 })
 
+it('expands an entry sub-folder to reveal its chips', () => {
+  const groups = [{
+    label: 'Experience',
+    subfolders: [{ label: 'Research Assistant', chips: [
+      { token: '{profile:e1}', label: '(whole entry)', display: 'Experience › RA' },
+    ] }],
+  }]
+  render(<ChipTray groups={groups} onInsert={() => {}} />)
+  fireEvent.click(screen.getByText('Experience'))
+  fireEvent.click(screen.getByText('Research Assistant'))
+  expect(screen.getByText('(whole entry)')).toBeInTheDocument()
+})
+
 describe('PromptField', () => {
   it('renders a stored token as a pill showing its label', () => {
     render(<PromptField value="{profile:fld1}" onChange={vi.fn()} tree={tree} ariaLabel="Section prompt" />)
