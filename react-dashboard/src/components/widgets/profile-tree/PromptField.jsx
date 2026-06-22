@@ -22,8 +22,9 @@ function sectionFields(section) {
 export function entryLabel(entry) {
   if (entry?.name && entry.name.trim()) return entry.name.trim()
   for (const f of entry?.children || []) {
-    if (typeof f.value === 'string' && f.value.trim()) return f.value.trim()
-    if (Array.isArray(f.value) && f.value.length) return f.value.join(', ')
+    const v = f.value
+    const s = Array.isArray(v) ? v.map(String).join(', ') : (v == null ? '' : String(v))
+    if (s.trim()) return s.trim()
   }
   return 'Entry'
 }

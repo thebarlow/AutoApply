@@ -87,6 +87,14 @@ it('labels an unnamed entry from its first field value', () => {
   expect(entryLabel({ name: '', children: [{ value: 'Barista' }] })).toBe('Barista')
 })
 
+it('coerces numeric scalars to strings matching Python _entry_label', () => {
+  expect(entryLabel({ name: '', children: [{ value: '' }, { value: 0 }] })).toBe('0')
+})
+
+it('falls back to Entry when all fields empty', () => {
+  expect(entryLabel({ name: '', children: [{ value: '' }, { value: null }] })).toBe('Entry')
+})
+
 it('buildFoldedPreview mirrors the Python format', () => {
   expect(buildFoldedPreview(listSection)).toBe(
     '[Experience: Lead with impact [Research Assistant: stress ML pubs]]',

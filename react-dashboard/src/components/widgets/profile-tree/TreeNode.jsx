@@ -113,7 +113,7 @@ function entrySummary(item) {
 
 // One list entry, made sortable. Collapsed by default; body-click on the
 // header bar toggles expand; drag-handle-only reorder.
-function SortableEntry({ item, index, count, ops, tree, sectionLocked }) {
+function SortableEntry({ item, index, ops, tree, sectionLocked }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id })
   const [collapsed, setCollapsed] = useState(true)
@@ -192,7 +192,7 @@ function ListView({ list, ops, tree, sectionLocked }) {
         <SortableContext items={list.children.map((i) => i.id)} strategy={verticalListSortingStrategy}>
           {list.children.map((item, i) => (
             <SortableEntry
-              key={item.id} item={item} index={i} count={list.children.length} ops={ops}
+              key={item.id} item={item} index={i} ops={ops}
               tree={tree} sectionLocked={sectionLocked}
             />
           ))}
