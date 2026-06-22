@@ -1,18 +1,22 @@
 import { useEffect } from 'react'
 import { PromptField, buildFoldedPreview } from './PromptField'
 
-// The sole surface for editing a section/item authoring prompt. Opened by the ✉
-// control on a section or list entry. Hosts the pill editor + chip tray, and for
-// sections a read-only folded preview mirroring the backend build_section_prompt.
-export function PromptEditorModal({ node, isSection, tree, onChange, onClose }) {
+// The sole surface for editing a section/item/field authoring prompt. Opened by
+// the 💬 control on a section, list entry, or LLM-written field. Hosts the pill
+// editor + chip tray, and for sections a read-only folded preview mirroring the
+// backend build_section_prompt. `value` is the current prompt text (falls back to
+// node.prompt for section/item callers); `label` overrides the title noun.
+export function PromptEditorModal({ node, isSection, label, value, tree, onChange, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const noun = label || (isSection ? 'Section' : 'Item')
   const locked = !!node.locked
-  const title = `${isSection ? 'Section' : 'Item'} prompt — ${node.name || 'Untitled'}`
+  const text = value !== undefined ? value : (node.prompt || '')
+  const title = `${noun} prompt — ${node.name || 'Untitled'}`
   const preview = isSection ? buildFoldedPreview(node) : ''
 
   return (
@@ -33,12 +37,12 @@ export function PromptEditorModal({ node, isSection, tree, onChange, onClose }) 
         </div>
         {locked && (
           <p className="text-xs text-amber-400">
-            This prompt is saved but inert while the {isSection ? 'section' : 'item'} is
+            This prompt is saved but inert while the {noun.toLowerCase()} is
             locked — the LLM skips locked nodes.
           </p>
         )}
         <PromptField
-          value={node.prompt || ''} tree={tree}
+          value={text} tree={tree}
           ariaLabel={title} placeholder="How should the LLM tailor this?"
           onChange={onChange}
         />

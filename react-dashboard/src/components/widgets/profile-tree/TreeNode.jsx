@@ -16,11 +16,13 @@ const rowWrap = 'flex flex-col gap-1'
 const headerRow = 'flex items-center justify-between gap-2'
 
 // A single field: label (renamable only on custom groups) + eye (render) +
-// lock (LLM may write) + widget, then the LLM instructions box when unlocked.
-// The lock and eye are the two field controls: lock = "can the LLM change this
-// value?", eye = "does this value appear in the output document?".
-function FieldView({ field, fieldsEditable, ops }) {
+// lock (LLM may write) + widget. When the LLM may write the field, a 💬 control
+// opens the prompt modal (bound to llm_instructions) — same idiom as section/item
+// prompts. The lock and eye are the two value controls: lock = "can the LLM
+// change this value?", eye = "does this value appear in the output document?".
+function FieldView({ field, fieldsEditable, ops, tree }) {
   const written = !!field.llm_output
+  const [promptOpen, setPromptOpen] = useState(false)
   return (
     <div className={rowWrap}>
       <div className={headerRow}>
@@ -31,39 +33,52 @@ function FieldView({ field, fieldsEditable, ops }) {
         <span className="inline-flex items-center">
           <LlmWriteToggle written={written} onToggle={() => ops.toggleWritten(field.id)} />
           <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} label="in output" />
+          {written && (
+            <button
+              type="button" aria-label="Edit field prompt" title="Field prompt"
+              className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+              onClick={() => setPromptOpen(true)}
+            >💬</button>
+          )}
         </span>
       </div>
       <div className={field.visible ? '' : 'opacity-50'}>
         <FieldWidget field={field} onChange={(v) => ops.setValue(field.id, v)} />
       </div>
-      {written && (
-        <textarea
-          aria-label="LLM instructions" rows={2}
-          placeholder="How should the LLM write this field?"
-          value={field.llm_instructions || ''}
-          className="bg-white/5 border border-space-border rounded px-2 py-1 text-sm text-space-text"
-          onChange={(e) => ops.setInstructions(field.id, e.target.value)}
+      {promptOpen && (
+        <PromptEditorModal
+          node={field} isSection={false} label="Field"
+          value={field.llm_instructions || ''} tree={tree}
+          onChange={(t) => ops.setInstructions(field.id, t)}
+          onClose={() => setPromptOpen(false)}
         />
       )}
     </div>
   )
 }
 
-// A group's fields. `fieldsEditable` enables rename + add/remove field (custom only).
-function GroupView({ group, fieldsEditable, ops }) {
+// A group's fields. `fieldsEditable` enables rename + add/remove field (custom
+// only). Single-line text fields pack two-to-a-row (Company | Title, Start | End);
+// multi-line kinds (markdown/bullets/taglist) span the full width.
+function GroupView({ group, fieldsEditable, ops, tree }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
       {group.children.map((f) => (
-        <div key={f.id} className="flex items-start gap-2">
-          <div className="flex-1">
-            <FieldView field={f} fieldsEditable={fieldsEditable} ops={ops} />
+        <div
+          key={f.id}
+          className={`flex items-start gap-2 ${f.kind === 'text' ? '' : 'col-span-2'}`}
+        >
+          <div className="flex-1 min-w-0">
+            <FieldView field={f} fieldsEditable={fieldsEditable} ops={ops} tree={tree} />
           </div>
           {fieldsEditable && (
             <RemoveButton onRemove={() => ops.remove(f.id)} label="Remove field" />
           )}
         </div>
       ))}
-      {fieldsEditable && <AddFieldForm groupId={group.id} ops={ops} />}
+      {fieldsEditable && (
+        <div className="col-span-2"><AddFieldForm groupId={group.id} ops={ops} /></div>
+      )}
     </div>
   )
 }
@@ -144,27 +159,23 @@ function SortableEntry({ item, index, ops, tree, sectionLocked }) {
           )}
         </span>
         <span className="inline-flex items-center" onClick={(e) => e.stopPropagation()}>
-          {!sectionLocked && (
-            <button
-              type="button"
-              aria-label={locked ? 'Unlock item for LLM' : 'Lock item from LLM'}
-              title={locked ? 'Locked — LLM leaves this entry as typed' : 'LLM may tailor this entry'}
-              className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
-              onClick={() => ops.toggleLocked(item.id)}
-            >{locked ? '🔒' : '🔓'}</button>
-          )}
+          <button
+            type="button"
+            aria-label={locked ? 'Unlock item for LLM' : 'Lock item from LLM'}
+            title={locked ? 'Locked — LLM leaves this entry as typed' : 'LLM may tailor this entry'}
+            className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+            onClick={() => ops.toggleLocked(item.id)}
+          >{locked ? '🔒' : '🔓'}</button>
           <VisibleToggle visible={item.visible} onToggle={() => ops.toggleVisible(item.id)} label="item in output" />
-          {!sectionLocked && (
-            <button
-              type="button" aria-label="Edit item prompt" title="Item prompt"
-              className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
-              onClick={() => setPromptOpen(true)}
-            >✉</button>
-          )}
+          <button
+            type="button" aria-label="Edit item prompt" title="Item prompt"
+            className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+            onClick={() => setPromptOpen(true)}
+          >💬</button>
           <RemoveButton onRemove={() => ops.remove(item.id)} label="Remove item" />
         </span>
       </div>
-      {!collapsed && <GroupView group={item} fieldsEditable={false} ops={ops} />}
+      {!collapsed && <GroupView group={item} fieldsEditable={false} ops={ops} tree={tree} />}
       {promptOpen && (
         <PromptEditorModal
           node={item} isSection={false} tree={tree}
@@ -206,9 +217,9 @@ function ListView({ list, ops, tree, sectionLocked }) {
 // The single child of a section is a group, list, or field.
 function SectionChild({ child, ops, tree, sectionLocked }) {
   if (child.type === 'list') return <ListView list={child} ops={ops} tree={tree} sectionLocked={sectionLocked} />
-  if (child.type === 'group') return <GroupView group={child} fieldsEditable ops={ops} />
+  if (child.type === 'group') return <GroupView group={child} fieldsEditable ops={ops} tree={tree} />
   // bare field child (e.g. summary hero, skills taglist)
-  return <FieldView field={child} fieldsEditable={false} ops={ops} />
+  return <FieldView field={child} fieldsEditable={false} ops={ops} tree={tree} />
 }
 
 export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, initialCollapsed = true }) {
@@ -238,7 +249,7 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
             type="button" aria-label="Edit section prompt" title="Section prompt"
             className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
             onClick={() => setPromptOpen(true)}
-          >✉</button>
+          >💬</button>
           {!preset && <RemoveButton onRemove={() => ops.remove(section.id)} label="Remove section" />}
         </span>
       </div>

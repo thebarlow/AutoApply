@@ -144,8 +144,8 @@ describe('SectionView custom', () => {
     expect(ops.toggleWritten).toHaveBeenCalledWith('fa')
   })
 
-  // ADAPTED: 'Expand section' button removed; use body-click
-  it('shows the instructions box when a field is LLM-written', () => {
+  // ADAPTED: inline instructions textarea retired → 💬 opens the prompt modal
+  it('shows a field prompt control (opening a modal) when a field is LLM-written', () => {
     const written = {
       ...customSection,
       children: [{
@@ -153,10 +153,12 @@ describe('SectionView custom', () => {
         children: [{ ...customSection.children[0].children[0], llm_output: true }],
       }],
     }
-    render(<SectionView section={written} isFirst isLast={false} ops={noopOps()} />)
+    render(<SectionView section={written} isFirst isLast={false} ops={noopOps()} tree={rootOf(written)} />)
     fireEvent.click(screen.getByText('Awards')) // expand section
-    expect(screen.getByLabelText('LLM instructions')).toBeInTheDocument()
+    expect(screen.queryByLabelText('LLM instructions')).toBeNull() // textarea retired
     expect(screen.getByLabelText('Lock from LLM (keep as typed)')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Edit field prompt'))
+    expect(screen.getByLabelText('Close prompt editor')).toBeInTheDocument() // modal opened
   })
 })
 
