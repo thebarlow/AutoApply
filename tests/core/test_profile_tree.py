@@ -505,6 +505,54 @@ def _sample_root():
     ])
 
 
+def test_build_section_prompt_section_only():
+    from core.profile_tree import FieldNode, SectionNode, build_section_prompt
+
+    sec = SectionNode(name="Summary", prompt="Be punchy", order=0,
+                      children=[FieldNode(name="Hero", key="hero", kind="markdown")])
+    assert build_section_prompt(sec) == "[Summary: Be punchy]"
+
+
+def test_build_section_prompt_folds_unlocked_items():
+    from core.profile_tree import GroupNode, ListNode, SectionNode, build_section_prompt
+
+    lst = ListNode(name="Experience", children=[
+        GroupNode(name="Research Assistant", prompt="stress ML pubs"),
+        GroupNode(name="Barista", prompt="keep it brief"),
+    ])
+    sec = SectionNode(name="Experience", prompt="Lead with impact", order=0, children=[lst])
+    out = build_section_prompt(sec)
+    assert out == ("[Experience: Lead with impact "
+                   "[Research Assistant: stress ML pubs] [Barista: keep it brief]]")
+
+
+def test_build_section_prompt_skips_locked_and_empty_items():
+    from core.profile_tree import GroupNode, ListNode, SectionNode, build_section_prompt
+
+    lst = ListNode(name="Experience", children=[
+        GroupNode(name="Locked Job", prompt="ignored", locked=True),
+        GroupNode(name="Empty Job", prompt=""),
+        GroupNode(name="Real Job", prompt="emphasize leadership"),
+    ])
+    sec = SectionNode(name="Experience", prompt="", order=0, children=[lst])
+    assert build_section_prompt(sec) == "[Experience: [Real Job: emphasize leadership]]"
+
+
+def test_build_section_prompt_locked_section_empty():
+    from core.profile_tree import SectionNode, build_section_prompt
+
+    sec = SectionNode(name="Skills", prompt="anything", locked=True, order=0)
+    assert build_section_prompt(sec) == ""
+
+
+def test_build_section_prompt_all_empty_returns_empty():
+    from core.profile_tree import FieldNode, SectionNode, build_section_prompt
+
+    sec = SectionNode(name="Skills", prompt="", order=0,
+                      children=[FieldNode(name="S", key="skills", kind="taglist")])
+    assert build_section_prompt(sec) == ""
+
+
 def test_resolve_field_token_by_id():
     from core.profile_tree import FieldNode, SectionNode, resolve_profile_tokens
 

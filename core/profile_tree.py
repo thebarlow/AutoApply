@@ -580,6 +580,47 @@ def _field_value_str(field: FieldNode) -> str:
     return "" if field.value is None else str(field.value)
 
 
+def _entry_label(group: GroupNode) -> str:
+    """An entry's display name, falling back to its first non-empty field value."""
+    if group.name.strip():
+        return group.name.strip()
+    for f in group.children:
+        s = _field_value_str(f).strip()
+        if s:
+            return s
+    return "Entry"
+
+
+def build_section_prompt(section: SectionNode) -> str:
+    """Assemble a section's authoring prompt, nesting unlocked list-entry prompts.
+
+    Produces ``[<SectionName>: <section.prompt> [<ItemName>: <item.prompt>] …]``.
+    Empty section/item prompts are omitted; a locked section returns ``""`` (it is
+    never authored); locked entries are skipped. Returns ``""`` when neither the
+    section prompt nor any item prompt is present.
+
+    Args:
+        section: The section to assemble a prompt for.
+
+    Returns:
+        The folded prompt string, or ``""`` when nothing is authored.
+    """
+    if section.locked:
+        return ""
+    parts: list[str] = []
+    if section.prompt.strip():
+        parts.append(section.prompt.strip())
+    child = section.children[0] if section.children else None
+    if isinstance(child, ListNode):
+        for entry in child.children:
+            if entry.locked or not entry.prompt.strip():
+                continue
+            parts.append(f"[{_entry_label(entry)}: {entry.prompt.strip()}]")
+    if not parts:
+        return ""
+    return f"[{section.name}: {' '.join(parts)}]"
+
+
 def _collect_fields(node: object) -> list[FieldNode]:
     """All FieldNodes anywhere under ``node`` (groups, list entries, bare).
 
