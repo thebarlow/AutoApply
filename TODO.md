@@ -79,11 +79,11 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
     frontmatter-driven. Phased into FOUR (the generation switch cascades into the refine loop, so
     the pure engine is isolated from the risky wiring); each phase = own plan → subagent impl,
     merged to LOCAL `main`:
-    - [ ] **4A — Pure foundation (NEXT, plan being written).** `core/document_tree.py`
-      (`build_resume_document_tree(root, authored)` — prune invisible + `context_only` nodes,
-      bake authored values, keep locked verbatim) + promote `core/tree_render.py` to a generic
-      template-composed section renderer with default contact + education templates (no
-      frontmatter). Pure functions + golden tests; running app unchanged.
+    - [x] **4A — Pure foundation — DONE (local main `1415846`, not pushed).** `core/document_tree.py`
+      (`build_resume_document_tree` — prune invisible + `context_only`, bake authored, carry locked
+      verbatim) + `core/tree_assembler.py` (`assemble_resume_tree_markdown` — role→formatter dispatch,
+      preset + generic, tree order, no frontmatter); dev harness repointed to dogfood. 23/23 tests,
+      final review clean. No production wiring. Plan: `docs/superpowers/plans/2026-06-22-schema-rendering-4a-foundation.md`.
     - [ ] **4B — Wire tree-v1 into production (headline win).** `generate_resume_md` →
       `section_generator` → document tree → store `schema:"tree-v1"`; `_render_meta` /
       `write_resume_markdown` branch on the discriminator; PDF/template rework (frontmatter
