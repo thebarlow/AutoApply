@@ -5,6 +5,7 @@ import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile
 import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'
 import ProfileDetailView from './ProfileDetail'
+import ProfileEditorModal from './ProfileEditorModal'
 import UserHome from './UserHome'
 import { WarningIcon } from '../shared/JobCard'
 import GatedButton from '../shared/GatedButton'
@@ -17,6 +18,29 @@ function BackArrow() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 12L6 8l4-4" />
     </svg>
+  )
+}
+
+// Copies the job's stable key to the clipboard (e.g. for the Admin résumé
+// comparison tool, which takes a job_key the UI otherwise doesn't surface).
+function CopyKeyButton({ jobKey }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(jobKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* clipboard unavailable (e.g. insecure context) — ignore */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={`Copy job key: ${jobKey}`}
+      className="text-xs text-space-dim hover:text-purple-400 border border-space-border rounded px-1.5 py-0.5 transition-colors"
+    >{copied ? 'Copied!' : 'Copy key'}</button>
   )
 }
 
@@ -689,6 +713,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
                 <option key={s} value={s} className="bg-[#0f0f1a]">{STATE_LABELS[s]}</option>
               ))}
             </select>
+            <CopyKeyButton jobKey={job.job_key} />
           </div>
         </div>
         <div className="flex flex-col gap-1 shrink-0">
@@ -1241,7 +1266,7 @@ function CreateProfile({ onBack, onCreated }) {
 const TABS = ['User', 'Preview']
 
 export default function Settings({ selectedJob, activeTab, onTabChange, promptStatus = {}, jobActionsInFlight = new Set(), onJobDeleted, onSkillFilter, activeSkill }) {
-  const [view, setView] = useState('main') // 'main' | 'createProfile' | 'profileDetail'
+  const [view, setView] = useState('main') // 'main' | 'createProfile' (profile editor opens as a modal)
   const [detailProfileId, setDetailProfileId] = useState(null)
 
   // Wizard "Manual Entry → Try it out" opens the active profile's editor directly.
@@ -1252,7 +1277,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
           const id = active_id ?? profiles?.[0]?.id
           if (id == null) return
           setDetailProfileId(id)
-          setView('profileDetail')
+          setView('main') // editor now opens as a modal over the main view
         })
         .catch(() => {})
     }
@@ -1332,7 +1357,7 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
           >
             {view === 'main' && activeTab === 'User' && (
               <UserHome
-                onSelect={(id) => { setDetailProfileId(id); setView('profileDetail') }}
+                onSelect={(id) => { setDetailProfileId(id); setView('main') }}
                 onCreateProfile={() => setView('createProfile')}
                 onSkillFilter={onSkillFilter}
                 activeSkill={activeSkill}
@@ -1348,12 +1373,17 @@ export default function Settings({ selectedJob, activeTab, onTabChange, promptSt
                 onCreated={() => setView('main')}
               />
             )}
-            {view === 'profileDetail' && detailProfileId != null && (
-              <ProfileDetailView profileId={detailProfileId} onDelete={() => setView('main')} />
-            )}
           </motion.div>
         </AnimatePresence>
       </div>
+      {detailProfileId != null && (
+        <ProfileEditorModal onClose={() => setDetailProfileId(null)}>
+          <ProfileDetailView
+            profileId={detailProfileId}
+            onDelete={() => setDetailProfileId(null)}
+          />
+        </ProfileEditorModal>
+      )}
     </motion.div>
   )
 }

@@ -3,6 +3,8 @@ import {
   PRESET_ROLES, isPresetSection, renumber, updateNode, removeNode,
   moveNode, makeField, addField, addListItem, addCustomSection,
   cloneWithFreshIds, addSection, reorderSiblings,
+  fieldRole, setFieldRole, setLlmInstructions, toggleRegenLock,
+  isLlmWritten, toggleLlmWritten, deepEqual, toggleLocked, setNodePrompt, isLocked,
 } from './treeOps'
 
 // Minimal tree: skills (preset, single field) + experience (preset list).
@@ -245,5 +247,114 @@ describe('reorderSiblings', () => {
     const t = tree()
     expect(reorderSiblings(t, 'nope', 'a')).toBe(t)
     expect(reorderSiblings(t, 'a', 'a')).toBe(t)
+  })
+})
+
+describe('field role helpers', () => {
+  function tree() {
+    return { type: 'root', id: 'r', children: [
+      { type: 'section', id: 's', name: 'S', role: null, order: 0, visible: true, children: [
+        { type: 'group', id: 'g', name: 'G', order: 0, visible: true, regen_lock: false, children: [
+          { type: 'field', id: 'f', name: 'F', key: 'f', order: 0, visible: true,
+            kind: 'markdown', value: '', llm_output: false, llm_instructions: '',
+            llm_input: false, regen_lock: false, min: null, max: null },
+        ] },
+      ] },
+    ] }
+  }
+
+  it('derives role from flags', () => {
+    expect(fieldRole({ llm_output: true, llm_input: false })).toBe('output')
+    expect(fieldRole({ llm_output: false, llm_input: true })).toBe('context')
+    expect(fieldRole({ llm_output: false, llm_input: false })).toBe('immutable')
+  })
+
+  it('setFieldRole sets the flag pair and is immutable', () => {
+    const t = tree()
+    const out = setFieldRole(t, 'f', 'output')
+    expect(out).not.toBe(t)
+    const f = out.children[0].children[0].children[0]
+    expect(f.llm_output).toBe(true)
+    expect(f.llm_input).toBe(false)
+    const ctx = setFieldRole(t, 'f', 'context').children[0].children[0].children[0]
+    expect(ctx.llm_output).toBe(false)
+    expect(ctx.llm_input).toBe(true)
+    const imm = setFieldRole(t, 'f', 'immutable').children[0].children[0].children[0]
+    expect(imm.llm_output).toBe(false)
+    expect(imm.llm_input).toBe(false)
+  })
+
+  it('setLlmInstructions writes the text', () => {
+    const f = setLlmInstructions(tree(), 'f', 'Rewrite punchier')
+      .children[0].children[0].children[0]
+    expect(f.llm_instructions).toBe('Rewrite punchier')
+  })
+
+  it('toggleRegenLock flips the lock', () => {
+    const f = toggleRegenLock(tree(), 'f').children[0].children[0].children[0]
+    expect(f.regen_lock).toBe(true)
+  })
+
+  it('toggleLlmWritten flips llm_output and clears llm_input, immutably', () => {
+    const t = tree()
+    const out = toggleLlmWritten(t, 'f')
+    expect(out).not.toBe(t)
+    const f = out.children[0].children[0].children[0]
+    expect(f.llm_output).toBe(true)
+    expect(f.llm_input).toBe(false)
+    expect(isLlmWritten(f)).toBe(true)
+    // toggling back locks it again
+    const back = toggleLlmWritten(out, 'f').children[0].children[0].children[0]
+    expect(back.llm_output).toBe(false)
+    expect(isLlmWritten(back)).toBe(false)
+  })
+})
+
+describe('deepEqual', () => {
+  it('is true for value-equal trees regardless of identity or key order', () => {
+    const a = { type: 'field', id: 'f', value: ['x', 'y'], meta: { a: 1, b: 2 } }
+    const b = { id: 'f', type: 'field', meta: { b: 2, a: 1 }, value: ['x', 'y'] }
+    expect(deepEqual(a, b)).toBe(true)
+  })
+
+  it('is false when a value differs, an array reorders, or a key is missing', () => {
+    expect(deepEqual({ v: 1 }, { v: 2 })).toBe(false)
+    expect(deepEqual({ v: ['a', 'b'] }, { v: ['b', 'a'] })).toBe(false)
+    expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false)
+  })
+})
+
+describe('toggleLocked / setNodePrompt', () => {
+  function tree() {
+    return {
+      type: 'root', id: 'r', children: [{
+        type: 'section', id: 's', name: 'S', role: null, order: 0, visible: true,
+        locked: false, prompt: '', children: [{
+          type: 'group', id: 'g', name: 'G', order: 0, visible: true,
+          locked: false, prompt: '', children: [] }],
+      }],
+    }
+  }
+
+  it('toggles locked on a section', () => {
+    const t = toggleLocked(tree(), 's')
+    expect(t.children[0].locked).toBe(true)
+  })
+
+  it('toggles locked on a group', () => {
+    const t = toggleLocked(tree(), 'g')
+    expect(t.children[0].children[0].locked).toBe(true)
+  })
+
+  it('sets a section prompt without mutating input', () => {
+    const orig = tree()
+    const t = setNodePrompt(orig, 's', 'Tailor it')
+    expect(t.children[0].prompt).toBe('Tailor it')
+    expect(orig.children[0].prompt).toBe('')
+  })
+
+  it('isLocked reads the flag', () => {
+    expect(isLocked({ locked: true })).toBe(true)
+    expect(isLocked({})).toBe(false)
   })
 })

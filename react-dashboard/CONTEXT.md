@@ -40,8 +40,9 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Prompts editor (scoring, resume, cover letter, extraction, resume parsing) | `src/components/widgets/ProfileDetail.jsx` — Prompts accordion |
 | LLM config (provider type, model, API key) | `src/components/widgets/ProfileDetail.jsx` — LLM Config accordion |
 | Default prompt text / prompt reset values | `src/components/widgets/ProfileDetail.jsx` — `DEFAULT_PROMPTS` object |
-| Admin page shell (Docs-style top Navbar + left function nav; functions: Manage Users) | `src/components/AdminPage.jsx` — admin-only, route `/admin` |
+| Admin page shell (Docs-style top Navbar + left function nav; functions: Manage Users, Résumé Compare) | `src/components/AdminPage.jsx` — admin-only, route `/admin` |
 | Admin user management (invite form + users table with view-as, ban/restore, capped credit grants, purchase-history modal) | `src/components/admin/ManageUsers.jsx` — rendered by `AdminPage.jsx` |
+| Dev-only résumé comparison view (side-by-side Model 1 vs Model 2 with eval scores) | `src/components/admin/ResumeCompare.jsx` — rendered by `AdminPage.jsx` when `active === 'resume-compare'`; calls `POST /api/dev/resume-compare/{job_key}` via `resumeCompare(jobKey)` in `api.js` |
 | Impersonation banner ("Viewing as {email} — Exit") | `src/App.jsx` — rendered when `me.impersonating` is set; calls `stopImpersonation` on exit |
 | First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
@@ -122,18 +123,20 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Remaining responsibilities: Prompts accordion (scoring/resume/cover/extraction/resume_parse prompt slots + refinement), Export Master button, Reset Profile flow
 - The flat `update_profile` endpoint is retained for name/job-preferences/onboarding writes; only the doc-section editor UI was retired
 
-### profile-tree/ (new in 2B, extended in 2C)
+### profile-tree/ (new in 2B, extended in 2C, field roles added in #3, section/item prompts in #4)
 - `ProfileTreeEditor.jsx` — root component; loads tree via `GET /api/config/profiles/{id}/tree`, manages dirty state, explicit Save (`PUT /api/config/profiles/{id}/tree`), Discard, and 422 error surfacing. **2C:** owns the section-level `DndContext` (drag-drop reorder of sections via `dnd-kit`); `↑`/`↓` buttons retained as a11y fallback.
-- `TreeNode.jsx` — recursive node renderer; dispatches ops (setValue, rename, toggleVisible, remove, move, addItem, addField, reorder) to parent. **2C:** `ListView` owns a per-list `DndContext` (drag-drop reorder of list entries); each entry gets a `"Drag to reorder item"` handle; `↑`/`↓` `MoveButtons` retained as a11y fallback. `SectionView` accepts an optional `dragHandle` prop so `ProfileTreeEditor` can inject the section drag handle without breaking 2B unit tests.
+- `TreeNode.jsx` — recursive node renderer; dispatches ops (setValue, rename, toggleVisible, remove, move, addItem, addField, reorder) to parent. **2C:** `ListView` owns a per-list `DndContext` (drag-drop reorder of list entries); each entry gets a drag-handle-only reorder. `SectionView` accepts an optional `dragHandle` prop so `ProfileTreeEditor` can inject the section drag handle without breaking 2B unit tests. **#4:** List entries are first-class: each has lock (🔒) / visibility (👁) / prompt (✉) controls, a double-click-rename name (falls back to `Entry N`), and body-click expand. The chip tray uses per-entry sub-folders for list sections (one folder per entry: a whole-entry pill + its field pills). Preset sections now allow add/remove fields.
 - `SectionGallery.jsx` — **2C:** recommended-section gallery (7 templates + Blank) that replaces the old "+ Add section" button; consumed by `ProfileTreeEditor`.
 - `sectionCatalog.js` — **2C:** catalog of the 7 section templates + Blank; each entry has a `type`, `label`, and `buildFn` that calls `buildSectionFromTemplate`.
-- `fieldWidgets.jsx` — per-kind field renderers: `TextWidget`, `MarkdownWidget`, `BulletsWidget`, `TaglistWidget`
-- `structuralControls.jsx` — structural mutation controls: add list item, add custom section + fields, rename, reorder, remove, visibility toggle
-- `treeOps.js` — pure tree mutation helpers: `updateNode`, `removeNode`, `moveNode`, `addField`, `addListItem`, `addCustomSection`, `reorderSiblings`, `renumber`, `isPresetSection`, `makeField`, `cloneWithFreshIds`
+- `fieldWidgets.jsx` — per-kind field renderers: `TextWidget`, `MarkdownWidget`, `BulletsWidget`, `TaglistWidget`. **#4:** `MarkdownWidget` has a pop-out (⤢) large-editor modal for long text values (no chip injection).
+- `PromptField.jsx` — **#4:** shared contenteditable pill prompt editor for section/item prompts. Tokens are node-id based (`{profile:<nodeId>}`) and `{job.<field>}`; each renders as a non-editable pill showing a human-readable label, while the stored value keeps raw tokens. Exports `buildChipGroups`, `buildLabelMap`, `splitSegments`, `serializeNode`, `renderHtml`, `ChipTray` (collapsible folder tray with Job + per-section/field chips), `PromptField`, `PopOutEditor`, and `buildFoldedPreview` (mirrors `build_section_prompt` in Python byte-for-byte). Injected pills render green (`.prompt-chip` in `src/index.css`) and drop at the release point (`caretRangeFromPoint`, feature-detected with fallback). Chips are draggable or click-to-insert.
+- `structuralControls.jsx` — structural mutation controls: add list item, add custom section + fields, rename (double-click), reorder, remove (bordered confirm dismissed on outside pointer-down), visibility toggle (`VisibleToggle`, eye), and section/item lock icons (🔒/🔓) gating LLM authoring (`locked` on `SectionNode`/`GroupNode`). **#4:** Section/item prompts are edited ONLY via `PromptEditorModal` (opened by the ✉ control on a section or list entry); inline prompt fields were retired. The chip tray + pill editor live inside that modal. `MoveButtons` remains exported but is no longer rendered (↑/↓ move buttons and ▸/▾ expand-arrow buttons were removed from sections and entries). Field lock/eye icons unchanged.
+- `treeOps.js` — pure tree mutation helpers: `updateNode`, `removeNode`, `moveNode`, `addField`, `addListItem`, `addCustomSection`, `reorderSiblings`, `renumber`, `isPresetSection`, `makeField`, `cloneWithFreshIds`, `toggleLlmWritten`/`isLlmWritten` (lock), `setLlmInstructions`, and `deepEqual` (effective-change detection for the Save/Discard bar). `SectionView` takes `initialCollapsed` so newly added sections open by default; clicking a section bar toggles collapse.
+- `ProfileEditorModal.jsx` — **#4:** modal editor for user profile name/pronouns/location; opened from the user's name click in `Settings.jsx` (the flat pushed `profileDetail` view was removed).
 
 ### Test suite
 - Vitest + React Testing Library + jsdom; run `npm run test` from `react-dashboard/`
-- 9 test files, 57 tests covering: API wrappers, treeOps helpers, sectionCatalog, SectionGallery, TreeNode rendering (including drag handle), fieldWidgets, structuralControls, ProfileTreeEditor integration, smoke
+- 10 test files, 65 tests covering: API wrappers, treeOps helpers, sectionCatalog, SectionGallery, TreeNode rendering (including drag handle), fieldWidgets, structuralControls, ProfileTreeEditor integration, ResumeCompare, smoke
 
 ---
 

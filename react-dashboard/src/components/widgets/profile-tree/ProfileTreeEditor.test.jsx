@@ -28,15 +28,15 @@ describe('ProfileTreeEditor', () => {
   it('loads and renders sections', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     expect(await screen.findByText('Skills')).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Expand section')) // collapsed by default
+    fireEvent.click(screen.getByText('Skills')) // body-click expands (▸/▾ button removed) // collapsed by default
     expect(screen.getByText('Python')).toBeInTheDocument()
   })
 
   it('an edit sets dirty; Save PUTs the tree and clears dirty', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
-    expect(screen.getByText('Save').closest('button')).toBeDisabled()
-    fireEvent.click(screen.getByLabelText('Expand section'))
+    expect(screen.queryByText('Save')).toBeNull() // no bar when clean
+    fireEvent.click(screen.getByText('Skills')) // body-click expands (▸/▾ button removed)
     fireEvent.click(screen.getByLabelText('Remove Python'))
     expect(screen.getByText('Save').closest('button')).not.toBeDisabled()
     fireEvent.click(screen.getByText('Save'))
@@ -44,24 +44,34 @@ describe('ProfileTreeEditor', () => {
     const [, sentTree] = api.putProfileTree.mock.calls[0]
     const skills = sentTree.children[0].children[0]
     expect(skills.value).toEqual([])
-    await waitFor(() => expect(screen.getByText('Save').closest('button')).toBeDisabled())
+    await waitFor(() => expect(screen.queryByText('Save')).toBeNull()) // bar hides again
   })
 
-  it('Discard reverts edits', async () => {
+  it('Discard reverts edits and hides the bar', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
-    fireEvent.click(screen.getByLabelText('Expand section'))
+    fireEvent.click(screen.getByText('Skills')) // body-click expands (▸/▾ button removed)
     fireEvent.click(screen.getByLabelText('Remove Python'))
     fireEvent.click(screen.getByText('Discard'))
     expect(screen.getByText('Python')).toBeInTheDocument()
-    expect(screen.getByText('Save').closest('button')).toBeDisabled()
+    expect(screen.queryByText('Save')).toBeNull()
+  })
+
+  it('reverting an edit to its original value hides the bar (effective change)', async () => {
+    render(<ProfileTreeEditor profileId={1} />)
+    await screen.findByText('Skills')
+    fireEvent.click(screen.getByText('Skills')) // body-click expands (▸/▾ button removed)
+    fireEvent.click(screen.getByLabelText('Hide section')) // edit: toggle visibility
+    expect(screen.getByText('Save')).toBeInTheDocument() // dirty
+    fireEvent.click(screen.getByLabelText('Show section')) // revert it
+    expect(screen.queryByText('Save')).toBeNull() // value-equal to saved → clean
   })
 
   it('surfaces a 422 message and keeps edits', async () => {
     api.putProfileTree.mockRejectedValueOnce(new Error('PUT /api/config/profiles/1/tree → 422'))
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
-    fireEvent.click(screen.getByLabelText('Expand section'))
+    fireEvent.click(screen.getByText('Skills')) // body-click expands (▸/▾ button removed)
     fireEvent.click(screen.getByLabelText('Remove Python'))
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByText(/could not be saved/i)).toBeInTheDocument()
@@ -69,12 +79,15 @@ describe('ProfileTreeEditor', () => {
     expect(screen.getByText('Save').closest('button')).not.toBeDisabled()
   })
 
+  // ADAPTED: gallery closes after selection; verify section was added by checking
+  // that the section name now appears in the tree and the editor is dirty.
   it('adds a blank custom section from the gallery', async () => {
     render(<ProfileTreeEditor profileId={1} />)
     await screen.findByText('Skills')
     fireEvent.click(screen.getByText('+ Add section'))
     fireEvent.click(screen.getByText('Blank section'))
     expect(await screen.findByText('Blank section')).toBeInTheDocument()
+    expect(screen.getByText('Save')).toBeInTheDocument() // dirty after add
   })
 
   it('adds a recommended template section from the gallery', async () => {
@@ -83,6 +96,7 @@ describe('ProfileTreeEditor', () => {
     fireEvent.click(screen.getByText('+ Add section'))
     fireEvent.click(screen.getByText('Certifications'))
     expect(await screen.findByText('Certifications')).toBeInTheDocument()
+    expect(screen.getByText('Save')).toBeInTheDocument() // dirty after add
   })
 
   it('renders a drag handle for each section', async () => {

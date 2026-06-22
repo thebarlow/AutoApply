@@ -7,11 +7,12 @@ representing a structured profile/résumé tree.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Callable
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _new_id() -> str:
@@ -61,8 +62,19 @@ class GroupNode(BaseModel):
     name: str = ""
     order: int = 0
     visible: bool = True
-    regen_lock: bool = False
+    locked: bool = False
+    prompt: str = ""
     children: list[FieldNode] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_regen_lock(cls, data):
+        """Legacy trees stored a group's pin as ``regen_lock``; fold it into the
+        new ``locked`` gate unless ``locked`` is already given explicitly.
+        """
+        if isinstance(data, dict) and "locked" not in data and data.get("regen_lock"):
+            data = {**data, "locked": True}
+        return data
 
 
 class ListNode(BaseModel):
@@ -90,6 +102,8 @@ class SectionNode(BaseModel):
     role: Optional[str] = None
     order: int = 0
     visible: bool = True
+    locked: bool = False
+    prompt: str = ""
     children: list[SectionChild] = Field(default_factory=list)
 
 
@@ -498,26 +512,32 @@ def tree_to_legacy(root: "RootNode") -> dict:
     }
 
     header = _section_by_role(root, "header")
-    if header and header.children and isinstance(header.children[0], GroupNode):
+    if header and header.visible and header.children and isinstance(header.children[0], GroupNode):
         for f in header.children[0].children:
-            if f.key in out:
+            if f.visible and f.key in out:
                 out[f.key] = f.value
 
     summary = _section_by_role(root, "summary")
-    if summary and summary.children and isinstance(summary.children[0], FieldNode):
+    if (summary and summary.visible and summary.children
+            and isinstance(summary.children[0], FieldNode)
+            and summary.children[0].visible):
         out["hero"] = summary.children[0].value
 
     skills = _section_by_role(root, "skills")
-    if skills and skills.children and isinstance(skills.children[0], FieldNode):
+    if (skills and skills.visible and skills.children
+            and isinstance(skills.children[0], FieldNode)
+            and skills.children[0].visible):
         out["skills"] = list(skills.children[0].value)
 
     def _rows(role: str) -> list[dict]:
         sect = _section_by_role(root, role)
-        if not sect or not sect.children or not isinstance(sect.children[0], ListNode):
+        if (not sect or not sect.visible or not sect.children
+                or not isinstance(sect.children[0], ListNode)):
             return []
         return [
             {f.key: f.value for f in item.children}
             for item in sect.children[0].children
+            if item.visible
         ]
 
     out["work_history"] = [
@@ -550,3 +570,138 @@ def tree_to_legacy(root: "RootNode") -> dict:
         for r in _rows("projects")
     ]
     return out
+
+
+def _field_value_str(field: FieldNode) -> str:
+    """Render a field value for prompt injection.
+
+    Args:
+        field: The field whose value to render.
+
+    Returns:
+        A string representation of the field value. Lists are joined with ", ".
+    """
+    if isinstance(field.value, list):
+        return ", ".join(str(v) for v in field.value)
+    return "" if field.value is None else str(field.value)
+
+
+def _entry_label(group: GroupNode) -> str:
+    """An entry's display name, falling back to its first non-empty field value."""
+    if group.name.strip():
+        return group.name.strip()
+    for f in group.children:
+        s = _field_value_str(f).strip()
+        if s:
+            return s
+    return "Entry"
+
+
+def build_section_prompt(section: SectionNode) -> str:
+    """Assemble a section's authoring prompt, nesting unlocked list-entry prompts.
+
+    Produces ``[<SectionName>: <section.prompt> [<ItemName>: <item.prompt>] …]``.
+    Empty section/item prompts are omitted; a locked section returns ``""`` (it is
+    never authored); locked entries are skipped. Returns ``""`` when neither the
+    section prompt nor any item prompt is present.
+
+    Args:
+        section: The section to assemble a prompt for.
+
+    Returns:
+        The folded prompt string, or ``""`` when nothing is authored.
+    """
+    if section.locked:
+        return ""
+    parts: list[str] = []
+    if section.prompt.strip():
+        parts.append(section.prompt.strip())
+    child = section.children[0] if section.children else None
+    if isinstance(child, ListNode):
+        for entry in child.children:
+            if entry.locked or not entry.prompt.strip():
+                continue
+            parts.append(f"[{_entry_label(entry)}: {entry.prompt.strip()}]")
+    if not parts:
+        return ""
+    return f"[{section.name}: {' '.join(parts)}]"
+
+
+def _collect_fields(node: object) -> list[FieldNode]:
+    """All FieldNodes anywhere under ``node`` (groups, list entries, bare).
+
+    The item_template of a list is intentionally not traversed.
+
+    Args:
+        node: The node to extract fields from.
+
+    Returns:
+        A list of all FieldNode instances found in the node's tree.
+    """
+    out: list[FieldNode] = []
+
+    def walk(n: object) -> None:
+        if isinstance(n, FieldNode):
+            out.append(n)
+            return
+        for c in getattr(n, "children", None) or []:
+            walk(c)
+
+    walk(node)
+    return out
+
+
+def _node_by_id(root: "RootNode", node_id: str) -> object | None:
+    """Return the first node whose ``id`` matches, searching the whole tree.
+
+    Args:
+        root: The root of the tree to search.
+        node_id: The id to search for.
+
+    Returns:
+        The first node with matching id, or None if not found.
+    """
+    found: object | None = None
+
+    def walk(n: object) -> None:
+        nonlocal found
+        if found is not None:
+            return
+        if getattr(n, "id", None) == node_id:
+            found = n
+            return
+        for c in getattr(n, "children", None) or []:
+            walk(c)
+        if isinstance(n, ListNode):
+            # item_template is structural; do not match against it.
+            return
+
+    walk(root)
+    return found
+
+
+def resolve_profile_tokens(root: "RootNode", text: str) -> str:
+    """Substitute ``{profile:<nodeId>}`` tokens with the node's rendered value.
+
+    A field node id resolves to that field's value; a section/group/list node id
+    resolves to ``"<name>: <value>"`` lines for every field under it. Unknown ids
+    are left untouched.
+
+    Args:
+        root: The profile tree.
+        text: A prompt string possibly containing ``{profile:<id>}`` tokens.
+
+    Returns:
+        ``text`` with recognized profile tokens substituted.
+    """
+
+    def _replace(m: "re.Match[str]") -> str:
+        node = _node_by_id(root, m.group(1))
+        if node is None:
+            return m.group(0)
+        if isinstance(node, FieldNode):
+            return _field_value_str(node)
+        lines = [f"{f.name}: {_field_value_str(f)}" for f in _collect_fields(node)]
+        return "\n".join(lines)
+
+    return re.sub(r"\{profile:([\w-]+)\}", _replace, text)

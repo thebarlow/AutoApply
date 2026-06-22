@@ -31,6 +31,7 @@ from web.routers import credits as credits_router
 from web.routers import payments as payments_router
 from web.routers import admin as admin_router
 from web.routers import extension as extension_router
+from web.routers import dev as dev_router
 from web.auth import routes as auth_routes
 from core.credits import InsufficientCredits
 from fastapi.responses import JSONResponse
@@ -178,6 +179,7 @@ app.include_router(credits_router.router)
 app.include_router(payments_router.router)
 app.include_router(admin_router.router)
 app.include_router(extension_router.router)
+app.include_router(dev_router.router)
 app.include_router(auth_routes.router)
 
 

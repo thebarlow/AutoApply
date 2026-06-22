@@ -368,6 +368,10 @@ class User(Base):
             return "none listed"
         return ", ".join(f"{e.degree} {e.field}" for e in self.education)
 
+    def profile_tree_root(self) -> "RootNode":
+        """Return the hydrated profile tree (source of truth for schema-driven generation)."""
+        return self.profile_tree
+
     def render_for_prompt(self) -> str:
         """Format the user profile as a human-readable string for LLM prompt injection.
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from core.profile_tree import RootNode
+
 
 def test_field_text_value_coerces_to_str():
     from core.profile_tree import FieldNode
@@ -366,13 +368,13 @@ def test_integer_gpa_round_trips():
 
 
 def _tree_with_custom_and_lock():
-    """A migrated tree plus a custom section and a regen-locked experience item."""
+    """A migrated tree plus a custom section and a locked experience item."""
     from core.profile_tree import FieldNode, GroupNode, ListNode, SectionNode, legacy_to_tree
 
     tree = legacy_to_tree(LEGACY)  # header/summary/experience/education/projects/skills
-    # lock the first experience item
+    # lock the first experience item (GroupNode uses locked, not regen_lock)
     exp = next(s for s in tree.children if s.role == "experience")
-    exp.children[0].children[0].regen_lock = True
+    exp.children[0].children[0].locked = True
     # add a custom (role=None) section with a single text field
     tree.children.append(
         SectionNode(
@@ -431,9 +433,9 @@ def test_apply_flat_overlay_preserves_custom_section_and_lock():
     awards = next((s for s in tree.children if s.role is None and s.name == "Awards"), None)
     assert awards is not None
     assert awards.children[0].children[0].value == "Hackathon Winner"
-    # regen lock survived
+    # lock survived
     exp = _section_by_role(tree, "experience")
-    assert exp.children[0].children[0].regen_lock is True
+    assert exp.children[0].children[0].locked is True
 
 
 def test_apply_flat_overlay_education_gpa_coerced_to_str():
@@ -446,6 +448,210 @@ def test_apply_flat_overlay_education_gpa_coerced_to_str():
     item = _section_by_role(tree, "education").children[0].children[0]
     gpa = next(f.value for f in item.children if f.key == "gpa")
     assert gpa == "4.0" and isinstance(gpa, str)
+
+
+def test_section_and_group_have_lock_and_prompt_defaults():
+    from core.profile_tree import GroupNode, SectionNode
+
+    s = SectionNode(name="X")
+    assert s.locked is False and s.prompt == ""
+    g = GroupNode(name="G")
+    assert g.locked is False and g.prompt == ""
+
+
+def test_group_legacy_regen_lock_migrates_to_locked():
+    from core.profile_tree import GroupNode
+
+    g = GroupNode.model_validate({"type": "group", "name": "G", "regen_lock": True})
+    assert g.locked is True
+
+
+def test_group_explicit_locked_wins_over_legacy_regen_lock():
+    from core.profile_tree import GroupNode
+
+    g = GroupNode.model_validate(
+        {"type": "group", "name": "G", "regen_lock": True, "locked": False}
+    )
+    assert g.locked is False
+
+
+def test_tree_with_locks_and_prompts_validates():
+    from core.profile_tree import GroupNode, RootNode, SectionNode, validate_tree
+
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="S",
+                order=0,
+                locked=True,
+                prompt="Tailor S",
+                children=[GroupNode(name="G", locked=True, prompt="Tailor G")],
+            ),
+        ]
+    )
+    validate_tree(root)  # must not raise
+
+
+def _sample_root():
+    from core.profile_tree import FieldNode, GroupNode, SectionNode
+
+    return RootNode(children=[
+        SectionNode(name="Skills", role="skills", order=0, children=[
+            FieldNode(name="Technical", key="skills", kind="taglist",
+                      value=["Python", "Go"])]),
+        SectionNode(name="My Awards", role=None, order=1, children=[
+            GroupNode(name="Awards", children=[
+                FieldNode(name="Award", key="award", kind="text", value="Winner")])]),
+    ])
+
+
+def test_build_section_prompt_section_only():
+    from core.profile_tree import FieldNode, SectionNode, build_section_prompt
+
+    sec = SectionNode(name="Summary", prompt="Be punchy", order=0,
+                      children=[FieldNode(name="Hero", key="hero", kind="markdown")])
+    assert build_section_prompt(sec) == "[Summary: Be punchy]"
+
+
+def test_build_section_prompt_folds_unlocked_items():
+    from core.profile_tree import GroupNode, ListNode, SectionNode, build_section_prompt
+
+    lst = ListNode(name="Experience", children=[
+        GroupNode(name="Research Assistant", prompt="stress ML pubs"),
+        GroupNode(name="Barista", prompt="keep it brief"),
+    ])
+    sec = SectionNode(name="Experience", prompt="Lead with impact", order=0, children=[lst])
+    out = build_section_prompt(sec)
+    assert out == ("[Experience: Lead with impact "
+                   "[Research Assistant: stress ML pubs] [Barista: keep it brief]]")
+
+
+def test_build_section_prompt_skips_locked_and_empty_items():
+    from core.profile_tree import GroupNode, ListNode, SectionNode, build_section_prompt
+
+    lst = ListNode(name="Experience", children=[
+        GroupNode(name="Locked Job", prompt="ignored", locked=True),
+        GroupNode(name="Empty Job", prompt=""),
+        GroupNode(name="Real Job", prompt="emphasize leadership"),
+    ])
+    sec = SectionNode(name="Experience", prompt="", order=0, children=[lst])
+    assert build_section_prompt(sec) == "[Experience: [Real Job: emphasize leadership]]"
+
+
+def test_build_section_prompt_locked_section_empty():
+    from core.profile_tree import SectionNode, build_section_prompt
+
+    sec = SectionNode(name="Skills", prompt="anything", locked=True, order=0)
+    assert build_section_prompt(sec) == ""
+
+
+def test_build_section_prompt_all_empty_returns_empty():
+    from core.profile_tree import FieldNode, SectionNode, build_section_prompt
+
+    sec = SectionNode(name="Skills", prompt="", order=0,
+                      children=[FieldNode(name="S", key="skills", kind="taglist")])
+    assert build_section_prompt(sec) == ""
+
+
+def test_resolve_field_token_by_id():
+    from core.profile_tree import FieldNode, SectionNode, resolve_profile_tokens
+
+    f = FieldNode(
+        name="Tech", key="skills", kind="taglist", value=["Python", "Go"]
+    )
+    root = RootNode(
+        children=[SectionNode(name="Skills", role="skills", order=0, children=[f])]
+    )
+    assert resolve_profile_tokens(root, "Have: {profile:%s}" % f.id) == "Have: Python, Go"
+
+
+def test_resolve_section_token_by_id_joins_fields():
+    from core.profile_tree import FieldNode, GroupNode, SectionNode, resolve_profile_tokens
+
+    sec = SectionNode(
+        name="Awards",
+        role=None,
+        order=0,
+        children=[
+            GroupNode(
+                name="Awards",
+                children=[FieldNode(name="Award", key="award", kind="text", value="Winner")],
+            )
+        ],
+    )
+    root = RootNode(children=[sec])
+    out = resolve_profile_tokens(root, "{profile:%s}" % sec.id)
+    assert "Award: Winner" in out
+
+
+def test_resolve_unknown_id_left_as_is():
+    from core.profile_tree import FieldNode, SectionNode, resolve_profile_tokens
+
+    root = RootNode(
+        children=[
+            SectionNode(
+                name="S",
+                order=0,
+                children=[FieldNode(name="A", key="a", kind="text", value="x")],
+            )
+        ]
+    )
+    assert (
+        resolve_profile_tokens(root, "{profile:nope} {job.title}")
+        == "{profile:nope} {job.title}"
+    )
+
+
+def test_tree_to_legacy_omits_invisible_experience_entry():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    legacy = {
+        "first_name": "A", "last_name": "B",
+        "work_history": [
+            {"company": "Acme", "title": "Eng", "start": "2020", "end": "2022", "summary": "x"},
+            {"company": "Globex", "title": "Eng", "start": "2018", "end": "2020", "summary": "y"},
+        ],
+    }
+    root = legacy_to_tree(legacy)
+    exp = next(s for s in root.children if s.role == "experience")
+    exp.children[0].children[1].visible = False  # hide the Globex entry
+    out = tree_to_legacy(root)
+    companies = [r["company"] for r in out["work_history"]]
+    assert companies == ["Acme"]
+
+
+def test_tree_to_legacy_omits_invisible_section():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    root = legacy_to_tree({"first_name": "A", "skills": ["Python", "Go"]})
+    skills = next(s for s in root.children if s.role == "skills")
+    skills.visible = False
+    assert tree_to_legacy(root)["skills"] == []
+
+
+def test_tree_to_legacy_omits_invisible_header_field():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    root = legacy_to_tree({"first_name": "A", "email": "a@b.c"})
+    header = next(s for s in root.children if s.role == "header")
+    for f in header.children[0].children:
+        if f.key == "email":
+            f.visible = False
+    assert tree_to_legacy(root)["email"] == ""
+
+
+def test_tree_to_legacy_all_visible_unchanged():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    legacy = {"first_name": "A", "last_name": "B", "email": "a@b.c",
+              "skills": ["Python"],
+              "work_history": [{"company": "Acme", "title": "Eng", "start": "2020",
+                                "end": "2022", "summary": "x"}]}
+    root = legacy_to_tree(legacy)
+    out = tree_to_legacy(root)
+    assert out["first_name"] == "A"
+    assert out["skills"] == ["Python"]
+    assert [r["company"] for r in out["work_history"]] == ["Acme"]
 
 
 class _StubDB:

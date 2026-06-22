@@ -35,7 +35,15 @@ it on every load via `tree_to_legacy`, so generation/rendering/UI are unchanged.
 Legacy profiles are migrated once on load via `legacy_to_tree`. Job-search
 metadata (target roles/salary, resume/md paths) stays as flat `data` keys, not
 in the tree. **Known gap:** custom (non-`role`) sections are storable but do not
-appear on generated documents until sub-project #4.
+appear on generated documents until sub-project #4. **#4 updates:** `SectionNode` and `GroupNode` now have `locked: bool` and `prompt: str` fields; legacy `regen_lock` on groups migrates to `locked` via a before-validator. `FieldNode.regen_lock` is unchanged.
+
+**Sub-project #4 updates (section/item authoring prompts):**
+- `build_section_prompt(section)` in `profile_tree.py` assembles the canonical folded authoring prompt `[<SectionName>: <section.prompt> [<ItemName>: <item.prompt>] …]` (empty section/item prompts omitted; locked section → `""`; locked entries skipped). It is the single source of truth for the folded format and is mirrored byte-for-byte in JS by `buildFoldedPreview` in `PromptField.jsx`. Consumed by `core/section_generator.py`.
+- `tree_to_legacy` now omits invisible sections, invisible list entries, and invisible header/summary/skills fields from the projected document dict.
+
+**Sub-project #3 (per-section generation engine) is DONE:** ships `core/section_generator.py` — a schema-driven, per-section LLM generation engine. One call per section; locked list entries are kept as fixed context (never authored); sections with no `llm_output`-role fields are skipped (no LLM call); per-section failures fall back gracefully without crashing the whole document. Field roles (`llm_output` / `llm_input` / `regen_lock`) are used to decide which fields the model should fill vs. receive as context vs. carry through unchanged. `generate_resume_by_section(root, job_ctx, client, model, resolve=None)` skips locked sections entirely (no call), injects section/entry `prompt` into each built prompt, and applies `resolve` (e.g. token expansion) to the final prompt before the LLM call. `web/routers/dev.py` composes the resolver as `resolve_profile_tokens` + `_apply_template({"job": job})`.
+  - **`profile_tree.resolve_profile_tokens(root, text)`** — resolves node-id tokens `{profile:<nodeId>}` (rename-safe): a field id → its value; a section/group id → "<name>: <value>" lines for all its fields; unknown ids left as-is. Helpers: `_node_by_id` (tree search), `_collect_fields` (field traversal, does not descend into list item templates).
+- Also ships `core/tree_render.py` — a **throwaway** renderer used only by the dev comparison harness (`web/routers/dev.py`); it overlays authored values, omits `context_only`-role fields, skips hidden nodes, and handles custom sections. Real schema-driven rendering of custom sections on generated documents is sub-project #4.
 
 **Sub-project 2C (graphical builder) is DONE:** ships drag-drop reorder of sections and list items (via `dnd-kit`) on top of the 2B editor, plus a recommended-section gallery (`SectionGallery.jsx` + `sectionCatalog.js`, 7 templates + Blank) replacing the old "+ Add section" button. `↑`/`↓` buttons are retained as the a11y fallback. No document rendering of custom sections — that is sub-project #4.
 
@@ -83,6 +91,8 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Rewriting cover letter to address eval issues | `job.py` → `Job.refine_cover_md()` |
 | Extracting structured job description fields | `job.py` → `Job.extract_description()` |
 | Post-intake background extraction trigger | `job.py` → `Job.intake()` |
+| Per-section LLM generation (skips locked, injects section prompt, resolves tokens before LLM) | `section_generator.py` → `generate_resume_by_section()` |
+| Resolving node-id tokens `{profile:<nodeId>}` in prompts | `profile_tree.py` → `resolve_profile_tokens()` |
 | User profile load/save/validation | `user.py` → `User` |
 | Degree list for hallucination-detection context | `user.py` → `User.education_degrees` |
 | Full profile render for prompt injection | `user.py` → `User.render_for_prompt()` |

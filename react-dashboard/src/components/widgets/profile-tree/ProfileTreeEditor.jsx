@@ -3,6 +3,7 @@ import { getProfileTree, putProfileTree } from '../../../api'
 import { SectionView } from './TreeNode'
 import {
   updateNode, removeNode, moveNode, addField, addListItem, addSection, reorderSiblings,
+  setLlmInstructions, toggleLlmWritten, deepEqual, toggleLocked, setNodePrompt,
 } from './treeOps'
 import { SectionGallery } from './SectionGallery'
 import { SECTION_TEMPLATES, buildSectionFromTemplate } from './sectionCatalog'
@@ -17,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities'
 export default function ProfileTreeEditor({ profileId }) {
   const [tree, setTree] = useState(null)
   const [saved, setSaved] = useState(null) // last-persisted snapshot for Discard
+  const [expandSectionId, setExpandSectionId] = useState(null) // newly added → start open
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -32,7 +34,9 @@ export default function ProfileTreeEditor({ profileId }) {
     return () => { cancelled = true }
   }, [profileId])
 
-  const dirty = tree !== saved
+  // Effective change: a value difference from the last-saved snapshot. Reverting
+  // an edit back to its saved value clears this even though identity changed.
+  const dirty = tree != null && saved != null && !deepEqual(tree, saved)
 
   // Handler bundle passed to SectionView; all address nodes by id.
   const ops = {
@@ -44,6 +48,10 @@ export default function ProfileTreeEditor({ profileId }) {
     addItem: useCallback((listId) => setTree((t) => addListItem(t, listId)), []),
     addField: useCallback((groupId, spec) => setTree((t) => addField(t, groupId, spec)), []),
     reorder: useCallback((activeId, overId) => setTree((t) => reorderSiblings(t, activeId, overId)), []),
+    setInstructions: useCallback((id, text) => setTree((t) => setLlmInstructions(t, id, text)), []),
+    toggleWritten: useCallback((id) => setTree((t) => toggleLlmWritten(t, id)), []),
+    toggleLocked: useCallback((id) => setTree((t) => toggleLocked(t, id)), []),
+    setPrompt: useCallback((id, text) => setTree((t) => setNodePrompt(t, id, text)), []),
   }
 
   const sensors = useSensors(
@@ -84,8 +92,9 @@ export default function ProfileTreeEditor({ profileId }) {
         <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           {sections.map((section, i) => (
             <SortableSection
-              key={section.id} section={section}
+              key={section.id} section={section} tree={tree}
               isFirst={i === 0} isLast={i === sections.length - 1} ops={ops}
+              initialCollapsed={section.id !== expandSectionId}
             />
           ))}
         </SortableContext>
@@ -93,27 +102,33 @@ export default function ProfileTreeEditor({ profileId }) {
 
       <SectionGallery
         templates={SECTION_TEMPLATES}
-        onAdd={(tpl) => setTree((t) => addSection(t, buildSectionFromTemplate(tpl)))}
+        onAdd={(tpl) => {
+          const section = buildSectionFromTemplate(tpl)
+          setExpandSectionId(section.id) // open the freshly added section
+          setTree((t) => addSection(t, section))
+        }}
       />
 
       {saveError && <p className="text-xs text-red-400">{saveError}</p>}
 
-      <div className="sticky bottom-0 flex items-center gap-2 bg-[#0f0f1a]/90 backdrop-blur py-2">
-        <button
-          type="button" onClick={handleSave} disabled={!dirty || saving}
-          className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
-        >{saving ? 'Saving…' : 'Save'}</button>
-        <button
-          type="button" onClick={handleDiscard} disabled={!dirty || saving}
-          className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text disabled:opacity-40 transition-colors"
-        >Discard</button>
-        {dirty && <span className="text-xs text-space-dim">Unsaved changes</span>}
-      </div>
+      {(dirty || saving) && (
+        <div className="sticky bottom-0 flex items-center gap-2 bg-[#0f0f1a]/90 backdrop-blur py-2">
+          <button
+            type="button" onClick={handleSave} disabled={!dirty || saving}
+            className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+          >{saving ? 'Saving…' : 'Save'}</button>
+          <button
+            type="button" onClick={handleDiscard} disabled={!dirty || saving}
+            className="px-4 py-2 rounded-lg border border-space-border text-sm text-space-dim hover:text-space-text disabled:opacity-40 transition-colors"
+          >Discard</button>
+          <span className="text-xs text-space-dim">Unsaved changes</span>
+        </div>
+      )}
     </div>
   )
 }
 
-function SortableSection({ section, isFirst, isLast, ops }) {
+function SortableSection({ section, isFirst, isLast, ops, initialCollapsed, tree }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: section.id })
   const style = {
@@ -125,13 +140,15 @@ function SortableSection({ section, isFirst, isLast, ops }) {
     <button
       type="button" aria-label="Drag to reorder section"
       className="cursor-grab active:cursor-grabbing px-1 text-space-dim hover:text-space-text"
+      onClick={(e) => e.stopPropagation()}
       {...attributes} {...listeners}
     >⋮⋮</button>
   )
   return (
     <div ref={setNodeRef} style={style}>
       <SectionView
-        section={section} isFirst={isFirst} isLast={isLast} ops={ops} dragHandle={handle}
+        section={section} isFirst={isFirst} isLast={isLast} ops={ops}
+        dragHandle={handle} initialCollapsed={initialCollapsed} tree={tree}
       />
     </div>
   )

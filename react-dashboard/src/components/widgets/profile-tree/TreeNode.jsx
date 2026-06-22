@@ -7,14 +7,20 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FieldWidget } from './fieldWidgets'
-import { MoveButtons, VisibleToggle, RenameLabel, RemoveButton, AddButton } from './structuralControls'
+import { VisibleToggle, RenameLabel, RemoveButton, AddButton, LlmWriteToggle } from './structuralControls'
 import { isPresetSection } from './treeOps'
+import { PromptEditorModal } from './PromptEditorModal'
+
 
 const rowWrap = 'flex flex-col gap-1'
 const headerRow = 'flex items-center justify-between gap-2'
 
-// A single field: label (renamable only on custom groups) + visible + widget.
+// A single field: label (renamable only on custom groups) + eye (render) +
+// lock (LLM may write) + widget, then the LLM instructions box when unlocked.
+// The lock and eye are the two field controls: lock = "can the LLM change this
+// value?", eye = "does this value appear in the output document?".
 function FieldView({ field, fieldsEditable, ops }) {
+  const written = !!field.llm_output
   return (
     <div className={rowWrap}>
       <div className={headerRow}>
@@ -22,11 +28,23 @@ function FieldView({ field, fieldsEditable, ops }) {
           name={field.name} editable={fieldsEditable}
           onRename={(n) => ops.rename(field.id, n)}
         />
-        <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} />
+        <span className="inline-flex items-center">
+          <LlmWriteToggle written={written} onToggle={() => ops.toggleWritten(field.id)} />
+          <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} label="in output" />
+        </span>
       </div>
       <div className={field.visible ? '' : 'opacity-50'}>
         <FieldWidget field={field} onChange={(v) => ops.setValue(field.id, v)} />
       </div>
+      {written && (
+        <textarea
+          aria-label="LLM instructions" rows={2}
+          placeholder="How should the LLM write this field?"
+          value={field.llm_instructions || ''}
+          className="bg-white/5 border border-space-border rounded px-2 py-1 text-sm text-space-text"
+          onChange={(e) => ops.setInstructions(field.id, e.target.value)}
+        />
+      )}
     </div>
   )
 }
@@ -93,57 +111,74 @@ function entrySummary(item) {
   return ''
 }
 
-// One list entry, made sortable. Collapsed by default (so multiple entries fit
-// on screen for drag-reorder); ↑/↓ buttons remain the a11y fallback.
-function SortableEntry({ item, index, count, ops }) {
+// One list entry, made sortable. Collapsed by default; body-click on the
+// header bar toggles expand; drag-handle-only reorder.
+function SortableEntry({ item, index, ops, tree, sectionLocked }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id })
   const [collapsed, setCollapsed] = useState(true)
+  const [promptOpen, setPromptOpen] = useState(false)
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   }
   const summary = entrySummary(item)
+  const locked = !!item.locked
+  const toggle = () => setCollapsed((c) => !c)
   return (
     <div
       ref={setNodeRef} style={style}
       className="border border-space-border/50 rounded-lg p-3 flex flex-col gap-2"
     >
-      <div className={headerRow}>
-        <span className="inline-flex items-center gap-2 min-w-0">
+      <div className={`${headerRow} cursor-pointer`} onClick={toggle} aria-label="Toggle entry">
+        <span className="inline-flex items-center gap-2 min-w-0" onClick={(e) => e.stopPropagation()}>
           <button
             type="button" aria-label="Drag to reorder item"
             className="cursor-grab active:cursor-grabbing px-1 text-space-dim hover:text-space-text"
             {...attributes} {...listeners}
           >⋮⋮</button>
-          <button
-            type="button"
-            aria-label={collapsed ? 'Expand item' : 'Collapse item'}
-            className="px-1 text-space-dim hover:text-space-text transition-colors"
-            onClick={() => setCollapsed((c) => !c)}
-          >{collapsed ? '▸' : '▾'}</button>
-          <span className="text-xs text-space-dim shrink-0">Entry {index + 1}</span>
-          {collapsed && summary && (
+          <RenameLabel name={item.name || `Entry ${index + 1}`} editable onRename={(n) => ops.rename(item.id, n)} />
+          {collapsed && !item.name && summary && (
             <span className="text-xs text-space-text truncate">— {summary}</span>
           )}
         </span>
-        <span className="inline-flex items-center">
-          <MoveButtons
-            canUp={index > 0} canDown={index < count - 1}
-            onUp={() => ops.move(item.id, -1)} onDown={() => ops.move(item.id, 1)}
-          />
+        <span className="inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+          {!sectionLocked && (
+            <button
+              type="button"
+              aria-label={locked ? 'Unlock item for LLM' : 'Lock item from LLM'}
+              title={locked ? 'Locked — LLM leaves this entry as typed' : 'LLM may tailor this entry'}
+              className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+              onClick={() => ops.toggleLocked(item.id)}
+            >{locked ? '🔒' : '🔓'}</button>
+          )}
+          <VisibleToggle visible={item.visible} onToggle={() => ops.toggleVisible(item.id)} label="item in output" />
+          {!sectionLocked && (
+            <button
+              type="button" aria-label="Edit item prompt" title="Item prompt"
+              className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+              onClick={() => setPromptOpen(true)}
+            >✉</button>
+          )}
           <RemoveButton onRemove={() => ops.remove(item.id)} label="Remove item" />
         </span>
       </div>
       {!collapsed && <GroupView group={item} fieldsEditable={false} ops={ops} />}
+      {promptOpen && (
+        <PromptEditorModal
+          node={item} isSection={false} tree={tree}
+          onChange={(t) => ops.setPrompt(item.id, t)}
+          onClose={() => setPromptOpen(false)}
+        />
+      )}
     </div>
   )
 }
 
 // A repeating list: each item is a fixed-shape group (no field add/remove);
-// items can be added (clone template), removed, reordered (drag or ↑/↓).
-function ListView({ list, ops }) {
+// items can be added (clone template), removed, reordered (drag).
+function ListView({ list, ops, tree, sectionLocked }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -157,7 +192,8 @@ function ListView({ list, ops }) {
         <SortableContext items={list.children.map((i) => i.id)} strategy={verticalListSortingStrategy}>
           {list.children.map((item, i) => (
             <SortableEntry
-              key={item.id} item={item} index={i} count={list.children.length} ops={ops}
+              key={item.id} item={item} index={i} ops={ops}
+              tree={tree} sectionLocked={sectionLocked}
             />
           ))}
         </SortableContext>
@@ -168,43 +204,54 @@ function ListView({ list, ops }) {
 }
 
 // The single child of a section is a group, list, or field.
-function SectionChild({ child, preset, ops }) {
-  if (child.type === 'list') return <ListView list={child} ops={ops} />
-  if (child.type === 'group') return <GroupView group={child} fieldsEditable={!preset} ops={ops} />
+function SectionChild({ child, ops, tree, sectionLocked }) {
+  if (child.type === 'list') return <ListView list={child} ops={ops} tree={tree} sectionLocked={sectionLocked} />
+  if (child.type === 'group') return <GroupView group={child} fieldsEditable ops={ops} />
   // bare field child (e.g. summary hero, skills taglist)
   return <FieldView field={child} fieldsEditable={false} ops={ops} />
 }
 
-export function SectionView({ section, isFirst, isLast, ops, dragHandle }) {
+export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, initialCollapsed = true }) {
   const preset = isPresetSection(section)
   const child = section.children[0]
-  const [collapsed, setCollapsed] = useState(true)
+  const [collapsed, setCollapsed] = useState(initialCollapsed)
+  const [promptOpen, setPromptOpen] = useState(false)
+  const toggle = () => setCollapsed((c) => !c)
+  const locked = !!section.locked
   return (
     <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
-      <div className={headerRow}>
+      <div className={`${headerRow} cursor-pointer`} onClick={toggle}>
         <span className="inline-flex items-center gap-2">
           {dragHandle}
+          <RenameLabel name={section.name} editable onRename={(n) => ops.rename(section.id, n)} />
+        </span>
+        <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            aria-label={collapsed ? 'Expand section' : 'Collapse section'}
-            className="px-1 text-space-dim hover:text-space-text transition-colors"
-            onClick={() => setCollapsed((c) => !c)}
-          >{collapsed ? '▸' : '▾'}</button>
-          <RenameLabel
-            name={section.name} editable
-            onRename={(n) => ops.rename(section.id, n)}
-          />
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <MoveButtons
-            canUp={!isFirst} canDown={!isLast}
-            onUp={() => ops.move(section.id, -1)} onDown={() => ops.move(section.id, 1)}
-          />
+            aria-label={locked ? 'Unlock section for LLM' : 'Lock section from LLM'}
+            title={locked ? 'Locked — LLM leaves this section as typed' : 'LLM may tailor this section'}
+            className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+            onClick={() => ops.toggleLocked(section.id)}
+          >{locked ? '🔒' : '🔓'}</button>
           <VisibleToggle visible={section.visible} onToggle={() => ops.toggleVisible(section.id)} label="section" />
+          <button
+            type="button" aria-label="Edit section prompt" title="Section prompt"
+            className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+            onClick={() => setPromptOpen(true)}
+          >✉</button>
           {!preset && <RemoveButton onRemove={() => ops.remove(section.id)} label="Remove section" />}
         </span>
       </div>
-      {!collapsed && child && <SectionChild child={child} preset={preset} ops={ops} />}
+      {!collapsed && child && (
+        <SectionChild child={child} ops={ops} tree={tree} sectionLocked={locked} />
+      )}
+      {promptOpen && (
+        <PromptEditorModal
+          node={section} isSection tree={tree}
+          onChange={(t) => ops.setPrompt(section.id, t)}
+          onClose={() => setPromptOpen(false)}
+        />
+      )}
     </div>
   )
 }
