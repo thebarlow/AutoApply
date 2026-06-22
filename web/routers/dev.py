@@ -17,7 +17,8 @@ from core.llm import get_client_for_profile
 from core.profile_tree import resolve_profile_tokens
 from core.schemas import ResumeGeneration
 from core.section_generator import generate_resume_by_section
-from core.tree_render import render_tree_markdown
+from core.document_tree import build_resume_document_tree
+from core.tree_assembler import assemble_resume_tree_markdown
 from core.user import User
 from db.database import get_db
 from web.routers.credits import require_admin
@@ -51,7 +52,8 @@ def _model2_markdown(job: Job, user: Any, client: Any, model: str, db: Session) 
         return _apply_template(text, {"job": job})
 
     authored = generate_resume_by_section(root, prompt, client, model, resolve=resolve)
-    return render_tree_markdown(root, authored)
+    doc_tree = build_resume_document_tree(root, authored)
+    return assemble_resume_tree_markdown(doc_tree)
 
 
 def _one_model(fn, job, user, client, model, eval_prompt, db) -> dict:
