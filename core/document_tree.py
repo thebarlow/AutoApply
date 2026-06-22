@@ -57,6 +57,10 @@ def build_resume_document_tree(
     for s in doc.children:
         if not s.visible:
             continue
+        # Locked sections are carried through verbatim (not pruned or baked).
+        if s.locked:
+            sections.append(s)
+            continue
         child = s.children[0] if s.children else None
         if isinstance(child, ListNode):
             entries = [e for e in child.children if e.visible]

@@ -115,3 +115,36 @@ def test_keeps_locked_list_entry_with_context_only_field():
     assert len(kept_entry.children) == 2  # Both fields kept (context-only NOT stripped)
     assert kept_entry.children[0].value == "context_value"  # context-only field unchanged
     assert kept_entry.children[1].value == "original_value"  # output field NOT baked
+
+
+def test_keeps_locked_section_verbatim():
+    """Locked sections must be carried through verbatim (not pruned or baked)."""
+    # Create a locked section with an unlocked group containing both context-only and output fields
+    context_field = FieldNode(
+        name="Context", key="ctx",
+        llm_input=True, llm_output=False,  # context-only
+        value="ctx"
+    )
+    output_field = FieldNode(
+        name="Output", key="out", kind="markdown",
+        llm_output=True, value="orig"
+    )
+    unlocked_group = GroupNode(locked=False, children=[context_field, output_field])
+    output_fid = output_field.id
+
+    sec = SectionNode(
+        name="Locked", role=None, order=0,
+        visible=True, locked=True,  # Locked section
+        children=[unlocked_group]
+    )
+
+    # Try to bake a value for the output field
+    out = build_resume_document_tree(RootNode(children=[sec]), {output_fid: "baked"})
+
+    # Verify the locked section is preserved verbatim
+    kept_section = out.children[0]
+    assert kept_section.locked is True
+    kept_group = kept_section.children[0]
+    assert len(kept_group.children) == 2  # Both fields kept (context-only NOT stripped)
+    assert kept_group.children[0].value == "ctx"  # context-only field unchanged
+    assert kept_group.children[1].value == "orig"  # output field NOT baked
