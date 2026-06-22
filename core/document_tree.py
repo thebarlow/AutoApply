@@ -13,7 +13,7 @@ from core.profile_tree import (
     FieldNode, GroupNode, ListNode, RootNode, SectionNode, _coerce_field_value,
 )
 
-Value = "str | list[str]"
+Value = str | list[str]
 
 
 def _is_context_only(field: FieldNode) -> bool:
@@ -21,13 +21,13 @@ def _is_context_only(field: FieldNode) -> bool:
     return field.llm_input and not field.llm_output
 
 
-def _bake(field: FieldNode, authored: "dict[str, Value]") -> None:
+def _bake(field: FieldNode, authored: dict[str, Value]) -> None:
     """Overlay an authored value onto a field, coercing to its kind's type."""
     if field.id in authored:
         field.value = _coerce_field_value(field.kind, authored[field.id])
 
 
-def _prune_group(group: GroupNode, authored: "dict[str, Value]") -> None:
+def _prune_group(group: GroupNode, authored: dict[str, Value]) -> None:
     """Drop invisible/context-only fields and bake authored values, in place."""
     kept: list[FieldNode] = []
     for f in group.children:
@@ -39,7 +39,7 @@ def _prune_group(group: GroupNode, authored: "dict[str, Value]") -> None:
 
 
 def build_resume_document_tree(
-    root: RootNode, authored: "dict[str, Value]"
+    root: RootNode, authored: dict[str, Value]
 ) -> RootNode:
     """Return a renderable document tree: pruned, value-baked deep copy of ``root``.
 
@@ -61,10 +61,12 @@ def build_resume_document_tree(
         if isinstance(child, ListNode):
             entries = [e for e in child.children if e.visible]
             for e in entries:
-                _prune_group(e, authored)
+                if not e.locked:
+                    _prune_group(e, authored)
             child.children = entries
         elif isinstance(child, GroupNode):
-            _prune_group(child, authored)
+            if not child.locked:
+                _prune_group(child, authored)
         elif isinstance(child, FieldNode):
             if not child.visible or _is_context_only(child):
                 continue  # bare-field section with nothing to render → drop
