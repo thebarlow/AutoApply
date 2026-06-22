@@ -152,3 +152,28 @@ def test_section_failure_falls_back_and_continues(monkeypatch):
     out = generate_resume_by_section(root, "JOB", client=None, model="m")
     # Failed scalar section contributes nothing; list section still authored.
     assert out == {s0: "n0", s1: "n1"}
+
+
+def test_list_prompt_contains_folded_format(monkeypatch):
+    import core.job
+    from core.section_generator import SectionOutput
+
+    captured = {}
+
+    def fake(prompt, client, model, schema, **kw):
+        captured["prompt"] = prompt
+        return SectionOutput(entries={})
+
+    monkeypatch.setattr(core.job, "_llm_json_with_retry", fake)
+
+    entry = GroupNode(name="Research Assistant", prompt="stress ML pubs", children=[
+        FieldNode(name="Summary", key="summary", kind="markdown",
+                  value="old", llm_output=True),
+    ])
+    lst = ListNode(name="Experience", item_template=GroupNode(), children=[entry])
+    sec = SectionNode(name="Experience", role="experience", prompt="Lead with impact",
+                      order=0, children=[lst])
+    root = RootNode(children=[sec])
+
+    generate_resume_by_section(root, "JOBCTX", client=object(), model="m")
+    assert "[Experience: Lead with impact [Research Assistant: stress ML pubs]]" in captured["prompt"]

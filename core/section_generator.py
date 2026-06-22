@@ -13,7 +13,9 @@ from typing import Any, Union
 
 from pydantic import BaseModel, Field
 
-from core.profile_tree import FieldNode, GroupNode, ListNode, RootNode, SectionNode
+from core.profile_tree import (
+    FieldNode, GroupNode, ListNode, RootNode, SectionNode, build_section_prompt,
+)
 
 Value = Union[str, list[str]]
 
@@ -59,7 +61,8 @@ def _build_scalar_prompt(section: SectionNode, group: GroupNode, job_ctx: str) -
     """Prompt for a section whose child is a single group (or bare field wrapped)."""
     ctx = "\n".join(_group_context(group)) or "(none)"
     specs = "\n".join(_outputable_specs(group))
-    guide = f"{section.prompt}\n\n" if section.prompt else ""
+    folded = build_section_prompt(section)
+    guide = f"{folded}\n\n" if folded else ""
     return (
         f"{guide}You are tailoring the résumé section '{section.name}' to a job.\n\n"
         f"JOB:\n{job_ctx}\n\n"
@@ -79,12 +82,12 @@ def _build_list_prompt(section: SectionNode, lst: ListNode, job_ctx: str) -> str
             blocks.append(f'ENTRY id="{entry.id}" (FIXED — do not rewrite):\n{ctx}')
             continue
         specs = "\n".join(_outputable_specs(entry))
-        item_guide = f"guidance: {entry.prompt}\n" if entry.prompt else ""
         blocks.append(
-            f'ENTRY id="{entry.id}":\n{item_guide}anchors:\n{ctx}\nwrite:\n{specs}'
+            f'ENTRY id="{entry.id}":\nanchors:\n{ctx}\nwrite:\n{specs}'
         )
     body = "\n\n".join(blocks)
-    guide = f"{section.prompt}\n\n" if section.prompt else ""
+    folded = build_section_prompt(section)
+    guide = f"{folded}\n\n" if folded else ""
     return (
         f"{guide}You are tailoring the résumé section '{section.name}' to a job. Each "
         f"entry is a separate item; write its fields using its own anchors.\n\n"
