@@ -204,9 +204,9 @@ function ListView({ list, ops, tree, sectionLocked }) {
 }
 
 // The single child of a section is a group, list, or field.
-function SectionChild({ child, preset, ops, tree, sectionLocked }) {
+function SectionChild({ child, ops, tree, sectionLocked }) {
   if (child.type === 'list') return <ListView list={child} ops={ops} tree={tree} sectionLocked={sectionLocked} />
-  if (child.type === 'group') return <GroupView group={child} fieldsEditable={!preset} ops={ops} />
+  if (child.type === 'group') return <GroupView group={child} fieldsEditable ops={ops} />
   // bare field child (e.g. summary hero, skills taglist)
   return <FieldView field={child} fieldsEditable={false} ops={ops} />
 }
@@ -243,7 +243,7 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
         </span>
       </div>
       {!collapsed && child && (
-        <SectionChild child={child} preset={preset} ops={ops} tree={tree} sectionLocked={locked} />
+        <SectionChild child={child} ops={ops} tree={tree} sectionLocked={locked} />
       )}
       {promptOpen && (
         <PromptEditorModal

@@ -242,3 +242,16 @@ it('list entry exposes eye and message controls', () => {
   expect(screen.getByLabelText('Edit item prompt')).toBeInTheDocument()
   expect(screen.getByLabelText(/item.*output|Hide item|Show item/i)).toBeInTheDocument()
 })
+
+it('preset header section allows adding a field', () => {
+  const ops = makeOps()
+  const header = {
+    type: 'section', id: 'h1', name: 'Header', role: 'header', visible: true, prompt: '',
+    children: [{ type: 'group', id: 'g1', name: 'Header', visible: true, children: [
+      { type: 'field', id: 'hf1', name: 'Email', key: 'email', kind: 'text', value: '', visible: true },
+    ] }],
+  }
+  const t = { type: 'root', id: 'r', children: [header] }
+  render(<SectionView section={header} isFirst isLast ops={ops} tree={t} initialCollapsed={false} />)
+  expect(screen.getByText('+ Add field')).toBeInTheDocument()
+})
