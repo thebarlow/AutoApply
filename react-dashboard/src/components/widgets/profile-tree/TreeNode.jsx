@@ -7,8 +7,9 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FieldWidget } from './fieldWidgets'
-import { MoveButtons, VisibleToggle, RenameLabel, RemoveButton, AddButton, LlmWriteToggle } from './structuralControls'
+import { VisibleToggle, RenameLabel, RemoveButton, AddButton, LlmWriteToggle } from './structuralControls'
 import { isPresetSection } from './treeOps'
+import { PromptEditorModal } from './PromptEditorModal'
 
 
 const rowWrap = 'flex flex-col gap-1'
@@ -110,12 +111,13 @@ function entrySummary(item) {
   return ''
 }
 
-// One list entry, made sortable. Collapsed by default (so multiple entries fit
-// on screen for drag-reorder); ↑/↓ buttons remain the a11y fallback.
+// One list entry, made sortable. Collapsed by default; body-click on the
+// header bar toggles expand; drag-handle-only reorder.
 function SortableEntry({ item, index, count, ops, tree, sectionLocked }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id })
   const [collapsed, setCollapsed] = useState(true)
+  const [promptOpen, setPromptOpen] = useState(false)
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -123,34 +125,25 @@ function SortableEntry({ item, index, count, ops, tree, sectionLocked }) {
   }
   const summary = entrySummary(item)
   const locked = !!item.locked
+  const toggle = () => setCollapsed((c) => !c)
   return (
     <div
       ref={setNodeRef} style={style}
       className="border border-space-border/50 rounded-lg p-3 flex flex-col gap-2"
     >
-      <div className={headerRow}>
-        <span className="inline-flex items-center gap-2 min-w-0">
+      <div className={`${headerRow} cursor-pointer`} onClick={toggle} aria-label="Toggle entry">
+        <span className="inline-flex items-center gap-2 min-w-0" onClick={(e) => e.stopPropagation()}>
           <button
             type="button" aria-label="Drag to reorder item"
             className="cursor-grab active:cursor-grabbing px-1 text-space-dim hover:text-space-text"
             {...attributes} {...listeners}
           >⋮⋮</button>
-          <button
-            type="button"
-            aria-label={collapsed ? 'Expand item' : 'Collapse item'}
-            className="px-1 text-space-dim hover:text-space-text transition-colors"
-            onClick={() => setCollapsed((c) => !c)}
-          >{collapsed ? '▸' : '▾'}</button>
-          <span className="text-xs text-space-dim shrink-0">Entry {index + 1}</span>
-          {collapsed && summary && (
+          <RenameLabel name={item.name || `Entry ${index + 1}`} editable onRename={(n) => ops.rename(item.id, n)} />
+          {collapsed && !item.name && summary && (
             <span className="text-xs text-space-text truncate">— {summary}</span>
           )}
         </span>
-        <span className="inline-flex items-center">
-          <MoveButtons
-            canUp={index > 0} canDown={index < count - 1}
-            onUp={() => ops.move(item.id, -1)} onDown={() => ops.move(item.id, 1)}
-          />
+        <span className="inline-flex items-center" onClick={(e) => e.stopPropagation()}>
           {!sectionLocked && (
             <button
               type="button"
@@ -160,17 +153,31 @@ function SortableEntry({ item, index, count, ops, tree, sectionLocked }) {
               onClick={() => ops.toggleLocked(item.id)}
             >{locked ? '🔒' : '🔓'}</button>
           )}
+          <VisibleToggle visible={item.visible} onToggle={() => ops.toggleVisible(item.id)} label="item in output" />
+          {!sectionLocked && (
+            <button
+              type="button" aria-label="Edit item prompt" title="Item prompt"
+              className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+              onClick={() => setPromptOpen(true)}
+            >✉</button>
+          )}
           <RemoveButton onRemove={() => ops.remove(item.id)} label="Remove item" />
         </span>
       </div>
-
       {!collapsed && <GroupView group={item} fieldsEditable={false} ops={ops} />}
+      {promptOpen && (
+        <PromptEditorModal
+          node={item} isSection={false} tree={tree}
+          onChange={(t) => ops.setPrompt(item.id, t)}
+          onClose={() => setPromptOpen(false)}
+        />
+      )}
     </div>
   )
 }
 
 // A repeating list: each item is a fixed-shape group (no field add/remove);
-// items can be added (clone template), removed, reordered (drag or ↑/↓).
+// items can be added (clone template), removed, reordered (drag).
 function ListView({ list, ops, tree, sectionLocked }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -208,28 +215,17 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
   const preset = isPresetSection(section)
   const child = section.children[0]
   const [collapsed, setCollapsed] = useState(initialCollapsed)
+  const [promptOpen, setPromptOpen] = useState(false)
   const toggle = () => setCollapsed((c) => !c)
   const locked = !!section.locked
   return (
     <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
-      {/* Clicking anywhere on the bar (name included) toggles collapse; the name
-          edits only on double-click; action buttons stop propagation. */}
       <div className={`${headerRow} cursor-pointer`} onClick={toggle}>
         <span className="inline-flex items-center gap-2">
           {dragHandle}
-          <button
-            type="button"
-            aria-label={collapsed ? 'Expand section' : 'Collapse section'}
-            className="px-1 text-space-dim hover:text-space-text transition-colors"
-            onClick={(e) => { e.stopPropagation(); toggle() }}
-          >{collapsed ? '▸' : '▾'}</button>
           <RenameLabel name={section.name} editable onRename={(n) => ops.rename(section.id, n)} />
         </span>
         <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <MoveButtons
-            canUp={!isFirst} canDown={!isLast}
-            onUp={() => ops.move(section.id, -1)} onDown={() => ops.move(section.id, 1)}
-          />
           <button
             type="button"
             aria-label={locked ? 'Unlock section for LLM' : 'Lock section from LLM'}
@@ -238,12 +234,23 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
             onClick={() => ops.toggleLocked(section.id)}
           >{locked ? '🔒' : '🔓'}</button>
           <VisibleToggle visible={section.visible} onToggle={() => ops.toggleVisible(section.id)} label="section" />
+          <button
+            type="button" aria-label="Edit section prompt" title="Section prompt"
+            className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
+            onClick={() => setPromptOpen(true)}
+          >✉</button>
           {!preset && <RemoveButton onRemove={() => ops.remove(section.id)} label="Remove section" />}
         </span>
       </div>
-
       {!collapsed && child && (
         <SectionChild child={child} preset={preset} ops={ops} tree={tree} sectionLocked={locked} />
+      )}
+      {promptOpen && (
+        <PromptEditorModal
+          node={section} isSection tree={tree}
+          onChange={(t) => ops.setPrompt(section.id, t)}
+          onClose={() => setPromptOpen(false)}
+        />
       )}
     </div>
   )
