@@ -66,3 +66,8 @@ node_modules/
 
 # Test artifacts
 test_new_user.db
+test_results.xml
+react-dashboard/test-output-*.txt
+
+# Superpowers skills lockfile (tooling state, regenerated locally)
+skills-lock.json
