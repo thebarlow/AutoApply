@@ -62,8 +62,49 @@ def _generic_section(section: SectionNode) -> str:
     return f"## {section.name}\n\n" + "\n\n".join(blocks)
 
 
+def _summary_section_md(section: SectionNode) -> str:
+    """Profile summary: ``## name`` + the markdown field value."""
+    child = section.children[0] if section.children else None
+    if not isinstance(child, FieldNode):
+        return ""
+    text = str(child.value).strip()
+    return f"## {section.name}\n\n{text}" if text else ""
+
+
+def _skills_section_md(section: SectionNode) -> str:
+    """Skills: ``## name`` + a single ``**label:** a, b, c`` line."""
+    child = section.children[0] if section.children else None
+    if not isinstance(child, FieldNode):
+        return ""
+    items = child.value if isinstance(child.value, list) else []
+    items = [str(x) for x in items if str(x).strip()]
+    if not items:
+        return ""
+    return f"## {section.name}\n\n**{child.name}:** {', '.join(items)}"
+
+
+def _header_section_md(section: SectionNode) -> str:
+    """Contact block: one ``**Label:** value`` block per non-empty field, in order."""
+    child = section.children[0] if section.children else None
+    if not isinstance(child, GroupNode):
+        return ""
+    blocks: list[str] = []
+    for f in child.children:
+        val = f.value if isinstance(f.value, str) else ", ".join(str(x) for x in f.value)
+        val = val.strip()
+        if val:
+            blocks.append(f"**{f.name}:** {val}")
+    if not blocks:
+        return ""
+    return f"## {section.name}\n\n" + "\n\n".join(blocks)
+
+
 # Role → formatter. Populated by Tasks 3–4; default is the generic formatter.
-_RENDERERS: dict[str, Callable[[SectionNode], str]] = {}
+_RENDERERS: dict[str, Callable[[SectionNode], str]] = {
+    "header": _header_section_md,
+    "summary": _summary_section_md,
+    "skills": _skills_section_md,
+}
 
 
 def _render_section(section: SectionNode) -> str:
