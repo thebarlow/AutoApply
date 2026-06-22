@@ -512,26 +512,32 @@ def tree_to_legacy(root: "RootNode") -> dict:
     }
 
     header = _section_by_role(root, "header")
-    if header and header.children and isinstance(header.children[0], GroupNode):
+    if header and header.visible and header.children and isinstance(header.children[0], GroupNode):
         for f in header.children[0].children:
-            if f.key in out:
+            if f.visible and f.key in out:
                 out[f.key] = f.value
 
     summary = _section_by_role(root, "summary")
-    if summary and summary.children and isinstance(summary.children[0], FieldNode):
+    if (summary and summary.visible and summary.children
+            and isinstance(summary.children[0], FieldNode)
+            and summary.children[0].visible):
         out["hero"] = summary.children[0].value
 
     skills = _section_by_role(root, "skills")
-    if skills and skills.children and isinstance(skills.children[0], FieldNode):
+    if (skills and skills.visible and skills.children
+            and isinstance(skills.children[0], FieldNode)
+            and skills.children[0].visible):
         out["skills"] = list(skills.children[0].value)
 
     def _rows(role: str) -> list[dict]:
         sect = _section_by_role(root, role)
-        if not sect or not sect.children or not isinstance(sect.children[0], ListNode):
+        if (not sect or not sect.visible or not sect.children
+                or not isinstance(sect.children[0], ListNode)):
             return []
         return [
             {f.key: f.value for f in item.children}
             for item in sect.children[0].children
+            if item.visible
         ]
 
     out["work_history"] = [

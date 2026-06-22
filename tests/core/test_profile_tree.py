@@ -602,6 +602,58 @@ def test_resolve_unknown_id_left_as_is():
     )
 
 
+def test_tree_to_legacy_omits_invisible_experience_entry():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    legacy = {
+        "first_name": "A", "last_name": "B",
+        "work_history": [
+            {"company": "Acme", "title": "Eng", "start": "2020", "end": "2022", "summary": "x"},
+            {"company": "Globex", "title": "Eng", "start": "2018", "end": "2020", "summary": "y"},
+        ],
+    }
+    root = legacy_to_tree(legacy)
+    exp = next(s for s in root.children if s.role == "experience")
+    exp.children[0].children[1].visible = False  # hide the Globex entry
+    out = tree_to_legacy(root)
+    companies = [r["company"] for r in out["work_history"]]
+    assert companies == ["Acme"]
+
+
+def test_tree_to_legacy_omits_invisible_section():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    root = legacy_to_tree({"first_name": "A", "skills": ["Python", "Go"]})
+    skills = next(s for s in root.children if s.role == "skills")
+    skills.visible = False
+    assert tree_to_legacy(root)["skills"] == []
+
+
+def test_tree_to_legacy_omits_invisible_header_field():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    root = legacy_to_tree({"first_name": "A", "email": "a@b.c"})
+    header = next(s for s in root.children if s.role == "header")
+    for f in header.children[0].children:
+        if f.key == "email":
+            f.visible = False
+    assert tree_to_legacy(root)["email"] == ""
+
+
+def test_tree_to_legacy_all_visible_unchanged():
+    from core.profile_tree import legacy_to_tree, tree_to_legacy
+
+    legacy = {"first_name": "A", "last_name": "B", "email": "a@b.c",
+              "skills": ["Python"],
+              "work_history": [{"company": "Acme", "title": "Eng", "start": "2020",
+                                "end": "2022", "summary": "x"}]}
+    root = legacy_to_tree(legacy)
+    out = tree_to_legacy(root)
+    assert out["first_name"] == "A"
+    assert out["skills"] == ["Python"]
+    assert [r["company"] for r in out["work_history"]] == ["Acme"]
+
+
 class _StubDB:
     def query(self, *a, **k):
         return self
