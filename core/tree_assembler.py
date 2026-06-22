@@ -99,11 +99,76 @@ def _header_section_md(section: SectionNode) -> str:
     return f"## {section.name}\n\n" + "\n\n".join(blocks)
 
 
+def _list_rows(section: SectionNode) -> list[dict[str, object]]:
+    """Per visible list entry, a ``{field key: value}`` dict; [] if not a list."""
+    child = section.children[0] if section.children else None
+    if not isinstance(child, ListNode):
+        return []
+    return [
+        {f.key: f.value for f in entry.children}
+        for entry in child.children
+        if entry.visible
+    ]
+
+
+def _experience_section_md(section: SectionNode) -> str:
+    rows = _list_rows(section)
+    if not rows:
+        return ""
+    parts = [f"## {section.name}"]
+    for r in rows:
+        dates = " – ".join(
+            x for x in (str(r.get("start", "")).strip(), str(r.get("end", "")).strip()) if x
+        )
+        heading = f"### {str(r.get('title', '')).strip()}, {str(r.get('company', '')).strip()}".strip(", ")
+        if dates:
+            heading += f" ({dates})"
+        block = heading
+        summary = str(r.get("summary", "")).strip()
+        if summary:
+            block += "\n\n" + summary
+        parts.append(block)
+    return "\n\n".join(parts)
+
+
+def _education_section_md(section: SectionNode) -> str:
+    rows = _list_rows(section)
+    if not rows:
+        return ""
+    lines = [f"## {section.name}"]
+    for r in rows:
+        line = (
+            f"**{str(r.get('degree', '')).strip()} in {str(r.get('field', '')).strip()}**, "
+            f"{str(r.get('institution', '')).strip()}"
+        ).strip(", ")
+        graduated = str(r.get("graduated", "")).strip()
+        if graduated:
+            line += f" ({graduated})"
+        lines.append(line)
+    return "\n\n".join(lines)
+
+
+def _projects_section_md(section: SectionNode) -> str:
+    rows = _list_rows(section)
+    if not rows:
+        return ""
+    parts = [f"## {section.name}"]
+    for r in rows:
+        name = str(r.get("name", "")).strip()
+        desc = str(r.get("description", "")).strip()
+        nm = f"**{name}**" if name else ""
+        parts.append(f"{nm}: {desc}".strip(": ") if nm else desc)
+    return "\n\n".join(parts)
+
+
 # Role → formatter. Populated by Tasks 3–4; default is the generic formatter.
 _RENDERERS: dict[str, Callable[[SectionNode], str]] = {
     "header": _header_section_md,
     "summary": _summary_section_md,
     "skills": _skills_section_md,
+    "experience": _experience_section_md,
+    "education": _education_section_md,
+    "projects": _projects_section_md,
 }
 
 
