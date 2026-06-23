@@ -23,6 +23,9 @@ from core.schemas import (
 from core.llm import call_llm
 from core.document_builder import build_resume_document, build_cover_document
 from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
+from core.tree_assembler import assemble_resume_tree_markdown
+from core.resume_document_io import is_tree_v1, deserialize_document_tree
+from core.profile_tree import RootNode
 from core.utils import render_pdf
 from core.paths import OUTPUTS_DIR as _OUTPUTS_DIR
 
@@ -919,16 +922,20 @@ class Job(Base):
         Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
         self.write_cover_markdown(doc)
 
-    def write_resume_markdown(self, doc: "ResumeDocument") -> None:
-        """Write the derived résumé .md (front matter + assembled body).
+    def write_resume_markdown(self, doc: "ResumeDocument | RootNode") -> None:
+        """Write the derived résumé .md.
 
-        Args:
-            doc: Structured résumé produced by ``build_resume_document``.
+        A document tree (tree-v1) is rendered by the generic tree assembler with
+        NO front matter — contact and education are ordinary body sections. A
+        legacy ``ResumeDocument`` keeps the front matter + fixed assembler path.
         """
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        if isinstance(doc, RootNode):
+            md_path.write_text(assemble_resume_tree_markdown(doc), encoding="utf-8")
+            return
         frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
         body = assemble_resume_markdown(doc)
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
         md_path.write_text(frontmatter + body, encoding="utf-8")
 
     def write_cover_markdown(self, doc: "CoverDocument") -> None:
@@ -1191,12 +1198,14 @@ class Job(Base):
     def _render_meta(self, doc_type: str, db: Session) -> dict:
         """Render meta from the stored document snapshot, falling back to profile.
 
-        Realizes snapshot behavior: an existing generated document renders from
-        the contact/education captured at generation time, not the live profile.
+        For a tree-v1 résumé row there is no front-matter channel — contact and
+        education render from the body — so meta is empty.
         """
         from core.user import User
         row = Document.fetch(db, self.job_key, doc_type, profile_id=self.profile_id)
         if row is not None:
+            if doc_type == "resume" and is_tree_v1(row.structured_json):
+                return {}
             model = ResumeDocument if doc_type == "resume" else CoverDocument
             stored = model.model_validate_json(row.structured_json)
             education = getattr(stored, "education", [])
