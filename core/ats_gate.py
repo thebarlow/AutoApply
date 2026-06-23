@@ -39,27 +39,10 @@ def extract_text(pdf_path: str | Path) -> PdfText:
     return PdfText(text=full, lines=lines)
 
 
-# Minimal synonym map for skill-survival matching. Declared one-way; the
-# reverse direction is derived so each pair is maintained in a single place.
-_RAW_SYNONYMS: dict[str, list[str]] = {
-    "nlp": ["natural language processing"],
-    "javascript": ["js"],
-    "postgresql": ["postgres"],
-}
-_SKILL_SYNONYMS: dict[str, list[str]] = {
-    **{k: list(v) for k, v in _RAW_SYNONYMS.items()},
-    **{syn: [k] for k, vs in _RAW_SYNONYMS.items() for syn in vs},
-}
-
-
 def _present(term: str, haystack_lower: str) -> bool:
-    """Case-insensitive literal-or-synonym substring match."""
+    """Case-insensitive literal substring match."""
     t = term.strip().lower()
-    if not t:
-        return False
-    if t in haystack_lower:
-        return True
-    return any(syn in haystack_lower for syn in _SKILL_SYNONYMS.get(t, []))
+    return bool(t) and t in haystack_lower
 
 
 def check_mechanical(
@@ -114,14 +97,6 @@ def check_mechanical(
         issues.append(AtsIssue(layer="mechanical", severity="critical",
                                code="contact_order",
                                message="Contact fields extracted out of order (column-scramble risk)."))
-
-    # section_missing — section_order values are lowercase by convention; the
-    # PDF text is lowercased into `low`, so the comparison is case-insensitive.
-    for section in doc.section_order:
-        if section.lower() not in low:
-            issues.append(AtsIssue(layer="mechanical", severity="critical",
-                                   code="section_missing",
-                                   message=f"Section '{section}' header missing from extracted text."))
 
     # present_skill_dropped — skills the candidate has AND the job wants,
     # but which did not survive into the text layer.
