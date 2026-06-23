@@ -12,6 +12,10 @@ from core.llm import get_client_for_profile
 from core.metering import meter_action
 from core.section_generator import generate_resume_by_section
 
+from pathlib import Path as _Path
+
+_OUTPUTS_DIR = _Path(__file__).parent.parent / "generator" / "outputs"
+
 
 def _render_doc_from_json(job, doc_type: str, structured_json: str, template_path, db) -> None:
     """Re-render a résumé or cover letter from stored structured JSON.
@@ -133,14 +137,12 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
 def _restore_best_sections(db, job_key: str, profile_id: int,
                            eval_log: list[dict], template_path) -> None:
     """Re-persist + re-render the highest-min turn's snapshot (tree-v1)."""
-    from pathlib import Path
     from db.database import Document
 
     if not eval_log:
         return
     best = max(eval_log, key=lambda e: e["score"])
-    snap = (Path(__file__).parent.parent / "generator" / "outputs"
-            / f"{job_key}_resume_turn_{best['turn']}.json")
+    snap = _OUTPUTS_DIR / f"{job_key}_resume_turn_{best['turn']}.json"
     if not snap.exists():
         return
     structured_json = snap.read_text(encoding="utf-8")
@@ -173,7 +175,6 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
     from core.user import User, PromptNotConfiguredError
     from db.database import Document
 
-    _OUTPUTS = Path(__file__).parent.parent / "generator" / "outputs"
     template_path = Path(__file__).parent.parent / "generator" / "resume_template.html"
 
     db = SessionLocal()
@@ -214,7 +215,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
         def _snapshot(n: int) -> None:
             r = Document.fetch(db, job_key, "resume", profile_id)
             if r is not None:
-                (_OUTPUTS / f"{job_key}_resume_turn_{n}.json").write_text(
+                (_OUTPUTS_DIR / f"{job_key}_resume_turn_{n}.json").write_text(
                     r.structured_json, encoding="utf-8")
 
         eval_log: list[dict] = []
@@ -227,6 +228,11 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                         eval_prompt, user, eval_client, eval_model, db)
             except Exception as exc:
                 db.rollback()
+                job = Job.get(job_key, db, profile_id)
+                job.last_result_error = f"Section eval turn {turn} failed: {exc}"
+                job.unread_indicator = "error"
+                db.commit()
+                _emit(job)
                 print(f"[section-refine] {job_key}: eval turn {turn} failed — {exc}", flush=True)
                 _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
                 return
@@ -272,6 +278,11 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                 _emit(job)
             except Exception as exc:
                 db.rollback()
+                job = Job.get(job_key, db, profile_id)
+                job.last_result_error = f"Section refine turn {turn} failed: {exc}"
+                job.unread_indicator = "error"
+                db.commit()
+                _emit(job)
                 print(f"[section-refine] {job_key}: refine turn {turn} failed — {exc}", flush=True)
                 _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
                 return

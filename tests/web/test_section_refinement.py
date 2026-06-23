@@ -105,7 +105,10 @@ def test_only_failing_section_regenerated_and_stops_when_all_pass(db_session, mo
 
     monkeypatch.setattr(ip, "meter_action", fake_meter)
 
-    # --- stub outputs dir to tmp_path ---
+    # --- redirect snapshot + .md writes to tmp_path ---
+    monkeypatch.setattr(ip, "_OUTPUTS_DIR", tmp_path)
+    import core.job as _cj
+    monkeypatch.setattr(_cj, "_OUTPUTS_DIR", tmp_path)
     monkeypatch.setattr(Job, "build_resume_prompt", lambda self, u, t, db: "prompt")
 
     # --- run ---
