@@ -46,3 +46,36 @@ def test_roundtrip_flags_phone_mismatch():
     with patch("core.ats_gate.call_llm", return_value=json.dumps(parsed)):
         issues = check_roundtrip(pt, doc, "PROMPT {extracted_text}", client=object(), model="m")
     assert any(i.code == "roundtrip_phone" for i in issues)
+
+
+def _doc_with_sections():
+    return ResumeDocument(
+        header=ResumeHeader(name="Jane Doe", email="jane@x.com"),
+        section_order=["experience", "skills"],
+    )
+
+
+def test_roundtrip_flags_missing_section():
+    parsed = {"name": "Jane Doe", "email": "jane@x.com", "phone": "",
+              "sections": ["experience"], "skills": [], "experience_dates": []}
+    with patch("core.ats_gate.call_llm", return_value=json.dumps(parsed)):
+        issues = check_roundtrip(_pt(), _doc_with_sections(), "P {extracted_text}", client=object(), model="m")
+    sec = [i for i in issues if i.code == "roundtrip_sections"]
+    assert sec and sec[0].severity == "warning" and sec[0].layer == "semantic"
+    assert "skills" in sec[0].message
+
+
+def test_roundtrip_no_section_issue_when_all_present():
+    parsed = {"name": "Jane Doe", "email": "jane@x.com", "phone": "",
+              "sections": ["experience", "skills"], "skills": [], "experience_dates": []}
+    with patch("core.ats_gate.call_llm", return_value=json.dumps(parsed)):
+        issues = check_roundtrip(_pt(), _doc_with_sections(), "P {extracted_text}", client=object(), model="m")
+    assert not any(i.code == "roundtrip_sections" for i in issues)
+
+
+def test_roundtrip_empty_parse_suppresses_section_issue():
+    parsed = {"name": "Jane Doe", "email": "jane@x.com", "phone": "",
+              "sections": [], "skills": [], "experience_dates": []}
+    with patch("core.ats_gate.call_llm", return_value=json.dumps(parsed)):
+        issues = check_roundtrip(_pt(), _doc_with_sections(), "P {extracted_text}", client=object(), model="m")
+    assert not any(i.code == "roundtrip_sections" for i in issues)

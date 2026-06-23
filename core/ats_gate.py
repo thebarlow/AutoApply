@@ -157,6 +157,17 @@ def check_roundtrip(
     if doc.header.phone and parsed.phone and parsed.phone.strip().lower() != doc.header.phone.strip().lower():
         issues.append(AtsIssue(layer="semantic", severity="warning", code="roundtrip_phone",
                                message=f"Parser read phone as '{parsed.phone}', expected '{doc.header.phone}'."))
+
+    # roundtrip_sections (advisory) — document sections the parser did not recover.
+    # Suppressed when the parse returned no sections (under-parse, not a layout fault).
+    if parsed.sections:
+        parsed_set = {s.strip().lower() for s in parsed.sections if s.strip()}
+        missing = [s for s in doc.section_order
+                   if s.strip() and s.strip().lower() not in parsed_set]
+        if missing:
+            issues.append(AtsIssue(layer="semantic", severity="warning",
+                                   code="roundtrip_sections",
+                                   message=f"Parser did not recover section(s): {', '.join(missing)}."))
     return issues
 
 
