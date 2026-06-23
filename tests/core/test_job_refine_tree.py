@@ -49,7 +49,8 @@ def test_refine_tree_v1_repersists_tree(db_session, tmp_path, monkeypatch):
 
     root = user.profile_tree_root()
     tree = build_resume_document_tree(root, {})
-    job = Job(job_key="rfjk", source="x", title="t", company="c", url="http://x/1", profile_id=1)
+    job = Job(job_key="rfjk", source="x", title="t", company="c", url="http://x/1", profile_id=1,
+              ext_seniority="mid", ext_role_type="engineering", ext_required_skills="Python")
     db_session.add(job)
     db_session.commit()
     Document.upsert(db_session, "rfjk", "resume", serialize_document_tree(tree),
@@ -69,3 +70,8 @@ def test_refine_tree_v1_repersists_tree(db_session, tmp_path, monkeypatch):
     assert captured["called"] is True
     row = Document.fetch(db_session, "rfjk", "resume", profile_id=1)
     assert is_tree_v1(row.structured_json)
+
+    md_path = tmp_path / "rfjk_resume.md"
+    assert md_path.exists(), "resume .md was not written"
+    md_text = md_path.read_text(encoding="utf-8")
+    assert not md_text.startswith("---"), "tree-v1 resume .md should be frontmatter-free"

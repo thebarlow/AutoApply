@@ -619,16 +619,13 @@ class Job(Base):
             # critique in context, rebuild the document tree, re-persist + re-render.
             # (Per-section scoring / selective regen is 4B-2.)
             root = user.profile_tree_root()
-            base_prompt = _apply_template(
-                refine_prompt.replace("{critique}", critique),
-                {"job": self, "user": user},
-            )
+            refine_with_ctx = refine_prompt.replace("{critique}", critique) + "\n\n{job.extracted_description}"
+            job_ctx = self.build_resume_prompt(user, refine_with_ctx, db)
 
             def resolve(text: str) -> str:
                 text = resolve_profile_tokens(root, text)
                 return _apply_template(text, {"job": self, "user": user})
 
-            job_ctx = f"{base_prompt}\n\n{self.description or ''}"
             authored = generate_resume_by_section(root, job_ctx, client, model, resolve=resolve)
             doc_tree = build_resume_document_tree(root, authored)
             Document.upsert(db, self.job_key, "resume",
