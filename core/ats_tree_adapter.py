@@ -1,6 +1,6 @@
 """Project a tree-v1 document into the minimal ResumeDocument the ATS gate reads
-(header + section_order). Interim for 4B-1; the ATS gate is reworked to consume
-the tree directly in 4C.
+(header + section_order). The header feeds the mechanical contact checks; section_order
+feeds the advisory semantic roundtrip (4C removed the mechanical section hard-block).
 """
 from __future__ import annotations
 

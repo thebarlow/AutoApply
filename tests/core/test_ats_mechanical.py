@@ -51,11 +51,12 @@ def test_contact_order_scramble_is_critical():
     assert "contact_order" in _codes(issues)
 
 
-def test_missing_section_is_critical():
+def test_missing_section_no_longer_blocks():
     full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nSKILLS\n"  # no EDUCATION
     pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), [], [], [])
-    assert "section_missing" in _codes(issues)
+    assert "section_missing" not in _codes(issues)
+    assert not any(i.severity == "critical" for i in issues)
 
 
 def test_present_relevant_skill_dropped_is_warning():
@@ -103,3 +104,20 @@ def test_contact_value_repeated_in_body_does_not_scramble_order():
     pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
     issues = check_mechanical(pt, _doc(), [], [], [])
     assert not any(i.code == "contact_order" for i in issues)
+
+
+def test_synonym_no_longer_matches_dropped_skill():
+    # Resume renders "postgres" but the owned/wanted skill is "postgresql".
+    # With the synonym map gone, this is a literal miss -> warning.
+    full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\npostgres\n"
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
+    issues = check_mechanical(pt, _doc(), ["postgresql"], [], ["postgresql"])
+    dropped = [i for i in issues if i.code == "present_skill_dropped"]
+    assert dropped and dropped[0].severity == "warning"
+
+
+def test_literal_skill_match_emits_nothing():
+    full = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\nEDUCATION\nSKILLS\npostgresql\n"
+    pt = PdfText(text=full, lines=[ln.strip() for ln in full.splitlines() if ln.strip()])
+    issues = check_mechanical(pt, _doc(), ["postgresql"], [], ["postgresql"])
+    assert not any(i.code == "present_skill_dropped" for i in issues)
