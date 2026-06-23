@@ -24,8 +24,10 @@ from core.llm import call_llm
 from core.document_builder import build_resume_document, build_cover_document
 from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
 from core.tree_assembler import assemble_resume_tree_markdown
-from core.resume_document_io import is_tree_v1, deserialize_document_tree
-from core.profile_tree import RootNode
+from core.resume_document_io import is_tree_v1, deserialize_document_tree, serialize_document_tree
+from core.profile_tree import RootNode, resolve_profile_tokens
+from core.section_generator import generate_resume_by_section
+from core.document_tree import build_resume_document_tree
 from core.utils import render_pdf
 from core.paths import OUTPUTS_DIR as _OUTPUTS_DIR
 
@@ -866,30 +868,27 @@ class Job(Base):
         model: str,
         db: Session,
     ) -> None:
-        """Generate resume markdown via LLM and write to generator/outputs/.
+        """Generate the résumé as a tree-v1 document and write its Markdown.
 
-        Writes to generator/outputs/{job_key}_resume.md, prepending YAML front matter
-        with the user's contact info.
-
-        Args:
-            user: A User instance with profile data.
-            prompt_content: Prompt template string.
-            client: An OpenAI-compatible client instance.
-            model: Model identifier string.
-            db: SQLAlchemy session.
+        Runs per-section generation against the profile tree, materializes a
+        self-contained document tree (pruned, value-baked, locked nodes verbatim),
+        stores it under ``schema:"tree-v1"`` (source of truth), and writes the
+        derived ``.md`` (no front matter).
         """
+        root = user.profile_tree_root()
         prompt = self.build_resume_prompt(user, prompt_content, db)
-        generation = _llm_json_with_retry(
-            prompt, client, model, ResumeGeneration, max_tokens=16384,
-            empty_msg=(
-                "Resume generation returned empty content — the model likely hit its "
-                "token limit before producing output (common with reasoning models). "
-                "Try a non-reasoning model or a shorter prompt."
-            ),
+
+        def resolve(text: str) -> str:
+            text = resolve_profile_tokens(root, text)
+            return _apply_template(text, {"job": self, "user": user})
+
+        authored = generate_resume_by_section(root, prompt, client, model, resolve=resolve)
+        doc_tree = build_resume_document_tree(root, authored)
+        Document.upsert(
+            db, self.job_key, "resume",
+            serialize_document_tree(doc_tree), profile_id=self.profile_id,
         )
-        doc = build_resume_document(user, generation, db)
-        Document.upsert(db, self.job_key, "resume", doc.model_dump_json(), profile_id=self.profile_id)
-        self.write_resume_markdown(doc)
+        self.write_resume_markdown(doc_tree)
 
     def generate_cover_md(
         self,
