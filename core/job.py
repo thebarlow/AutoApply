@@ -614,6 +614,28 @@ class Job(Base):
         critique = json.dumps(issues)
         prompt = refine_prompt.replace("{critique}", critique)
 
+        if doc_type == "resume" and is_tree_v1(row.structured_json):
+            # Interim tree-v1 refine: re-author all llm_output sections with the
+            # critique in context, rebuild the document tree, re-persist + re-render.
+            # (Per-section scoring / selective regen is 4B-2.)
+            root = user.profile_tree_root()
+            base_prompt = _apply_template(
+                refine_prompt.replace("{critique}", critique),
+                {"job": self, "user": user},
+            )
+
+            def resolve(text: str) -> str:
+                text = resolve_profile_tokens(root, text)
+                return _apply_template(text, {"job": self, "user": user})
+
+            job_ctx = f"{base_prompt}\n\n{self.description or ''}"
+            authored = generate_resume_by_section(root, job_ctx, client, model, resolve=resolve)
+            doc_tree = build_resume_document_tree(root, authored)
+            Document.upsert(db, self.job_key, "resume",
+                            serialize_document_tree(doc_tree), profile_id=self.profile_id)
+            self.write_resume_markdown(doc_tree)
+            return
+
         if doc_type == "resume":
             doc = ResumeDocument.model_validate_json(row.structured_json)
             prompt = prompt.replace("{current_profile_summary}", doc.profile_summary)
