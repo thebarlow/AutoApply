@@ -97,9 +97,17 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
         Custom sections now appear on generated résumés. (Spec/plan: `docs/superpowers/{specs,plans}/2026-06-22-*4b*`.)
         Carry-forwards: remove orphaned `core/tree_render.py` (still imported by `tests/core/test_tree_render.py`);
         pull duplicated test fixtures into conftest.
-      - [ ] **4B-2 — Per-section refinement engine.** Replace the interim whole-doc re-author: one eval
-        LLM call returns a per-section breakdown (`{section: {score, issues}}`); regenerate only
-        sub-threshold sections. Own spec → plan.
+      - [x] **4B-2 — Per-section refinement engine — DONE (local main `ba2ce57`, not pushed).**
+        Spec/plan `docs/superpowers/{specs,plans}/2026-06-23-*4b2*`; 6 TDD tasks subagent-driven,
+        final opus review READY TO MERGE (no Critical/Important); 75/75 on 4B-2+adjacent. `SectionEvalResponse`
+        schema + `resume_eval_sectioned` prompt key; `Job.evaluate_resume_sections` scores only regenerable
+        sections (unlocked `llm_output`) by name; `generate_resume_by_section` gained optional
+        `only_sections`/`critiques` (behavior-preserving); `authored_values_from_tree` carries passing
+        sections forward; `web/intake_pipeline._run_resume_section_refinement` loop (stop when all
+        regenerable ≥ `resume_refine_pass_score` or max_turns; turn score = MIN; best-by-min restore)
+        dispatched from `_run_doc_refinement` for tree-v1 résumés only. Cover/legacy whole-doc loop +
+        `_refine_doc_md` untouched (feedback-refine → 4D). Carry-forwards: dispatch double-fetch (1-line);
+        de-dup `_restore_best_sections` vs whole-doc `_restore_best` (note divergence first); test fixtures→conftest.
     - [ ] **4C — ATS gate rework.** Drop the required-fixed-heading hard-block + literal heading
       matching from `check_mechanical`; keep contact-at-top / text-layer / glyph-junk / per-job
       `ext_required_skills`-survive checks + the semantic LLM roundtrip. No roles, no synonym map
