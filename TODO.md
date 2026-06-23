@@ -108,11 +108,17 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
         dispatched from `_run_doc_refinement` for tree-v1 résumés only. Cover/legacy whole-doc loop +
         `_refine_doc_md` untouched (feedback-refine → 4D). Carry-forwards: dispatch double-fetch (1-line);
         de-dup `_restore_best_sections` vs whole-doc `_restore_best` (note divergence first); test fixtures→conftest.
-    - [ ] **4C — ATS gate rework.** Drop the required-fixed-heading hard-block + literal heading
-      matching from `check_mechanical`; keep contact-at-top / text-layer / glyph-junk / per-job
-      `ext_required_skills`-survive checks + the semantic LLM roundtrip. No roles, no synonym map
-      (vendor synonym dicts are proprietary; no section is universally required — freshers/
-      career-changers lack work history).
+    - [x] **4C — ATS gate rework — DONE (local main `11a8794`, not pushed).**
+      Spec/plan `docs/superpowers/{specs,plans}/2026-06-23-*4c*`; 2 TDD tasks subagent-driven,
+      final opus review READY TO MERGE (no Critical/Important); 33/33 ATS+adjacent. Removed the
+      `section_missing` critical hard-block and the skill synonym map (`_RAW_SYNONYMS`/`_SKILL_SYNONYMS`)
+      from `core/ats_gate.check_mechanical` — `_present` is now literal-only. Kept text-layer / contact /
+      glyph-junk / `present_skill_dropped` mechanical checks + the score formula + blocking contract
+      (`AtsReport.build`, confirm-applied) unchanged. Section-structure verification moved to the
+      advisory semantic roundtrip: new warning-only `roundtrip_sections` diff in `check_roundtrip`
+      (document `section_order` vs LLM-parsed `sections`, suppressed on empty parse). `section_order`
+      now feeds the roundtrip (consumer moved from mechanical → semantic); adapter docstring updated.
+      Both tree-v1 and legacy `ResumeDocument` rows lose the section hard-block identically (intended).
     - [ ] **4D — DocumentModal generic rebuild + feedback-on-tree.** Rebuild
       `react-dashboard/src/components/widgets/document/` to render/edit the document tree
       generically (reuse `profile-tree/` patterns); retarget `POST /{doc_type}/feedback` refine
