@@ -83,20 +83,59 @@ def _skills_section_md(section: SectionNode) -> str:
     return f"## {section.name}\n\n**{child.name}:** {', '.join(items)}"
 
 
+def _strip_url(url: str) -> str:
+    """Display form of a URL: scheme and leading www. removed, trailing / dropped."""
+    return (
+        url.replace("https://www.", "").replace("http://www.", "")
+        .replace("https://", "").replace("http://", "").rstrip("/")
+    )
+
+
+_HEADER_LINK_KEYS = {"github", "linkedin", "website"}
+
+
 def _header_section_md(section: SectionNode) -> str:
-    """Contact block: one ``**Label:** value`` block per non-empty field, in order."""
+    """Résumé header: name as H1, remaining contact fields as one ordered line.
+
+    Name comes from ``first_name``/``last_name`` (joined). Remaining non-empty
+    fields render in tree order as a ` · `-joined line; link-kind fields render as
+    Markdown links with a scheme-stripped display. ATS-load-bearing order
+    (email, phone, location, …) follows the tree's field order.
+    """
     child = section.children[0] if section.children else None
     if not isinstance(child, GroupNode):
         return ""
-    blocks: list[str] = []
+
+    by_key = {f.key: f for f in child.children}
+
+    def _val(f: FieldNode) -> str:
+        v = f.value if isinstance(f.value, str) else ", ".join(str(x) for x in f.value)
+        return v.strip()
+
+    first = _val(by_key["first_name"]) if "first_name" in by_key else ""
+    last = _val(by_key["last_name"]) if "last_name" in by_key else ""
+    name = f"{first} {last}".strip()
+
+    parts: list[str] = []
     for f in child.children:
-        val = f.value if isinstance(f.value, str) else ", ".join(str(x) for x in f.value)
-        val = val.strip()
-        if val:
-            blocks.append(f"**{f.name}:** {val}")
-    if not blocks:
+        if f.key in ("first_name", "last_name"):
+            continue
+        val = _val(f)
+        if not val:
+            continue
+        if f.key in _HEADER_LINK_KEYS:
+            parts.append(f"[{_strip_url(val)}]({val})")
+        else:
+            parts.append(val)
+
+    if not name and not parts:
         return ""
-    return f"## {section.name}\n\n" + "\n\n".join(blocks)
+    lines = []
+    if name:
+        lines.append(f"# {name}")
+    if parts:
+        lines.append(" · ".join(parts))
+    return "\n\n".join(lines)
 
 
 def _list_rows(section: SectionNode) -> list[dict[str, object]]:

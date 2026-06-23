@@ -726,10 +726,19 @@ def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):
 
 
 def test_generate_resume_md_writes_document_and_markdown(db_session, tmp_path, monkeypatch):
+    """Updated for tree-v1: generate_resume_md now stores a tree-v1 document
+    (not a legacy ResumeDocument) and writes frontmatter-free markdown.
+
+    Previously asserted legacy ResumeDocument shape (profile_summary, experience,
+    header keys, "---" frontmatter). Now asserts tree-v1 schema and no frontmatter.
+    """
     import json
     import core.job as job_mod
+    import core.section_generator as sg
     from core.job import Job
     from core.user import User
+    from core.profile_tree import FieldNode, GroupNode
+    from core.resume_document_io import is_tree_v1
     from db.database import Document
 
     monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
@@ -746,31 +755,39 @@ def test_generate_resume_md_writes_document_and_markdown(db_session, tmp_path, m
     user = User.load(db_session)
 
     job = Job(job_key="k1", source="x", title="SWE", company="Acme", url="http://x/1", profile_id=1)
+    job.ext_seniority = "mid"
     db_session.add(job)
     db_session.commit()
 
-    fake = json.dumps({
-        "profile_summary": "Ships software.",
-        "experience": [{"ref": 0, "description": "- Built X"}],
-        "projects": [{"ref": 0, "description": "A project."}],
-        "skills": [{"category": "Languages", "items": ["Python"]}],
-    })
-    monkeypatch.setattr(job_mod, "call_llm", lambda *a, **k: fake, raising=False)
-    prompt = "History:\n{user_profile.work_history_indexed}\nProjects:\n{user_profile.projects_indexed}"
+    # Stub per-section generation (tree-v1 path uses generate_resume_by_section)
+    def fake_generate(root, job_ctx, client, model, resolve=None):
+        out = {}
+        for s in root.children:
+            child = s.children[0] if s.children else None
+            if isinstance(child, GroupNode):
+                for f in child.children:
+                    if isinstance(f, FieldNode) and f.llm_output:
+                        out[f.id] = "Generated."
+                    elif isinstance(f, GroupNode):
+                        for ff in f.children:
+                            if isinstance(ff, FieldNode) and ff.llm_output:
+                                out[ff.id] = "Generated."
+            elif isinstance(child, FieldNode) and child.llm_output:
+                out[child.id] = "Generated."
+        return out
 
+    monkeypatch.setattr(sg, "generate_resume_by_section", fake_generate)
+    monkeypatch.setattr("core.job.generate_resume_by_section", fake_generate, raising=False)
+
+    prompt = "History:\n{user_profile.work_history_indexed}\nProjects:\n{user_profile.projects_indexed}"
     job.generate_resume_md(user, prompt, client=object(), model="m", db=db_session)
 
     row = Document.fetch(db_session, "k1", "resume", profile_id=1)
     assert row is not None
-    doc = json.loads(row.structured_json)
-    assert doc["profile_summary"] == "Ships software."
-    assert doc["experience"][0]["company"] == "Acme"
-    assert doc["header"]["name"] == "Jane Doe"
+    assert is_tree_v1(row.structured_json)
 
     md = (tmp_path / "k1_resume.md").read_text(encoding="utf-8")
-    assert md.startswith("---")
-    assert "## Profile" in md
-    assert "- Built X" in md
+    assert not md.startswith("---")
 
 
 def test_generate_cover_md_writes_document(db_session, tmp_path, monkeypatch):

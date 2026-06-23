@@ -469,6 +469,10 @@ def serve_doc_turn_markdown(
     raw = path.read_text(encoding="utf-8")
     try:
         if doc_type == "resume":
+            from core.resume_document_io import is_tree_v1, deserialize_document_tree
+            from core.tree_assembler import assemble_resume_tree_markdown
+            if is_tree_v1(raw):
+                return assemble_resume_tree_markdown(deserialize_document_tree(raw))
             return assemble_resume_markdown(ResumeDocument.model_validate_json(raw))
         return assemble_cover_markdown(CoverDocument.model_validate_json(raw))
     except ValidationError as exc:

@@ -23,6 +23,11 @@ from core.schemas import (
 from core.llm import call_llm
 from core.document_builder import build_resume_document, build_cover_document
 from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
+from core.tree_assembler import assemble_resume_tree_markdown
+from core.resume_document_io import is_tree_v1, deserialize_document_tree, serialize_document_tree
+from core.profile_tree import RootNode, resolve_profile_tokens
+from core.section_generator import generate_resume_by_section
+from core.document_tree import build_resume_document_tree
 from core.utils import render_pdf
 from core.paths import OUTPUTS_DIR as _OUTPUTS_DIR
 
@@ -609,6 +614,25 @@ class Job(Base):
         critique = json.dumps(issues)
         prompt = refine_prompt.replace("{critique}", critique)
 
+        if doc_type == "resume" and is_tree_v1(row.structured_json):
+            # Interim tree-v1 refine: re-author all llm_output sections with the
+            # critique in context, rebuild the document tree, re-persist + re-render.
+            # (Per-section scoring / selective regen is 4B-2.)
+            root = user.profile_tree_root()
+            refine_with_ctx = refine_prompt.replace("{critique}", critique) + "\n\n{job.extracted_description}"
+            job_ctx = self.build_resume_prompt(user, refine_with_ctx, db)
+
+            def resolve(text: str) -> str:
+                text = resolve_profile_tokens(root, text)
+                return _apply_template(text, {"job": self, "user": user})
+
+            authored = generate_resume_by_section(root, job_ctx, client, model, resolve=resolve)
+            doc_tree = build_resume_document_tree(root, authored)
+            Document.upsert(db, self.job_key, "resume",
+                            serialize_document_tree(doc_tree), profile_id=self.profile_id)
+            self.write_resume_markdown(doc_tree)
+            return
+
         if doc_type == "resume":
             doc = ResumeDocument.model_validate_json(row.structured_json)
             prompt = prompt.replace("{current_profile_summary}", doc.profile_summary)
@@ -863,30 +887,27 @@ class Job(Base):
         model: str,
         db: Session,
     ) -> None:
-        """Generate resume markdown via LLM and write to generator/outputs/.
+        """Generate the résumé as a tree-v1 document and write its Markdown.
 
-        Writes to generator/outputs/{job_key}_resume.md, prepending YAML front matter
-        with the user's contact info.
-
-        Args:
-            user: A User instance with profile data.
-            prompt_content: Prompt template string.
-            client: An OpenAI-compatible client instance.
-            model: Model identifier string.
-            db: SQLAlchemy session.
+        Runs per-section generation against the profile tree, materializes a
+        self-contained document tree (pruned, value-baked, locked nodes verbatim),
+        stores it under ``schema:"tree-v1"`` (source of truth), and writes the
+        derived ``.md`` (no front matter).
         """
+        root = user.profile_tree_root()
         prompt = self.build_resume_prompt(user, prompt_content, db)
-        generation = _llm_json_with_retry(
-            prompt, client, model, ResumeGeneration, max_tokens=16384,
-            empty_msg=(
-                "Resume generation returned empty content — the model likely hit its "
-                "token limit before producing output (common with reasoning models). "
-                "Try a non-reasoning model or a shorter prompt."
-            ),
+
+        def resolve(text: str) -> str:
+            text = resolve_profile_tokens(root, text)
+            return _apply_template(text, {"job": self, "user": user})
+
+        authored = generate_resume_by_section(root, prompt, client, model, resolve=resolve)
+        doc_tree = build_resume_document_tree(root, authored)
+        Document.upsert(
+            db, self.job_key, "resume",
+            serialize_document_tree(doc_tree), profile_id=self.profile_id,
         )
-        doc = build_resume_document(user, generation, db)
-        Document.upsert(db, self.job_key, "resume", doc.model_dump_json(), profile_id=self.profile_id)
-        self.write_resume_markdown(doc)
+        self.write_resume_markdown(doc_tree)
 
     def generate_cover_md(
         self,
@@ -919,16 +940,20 @@ class Job(Base):
         Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
         self.write_cover_markdown(doc)
 
-    def write_resume_markdown(self, doc: "ResumeDocument") -> None:
-        """Write the derived résumé .md (front matter + assembled body).
+    def write_resume_markdown(self, doc: "ResumeDocument | RootNode") -> None:
+        """Write the derived résumé .md.
 
-        Args:
-            doc: Structured résumé produced by ``build_resume_document``.
+        A document tree (tree-v1) is rendered by the generic tree assembler with
+        NO front matter — contact and education are ordinary body sections. A
+        legacy ``ResumeDocument`` keeps the front matter + fixed assembler path.
         """
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        if isinstance(doc, RootNode):
+            md_path.write_text(assemble_resume_tree_markdown(doc), encoding="utf-8")
+            return
         frontmatter = self._build_frontmatter_from_header(doc.header, doc.education)
         body = assemble_resume_markdown(doc)
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
         md_path.write_text(frontmatter + body, encoding="utf-8")
 
     def write_cover_markdown(self, doc: "CoverDocument") -> None:
@@ -999,7 +1024,11 @@ class Job(Base):
         row = Document.fetch(db, self.job_key, "resume", profile_id=self.profile_id)
         if row is None:
             raise FileNotFoundError(f"No structured resume document for {self.job_key}")
-        doc = ResumeDocument.model_validate_json(row.structured_json)
+        if is_tree_v1(row.structured_json):
+            from core.ats_tree_adapter import resume_document_for_ats
+            doc = resume_document_for_ats(deserialize_document_tree(row.structured_json))
+        else:
+            doc = ResumeDocument.model_validate_json(row.structured_json)
 
         required = [s.strip() for s in (self.ext_required_skills or "").split(",") if s.strip()]
         preferred = [s.strip() for s in (self.ext_preferred_skills or "").split(",") if s.strip()]
@@ -1191,12 +1220,14 @@ class Job(Base):
     def _render_meta(self, doc_type: str, db: Session) -> dict:
         """Render meta from the stored document snapshot, falling back to profile.
 
-        Realizes snapshot behavior: an existing generated document renders from
-        the contact/education captured at generation time, not the live profile.
+        For a tree-v1 résumé row there is no front-matter channel — contact and
+        education render from the body — so meta is empty.
         """
         from core.user import User
         row = Document.fetch(db, self.job_key, doc_type, profile_id=self.profile_id)
         if row is not None:
+            if doc_type == "resume" and is_tree_v1(row.structured_json):
+                return {}
             model = ResumeDocument if doc_type == "resume" else CoverDocument
             stored = model.model_validate_json(row.structured_json)
             education = getattr(stored, "education", [])

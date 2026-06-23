@@ -50,3 +50,7 @@ Resume rendering passes `max_pages=1`. If content overflows one page, `render_pd
 `render_pdf` (in `core/utils.py`) is **unchanged** in Phase 3a. It strips any Education section from the Markdown body and re-injects it from `meta['education']` (now sourced from the `Document` snapshot via `_render_meta`) positioned immediately after Profile — matching the existing template layout.
 
 The assembled `.md` file follows canonical order (Profile → Experience → Education → Projects → Skills), so Education appears third in the file. The PDF overrides this and places Education second (after Profile). This divergence is intentional for Phase 3a; render internals are out of scope until Phase 3b.
+
+### tree-v1 rendering
+
+Tree-v1 résumés render contact info and education from the body markdown with empty `meta` (no YAML frontmatter, no education injection). The name arrives as a body `<h1>` and the contact line as the `<p>` immediately after it; CSS in `resume.css` (`.resume > h1` rules) styles them. The icon-grid contact block and meta-driven education injection are legacy-only; rich/icon contact formatting is a future #6 (user-formatted templates) feature.
