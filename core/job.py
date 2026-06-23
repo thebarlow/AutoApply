@@ -1027,7 +1027,11 @@ class Job(Base):
         row = Document.fetch(db, self.job_key, "resume", profile_id=self.profile_id)
         if row is None:
             raise FileNotFoundError(f"No structured resume document for {self.job_key}")
-        doc = ResumeDocument.model_validate_json(row.structured_json)
+        if is_tree_v1(row.structured_json):
+            from core.ats_tree_adapter import resume_document_for_ats
+            doc = resume_document_for_ats(deserialize_document_tree(row.structured_json))
+        else:
+            doc = ResumeDocument.model_validate_json(row.structured_json)
 
         required = [s.strip() for s in (self.ext_required_skills or "").split(",") if s.strip()]
         preferred = [s.strip() for s in (self.ext_preferred_skills or "").split(",") if s.strip()]
