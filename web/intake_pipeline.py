@@ -12,6 +12,26 @@ from core.llm import get_client_for_profile
 from core.metering import meter_action
 
 
+def _render_doc_from_json(job, doc_type: str, structured_json: str, template_path, db) -> None:
+    """Re-render a résumé or cover letter from stored structured JSON.
+
+    Branches on tree-v1 discriminator for résumés; legacy path uses
+    ResumeDocument. Cover path unchanged.
+    """
+    from core.schemas import ResumeDocument, CoverDocument
+    from core.resume_document_io import is_tree_v1, deserialize_document_tree
+
+    if doc_type == "resume":
+        if is_tree_v1(structured_json):
+            job.write_resume_markdown(deserialize_document_tree(structured_json))
+        else:
+            job.write_resume_markdown(ResumeDocument.model_validate_json(structured_json))
+        job.generate_resume_pdf(template_path, db, max_pages=1)
+    else:
+        job.write_cover_markdown(CoverDocument.model_validate_json(structured_json))
+        job.generate_cover_pdf(template_path, db)
+
+
 def build_feedback_issues(notes: list[dict]) -> list[dict]:
     """Convert UI section-anchored feedback notes to refine ``issues``.
 
@@ -172,13 +192,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
             Document.upsert(db2, job_key, doc_type, structured_json, profile_id)
             job2 = Job.get(job_key, db2, profile_id)
             if job2:
-                from core.schemas import ResumeDocument, CoverDocument
-                if doc_type == "resume":
-                    job2.write_resume_markdown(ResumeDocument.model_validate_json(structured_json))
-                    job2.generate_resume_pdf(template_path, db2, max_pages=1)
-                else:
-                    job2.write_cover_markdown(CoverDocument.model_validate_json(structured_json))
-                    job2.generate_cover_pdf(template_path, db2)
+                _render_doc_from_json(job2, doc_type, structured_json, template_path, db2)
                 setattr(job2, score_field, best["score"])
                 db2.commit()
                 db2.refresh(job2)
