@@ -133,3 +133,40 @@ def test_serve_doc_turn_markdown_route(client, db_session, tmp_path, monkeypatch
     assert "Staff Engineer" in r.text
 
     assert client.get("/api/jobs/rt1/resume/turn/9/markdown").status_code == 404
+
+
+def test_serve_doc_turn_tree_v1_route(client, db_session, tmp_path, monkeypatch):
+    """Turn endpoint renders tree-v1 snapshots via assemble_resume_tree_markdown."""
+    import json
+    import web.routers.jobs as jobs_router
+    from core.user import User
+    from core.document_tree import build_resume_document_tree
+    from core.resume_document_io import serialize_document_tree
+
+    monkeypatch.setattr(jobs_router, "_GENERATOR_OUTPUTS", tmp_path)
+
+    db_session.add(User(name="Jane Doe", data=json.dumps({
+        "first_name": "Jane", "last_name": "Doe", "email": "j@x.com",
+        "work_history": [
+            {"company": "Acme", "title": "Eng", "start": "2020", "end": "2024", "summary": "s1"},
+        ],
+        "projects": [{"name": "P0", "description": "d0", "url": "u0", "technologies": []}],
+        "education": [{"institution": "MIT", "degree": "BS", "field": "EE", "graduated": "2018", "gpa": 3.9}],
+    })))
+    db_session.commit()
+    user = User.load(db_session)
+
+    tree = build_resume_document_tree(user.profile_tree_root(), {})
+    (tmp_path / "tv1_resume_turn_0.json").write_text(
+        serialize_document_tree(tree), encoding="utf-8"
+    )
+
+    job = Job(job_key="tv1", profile_id=1, source="x", title="t", company="Acme",
+              url="u/tv1", state=JobState.NEW.value)
+    db_session.add(job)
+    db_session.commit()
+
+    r = client.get("/api/jobs/tv1/resume/turn/0/markdown")
+    assert r.status_code == 200
+    assert "# " in r.text
+    assert not r.text.startswith("---")
