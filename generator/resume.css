@@ -143,3 +143,26 @@ html, body {
   white-space: nowrap;
   margin-left: 0.2in;
 }
+
+/* ── tree-v1: body contact header ──
+   Name is a direct-child <h1> of .resume (not inside .resume-header).
+   The contact line is the <p> immediately after it. */
+.resume > h1 {
+  text-align: center;
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.15rem 0;
+}
+
+.resume > h1 + p {
+  text-align: center;
+  font-size: 0.92rem;
+  color: #222;
+  margin: 0 0 0.6rem 0;
+}
+
+.resume > h1 + p a {
+  text-decoration: none;
+  color: #222;
+}
