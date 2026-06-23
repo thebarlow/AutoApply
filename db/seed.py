@@ -13,6 +13,7 @@ _PROMPTS_DEFAULTS_DIR = Path(__file__).parent.parent / "prompts" / "defaults"
 PROMPT_TYPE_KEYS = (
     "scoring", "resume", "cover", "extraction", "resume_parse",
     "resume_eval", "resume_refine", "cover_eval", "cover_refine",
+    "resume_eval_sectioned",
 )
 
 DEFAULT_CONFIG: dict[str, str] = {
