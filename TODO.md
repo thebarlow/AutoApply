@@ -84,11 +84,22 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
       verbatim) + `core/tree_assembler.py` (`assemble_resume_tree_markdown` — role→formatter dispatch,
       preset + generic, tree order, no frontmatter); dev harness repointed to dogfood. 23/23 tests,
       final review clean. No production wiring. Plan: `docs/superpowers/plans/2026-06-22-schema-rendering-4a-foundation.md`.
-    - [ ] **4B — Wire tree-v1 into production (headline win).** `generate_resume_md` →
-      `section_generator` → document tree → store `schema:"tree-v1"`; `_render_meta` /
-      `write_resume_markdown` branch on the discriminator; PDF/template rework (frontmatter
-      retired, Education special-casing removed from `render_pdf`/`resume_template.html`); make
-      the auto-refine loop + feedback-refine tree-aware. Custom sections appear on generated PDFs.
+    - **4B — Wire tree-v1 into production (headline win).** Split into 4B-1 (done) + 4B-2 (next).
+      - [x] **4B-1 — Tree-v1 in production — DONE (local main `a83bc39`, not pushed).**
+        `generate_resume_md` → `section_generator` → document tree → store `schema:"tree-v1"`
+        (`core/resume_document_io.py`). `write_resume_markdown`/`_render_meta`/refine/`_restore_best`/
+        turn-snapshot/`run_ats_check` all branch on the discriminator; legacy `ResumeDocument` rows
+        render byte-for-byte unchanged. Frontmatter retired for tree-v1 (contact `# name` + ordered
+        contact line + education render from body markdown; `_render_meta`→{} so `render_pdf` education
+        injection no-ops; `generator/resume.css` `.resume > h1` rules, legacy `.resume-header h1`
+        untouched). `core/ats_tree_adapter.py` projects tree→minimal `ResumeDocument` for the gate.
+        Interim refine re-authors all `llm_output` sections via `build_resume_prompt`+`{job.extracted_description}`.
+        Custom sections now appear on generated résumés. (Spec/plan: `docs/superpowers/{specs,plans}/2026-06-22-*4b*`.)
+        Carry-forwards: remove orphaned `core/tree_render.py` (still imported by `tests/core/test_tree_render.py`);
+        pull duplicated test fixtures into conftest.
+      - [ ] **4B-2 — Per-section refinement engine.** Replace the interim whole-doc re-author: one eval
+        LLM call returns a per-section breakdown (`{section: {score, issues}}`); regenerate only
+        sub-threshold sections. Own spec → plan.
     - [ ] **4C — ATS gate rework.** Drop the required-fixed-heading hard-block + literal heading
       matching from `check_mechanical`; keep contact-at-top / text-layer / glyph-junk / per-job
       `ext_required_skills`-survive checks + the semantic LLM roundtrip. No roles, no synonym map
