@@ -10,6 +10,11 @@ from web.routers.jobs import _do_extract_description, _load_score_config
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
 from core.metering import meter_action
+from core.section_generator import generate_resume_by_section
+
+from pathlib import Path as _Path
+
+_OUTPUTS_DIR = _Path(__file__).parent.parent / "generator" / "outputs"
 
 
 def _render_doc_from_json(job, doc_type: str, structured_json: str, template_path, db) -> None:
@@ -129,6 +134,164 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
         db.close()
 
 
+def _restore_best_sections(db, job_key: str, profile_id: int,
+                           eval_log: list[dict], template_path) -> None:
+    """Re-persist + re-render the highest-min turn's snapshot (tree-v1)."""
+    from db.database import Document
+
+    if not eval_log:
+        return
+    best = max(eval_log, key=lambda e: e["score"])
+    snap = _OUTPUTS_DIR / f"{job_key}_resume_turn_{best['turn']}.json"
+    if not snap.exists():
+        return
+    structured_json = snap.read_text(encoding="utf-8")
+    cur = Document.fetch(db, job_key, "resume", profile_id)
+    if cur is not None and cur.structured_json == structured_json:
+        return
+    Document.upsert(db, job_key, "resume", structured_json, profile_id)
+    job = Job.get(job_key, db, profile_id)
+    if job is not None:
+        _render_doc_from_json(job, "resume", structured_json, template_path, db)
+        job.resume_eval_score = best["score"]
+        db.commit()
+        db.refresh(job)
+        _emit(job)
+
+
+def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
+    """Per-section auto-refine for a tree-v1 résumé: score each regenerable
+    section, regenerate only sub-threshold sections (with their issues as
+    critique), repeat until all pass or max_turns; restore the best-by-min
+    turn."""
+    import json as _json
+    from pathlib import Path
+    from core.document_tree import authored_values_from_tree, build_resume_document_tree
+    from core.profile_tree import resolve_profile_tokens
+    from core.resume_document_io import (
+        serialize_document_tree, deserialize_document_tree, is_tree_v1,
+    )
+    from core.job import Job, _apply_template
+    from core.user import User, PromptNotConfiguredError
+    from db.database import Document
+
+    template_path = Path(__file__).parent.parent / "generator" / "resume_template.html"
+
+    db = SessionLocal()
+    try:
+        job = Job.get(job_key, db, profile_id)
+        if job is None:
+            return
+        user = User.load(db, profile_id)
+        if not getattr(user, "resume_refine_enabled", True):
+            return
+        max_turns = int(getattr(user, "resume_refine_max_turns", 3))
+        pass_score = float(getattr(user, "resume_refine_pass_score", 0.80))
+        if max_turns == 0:
+            return
+
+        row = Document.fetch(db, job_key, "resume", profile_id)
+        if row is None or not is_tree_v1(row.structured_json):
+            return
+
+        try:
+            eval_prompt = user.resolve_prompt("resume_eval_sectioned")
+            gen_prompt = user.resolve_prompt("resume")
+        except PromptNotConfiguredError as exc:
+            print(f"[section-refine] {job_key}: prompt not configured — {exc}", flush=True)
+            return
+        eval_client, eval_model = get_client_for_profile(
+            user, getattr(user, "prompt_resume_eval_sectioned_model", "") or "")
+        gen_client, gen_model = get_client_for_profile(
+            user, getattr(user, "prompt_resume_model", "") or "")
+
+        root = user.profile_tree_root()
+        authored = authored_values_from_tree(deserialize_document_tree(row.structured_json))
+        job_ctx = job.build_resume_prompt(user, gen_prompt, db)
+
+        def resolve(text: str) -> str:
+            return _apply_template(resolve_profile_tokens(root, text), {"job": job, "user": user})
+
+        def _snapshot(n: int) -> None:
+            r = Document.fetch(db, job_key, "resume", profile_id)
+            if r is not None:
+                (_OUTPUTS_DIR / f"{job_key}_resume_turn_{n}.json").write_text(
+                    r.structured_json, encoding="utf-8")
+
+        eval_log: list[dict] = []
+        _snapshot(0)
+        for turn in range(1, max_turns + 1):
+            llm_status.start(job_key, "resume_eval")
+            try:
+                with meter_action(db, profile_id, action="eval", job_key=job_key):
+                    scores = job.evaluate_resume_sections(
+                        eval_prompt, user, eval_client, eval_model, db)
+            except Exception as exc:
+                db.rollback()
+                job = Job.get(job_key, db, profile_id)
+                job.last_result_error = f"Section eval turn {turn} failed: {exc}"
+                job.unread_indicator = "error"
+                db.commit()
+                _emit(job)
+                print(f"[section-refine] {job_key}: eval turn {turn} failed — {exc}", flush=True)
+                _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
+                return
+            finally:
+                llm_status.finish(job_key, "resume_eval")
+
+            if not scores:
+                return
+            min_score = min(s["score"] for s in scores.values())
+            failing = {n for n, s in scores.items() if s["score"] < pass_score}
+            eval_log.append({"turn": turn, "score": min_score,
+                             "issues": [i for s in scores.values() for i in s["issues"]],
+                             "passed": not failing})
+            job.resume_eval_score = min_score
+            job.resume_eval_turns = turn
+            job.resume_eval_log = _json.dumps(eval_log)
+            job.last_result_error = None
+            db.commit()
+            db.refresh(job)
+            _emit(job)
+
+            if not failing:
+                return
+            if turn >= max_turns:
+                _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
+                return
+
+            llm_status.start(job_key, "resume_refine")
+            try:
+                critiques = {n: scores[n]["issues"] for n in failing}
+                with meter_action(db, profile_id, action="refine", job_key=job_key):
+                    new_vals = generate_resume_by_section(
+                        root, job_ctx, gen_client, gen_model, resolve=resolve,
+                        only_sections=failing, critiques=critiques)
+                authored.update(new_vals)
+                doc_tree = build_resume_document_tree(root, authored)
+                Document.upsert(db, job_key, "resume",
+                                serialize_document_tree(doc_tree), profile_id=profile_id)
+                job.write_resume_markdown(doc_tree)
+                job.generate_resume_pdf(template_path, db, max_pages=1)
+                db.commit()
+                db.refresh(job)
+                _emit(job)
+            except Exception as exc:
+                db.rollback()
+                job = Job.get(job_key, db, profile_id)
+                job.last_result_error = f"Section refine turn {turn} failed: {exc}"
+                job.unread_indicator = "error"
+                db.commit()
+                _emit(job)
+                print(f"[section-refine] {job_key}: refine turn {turn} failed — {exc}", flush=True)
+                _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
+                return
+            finally:
+                llm_status.finish(job_key, "resume_refine")
+    finally:
+        db.close()
+
+
 def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
     """Background refinement loop for a generated document (resume or cover).
 
@@ -209,6 +372,15 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
         job = Job.get(job_key, db, profile_id)
         if job is None:
             return
+
+        # Dispatch: tree-v1 résumés use the per-section refinement loop
+        if doc_type == "resume":
+            from core.resume_document_io import is_tree_v1
+            _row = Document.fetch(db, job_key, "resume", profile_id)
+            if _row is not None and is_tree_v1(_row.structured_json):
+                _run_resume_section_refinement(job_key, profile_id)
+                return
+
         user = User.load(db, profile_id)
 
         enabled = getattr(user, f"{doc_type}_refine_enabled", True)

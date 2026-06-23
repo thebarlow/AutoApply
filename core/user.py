@@ -29,6 +29,7 @@ _PROMPT_LABELS: dict[str, str] = {
     "extraction": "Description Processing",
     "resume_parse": "Resume Parsing",
     "resume_eval": "Resume Evaluator",
+    "resume_eval_sectioned": "Resume Section Evaluator",
     "resume_refine": "Resume Rewriter",
     "cover_eval": "Cover Letter Evaluator",
     "cover_refine": "Cover Letter Rewriter",

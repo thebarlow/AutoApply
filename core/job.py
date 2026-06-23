@@ -499,6 +499,50 @@ class Job(Base):
 
     # ── Refinement — evaluation ────────────────────────────────────────────────
 
+    def _regenerable_section_names(self, db: Session) -> list[str]:
+        """Names of stored tree-v1 sections that have an unlocked llm_output field."""
+        from core.section_generator import _outputable
+        from core.profile_tree import GroupNode, ListNode, FieldNode
+        row = Document.fetch(db, self.job_key, "resume", profile_id=self.profile_id)
+        if row is None or not is_tree_v1(row.structured_json):
+            return []
+        root = deserialize_document_tree(row.structured_json)
+        names: list[str] = []
+        for s in root.children:
+            if not s.visible or s.locked:
+                continue
+            child = s.children[0] if s.children else None
+            groups = (child.children if isinstance(child, ListNode)
+                      else [child] if isinstance(child, GroupNode) else [])
+            has = any(
+                _outputable(f) for g in groups for f in g.children
+            ) if groups else (isinstance(child, FieldNode) and _outputable(child))
+            if has:
+                names.append(s.name)
+        return names
+
+    def evaluate_resume_sections(
+        self, eval_prompt: str, user: Any, client: Any, model: str, db: Session,
+    ) -> dict:
+        """Per-section résumé evaluation. Returns {section_name: {score, issues}} for
+        regenerable sections only (others are dropped)."""
+        from core.schemas import SectionEvalResponse
+        names = self._regenerable_section_names(db)
+        if not names:
+            return {}
+        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        body = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+        prompt = eval_prompt.replace("{current_document}", body)
+        prompt = prompt.replace("{sections_to_score}", "\n".join(names))
+        prompt = _apply_template(prompt, {"job": self, "user": user})
+        raw = call_llm(prompt, client, model, max_tokens=8192)
+        parsed = parse_llm_json(raw, SectionEvalResponse)
+        allowed = set(names)
+        return {
+            s.section: {"score": s.score, "issues": [i.model_dump() for i in s.issues]}
+            for s in parsed.sections if s.section in allowed
+        }
+
     def _evaluate_doc_md(
         self,
         doc_type: str,

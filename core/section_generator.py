@@ -20,6 +20,14 @@ from core.profile_tree import (
 Value = Union[str, list[str]]
 
 
+def _critique_block(critique: "list[dict] | None") -> str:
+    """A 'fix these issues' block for a section prompt, or '' if no critique."""
+    if not critique:
+        return ""
+    lines = "\n".join(f"- {i.get('description', '')}".rstrip() for i in critique)
+    return f"\nFIX THESE ISSUES from the previous draft:\n{lines}\n"
+
+
 class SectionOutput(BaseModel):
     """One section's LLM output. Scalar sections fill ``fields``; list sections
     fill ``entries`` (keyed by entry node id, then field key)."""
@@ -57,7 +65,7 @@ def _outputable_specs(group: GroupNode) -> list[str]:
     ]
 
 
-def _build_scalar_prompt(section: SectionNode, group: GroupNode, job_ctx: str) -> str:
+def _build_scalar_prompt(section: SectionNode, group: GroupNode, job_ctx: str, critique=None) -> str:
     """Prompt for a section whose child is a single group (or bare field wrapped)."""
     ctx = "\n".join(_group_context(group)) or "(none)"
     specs = "\n".join(_outputable_specs(group))
@@ -67,13 +75,14 @@ def _build_scalar_prompt(section: SectionNode, group: GroupNode, job_ctx: str) -
         f"{guide}You are tailoring the résumé section '{section.name}' to a job.\n\n"
         f"JOB:\n{job_ctx}\n\n"
         f"EXISTING SECTION DATA (anchors — do not change these):\n{ctx}\n\n"
-        f"Write tailored content for these fields:\n{specs}\n\n"
+        f"Write tailored content for these fields:\n{specs}\n"
+        f"{_critique_block(critique)}\n"
         'Return JSON: {"fields": {"<field_key>": "<value>"}} containing exactly '
         "the field keys above."
     )
 
 
-def _build_list_prompt(section: SectionNode, lst: ListNode, job_ctx: str) -> str:
+def _build_list_prompt(section: SectionNode, lst: ListNode, job_ctx: str, critique=None) -> str:
     """Prompt for a repeating-list section (one call authors every unlocked entry)."""
     blocks = []
     for entry in lst.children:
@@ -91,7 +100,8 @@ def _build_list_prompt(section: SectionNode, lst: ListNode, job_ctx: str) -> str
     return (
         f"{guide}You are tailoring the résumé section '{section.name}' to a job. Each "
         f"entry is a separate item; write its fields using its own anchors.\n\n"
-        f"JOB:\n{job_ctx}\n\n{body}\n\n"
+        f"JOB:\n{job_ctx}\n\n{body}\n"
+        f"{_critique_block(critique)}\n"
         'Return JSON: {"entries": {"<entry_id>": {"<field_key>": "<value>"}}} '
         "with an object for every entry id above that is not FIXED."
     )
@@ -108,6 +118,8 @@ def generate_resume_by_section(
     client: Any,
     model: str,
     resolve: "Callable[[str], str] | None" = None,
+    only_sections: "set[str] | None" = None,
+    critiques: "dict[str, list[dict]] | None" = None,
 ) -> dict[str, Value]:
     """Author every writable field across visible, unlocked sections.
 
@@ -130,10 +142,14 @@ def generate_resume_by_section(
     from core.job import _llm_json_with_retry  # local import avoids a cycle
 
     apply = resolve or (lambda s: s)
+    crit = critiques or {}
     out: dict[str, Value] = {}
     for section in root.children:
         if not section.visible or section.locked:
             continue
+        if only_sections is not None and section.name not in only_sections:
+            continue
+        section_critique = crit.get(section.name)
         child = _section_child(section)
         if isinstance(child, ListNode):
             entries_with_work = [
@@ -142,17 +158,18 @@ def generate_resume_by_section(
             ]
             if not entries_with_work:
                 continue
-            prompt = _build_list_prompt(section, child, job_ctx)
+            prompt = _build_list_prompt(section, child, job_ctx, critique=section_critique)
         elif isinstance(child, GroupNode):
             if child.locked or not any(_outputable(f) for f in child.children):
                 continue
-            prompt = _build_scalar_prompt(section, child, job_ctx)
+            prompt = _build_scalar_prompt(section, child, job_ctx, critique=section_critique)
         elif isinstance(child, FieldNode):
             if not _outputable(child):
                 continue
             # Wrap the bare field as a one-field group for uniform handling.
             prompt = _build_scalar_prompt(
-                section, GroupNode(name=section.name, children=[child]), job_ctx
+                section, GroupNode(name=section.name, children=[child]), job_ctx,
+                critique=section_critique,
             )
         else:
             continue

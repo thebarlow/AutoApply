@@ -148,3 +148,30 @@ def test_keeps_locked_section_verbatim():
     assert len(kept_group.children) == 2  # Both fields kept (context-only NOT stripped)
     assert kept_group.children[0].value == "ctx"  # context-only field unchanged
     assert kept_group.children[1].value == "orig"  # output field NOT baked
+
+
+def test_authored_values_collects_only_llm_output_fields():
+    from core.document_tree import authored_values_from_tree
+
+    root = RootNode(children=[
+        SectionNode(name="Summary", role="summary", order=0, children=[
+            GroupNode(name="g", children=[
+                FieldNode(name="Hero", key="hero", kind="markdown", value="S", llm_output=True),
+                FieldNode(name="Email", key="email", kind="text", value="e", llm_output=False),
+            ]),
+        ]),
+        SectionNode(name="Experience", role="experience", order=1, children=[
+            ListNode(name="X", item_template=GroupNode(name="t", children=[
+                FieldNode(name="Summary", key="summary", kind="markdown", value="", llm_output=True),
+            ]), children=[
+                GroupNode(name="e", children=[
+                    FieldNode(name="Summary", key="summary", kind="markdown",
+                              value="did things", llm_output=True),
+                ]),
+            ]),
+        ]),
+    ])
+    out = authored_values_from_tree(root)
+    hero_id = root.children[0].children[0].children[0].id
+    exp_id = root.children[1].children[0].children[0].children[0].id
+    assert out == {hero_id: "S", exp_id: "did things"}

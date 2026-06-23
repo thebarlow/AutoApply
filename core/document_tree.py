@@ -38,6 +38,32 @@ def _prune_group(group: GroupNode, authored: dict[str, Value]) -> None:
     group.children = kept
 
 
+def authored_values_from_tree(root: RootNode) -> dict[str, Value]:
+    """``field_id -> value`` for every ``llm_output`` field anywhere in the tree.
+
+    Seeds the cumulative authored map so per-section refinement can regenerate
+    only failing sections while passing sections keep their current values.
+    """
+    out: dict[str, Value] = {}
+
+    def _visit_group(group: GroupNode) -> None:
+        for f in group.children:
+            if f.llm_output:
+                out[f.id] = f.value
+
+    for s in root.children:
+        child = s.children[0] if s.children else None
+        if isinstance(child, ListNode):
+            for entry in child.children:
+                _visit_group(entry)
+        elif isinstance(child, GroupNode):
+            _visit_group(child)
+        elif isinstance(child, FieldNode):
+            if child.llm_output:
+                out[child.id] = child.value
+    return out
+
+
 def build_resume_document_tree(
     root: RootNode, authored: dict[str, Value]
 ) -> RootNode:

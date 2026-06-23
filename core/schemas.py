@@ -61,6 +61,25 @@ class EvalResponse(BaseModel):
         return v if isinstance(v, list) else []
 
 
+class SectionScore(BaseModel):
+    """One section's evaluation: name (matches a tree SectionNode.name), score, issues."""
+
+    section: str = ""
+    score: float = 0.0
+    issues: list[Issue] = Field(default_factory=list)
+
+    @field_validator("score")
+    @classmethod
+    def _clamp_score(cls, v: float) -> float:
+        return _clamp_unit(v)
+
+
+class SectionEvalResponse(BaseModel):
+    """Per-section résumé evaluation: one SectionScore per scored section."""
+
+    sections: list[SectionScore] = Field(default_factory=list)
+
+
 class ExtractionResponse(BaseModel):
     """Parsed output of the `extraction` prompt."""
 
