@@ -31,7 +31,7 @@ def _render_doc_from_json(job, doc_type: str, structured_json: str, template_pat
             job.write_resume_markdown(deserialize_document_tree(structured_json))
         else:
             job.write_resume_markdown(ResumeDocument.model_validate_json(structured_json))
-        job.generate_resume_pdf(template_path, db, max_pages=1)
+        job.generate_resume_pdf(template_path, db)
     else:
         job.write_cover_markdown(CoverDocument.model_validate_json(structured_json))
         job.generate_cover_pdf(template_path, db)
@@ -276,7 +276,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                 Document.upsert(db, job_key, "resume",
                                 serialize_document_tree(doc_tree), profile_id=profile_id)
                 job.write_resume_markdown(doc_tree)
-                job.generate_resume_pdf(template_path, db, max_pages=1)
+                job.generate_resume_pdf(template_path, db)
                 db.commit()
                 db.refresh(job)
                 _emit(job)
@@ -630,7 +630,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
                 Document.upsert(db, job_key, "resume",
                                 serialize_document_tree(doc_tree), profile_id=profile_id)
                 job.write_resume_markdown(doc_tree)
-                job.generate_resume_pdf(template_path, db, max_pages=1)
+                job.generate_resume_pdf(template_path, db)
                 db.commit()
                 db.refresh(job)
                 _emit(job)

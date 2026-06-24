@@ -564,7 +564,7 @@ def put_document(
         Document.upsert(db, job_key, "resume", serialized, profile_id=profile_id)
         try:
             job.write_resume_markdown(root)
-            job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=1)
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
         db.refresh(job)
@@ -586,7 +586,7 @@ def put_document(
     try:
         if doc_type == "resume":
             job.write_resume_markdown(doc)
-            job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=1)
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
         else:
             job.write_cover_markdown(doc)
             job.generate_cover_pdf(_COVER_TEMPLATE, db)
