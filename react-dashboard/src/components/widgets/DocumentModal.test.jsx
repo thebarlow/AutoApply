@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import DocumentModal from './DocumentModal'
 
 vi.mock('../../api', () => ({
@@ -22,6 +22,7 @@ describe('DocumentModal schema branch', () => {
     })
     render(<DocumentModal job={job} docType="resume" processing={false} onClose={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByText('Summary').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByText('Summary'))
     expect(screen.getByDisplayValue('Hi')).toBeTruthy()
   })
 

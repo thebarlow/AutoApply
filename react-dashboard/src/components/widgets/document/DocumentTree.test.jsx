@@ -2,87 +2,69 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import DocumentTree from './DocumentTree'
 
-vi.mock('../../../api', () => ({
-  getSkillAliases: vi.fn(async () => ({ groups: [] })),
-  assignSkillAlias: vi.fn(async () => ({})),
-  removeSkillAliasMember: vi.fn(async () => {}),
-}))
-
 const doc = {
   type: 'root', id: 'r', children: [
     { type: 'section', id: 's1', name: 'Summary', locked: false, children: [
       { type: 'field', id: 'f1', name: 'Summary', kind: 'text', value: 'Hello' }] },
-    { type: 'section', id: 's2', name: 'Skills', locked: true, children: [
-      { type: 'group', id: 'g2', name: 'G', children: [
-        { type: 'field', id: 'f2', name: 'Skill', kind: 'text', value: 'Python' }] }] },
+    { type: 'section', id: 's2', name: 'Experience', locked: false, children: [
+      { type: 'list', id: 'l2', name: 'Experience', children: [
+        { type: 'group', id: 'g1', name: 'Acme', locked: false, children: [
+          { type: 'field', id: 'c1', name: 'Company', kind: 'text', value: 'Acme' },
+          { type: 'field', id: 't1', name: 'Title', kind: 'text', value: 'Engineer' }] }] }] },
+    { type: 'section', id: 's3', name: 'Certs', locked: true, children: [
+      { type: 'group', id: 'g3', name: 'C', children: [
+        { type: 'field', id: 'f3', name: 'Cert', kind: 'text', value: 'AWS' }] }] },
   ],
 }
 
+const noop = () => {}
+
 describe('DocumentTree', () => {
-  it('renders section headings and field values', () => {
+  it('renders section headings but keeps fields hidden until expanded', () => {
     render(<DocumentTree doc={doc} onSave={vi.fn()} notes={{}} setNote={vi.fn()} />)
-    // "Summary" appears as both section heading and field label
-    expect(screen.getAllByText('Summary').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Skills')).toBeTruthy()
-    expect(screen.getByDisplayValue('Hello')).toBeTruthy()
+    expect(screen.getByText('Summary')).toBeTruthy()
+    expect(screen.getByText('Experience')).toBeTruthy()
+    expect(screen.queryByDisplayValue('Hello')).toBeNull()
   })
 
-  it('editing a field calls onSave with the updated tree', () => {
+  it('expanding a section reveals an editable field that saves the updated tree', () => {
     const onSave = vi.fn()
     render(<DocumentTree doc={doc} onSave={onSave} notes={{}} setNote={vi.fn()} />)
+    fireEvent.click(screen.getByText('Summary'))
     fireEvent.change(screen.getByDisplayValue('Hello'), { target: { value: 'Hi' } })
-    const arg = onSave.mock.calls.at(-1)[0]
-    expect(arg.children[0].children[0].value).toBe('Hi')
+    expect(onSave.mock.calls.at(-1)[0].children[0].children[0].value).toBe('Hi')
   })
 
-  it('a locked section exposes no feedback control', () => {
+  it('a multi-entry section renders a collapsed sub-card per entry', () => {
     render(<DocumentTree doc={doc} onSave={vi.fn()} notes={{}} setNote={vi.fn()} />)
-    // Feedback buttons carry an accessible name starting with "Feedback on".
-    // Locked section "Skills" has no feedback buttons at all
-    expect(screen.queryByRole('button', { name: /Feedback on Skills/i })).toBeNull()
-    // Unlocked section "Summary" has at least one feedback button
-    expect(screen.getAllByRole('button', { name: /Feedback on Summary/i }).length).toBeGreaterThanOrEqual(1)
+    fireEvent.click(screen.getByText('Experience'))
+    expect(screen.getByText('Acme')).toBeTruthy()            // entry summary label
+    expect(screen.queryByDisplayValue('Engineer')).toBeNull() // entry collapsed
+    fireEvent.click(screen.getByText('Acme'))
+    expect(screen.getByDisplayValue('Engineer')).toBeTruthy()
   })
 
-  it('locked-section field is read-only; unlocked field is editable', () => {
-    const onSave = vi.fn()
-    render(<DocumentTree doc={doc} onSave={onSave} notes={{}} setNote={vi.fn()} />)
-    // Unlocked field is editable
-    const unlocked = screen.getByDisplayValue('Hello')
-    expect(unlocked.disabled).toBe(false)
-    fireEvent.change(unlocked, { target: { value: 'Hi' } })
-    expect(onSave).toHaveBeenCalled()
-    // Locked field is disabled/readOnly
-    const locked = screen.getByDisplayValue('Python')
-    expect(locked.disabled).toBe(true)
-    expect(locked.readOnly).toBe(true)
+  it('a locked section renders read-only fields and no feedback control', () => {
+    render(<DocumentTree doc={doc} onSave={vi.fn()} notes={{}} setNote={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /Feedback on Certs/i })).toBeNull()
+    fireEvent.click(screen.getByText('Certs'))
+    expect(screen.getByDisplayValue('AWS')).toBeDisabled()
   })
 
-  it('locked-section field edit does not call onSave', () => {
-    const onSave = vi.fn()
-    render(<DocumentTree doc={doc} onSave={onSave} notes={{}} setNote={vi.fn()} />)
-    const locked = screen.getByDisplayValue('Python')
-    onSave.mockClear()
-    // Even if we force a change event, onChange is undefined for locked fields
-    fireEvent.change(locked, { target: { value: 'Java' } })
-    expect(onSave).not.toHaveBeenCalled()
+  it('collects feedback at section and entry level only (no per-field control)', () => {
+    render(<DocumentTree doc={doc} onSave={vi.fn()} notes={{}} setNote={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /Feedback on Summary/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Feedback on Experience/i })).toBeTruthy()
+    fireEvent.click(screen.getByText('Experience'))
+    expect(screen.getByRole('button', { name: /Feedback on Acme/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Feedback on Company/i })).toBeNull()
   })
 
-  it('taglist fields in doc modal have no alias-mutation affordances', () => {
-    const tagDoc = {
-      type: 'root', id: 'r', children: [
-        { type: 'section', id: 's1', name: 'Tech', locked: false, children: [
-          { type: 'field', id: 'f1', name: 'Tags', kind: 'taglist', value: ['React', 'Node'] }] },
-      ],
-    }
-    render(<DocumentTree doc={tagDoc} onSave={vi.fn()} notes={{}} setNote={vi.fn()} />)
-    // Tags are rendered as plain text, not clickable edit buttons
-    expect(screen.getByText('React')).toBeTruthy()
-    // No "Add…" input, no remove buttons, no alias modal trigger
-    expect(screen.queryByPlaceholderText('Add…')).toBeNull()
-    expect(screen.queryByLabelText('Remove React')).toBeNull()
-    // Clicking a tag does not open the edit modal
-    fireEvent.click(screen.getByText('React'))
-    expect(screen.queryByText('Edit tag')).toBeNull()
+  it('section feedback records a note keyed by the section id', () => {
+    const setNote = vi.fn()
+    render(<DocumentTree doc={doc} onSave={vi.fn()} notes={{}} setNote={setNote} />)
+    fireEvent.click(screen.getByRole('button', { name: /Feedback on Summary/i }))
+    fireEvent.change(screen.getByPlaceholderText(/change in this section/i), { target: { value: 'punchier' } })
+    expect(setNote).toHaveBeenCalledWith('s1', { section: 'Summary', label: 'Summary', note: 'punchier' })
   })
 })
