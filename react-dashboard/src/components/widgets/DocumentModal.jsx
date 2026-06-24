@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { getDocument, putDocument, submitFeedback } from '../../api'
-import InteractiveResume from './document/InteractiveResume'
+import DocumentTree from './document/DocumentTree'
 import CoverView from './document/CoverView'
-
-const SECTION_FIELD = { summary: 'profile_summary', experience: 'experience', education: 'education', project: 'projects', skills: 'skills' }
 
 // Renders the structured document as an interactive surface: hover-highlight,
 // inline edit (PUT), and per-item/cover feedback (regenerate).
@@ -15,7 +13,7 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState(null)
   const [coverFeedback, setCoverFeedback] = useState('')
-  // Children (InteractiveResume / CoverView) install a consumer here that exits an
+  // Children (CoverView) install a consumer here that exits an
   // open inline edit or feedback box and returns true; if nothing is open it returns
   // false and the modal closes instead.
   const escapeRef = useRef(null)
@@ -62,21 +60,16 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   }
   useEffect(reload, [job.job_key, docType])
 
-  const handleSave = async (section, index, newValue) => {
-    if (!doc) return
-    const next = JSON.parse(JSON.stringify(doc))
-    if (section === 'summary') {
-      next.profile_summary = newValue
-    } else {
-      next[SECTION_FIELD[section]][index] = newValue
-    }
+  const isTreeV1 = doc && doc.schema === 'tree-v1'
+  const isLegacyResume = doc && docType === 'resume' && !isTreeV1
+
+  const handleTreeSave = async (nextRoot) => {
+    setDoc(nextRoot)
     try {
-      await putDocument(job.job_key, docType, next)
+      await putDocument(job.job_key, 'resume', nextRoot)
       setLoadError(null)
-      reload()
     } catch (e) {
       setLoadError(e?.message || 'Failed to save changes')
-      throw e
     }
   }
 
@@ -97,8 +90,13 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
         <div className="flex-1 overflow-auto p-5">
           {loadError && <p className="text-xs text-red-400">{loadError}</p>}
           {!loadError && !doc && <p className="text-xs text-space-dim">Loading…</p>}
-          {doc && docType === 'resume' && (
-            <InteractiveResume doc={doc} onSave={handleSave} notes={notes} setNote={setNote} escapeRef={escapeRef} />
+          {doc && docType === 'resume' && isTreeV1 && (
+            <DocumentTree doc={doc} onSave={handleTreeSave} notes={notes} setNote={setNote} />
+          )}
+          {doc && isLegacyResume && (
+            <p className="text-sm text-space-dim">
+              This résumé was generated before the new editor. Regenerate it to edit inline.
+            </p>
           )}
           {doc && docType === 'cover' && (
             <CoverView
@@ -119,7 +117,7 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
           {actionError ? <span className="text-xs text-red-400 break-words">{actionError}</span> : <span />}
           <button
             onClick={submitNotes}
-            disabled={submitting || processing || !collected.length}
+            disabled={submitting || processing || !collected.length || isLegacyResume}
             className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {submitting ? 'Submitting…' : processing ? 'Processing…' : `Regenerate with feedback${collected.length ? ` (${collected.length})` : ''}`}
