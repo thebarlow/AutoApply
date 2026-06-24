@@ -103,3 +103,29 @@ def test_put_cover_document_persists(client, db_session, monkeypatch):
     assert r.json()["body"] == "Cover body text."
     row = Document.fetch(db_session, "kc", "cover", profile_id=1)
     assert row is not None and "Cover body text." in row.structured_json
+
+
+def test_put_resume_tree_v1_roundtrip(client, db_session, monkeypatch):
+    import core.job as jobmod
+    monkeypatch.setattr(jobmod.Job, "generate_resume_pdf", lambda self, t, db, max_pages=1: None)
+    monkeypatch.setattr(jobmod.Job, "write_resume_markdown", lambda self, doc: None)
+    _job(db_session)
+    payload = {
+        "schema": "tree-v1", "type": "root", "id": "r",
+        "children": [
+            {"type": "section", "id": "s1", "name": "Summary", "role": "summary",
+             "order": 0, "visible": True, "locked": False, "children": [
+                {"type": "field", "id": "f1", "name": "Summary", "key": "summary",
+                 "order": 0, "visible": True, "kind": "markdown",
+                 "value": "Edited summary text.", "llm_output": True}]},
+        ],
+    }
+    r = client.put("/api/jobs/k1/resume/document", json=payload)
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("schema") == "tree-v1"
+    row = Document.fetch(db_session, "k1", "resume", profile_id=1)
+    assert row is not None
+    from core.resume_document_io import is_tree_v1
+    assert is_tree_v1(row.structured_json)
+    assert "Edited summary text." in row.structured_json
