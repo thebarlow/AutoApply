@@ -88,11 +88,19 @@ The page limit lives in `profile.data.resume_max_pages`:
 
 - integer N → cap the résumé at N pages (shrink-to-fit as today);
 - `null` → unlimited (disables the shrink/limit);
-- **absent** → treated as `1` (preserves current behavior for every existing profile).
+- **absent → unlimited** (no limit). Existing profiles (which have no key) therefore render
+  without a page cap until the user sets one — an intentional behavior change from today's
+  hardcoded 1-page cap. No migration of existing rows.
+
+**New profiles are seeded** with `resume_max_pages: 1` at creation, so a fresh profile defaults
+to the 1-page limit (toggle on, value 1). The seed is written at profile-creation time (prefer
+the backend create-profile seam for robustness; the frontend creation flow may set it if that is
+the cleaner seam).
 
 ### Backend
 
-Add a resolver that reads `profile.data.resume_max_pages` and returns `int | None` (absent → 1).
+Add a resolver that reads `profile.data.resume_max_pages` and returns `int | None`
+(**absent → `None`/unlimited**; `null` → `None`; integer → that integer).
 Replace the six hardcoded `max_pages=1` arguments with the resolved value so every résumé render
 honors the setting:
 
@@ -113,14 +121,16 @@ Add a "Limit résumé length" control to the profile detail/editor:
 
 Toggle **off** persists `resume_max_pages: null`; toggle **on** persists the input's integer
 value. Saved through the existing `updateProfile(profileId, { data })` path (the same mechanism
-that stores `llm_model`, `resume_path`, etc.). When the field is absent, the control initializes
-to on/`1` (the effective default).
+that stores `llm_model`, `resume_path`, etc.). The control **initializes from the stored value**:
+an integer → toggle on with that number; `null` or absent → toggle off (unlimited). New profiles,
+seeded with `1`, therefore open showing toggle on / `1`.
 
 ### Tests
 
 - Backend: a test that `profile.data.resume_max_pages` flows into `generate_resume_pdf`'s
-  `max_pages` — integer passes through, `null` → `None`, absent → `1` (mock `render_pdf` /
-  `generate_resume_pdf` and assert the argument).
+  `max_pages` — integer passes through, `null` → `None`, **absent → `None`** (mock `render_pdf` /
+  `generate_resume_pdf` and assert the argument); plus a test that a newly created profile is
+  seeded with `resume_max_pages: 1`.
 - Frontend: a `ProfileDetail` test for the toggle + digit input persisting the right
   `resume_max_pages` value (if the suite has a harness for ProfileDetail; otherwise cover the
   pure read/normalize helper).
