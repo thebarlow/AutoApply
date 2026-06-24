@@ -18,7 +18,10 @@ function FieldRow({ root, field, onSave, notes, setNote }) {
           >💬</button>
         )}
       </div>
-      <FieldWidget field={field} onChange={(v) => onSave(setFieldValue(root, field.id, v))} />
+      <FieldWidget
+        field={field} onChange={locked ? undefined : (v) => onSave(setFieldValue(root, field.id, v))}
+        readOnly={locked} valueOnly
+      />
       {open && !locked && (
         <textarea
           className="mt-1 w-full bg-white/5 border border-space-border rounded px-2 py-1 text-xs text-space-text"

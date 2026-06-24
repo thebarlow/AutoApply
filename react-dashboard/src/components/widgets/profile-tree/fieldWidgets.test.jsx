@@ -133,6 +133,22 @@ describe('FieldWidget', () => {
   })
 })
 
+describe('TagListField valueOnly mode', () => {
+  it('suppresses add/remove/rename and alias modal', () => {
+    const onChange = vi.fn()
+    render(<FieldWidget field={field({ kind: 'taglist', value: ['Python', 'SQL'] })} onChange={onChange} valueOnly />)
+    // Tags are rendered as plain text spans, not buttons
+    expect(screen.getByText('Python')).toBeTruthy()
+    expect(screen.getByText('Python').tagName).toBe('SPAN')
+    // No add input, no remove buttons
+    expect(screen.queryByPlaceholderText('Add…')).toBeNull()
+    expect(screen.queryByLabelText('Remove Python')).toBeNull()
+    // Clicking the tag text does not open the alias modal
+    fireEvent.click(screen.getByText('Python'))
+    expect(screen.queryByText('Edit tag')).toBeNull()
+  })
+})
+
 describe('MarkdownField pop-out', () => {
   it('expands to a large editor and edits there', () => {
     const onChange = vi.fn()
