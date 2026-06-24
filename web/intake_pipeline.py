@@ -57,7 +57,11 @@ def build_feedback_issues(notes: list[dict]) -> list[dict]:
         if not text:
             continue
         label = (n.get("label") or "").strip() or "Document"
-        issues.append({"category": "user_feedback", "description": f"{label}: {text}"})
+        issue: dict = {"category": "user_feedback", "description": f"{label}: {text}"}
+        section = (n.get("section") or "").strip()
+        if section:
+            issue["section"] = section
+        issues.append(issue)
     return issues
 
 
@@ -565,6 +569,116 @@ def run_cover_refinement(job_key: str, profile_id: int) -> None:
     _run_doc_refinement(job_key, "cover", profile_id)
 
 
+def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], profile_id: int) -> None:
+    """Tree-v1 résumé user-feedback refine: regenerate only the commented,
+    regenerable sections via 4B-2 selective regen, then eval-for-score + ATS.
+    No restore-best (the user-directed result is always kept)."""
+    import json as _json
+    from pathlib import Path
+    from core.document_tree import authored_values_from_tree, build_resume_document_tree
+    from core.profile_tree import resolve_profile_tokens
+    from core.resume_document_io import serialize_document_tree, deserialize_document_tree
+    from core.job import Job, _apply_template
+    from db.database import Document
+
+    template_path = Path(__file__).parent.parent / "generator" / "resume_template.html"
+    issues = build_feedback_issues(notes)
+    if not issues:
+        return
+
+    db = SessionLocal()
+    try:
+        job = Job.get(job_key, db, profile_id)
+        if job is None:
+            return
+        user = User.load(db, profile_id)
+        row = Document.fetch(db, job_key, "resume", profile_id)
+        if row is None:
+            return
+
+        # Group notes by owning section, keep only regenerable ones.
+        regenerable = set(job._regenerable_section_names(db))
+        by_section: dict[str, list[dict]] = {}
+        for i in issues:
+            sec = i.get("section")
+            if sec in regenerable:
+                by_section.setdefault(sec, []).append(i)
+
+        if by_section:
+            try:
+                gen_prompt = user.resolve_prompt("resume")
+            except PromptNotConfiguredError as exc:
+                print(f"[feedback:resume] {job_key}: prompt not configured — {exc}", flush=True)
+                return
+            gen_client, gen_model = get_client_for_profile(
+                user, getattr(user, "prompt_resume_model", "") or "")
+            root = user.profile_tree_root()
+            authored = authored_values_from_tree(deserialize_document_tree(row.structured_json))
+            job_ctx = job.build_resume_prompt(user, gen_prompt, db)
+
+            def resolve(text: str) -> str:
+                return _apply_template(resolve_profile_tokens(root, text), {"job": job, "user": user})
+
+            llm_status.start(job_key, "resume_refine")
+            try:
+                with meter_action(db, profile_id, action="refine", job_key=job_key):
+                    new_vals = generate_resume_by_section(
+                        root, job_ctx, gen_client, gen_model, resolve=resolve,
+                        only_sections=set(by_section), critiques=by_section)
+                authored.update(new_vals)
+                doc_tree = build_resume_document_tree(root, authored)
+                Document.upsert(db, job_key, "resume",
+                                serialize_document_tree(doc_tree), profile_id=profile_id)
+                job.write_resume_markdown(doc_tree)
+                job.generate_resume_pdf(template_path, db, max_pages=1)
+                db.commit()
+                db.refresh(job)
+                _emit(job)
+            except Exception as exc:
+                db.rollback()
+                job = Job.get(job_key, db, profile_id)
+                job.last_result_error = f"Resume feedback refine failed: {exc}"
+                job.unread_indicator = "error"
+                db.commit()
+                _emit(job)
+                print(f"[feedback:resume] {job_key}: refine failed — {exc}", flush=True)
+                return
+            finally:
+                llm_status.finish(job_key, "resume_refine")
+
+        # Eval-for-score (informational; non-fatal; no restore-best).
+        llm_status.start(job_key, "resume_eval")
+        try:
+            eval_prompt = user.resolve_prompt("resume_eval_sectioned")
+            eval_client, eval_model = get_client_for_profile(
+                user, getattr(user, "prompt_resume_eval_sectioned_model", "") or "")
+            with meter_action(db, profile_id, action="eval", job_key=job_key):
+                scores = job.evaluate_resume_sections(eval_prompt, user, eval_client, eval_model, db)
+            if scores:
+                min_score = min(s["score"] for s in scores.values())
+                pass_score = float(getattr(user, "resume_refine_pass_score", 0.80))
+                eval_log = _json.loads(job.resume_eval_log or "[]")
+                turn = len(eval_log) + 1
+                eval_log.append({"turn": turn, "score": min_score,
+                                 "issues": [i for s in scores.values() for i in s["issues"]],
+                                 "passed": min_score >= pass_score, "source": "user_feedback"})
+                job.resume_eval_score = min_score
+                job.resume_eval_turns = turn
+                job.resume_eval_log = _json.dumps(eval_log)
+                db.commit()
+                db.refresh(job)
+                _emit(job)
+        except Exception as exc:
+            db.rollback()
+            print(f"[feedback:resume] {job_key}: post-feedback eval failed (non-fatal) — {exc}", flush=True)
+        finally:
+            llm_status.finish(job_key, "resume_eval")
+    finally:
+        db.close()
+
+    run_ats_gate(job_key, profile_id)
+
+
 def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], profile_id: int) -> None:
     """Apply user section-anchored feedback as a one-shot refine.
 
@@ -589,6 +703,20 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
     issues = build_feedback_issues(notes)
     if not issues:
         return
+
+    # Tree-v1 résumés use the selective per-section regen path.
+    if doc_type == "resume":
+        _probe = SessionLocal()
+        try:
+            from db.database import Document
+            from core.resume_document_io import is_tree_v1
+            _r = Document.fetch(_probe, job_key, "resume", profile_id)
+            _is_tree = _r is not None and is_tree_v1(_r.structured_json)
+        finally:
+            _probe.close()
+        if _is_tree:
+            _run_resume_feedback_refine(job_key, "resume", notes, profile_id)
+            return
 
     _GEN_DIR = Path(__file__).parent.parent / "generator"
     template_path = {
