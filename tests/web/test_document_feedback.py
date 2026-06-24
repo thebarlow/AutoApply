@@ -11,8 +11,8 @@ def test_build_feedback_issues_formats_and_filters():
     ]
     issues = build_feedback_issues(notes)
     assert issues == [
-        {"category": "user_feedback", "description": "Profile summary: make punchier"},
-        {"category": "user_feedback", "description": "Experience [0] (Eng at Acme): quantify"},
+        {"category": "user_feedback", "description": "Profile summary: make punchier", "section": "summary"},
+        {"category": "user_feedback", "description": "Experience [0] (Eng at Acme): quantify", "section": "experience:0"},
     ]
 
 
@@ -56,7 +56,7 @@ def test_run_user_feedback_refine_keeps_user_version():
     # refine called with our built issues
     args, kwargs = refine_fn.call_args
     passed_issues = args[5]  # (user, prompt, client, model, db, issues, template)
-    assert passed_issues == [{"category": "user_feedback", "description": "Profile summary: punchier"}]
+    assert passed_issues == [{"category": "user_feedback", "description": "Profile summary: punchier", "section": "summary"}]
 
     # a user_feedback turn was appended with the new (lower) score; no restore to 0.95
     log = json.loads(job.resume_eval_log)
