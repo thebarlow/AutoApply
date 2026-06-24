@@ -820,6 +820,52 @@ function PromptsSection({ data, profileId, profileName, defaultModel, onSave }) 
     </>
   )
 }
+// Per-profile résumé page limit. `value` is int (cap) | null | undefined
+// (null/absent = unlimited). Toggling off persists null; toggling on persists
+// the digit input as an integer (≤0 / blank normalizes to 1).
+export function ResumePageLimit({ value, onSave }) {
+  const [limited, setLimited] = useState(typeof value === 'number')
+  const [pages, setPages] = useState(typeof value === 'number' ? String(value) : '1')
+
+  const persist = (nextLimited, nextPages) => {
+    if (!nextLimited) { onSave({ resume_max_pages: null }); return }
+    const n = parseInt(nextPages, 10)
+    onSave({ resume_max_pages: Number.isInteger(n) && n > 0 ? n : 1 })
+  }
+
+  const toggle = () => {
+    const next = !limited
+    setLimited(next)
+    persist(next, pages)
+  }
+
+  const onPages = (e) => {
+    const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 1)
+    setPages(digits)
+    if (limited) persist(true, digits)
+  }
+
+  return (
+    <AccordionSection id="document" title="Document">
+      <div className="flex items-center gap-3">
+        <button
+          type="button" role="switch" aria-checked={limited}
+          aria-label="Limit résumé length" onClick={toggle}
+          className={`px-2 py-0.5 rounded border text-xs transition-colors ${
+            limited ? 'text-emerald-400 border-emerald-500/40' : 'text-space-dim border-space-border'
+          }`}
+        >{limited ? '✓ On' : '✗ Off'}</button>
+        <label className="text-xs text-space-dim">Max pages</label>
+        <input
+          type="text" inputMode="numeric" aria-label="Max pages"
+          className="w-12 bg-white/5 border border-space-border rounded px-2 py-1 text-xs text-space-text disabled:opacity-40"
+          value={pages} onChange={onPages} disabled={!limited}
+        />
+      </div>
+    </AccordionSection>
+  )
+}
+
 // ─── ProfileDetailView ─────────────────────────────────────────────────────────
 
 const PROFILE_DATA_DEFAULTS = {
@@ -898,6 +944,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
     <>
       <div className="flex flex-col gap-3">
         <ProfileTreeEditor profileId={profileId} />
+        <ResumePageLimit value={d.resume_max_pages} onSave={handleSave} />
         <PromptsSection
           data={d}
           profileId={profileId}
