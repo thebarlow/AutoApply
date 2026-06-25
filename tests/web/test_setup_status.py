@@ -42,9 +42,17 @@ def test_setup_status_returns_booleans(client):
     assert isinstance(data["resume_parsed"], bool)
 
 
-def test_setup_status_llm_not_configured_initially(client, db_session):
-    """llm_configured should be False when no providers exist."""
-    r = client.get("/api/setup-status")
+def test_setup_status_llm_not_configured_initially(client, db_session, monkeypatch):
+    """llm_configured should be False when no providers exist.
+
+    Isolated from the developer's real .env / LLM_API_KEY so the result depends
+    only on the (empty) test DB.
+    """
+    from unittest import mock
+
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    with mock.patch("web.routers.setup_status._read_env", return_value={}):
+        r = client.get("/api/setup-status")
     assert r.status_code == 200
     assert r.json()["llm_configured"] is False
 
