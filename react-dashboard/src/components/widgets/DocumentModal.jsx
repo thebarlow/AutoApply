@@ -112,8 +112,17 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
                 escapeRef={escapeRef}
                 onSave={async (body) => {
                   const next = { ...doc, body }
-                  await putDocument(job.job_key, 'cover', next)
-                  reload()
+                  setDoc(next)
+                  setRefreshing(true)
+                  try {
+                    await putDocument(job.job_key, 'cover', next)
+                    setLoadError(null)
+                    setPreviewVersion((v) => v + 1)
+                  } catch (e) {
+                    setLoadError(e?.message || 'Failed to save changes')
+                  } finally {
+                    setRefreshing(false)
+                  }
                 }}
                 feedback={coverFeedback}
                 setFeedback={setCoverFeedback}
