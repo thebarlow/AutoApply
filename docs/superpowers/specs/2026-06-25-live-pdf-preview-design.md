@@ -60,10 +60,11 @@ wiring is added.
 Presentation only. Props: `{ jobKey, docType, version }`.
 
 - Renders `<iframe title="PDF preview" src={`/api/jobs/${jobKey}/${docType}?v=${version}`}>`.
-- **Not-generated state:** the PDF endpoint returns 404 when the document has
-  not been generated yet. Detect the failed load (iframe `onError` / a
-  `HEAD`/`fetch` probe of the endpoint) and show "Generate this document to see
-  a preview." instead of a broken frame.
+- **Not-generated state:** the modal already loads the document JSON
+  (`getDocument`) and knows whether the document exists. When there is no
+  document, the modal shows "Generate this document to see a preview." in place
+  of the iframe — no `onError` handler or endpoint probe is needed. The iframe
+  is only mounted once a document exists.
 - **Refreshing state:** a subtle overlay while a save is in flight (driven by a
   `refreshing` prop from the modal), so the user sees the preview is updating.
 - **Error state:** if a refresh fails (e.g. render overflow → 500), keep showing
@@ -111,7 +112,8 @@ and only if the gap is real.
   - `DocumentPreview` renders an iframe whose `src` targets
     `/api/jobs/{key}/{docType}` with the given `?v=` version.
   - changing the `version` prop changes the iframe `src` (forces refetch).
-  - the not-generated and refresh-error states render their messages.
+  - the refresh-error state renders its message; the modal shows the
+    not-generated placeholder (and no iframe) when no document exists.
   - `DocumentModal` renders the side-by-side editor+preview for a tree-v1
     résumé and for a cover, and a successful save bumps the preview version
     (asserted via the iframe `src` changing).
