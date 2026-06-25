@@ -43,10 +43,8 @@ def test_prompts_unique_profile_type(db_session):
     db_session.rollback()
 
 
-PROMPT_TYPE_KEYS = (
-    "scoring", "resume", "cover", "extraction", "resume_parse",
-    "resume_eval", "resume_refine", "cover_eval", "cover_refine",
-)
+# Source of truth — keeps the row-count assertions in step with new prompt keys.
+from db.seed import PROMPT_TYPE_KEYS
 
 
 def test_seed_prompt_defaults_creates_rows(db_session):
@@ -81,14 +79,14 @@ def _seed_profile(db, data):
     return u.id
 
 
-def test_migrate_creates_nine_rows_with_fallback(db_session):
+def test_migrate_creates_a_row_per_prompt_key_with_fallback(db_session):
     from db.seed import seed_prompt_defaults, migrate_file_prompts_to_db
     from db.database import Prompt
     seed_prompt_defaults(db_session)
     pid = _seed_profile(db_session, {"first_name": "X"})
     migrate_file_prompts_to_db(db_session)
     rows = db_session.query(Prompt).filter_by(profile_id=pid).all()
-    assert len(rows) == 9
+    assert len(rows) == len(PROMPT_TYPE_KEYS)
     scoring = next(r for r in rows if r.type_key == "scoring")
     assert scoring.content.strip()
     assert scoring.model == ""
@@ -113,7 +111,7 @@ def test_migrate_is_idempotent(db_session):
     db_session.query(Prompt).filter_by(profile_id=pid, type_key="scoring").first().content = "EDITED"
     db_session.commit()
     migrate_file_prompts_to_db(db_session)
-    assert db_session.query(Prompt).filter_by(profile_id=pid).count() == 9
+    assert db_session.query(Prompt).filter_by(profile_id=pid).count() == len(PROMPT_TYPE_KEYS)
     assert db_session.query(Prompt).filter_by(profile_id=pid, type_key="scoring").first().content == "EDITED"
 
 
