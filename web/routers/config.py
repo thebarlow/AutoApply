@@ -555,6 +555,7 @@ _EMPTY_PROFILE_DATA: dict[str, Any] = {
     "md_path": "", "cover_letter_path": "",
     "resume_uploaded_at": "", "cover_uploaded_at": "",
     "resume_filename": "", "cover_filename": "",
+    "resume_max_pages": 1,
 }
 
 

@@ -4,29 +4,31 @@ import { getSkillAliases, assignSkillAlias, removeSkillAliasMember } from '../..
 const inputClass =
   'w-full bg-white/5 border border-space-border rounded-lg px-3 py-2 text-sm text-space-text placeholder-space-dim focus:outline-none focus:border-purple-500 transition-colors'
 
-export function TextField({ value, onChange }) {
+export function TextField({ value, onChange, readOnly }) {
   return (
     <input
       type="text" className={inputClass} value={value ?? ''}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
+      readOnly={readOnly} disabled={readOnly}
     />
   )
 }
 
-export function MarkdownField({ value, onChange }) {
+export function MarkdownField({ value, onChange, readOnly }) {
   const [popOut, setPopOut] = useState(false)
   return (
     <div className="flex items-start gap-1.5">
       <textarea
         className={`${inputClass} min-h-[80px] resize-y`} value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
+        readOnly={readOnly} disabled={readOnly}
       />
-      <button
+      {!readOnly && <button
         type="button" aria-label="Expand field editor" title="Pop out"
         className="px-1.5 py-0.5 text-space-dim hover:text-space-text"
         onClick={() => setPopOut(true)}
-      >⤢</button>
-      {popOut && (
+      >⤢</button>}
+      {popOut && !readOnly && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60" onClick={() => setPopOut(false)}>
           <div
             className="bg-[#0f0f1a] border border-space-border rounded-2xl p-5 w-[48rem] max-w-[92vw] flex flex-col gap-3"
@@ -50,7 +52,7 @@ export function MarkdownField({ value, onChange }) {
   )
 }
 
-export function BulletsField({ value, onChange }) {
+export function BulletsField({ value, onChange, readOnly }) {
   const arr = Array.isArray(value) ? value : []
   const setAt = (i, v) => onChange(arr.map((x, j) => (j === i ? v : x)))
   const removeAt = (i) => onChange(arr.filter((_, j) => j !== i))
@@ -60,25 +62,30 @@ export function BulletsField({ value, onChange }) {
         <div key={i} className="flex items-center gap-2">
           <input
             type="text" className={inputClass} value={line}
-            onChange={(e) => setAt(i, e.target.value)}
+            onChange={readOnly ? undefined : (e) => setAt(i, e.target.value)}
+            readOnly={readOnly} disabled={readOnly}
           />
-          <button
-            type="button" aria-label={`Remove bullet ${i + 1}`}
-            className="text-space-dim hover:text-red-400 px-1"
-            onClick={() => removeAt(i)}
-          >✕</button>
+          {!readOnly && (
+            <button
+              type="button" aria-label={`Remove bullet ${i + 1}`}
+              className="text-space-dim hover:text-red-400 px-1"
+              onClick={() => removeAt(i)}
+            >✕</button>
+          )}
         </div>
       ))}
-      <button
-        type="button"
-        className="self-start text-xs text-purple-400 hover:text-purple-300"
-        onClick={() => onChange([...arr, ''])}
-      >+ Add bullet</button>
+      {!readOnly && (
+        <button
+          type="button"
+          className="self-start text-xs text-purple-400 hover:text-purple-300"
+          onClick={() => onChange([...arr, ''])}
+        >+ Add bullet</button>
+      )}
     </div>
   )
 }
 
-export function TagListField({ value, onChange }) {
+export function TagListField({ value, onChange, readOnly, valueOnly }) {
   const arr = Array.isArray(value) ? value : []
   const [draft, setDraft] = useState('')
   const [editIdx, setEditIdx] = useState(null)
@@ -100,26 +107,34 @@ export function TagListField({ value, onChange }) {
             key={i}
             className="inline-flex items-center gap-1 bg-purple-500/15 text-purple-200 text-xs rounded-full pl-2 pr-1 py-0.5"
           >
-            <button
-              type="button" title="Edit tag / aliases"
-              className="hover:text-purple-100 transition-colors"
-              onClick={() => setEditIdx(i)}
-            >{tag}</button>
-            <button
-              type="button" aria-label={`Remove ${tag}`}
-              className="hover:text-red-300 px-0.5"
-              onClick={() => onChange(arr.filter((_, j) => j !== i))}
-            >✕</button>
+            {valueOnly || readOnly ? (
+              <span className="px-0.5">{tag}</span>
+            ) : (
+              <button
+                type="button" title="Edit tag / aliases"
+                className="hover:text-purple-100 transition-colors"
+                onClick={() => setEditIdx(i)}
+              >{tag}</button>
+            )}
+            {!readOnly && !valueOnly && (
+              <button
+                type="button" aria-label={`Remove ${tag}`}
+                className="hover:text-red-300 px-0.5"
+                onClick={() => onChange(arr.filter((_, j) => j !== i))}
+              >✕</button>
+            )}
           </span>
         ))}
       </div>
-      <input
-        type="text" className={inputClass} placeholder="Add…" value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-        onBlur={add}
-      />
-      {editIdx !== null && arr[editIdx] !== undefined && (
+      {!readOnly && !valueOnly && (
+        <input
+          type="text" className={inputClass} placeholder="Add…" value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+          onBlur={add}
+        />
+      )}
+      {!valueOnly && editIdx !== null && arr[editIdx] !== undefined && (
         <TagChipModal
           tag={arr[editIdx]}
           onRename={(name) => rename(editIdx, name)}
@@ -298,12 +313,12 @@ export function TagChipModal({ tag, onRename, onClose }) {
   )
 }
 
-export function FieldWidget({ field, onChange }) {
+export function FieldWidget({ field, onChange, readOnly, valueOnly }) {
   switch (field.kind) {
-    case 'markdown': return <MarkdownField value={field.value} onChange={onChange} />
-    case 'bullets': return <BulletsField value={field.value} onChange={onChange} />
-    case 'taglist': return <TagListField value={field.value} onChange={onChange} />
+    case 'markdown': return <MarkdownField value={field.value} onChange={onChange} readOnly={readOnly} />
+    case 'bullets': return <BulletsField value={field.value} onChange={onChange} readOnly={readOnly} />
+    case 'taglist': return <TagListField value={field.value} onChange={onChange} readOnly={readOnly} valueOnly={valueOnly} />
     case 'text':
-    default: return <TextField value={field.value} onChange={onChange} />
+    default: return <TextField value={field.value} onChange={onChange} readOnly={readOnly} />
   }
 }

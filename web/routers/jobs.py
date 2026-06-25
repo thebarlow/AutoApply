@@ -553,6 +553,26 @@ def put_document(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    if doc_type == "resume" and payload.get("schema") == "tree-v1":
+        from core.resume_document_io import deserialize_document_tree, serialize_document_tree
+        import json as _json2
+        try:
+            root = deserialize_document_tree(_json2.dumps(payload))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid document: {exc}")
+        serialized = serialize_document_tree(root)
+        Document.upsert(db, job_key, "resume", serialized, profile_id=profile_id)
+        try:
+            job.write_resume_markdown(root)
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
+        db.refresh(job)
+        _emit(job)
+        from web.intake_pipeline import run_ats_gate
+        _spawn(run_ats_gate, job_key, profile_id)
+        return _json.loads(serialized)
+
     try:
         doc = _doc_model(doc_type).model_validate(payload)
     except ValidationError as exc:
@@ -566,7 +586,7 @@ def put_document(
     try:
         if doc_type == "resume":
             job.write_resume_markdown(doc)
-            job.generate_resume_pdf(_RESUME_TEMPLATE, db, max_pages=1)
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
         else:
             job.write_cover_markdown(doc)
             job.generate_cover_pdf(_COVER_TEMPLATE, db)

@@ -19,6 +19,22 @@ from core.profile_tree import (
     validate_tree,
 )
 
+def _normalize_max_pages(value: object) -> int | None:
+    """Normalize a stored résumé page limit to ``int | None`` (None = unlimited).
+
+    A positive integer (or all-digit string) is the page cap; anything else
+    (None, null, non-positive, non-numeric, bool) means unlimited.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and value.strip().isdigit():
+        n = int(value)
+        return n if n > 0 else None
+    return None
+
+
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPTS_DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
 
@@ -141,6 +157,8 @@ class User(Base):
         self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
         self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 3))
         self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
+        # Résumé page limit
+        self.resume_max_pages = _normalize_max_pages(raw.get("resume_max_pages"))
         return migrated_tree
 
     def _to_dict(self) -> dict:
@@ -171,6 +189,7 @@ class User(Base):
         d["cover_refine_enabled"] = self.cover_refine_enabled
         d["cover_refine_max_turns"] = self.cover_refine_max_turns
         d["cover_refine_pass_score"] = self.cover_refine_pass_score
+        d["resume_max_pages"] = self.resume_max_pages
         apply_flat_to_tree(self.profile_tree, d)
         d["profile_tree"] = self.profile_tree.model_dump(mode="json")
         return d
