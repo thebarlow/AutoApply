@@ -8,6 +8,32 @@ from __future__ import annotations
 
 from core.profile_tree import FieldNode, GroupNode, ListNode, SectionNode
 
+# Default per-section authoring guidance, distilled from prompts/defaults/resume.md.
+# Folded into each per-section generation call by build_section_prompt; the job
+# context, field specs, and JSON contract are auto-built around it, so these are
+# concise tailoring rules, not full prompts. Keyed by section role.
+SECTION_PROMPT_DEFAULTS = {
+    "summary": (
+        "Lead with the candidate's identity for this specific role — the nature, "
+        "scale, and stakes of their actual work — then weave in the role's keywords. "
+        "Max 500 characters. Never imply a title, level, or outcome the applicant's "
+        "details do not support."
+    ),
+    "experience": (
+        "Max 2 bullets per entry, each at most 120 characters. Stress the skills and "
+        "responsibilities named in the job description. Do not reorder, rename, or "
+        "invent entries or facts — tailor only the wording."
+    ),
+    "projects": (
+        "Select and order the most relevant projects first; omit irrelevant ones. "
+        "Each description is one sentence, at most 120 characters, no bullets."
+    ),
+    "skills": (
+        "Group into at most 6 categories (e.g. Languages, Frameworks, Tools). Include "
+        "only categories with 2+ relevant skills; list job-mentioned skills first."
+    ),
+}
+
 _HEADER_KEYS = [
     ("first_name", "First Name"),
     ("last_name", "Last Name"),
@@ -40,6 +66,7 @@ def summary_section() -> SectionNode:
         name="Summary",
         role="summary",
         order=1,
+        prompt=SECTION_PROMPT_DEFAULTS["summary"],
         children=[
             FieldNode(
                 name="Summary", key="hero", kind="markdown", order=0, llm_output=True
@@ -103,5 +130,6 @@ def skills_section() -> SectionNode:
         name="Skills",
         role="skills",
         order=5,
+        prompt=SECTION_PROMPT_DEFAULTS["skills"],
         children=[FieldNode(name="Skills", key="skills", kind="taglist")],
     )
