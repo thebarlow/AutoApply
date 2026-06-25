@@ -127,6 +127,15 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   Live in-dashboard PDF render + a constrained, user-customizable template system: the user
   controls how each section/item renders (templates), with ATS-safety enforced by the templates
   themselves. Depends on #4 (not #5); the 4D DocumentModal is its UI home. Own spec when reached.
+  - [x] **#6A — Live in-dashboard PDF preview** (merged to local main `405e51a`, 2026-06-25,
+    not pushed; branch deleted). Spec/plan `docs/superpowers/{specs,plans}/2026-06-25-live-pdf-preview*`.
+    Side-by-side editor + read-only real-PDF iframe in DocumentModal, refresh-on-save (cache-busting
+    `?v=` version bump after a successful PUT, which already re-renders both PDFs), both résumé +
+    cover, responsive stacking, not-generated placeholder. New `document/DocumentPreview.jsx`. Pure
+    frontend, no backend changes. 136/136 frontend + build. Manual QA (non-edge-case paths) confirmed
+    by user. Final opus review clean. Deferred Minor: narrow-breakpoint layout polish.
+  - [ ] **#6B — User-customizable templates** — constrained per-section/item render control,
+    ATS-safety enforced by templates. Direct-edit-on-PDF (WYSIWYG) belongs here. Own spec.
   - [ ] **#5 Onboarding parse** — map novel/uploaded résumé sections onto the schema during
     first-run onboarding. After #6.
 
