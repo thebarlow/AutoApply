@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { getDocument, putDocument, submitFeedback } from '../../api'
 import DocumentTree from './document/DocumentTree'
 import CoverView from './document/CoverView'
+import DocumentPreview from './document/DocumentPreview'
 
 // Renders the structured document as an interactive surface: hover-highlight,
 // inline edit (PUT), and per-item/cover feedback (regenerate).
@@ -13,6 +14,8 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState(null)
   const [coverFeedback, setCoverFeedback] = useState('')
+  const [previewVersion, setPreviewVersion] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
   // Children (CoverView) install a consumer here that exits an
   // open inline edit or feedback box and returns true; if nothing is open it returns
   // false and the modal closes instead.
@@ -55,7 +58,7 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
   const reload = () => {
     setDoc(null)  // clear stale content while the new doc loads (job/tab switch)
     getDocument(job.job_key, docType)
-      .then((d) => { setDoc(d); setLoadError(null) })
+      .then((d) => { setDoc(d); setLoadError(null); setPreviewVersion((v) => v + 1) })
       .catch((e) => setLoadError(e?.message || 'Could not load document'))
   }
   useEffect(reload, [job.job_key, docType])
@@ -65,11 +68,15 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
 
   const handleTreeSave = async (nextRoot) => {
     setDoc(nextRoot)
+    setRefreshing(true)
     try {
       await putDocument(job.job_key, 'resume', nextRoot)
       setLoadError(null)
+      setPreviewVersion((v) => v + 1)
     } catch (e) {
       setLoadError(e?.message || 'Failed to save changes')
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -80,37 +87,49 @@ export default function DocumentModal({ job, docType, processing, onClose }) {
       <motion.div
         initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-[#0f0f1a] border border-space-border rounded-xl w-full max-w-4xl h-[88vh] flex flex-col shadow-2xl"
+        className="bg-[#0f0f1a] border border-space-border rounded-xl w-full max-w-6xl h-[88vh] flex flex-col shadow-2xl"
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-space-border">
           <p className="text-sm font-semibold text-space-text">{title} — {job.title || job.job_key}</p>
           <button onClick={onClose} className="px-2 py-1 rounded text-space-dim hover:text-space-text" title="Close">✕</button>
         </div>
 
-        <div className="flex-1 overflow-auto p-5">
-          {loadError && <p className="text-xs text-red-400">{loadError}</p>}
-          {!loadError && !doc && <p className="text-xs text-space-dim">Loading…</p>}
-          {doc && docType === 'resume' && isTreeV1 && (
-            <DocumentTree doc={doc} onSave={handleTreeSave} notes={notes} setNote={setNote} />
-          )}
-          {doc && isLegacyResume && (
-            <p className="text-sm text-space-dim">
-              This résumé was generated before the new editor. Regenerate it to edit inline.
-            </p>
-          )}
-          {doc && docType === 'cover' && (
-            <CoverView
-              doc={doc}
-              escapeRef={escapeRef}
-              onSave={async (body) => {
-                const next = { ...doc, body }
-                await putDocument(job.job_key, 'cover', next)
-                reload()
-              }}
-              feedback={coverFeedback}
-              setFeedback={setCoverFeedback}
-            />
-          )}
+        <div className="flex-1 overflow-hidden p-5 flex flex-col lg:flex-row gap-4">
+          <div className="flex-1 overflow-auto lg:w-1/2">
+            {loadError && <p className="text-xs text-red-400">{loadError}</p>}
+            {!loadError && !doc && <p className="text-xs text-space-dim">Loading…</p>}
+            {doc && docType === 'resume' && isTreeV1 && (
+              <DocumentTree doc={doc} onSave={handleTreeSave} notes={notes} setNote={setNote} />
+            )}
+            {doc && isLegacyResume && (
+              <p className="text-sm text-space-dim">
+                This résumé was generated before the new editor. Regenerate it to edit inline.
+              </p>
+            )}
+            {doc && docType === 'cover' && (
+              <CoverView
+                doc={doc}
+                escapeRef={escapeRef}
+                onSave={async (body) => {
+                  const next = { ...doc, body }
+                  await putDocument(job.job_key, 'cover', next)
+                  reload()
+                }}
+                feedback={coverFeedback}
+                setFeedback={setCoverFeedback}
+              />
+            )}
+          </div>
+          <div className="flex-1 lg:w-1/2 min-h-[300px] lg:min-h-0">
+            {doc ? (
+              <DocumentPreview
+                jobKey={job.job_key} docType={docType}
+                version={previewVersion} refreshing={refreshing}
+              />
+            ) : (
+              <p className="text-xs text-space-dim">Generate this document to see a preview.</p>
+            )}
+          </div>
         </div>
 
         <div className="px-5 py-3 border-t border-space-border flex items-center justify-between gap-3">
