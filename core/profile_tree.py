@@ -203,6 +203,7 @@ def legacy_to_tree(data: dict) -> "RootNode":
         A RootNode with fully populated preset sections.
     """
     from core.section_presets import (
+        SECTION_PROMPT_DEFAULTS,
         education_template,
         experience_template,
         header_section,
@@ -245,6 +246,7 @@ def legacy_to_tree(data: dict) -> "RootNode":
         name="Experience",
         role="experience",
         order=2,
+        prompt=SECTION_PROMPT_DEFAULTS["experience"],
         children=[
             ListNode(
                 name="Experience",
@@ -277,6 +279,7 @@ def legacy_to_tree(data: dict) -> "RootNode":
         name="Projects",
         role="projects",
         order=4,
+        prompt=SECTION_PROMPT_DEFAULTS["projects"],
         children=[
             ListNode(
                 name="Projects",
@@ -291,6 +294,30 @@ def legacy_to_tree(data: dict) -> "RootNode":
 
     root = RootNode(children=[header, summary, experience, education, projects, skills])
     return root
+
+
+def backfill_section_prompts(root: RootNode) -> bool:
+    """Fill empty section prompts from the role-keyed defaults, in place.
+
+    Only sections whose ``role`` has a default and whose ``prompt`` is currently
+    blank are touched, so user-authored or deliberately-cleared prompts are
+    never overwritten. Idempotent.
+
+    Args:
+        root: The profile tree to backfill.
+
+    Returns:
+        True if any section prompt was changed, else False.
+    """
+    from core.section_presets import SECTION_PROMPT_DEFAULTS
+
+    changed = False
+    for section in root.children:
+        default = SECTION_PROMPT_DEFAULTS.get(section.role)
+        if default and not section.prompt.strip():
+            section.prompt = default
+            changed = True
+    return changed
 
 
 def merge_flat_into_stored(existing_data: dict, new_flat: dict) -> dict:
