@@ -134,7 +134,7 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
     cover, responsive stacking, not-generated placeholder. New `document/DocumentPreview.jsx`. Pure
     frontend, no backend changes. 136/136 frontend + build. Manual QA (non-edge-case paths) confirmed
     by user. Final opus review clean. Deferred Minor: narrow-breakpoint layout polish.
-  - [ ] **#6B — User-customizable templates** — split 6B-1 (done) → 6B-2 (next).
+  - [x] **#6B — User-customizable templates** — 6B-1 (output formats) + 6B-2 (résumé themes) both done.
     - [x] **#6B-1 — Output formats** (merged to local main via `--no-ff`, 2026-06-26, not
       pushed; branch deleted). Per-LLM-field output format (Bullet list / Paragraph) on the
       profile tree, driving both the generation JSON shape ("# Output Format" prompt block +
@@ -142,8 +142,13 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
       summary/projects→paragraph; idempotent backfill (`scripts/backfill_output_formats.py`,
       RAN on dev profile 9). Registry `core/output_formats.py`; `GET /api/output-formats` +
       profile-tree `<select>`. Tree-v1 only; legacy/cover untouched. Backend 878 + FE 138 green.
-    - [ ] **#6B-2 — Document-level themes** — constrained per-document render/theme control,
-      ATS-safety enforced by templates. Direct-edit-on-PDF (WYSIWYG) decision belongs here. Own spec.
+    - [x] **#6B-2 — Résumé themes** (merged to local main `5b4ef7f` via `--no-ff`, 2026-06-26,
+      not pushed; branch deleted). Curated theme picker (classic/modern/compact), profile-level,
+      résumé only, picked in profile editor, re-rendered on open when stale. `generator/themes.py`
+      registry; `render_pdf(css_path=)` override; two standalone ATS-safe stylesheets (both tree-v1
+      + legacy selector families); `User.resume_theme`; `jobs.resume_rendered_theme` col + migration
+      `aa07themes01`; `serve_resume` best-effort re-theme-on-open; `GET /api/themes` + profile
+      `<select>`. Classic byte-identical. Backend 904 + FE 140 green. Manual re-theme QA deferred to user.
   - [ ] **#5 Onboarding parse** — map novel/uploaded résumé sections onto the schema during
     first-run onboarding. After #6.
 
