@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from db.database import Base
 import db.database as _db_core  # noqa: F401 — ensures Config/FieldHelp registered with Base.metadata
+from generator.themes import DEFAULT_THEME_ID
 from core.profile_tree import (
     RootNode,
     apply_flat_to_tree,
@@ -159,6 +160,8 @@ class User(Base):
         self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
         # Résumé page limit
         self.resume_max_pages = _normalize_max_pages(raw.get("resume_max_pages"))
+        # Résumé theme — see generator.themes.DEFAULT_THEME_ID
+        self.resume_theme: str = raw.get("resume_theme") or DEFAULT_THEME_ID
         return migrated_tree
 
     def _to_dict(self) -> dict:
@@ -190,6 +193,7 @@ class User(Base):
         d["cover_refine_max_turns"] = self.cover_refine_max_turns
         d["cover_refine_pass_score"] = self.cover_refine_pass_score
         d["resume_max_pages"] = self.resume_max_pages
+        d["resume_theme"] = self.resume_theme
         apply_flat_to_tree(self.profile_tree, d)
         d["profile_tree"] = self.profile_tree.model_dump(mode="json")
         return d
