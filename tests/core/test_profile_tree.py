@@ -654,6 +654,16 @@ def test_tree_to_legacy_all_visible_unchanged():
     assert [r["company"] for r in out["work_history"]] == ["Acme"]
 
 
+def test_field_output_format_defaults_empty_and_round_trips():
+    from core.profile_tree import FieldNode
+    f = FieldNode(name="Summary", key="summary", kind="markdown")
+    assert f.output_format == ""
+    f2 = FieldNode(name="Summary", key="summary", kind="bullets", output_format="bullets")
+    dumped = f2.model_dump(mode="json")
+    assert dumped["output_format"] == "bullets"
+    assert FieldNode.model_validate(dumped).output_format == "bullets"
+
+
 class _StubDB:
     def query(self, *a, **k):
         return self

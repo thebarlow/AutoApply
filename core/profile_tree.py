@@ -33,6 +33,7 @@ class FieldNode(BaseModel):
     value: Union[str, list[str]] = ""
     llm_output: bool = False
     llm_instructions: str = ""
+    output_format: str = ""
     llm_input: bool = False
     regen_lock: bool = False
     min: Optional[int] = None
