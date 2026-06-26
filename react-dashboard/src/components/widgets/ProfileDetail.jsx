@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
-import { getProfile, updateProfile, resetProfile, getPrompt, putPrompt, resetPrompt } from '../../api'
+import { getProfile, updateProfile, resetProfile, getPrompt, putPrompt, resetPrompt, getThemes } from '../../api'
 import HelpIcon from '../shared/HelpIcon'
 import ProfileTreeEditor from './profile-tree/ProfileTreeEditor'
 
@@ -846,23 +846,47 @@ export function ResumePageLimit({ value, onSave }) {
   }
 
   return (
-    <AccordionSection id="document" title="Document">
-      <div className="flex items-center gap-3">
-        <button
-          type="button" role="switch" aria-checked={limited}
-          aria-label="Limit résumé length" onClick={toggle}
-          className={`px-2 py-0.5 rounded border text-xs transition-colors ${
-            limited ? 'text-emerald-400 border-emerald-500/40' : 'text-space-dim border-space-border'
-          }`}
-        >{limited ? '✓ On' : '✗ Off'}</button>
-        <label className="text-xs text-space-dim">Max pages</label>
-        <input
-          type="text" inputMode="numeric" aria-label="Max pages"
-          className="w-12 bg-white/5 border border-space-border rounded px-2 py-1 text-xs text-space-text disabled:opacity-40"
-          value={pages} onChange={onPages} disabled={!limited}
-        />
-      </div>
-    </AccordionSection>
+    <div className="flex items-center gap-3">
+      <button
+        type="button" role="switch" aria-checked={limited}
+        aria-label="Limit résumé length" onClick={toggle}
+        className={`px-2 py-0.5 rounded border text-xs transition-colors ${
+          limited ? 'text-emerald-400 border-emerald-500/40' : 'text-space-dim border-space-border'
+        }`}
+      >{limited ? '✓ On' : '✗ Off'}</button>
+      <label className="text-xs text-space-dim">Max pages</label>
+      <input
+        type="text" inputMode="numeric" aria-label="Max pages"
+        className="w-12 bg-white/5 border border-space-border rounded px-2 py-1 text-xs text-space-text disabled:opacity-40"
+        value={pages} onChange={onPages} disabled={!limited}
+      />
+    </div>
+  )
+}
+
+// Per-profile résumé theme. `value` is the stored theme id (default 'classic').
+export function ResumeTheme({ value, onSave }) {
+  const [themes, setThemes] = useState([])
+  useEffect(() => {
+    let alive = true
+    const p = getThemes()
+    if (p && typeof p.then === 'function') {
+      p.then(t => { if (alive) setThemes(Array.isArray(t) ? t : []) }).catch(() => {})
+    }
+    return () => { alive = false }
+  }, [])
+  const current = value || 'classic'
+  return (
+    <div className="flex items-center gap-3">
+      <label htmlFor="resume-theme" className="text-xs text-space-dim">Theme</label>
+      <select
+        id="resume-theme" aria-label="Résumé theme" value={current}
+        onChange={(e) => onSave({ resume_theme: e.target.value })}
+        className="bg-white text-black border border-space-border rounded px-2 py-1 text-xs"
+      >
+        {themes.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+      </select>
+    </div>
   )
 }
 
@@ -944,7 +968,12 @@ export default function ProfileDetailView({ profileId, onDelete }) {
     <>
       <div className="flex flex-col gap-3">
         <ProfileTreeEditor profileId={profileId} />
-        <ResumePageLimit value={d.resume_max_pages} onSave={handleSave} />
+        <AccordionSection id="document" title="Document">
+          <div className="flex flex-col gap-2">
+            <ResumePageLimit value={d.resume_max_pages} onSave={handleSave} />
+            <ResumeTheme value={d.resume_theme} onSave={handleSave} />
+          </div>
+        </AccordionSection>
         <PromptsSection
           data={d}
           profileId={profileId}
