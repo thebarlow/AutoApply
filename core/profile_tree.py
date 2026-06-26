@@ -322,6 +322,63 @@ def backfill_section_prompts(root: RootNode) -> bool:
     return changed
 
 
+# Default output formats by (section role, field key) for the preset prose fields.
+_OUTPUT_FORMAT_DEFAULTS: dict[tuple[str, str], str] = {
+    ("experience", "summary"): "bullets",
+    ("summary", "hero"): "paragraph",
+    ("projects", "description"): "paragraph",
+}
+
+
+def _split_bullets(text: str) -> list[str]:
+    """Split a markdown bullet string into a clean list of bullet bodies."""
+    return [
+        ln.lstrip("-*• \t").strip()
+        for ln in str(text).splitlines()
+        if ln.strip()
+    ]
+
+
+def backfill_output_formats(root: RootNode) -> bool:
+    """Fill default output formats on the known prose fields, in place.
+
+    For each ``(section role, field key)`` in ``_OUTPUT_FORMAT_DEFAULTS`` whose
+    field has no ``output_format`` yet: set the default format and, for a
+    ``bullets`` default, align ``kind`` to ``bullets`` and split a stored string
+    value into a list. Idempotent; never overwrites a user-set format. Returns
+    True if anything changed.
+    """
+    from core.output_formats import get_format
+
+    changed = False
+    for section in root.children:
+        role = section.role or ""
+        child = section.children[0] if section.children else None
+        if child is None:
+            continue
+        if child.type == "list":
+            field_lists = [g.children for g in (list(child.children) + [child.item_template])]
+        elif child.type == "group":
+            field_lists = [child.children]
+        else:  # bare field
+            field_lists = [[child]]
+        for fields in field_lists:
+            for f in fields:
+                fmt_id = _OUTPUT_FORMAT_DEFAULTS.get((role, f.key))
+                if not fmt_id or getattr(f, "output_format", ""):
+                    continue
+                fmt = get_format(fmt_id)
+                if fmt is None:
+                    continue
+                f.output_format = fmt_id
+                if fmt.kind == "bullets" and f.kind != "bullets":
+                    if isinstance(f.value, str):
+                        f.value = _split_bullets(f.value)
+                    f.kind = "bullets"
+                changed = True
+    return changed
+
+
 def merge_flat_into_stored(existing_data: dict, new_flat: dict) -> dict:
     """Return the dict to persist: ``new_flat`` plus a tree with flat overlaid.
 
