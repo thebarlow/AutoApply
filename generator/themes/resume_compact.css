@@ -1,0 +1,187 @@
+/* Compact theme — tighter margins, smaller base font, reduced spacing throughout
+   to pack more content per page. Typography stays serif like classic. All
+   selector families from classic (resume.css) are preserved verbatim or
+   diverged per density notes below. ATS-safe: selectable text only, single
+   column, system font stacks only. */
+
+@page {
+  /* DIVERGE: tighter page margins for more usable area */
+  size: letter;
+  margin: 0.35in 0.45in 0.35in 0.45in;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  /* DIVERGE: smaller base font for density */
+  font-size: 9pt;
+  /* DIVERGE: tighter line-height */
+  line-height: 1.2;
+  color: #111;
+}
+
+/* ── Legacy header (icon-grid render path) ── */
+.resume-header {
+  /* DIVERGE: less bottom margin */
+  margin-bottom: 0.06in;
+}
+
+.resume-header h1 {
+  /* DIVERGE: slightly smaller name */
+  font-size: 17pt;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.04in 0;
+}
+
+/* 5-track grid: value / leader / value / leader / value. */
+.contact-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr auto;
+  column-gap: 0.1in;
+  /* DIVERGE: tighter row gap */
+  row-gap: 0.03in;
+  /* DIVERGE: smaller contact font */
+  font-size: 9pt;
+  color: #222;
+}
+
+.contact-val {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  color: #222;
+  text-decoration: none;
+}
+
+.contact-icon {
+  width: 0.95em;
+  height: 0.95em;
+  flex: none;
+  margin-right: 0.05in;
+  color: #555;
+}
+
+.leader {
+  align-self: end;
+  border-bottom: 1.5px dotted #bbb;
+  transform: translateY(-0.05in);
+}
+
+.contact-item a:hover {
+  text-decoration: underline;
+}
+
+/* Projects as prose paragraphs */
+.resume h2#projects ~ ul,
+.resume h2#projects + ul {
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.resume h2#projects ~ ul li,
+.resume h2#projects + ul li {
+  /* DIVERGE: less bottom margin */
+  margin-bottom: 0.02in;
+}
+
+/* ── Section headings ──
+   DIVERGE: tighter margins above/below, same serif family as classic. */
+.resume h2,
+.injected-section h2 {
+  font-family: "Georgia", "Times New Roman", serif;
+  /* DIVERGE: slightly smaller heading */
+  font-size: 9.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  border-bottom: 1px solid #111;
+  padding-bottom: 1px;
+  /* DIVERGE: tighter top and bottom margins */
+  margin: 0.08in 0 0.03in 0;
+}
+
+.resume h3 {
+  font-size: 9pt;
+  font-weight: 700;
+  /* DIVERGE: tighter margins */
+  margin: 0.04in 0 0.01in 0;
+}
+
+.resume p {
+  /* DIVERGE: tighter paragraph spacing */
+  margin: 0.015in 0;
+}
+
+.resume ul {
+  /* DIVERGE: tighter list spacing, slightly less indent */
+  margin: 0.01in 0 0.03in 0.18in;
+  padding: 0;
+}
+
+.resume li {
+  /* DIVERGE: no extra vertical gap between bullets */
+  margin: 0 0;
+}
+
+.resume strong { font-weight: 700; }
+.resume em { font-style: italic; color: #444; }
+
+/* ── Injected education ── */
+.injected-section {
+  margin: 0;
+}
+
+.edu-entry {
+  /* DIVERGE: tighter between entries */
+  margin-bottom: 0.04in;
+}
+
+.edu-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.edu-left {
+  font-weight: 600;
+  /* DIVERGE: inherit smaller base */
+  font-size: 9pt;
+}
+
+.edu-graduated {
+  /* DIVERGE: smaller date label */
+  font-size: 8pt;
+  color: #444;
+  white-space: nowrap;
+  margin-left: 0.15in;
+}
+
+/* ── tree-v1: body contact header ──
+   Name is a direct-child <h1> of .resume.
+   Contact line is the <p> immediately after it. */
+.resume > h1 {
+  text-align: center;
+  /* DIVERGE: slightly smaller name */
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  /* DIVERGE: tighter bottom margin */
+  margin: 0 0 0.08rem 0;
+}
+
+.resume > h1 + p {
+  text-align: center;
+  /* DIVERGE: slightly smaller contact line */
+  font-size: 0.85rem;
+  color: #222;
+  /* DIVERGE: tighter bottom margin */
+  margin: 0 0 0.35rem 0;
+}
+
+.resume > h1 + p a {
+  text-decoration: none;
+  color: #222;
+}
