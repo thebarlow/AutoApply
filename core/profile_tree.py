@@ -49,7 +49,7 @@ class FieldNode(BaseModel):
             return "" if v is None else str(v)
         # bullets, taglist
         if isinstance(v, str):
-            return [v] if v else []
+            return [ln.lstrip("-*• \t").strip() for ln in v.splitlines() if ln.strip()]
         if v is None:
             return []
         return [str(x) for x in v]
@@ -480,7 +480,7 @@ def _coerce_field_value(kind: str, raw: object) -> "str | list[str]":
             return " ".join(str(x) for x in raw)
         return "" if raw is None else str(raw)
     if isinstance(raw, str):
-        return [raw] if raw else []
+        return _split_bullets(raw) if raw.strip() else []
     if raw is None:
         return []
     return [str(x) for x in raw]
