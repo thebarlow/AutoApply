@@ -234,6 +234,7 @@ class Job(Base):
     resume_path = Column(String)
     cover_path = Column(String)
     resume_generated_at = Column(String)
+    resume_rendered_theme = Column(String)  # theme id of the last résumé render; NULL = classic
     resume_docx_path = Column(String)
     cover_generated_at = Column(String)
     # ── ATS gate — last report for the current résumé render ────────────────────
