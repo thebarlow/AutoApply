@@ -30,6 +30,7 @@ from core.section_generator import generate_resume_by_section
 from core.document_tree import build_resume_document_tree
 from core.utils import render_pdf
 from core.paths import OUTPUTS_DIR as _OUTPUTS_DIR
+from generator.themes import resolve_theme, Theme
 
 _MAX_PAGES_UNSET = object()  # "resolve the page limit from the job's profile"
 
@@ -1022,6 +1023,13 @@ class Job(Base):
         user = User.load(db, profile_id=self.profile_id)
         return user.resume_max_pages
 
+    def _resolve_resume_theme(self, db: Session) -> Theme:
+        """Résumé theme for this job's owning profile (falls back to classic)."""
+        from core.user import User
+
+        user = User.load(db, profile_id=self.profile_id)
+        return resolve_theme(user.resume_theme)
+
     def generate_resume_pdf(self, template_path: Path, db: Session, max_pages=_MAX_PAGES_UNSET) -> None:
         """Render resume PDF from existing markdown and update resume_path.
 
@@ -1043,10 +1051,13 @@ class Job(Base):
         if not md_path.exists():
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
+        theme = self._resolve_resume_theme(db)
+        css_path = template_path.parent / theme.css_filename
         meta = self._render_meta("resume", db)
-        render_pdf(md_path, pdf_path, template_path, max_pages=max_pages, meta=meta)
+        render_pdf(md_path, pdf_path, template_path, max_pages=max_pages, meta=meta, css_path=css_path)
         self.resume_path = str(pdf_path)
         self.resume_generated_at = datetime.now(timezone.utc).isoformat()
+        self.resume_rendered_theme = theme.id
         db.commit()
 
     def run_ats_check(self, db: Any, user: Any, client: Any, model: str) -> "AtsReport":
