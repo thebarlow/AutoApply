@@ -119,10 +119,12 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
       (document `section_order` vs LLM-parsed `sections`, suppressed on empty parse). `section_order`
       now feeds the roundtrip (consumer moved from mechanical → semantic); adapter docstring updated.
       Both tree-v1 and legacy `ResumeDocument` rows lose the section hard-block identically (intended).
-    - [ ] **4D — DocumentModal generic rebuild + feedback-on-tree.** Rebuild
-      `react-dashboard/src/components/widgets/document/` to render/edit the document tree
-      generically (reuse `profile-tree/` patterns); retarget `POST /{doc_type}/feedback` refine
-      to tree nodes. Largest, mostly frontend. Cover editing unchanged.
+    - [x] **4D — DocumentModal generic rebuild + feedback-on-tree** (merged to local main
+      `06219ff`, 2026-06-24, not pushed). New generic `document/DocumentTree.jsx` + `docTreeOps.js`;
+      retired legacy `InteractiveResume`/`ItemEditor`/`ItemPopover`/`ResumeSection`/`items.jsx`;
+      `DocumentModal` rewired to the tree; `PUT /document` tree-v1 branch; node-anchored feedback
+      routed through 4B-2 selective per-section regen for tree-v1 résumés. Bonus document-editor
+      layout + page-limit folded into the same merge. Cover editing unchanged. **#4 complete.**
 - [ ] **Profile Schema Engine #6 — User-formatted PDF + live preview (NEW; sequenced #4 → #6 → #5).**
   Live in-dashboard PDF render + a constrained, user-customizable template system: the user
   controls how each section/item renders (templates), with ATS-safety enforced by the templates
