@@ -267,7 +267,8 @@ def test_legacy_to_tree_populates_experience_item():
     exp = next(s for s in root.children if s.role == "experience")
     item = exp.children[0].children[0]
     vals = {f.key: f.value for f in item.children}
-    assert vals["company"] == "Acme" and vals["summary"] == "Built."
+    # Experience summary now defaults to a bullets output format → list[str].
+    assert vals["company"] == "Acme" and vals["summary"] == ["Built."]
 
 
 def test_tree_to_legacy_round_trips_fields():

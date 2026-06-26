@@ -632,7 +632,7 @@ def tree_to_legacy(root: "RootNode") -> dict:
             "title": r.get("title", ""),
             "start": r.get("start", ""),
             "end": r.get("end", ""),
-            "summary": r.get("summary", ""),
+            "summary": _legacy_str(r.get("summary", "")),
         }
         for r in _rows("experience")
     ]
@@ -656,6 +656,18 @@ def tree_to_legacy(root: "RootNode") -> dict:
         for r in _rows("projects")
     ]
     return out
+
+
+def _legacy_str(value: object) -> str:
+    """Coerce a field value to the legacy flat form's string contract.
+
+    Tree-v1 may store a prose body as a bullets ``list[str]`` (output formats),
+    but the derived legacy surface (consumed by the untouched legacy path) expects
+    a plain string. Joins list bullets with newlines; passes strings through.
+    """
+    if isinstance(value, list):
+        return "\n".join(str(v) for v in value)
+    return "" if value is None else str(value)
 
 
 def _field_value_str(field: FieldNode) -> str:
