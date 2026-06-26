@@ -228,6 +228,7 @@ def legacy_to_tree(data: dict) -> "RootNode":
                     kind=t.kind,
                     order=t.order,
                     llm_output=t.llm_output,
+                    output_format=getattr(t, "output_format", ""),
                     value=vals.get(t.key, ""),
                 )
                 for t in template.children
