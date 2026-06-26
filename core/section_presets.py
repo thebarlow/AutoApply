@@ -69,7 +69,8 @@ def summary_section() -> SectionNode:
         prompt=SECTION_PROMPT_DEFAULTS["summary"],
         children=[
             FieldNode(
-                name="Summary", key="hero", kind="markdown", order=0, llm_output=True
+                name="Summary", key="hero", kind="markdown", order=0,
+                llm_output=True, output_format="paragraph",
             )
         ],
     )
@@ -85,7 +86,8 @@ def experience_template() -> GroupNode:
             FieldNode(name="Start", key="start", kind="text", order=2),
             FieldNode(name="End", key="end", kind="text", order=3),
             FieldNode(
-                name="Summary", key="summary", kind="markdown", order=4, llm_output=True
+                name="Summary", key="summary", kind="bullets", order=4,
+                llm_output=True, output_format="bullets",
             ),
         ],
     )
@@ -117,6 +119,7 @@ def projects_template() -> GroupNode:
                 kind="markdown",
                 order=1,
                 llm_output=True,
+                output_format="paragraph",
             ),
             FieldNode(name="URL", key="url", kind="text", order=2),
             FieldNode(name="Technologies", key="technologies", kind="taglist", order=3),

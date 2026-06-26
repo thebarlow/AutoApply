@@ -267,7 +267,8 @@ def test_legacy_to_tree_populates_experience_item():
     exp = next(s for s in root.children if s.role == "experience")
     item = exp.children[0].children[0]
     vals = {f.key: f.value for f in item.children}
-    assert vals["company"] == "Acme" and vals["summary"] == "Built."
+    # Experience summary now defaults to a bullets output format → list[str].
+    assert vals["company"] == "Acme" and vals["summary"] == ["Built."]
 
 
 def test_tree_to_legacy_round_trips_fields():
@@ -652,6 +653,16 @@ def test_tree_to_legacy_all_visible_unchanged():
     assert out["first_name"] == "A"
     assert out["skills"] == ["Python"]
     assert [r["company"] for r in out["work_history"]] == ["Acme"]
+
+
+def test_field_output_format_defaults_empty_and_round_trips():
+    from core.profile_tree import FieldNode
+    f = FieldNode(name="Summary", key="summary", kind="markdown")
+    assert f.output_format == ""
+    f2 = FieldNode(name="Summary", key="summary", kind="bullets", output_format="bullets")
+    dumped = f2.model_dump(mode="json")
+    assert dumped["output_format"] == "bullets"
+    assert FieldNode.model_validate(dumped).output_format == "bullets"
 
 
 class _StubDB:

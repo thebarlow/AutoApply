@@ -150,6 +150,14 @@ def _list_rows(section: SectionNode) -> list[dict[str, object]]:
     ]
 
 
+def _render_body(value: object) -> str:
+    """Render an authored body value: a list → ``- `` bullet lines, else prose."""
+    if isinstance(value, list):
+        items = [str(x).strip() for x in value if str(x).strip()]
+        return "\n".join(f"- {x}" for x in items)
+    return str(value).strip()
+
+
 def _experience_section_md(section: SectionNode) -> str:
     rows = _list_rows(section)
     if not rows:
@@ -163,7 +171,7 @@ def _experience_section_md(section: SectionNode) -> str:
         if dates:
             heading += f" ({dates})"
         block = heading
-        summary = str(r.get("summary", "")).strip()
+        summary = _render_body(r.get("summary", ""))
         if summary:
             block += "\n\n" + summary
         parts.append(block)

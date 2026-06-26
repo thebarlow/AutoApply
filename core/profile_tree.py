@@ -33,6 +33,7 @@ class FieldNode(BaseModel):
     value: Union[str, list[str]] = ""
     llm_output: bool = False
     llm_instructions: str = ""
+    output_format: str = ""
     llm_input: bool = False
     regen_lock: bool = False
     min: Optional[int] = None
@@ -48,7 +49,7 @@ class FieldNode(BaseModel):
             return "" if v is None else str(v)
         # bullets, taglist
         if isinstance(v, str):
-            return [v] if v else []
+            return [ln.lstrip("-*• \t").strip() for ln in v.splitlines() if ln.strip()]
         if v is None:
             return []
         return [str(x) for x in v]
@@ -227,6 +228,7 @@ def legacy_to_tree(data: dict) -> "RootNode":
                     kind=t.kind,
                     order=t.order,
                     llm_output=t.llm_output,
+                    output_format=getattr(t, "output_format", ""),
                     value=vals.get(t.key, ""),
                 )
                 for t in template.children
@@ -317,6 +319,63 @@ def backfill_section_prompts(root: RootNode) -> bool:
         if default and not section.prompt.strip():
             section.prompt = default
             changed = True
+    return changed
+
+
+# Default output formats by (section role, field key) for the preset prose fields.
+_OUTPUT_FORMAT_DEFAULTS: dict[tuple[str, str], str] = {
+    ("experience", "summary"): "bullets",
+    ("summary", "hero"): "paragraph",
+    ("projects", "description"): "paragraph",
+}
+
+
+def _split_bullets(text: str) -> list[str]:
+    """Split a markdown bullet string into a clean list of bullet bodies."""
+    return [
+        ln.lstrip("-*• \t").strip()
+        for ln in str(text).splitlines()
+        if ln.strip()
+    ]
+
+
+def backfill_output_formats(root: RootNode) -> bool:
+    """Fill default output formats on the known prose fields, in place.
+
+    For each ``(section role, field key)`` in ``_OUTPUT_FORMAT_DEFAULTS`` whose
+    field has no ``output_format`` yet: set the default format and, for a
+    ``bullets`` default, align ``kind`` to ``bullets`` and split a stored string
+    value into a list. Idempotent; never overwrites a user-set format. Returns
+    True if anything changed.
+    """
+    from core.output_formats import get_format
+
+    changed = False
+    for section in root.children:
+        role = section.role or ""
+        child = section.children[0] if section.children else None
+        if child is None:
+            continue
+        if child.type == "list":
+            field_lists = [g.children for g in (list(child.children) + [child.item_template])]
+        elif child.type == "group":
+            field_lists = [child.children]
+        else:  # bare field
+            field_lists = [[child]]
+        for fields in field_lists:
+            for f in fields:
+                fmt_id = _OUTPUT_FORMAT_DEFAULTS.get((role, f.key))
+                if not fmt_id or getattr(f, "output_format", ""):
+                    continue
+                fmt = get_format(fmt_id)
+                if fmt is None:
+                    continue
+                f.output_format = fmt_id
+                if fmt.kind == "bullets" and f.kind != "bullets":
+                    if isinstance(f.value, str):
+                        f.value = _split_bullets(f.value)
+                    f.kind = "bullets"
+                changed = True
     return changed
 
 
@@ -421,7 +480,7 @@ def _coerce_field_value(kind: str, raw: object) -> "str | list[str]":
             return " ".join(str(x) for x in raw)
         return "" if raw is None else str(raw)
     if isinstance(raw, str):
-        return [raw] if raw else []
+        return _split_bullets(raw) if raw.strip() else []
     if raw is None:
         return []
     return [str(x) for x in raw]
@@ -573,7 +632,7 @@ def tree_to_legacy(root: "RootNode") -> dict:
             "title": r.get("title", ""),
             "start": r.get("start", ""),
             "end": r.get("end", ""),
-            "summary": r.get("summary", ""),
+            "summary": _legacy_str(r.get("summary", "")),
         }
         for r in _rows("experience")
     ]
@@ -597,6 +656,18 @@ def tree_to_legacy(root: "RootNode") -> dict:
         for r in _rows("projects")
     ]
     return out
+
+
+def _legacy_str(value: object) -> str:
+    """Coerce a field value to the legacy flat form's string contract.
+
+    Tree-v1 may store a prose body as a bullets ``list[str]`` (output formats),
+    but the derived legacy surface (consumed by the untouched legacy path) expects
+    a plain string. Joins list bullets with newlines; passes strings through.
+    """
+    if isinstance(value, list):
+        return "\n".join(str(v) for v in value)
+    return "" if value is None else str(value)
 
 
 def _field_value_str(field: FieldNode) -> str:
