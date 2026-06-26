@@ -417,7 +417,10 @@ def serve_resume(job_key: str, db: Session = Depends(get_db), profile_id: int = 
     stamped = job.resume_rendered_theme or "classic"
     md_path = _OUTPUTS_DIR / f"{job_key}_resume.md"
     if current != stamped and md_path.exists():
-        job.generate_resume_pdf(_RESUME_TEMPLATE, db)
+        try:
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
+        except Exception:
+            pass  # best-effort re-theme; serve the existing PDF rather than 500
 
     path = Path(job.resume_path)
     if not path.exists():

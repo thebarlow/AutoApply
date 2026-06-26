@@ -69,6 +69,32 @@ def test_no_rerender_when_theme_same(monkeypatch, tmp_path):
     job.generate_resume_pdf.assert_not_called()
 
 
+def test_rerender_failure_falls_back_to_existing_pdf(monkeypatch, tmp_path):
+    """When themes differ + markdown exists but generate_resume_pdf raises,
+    serve_resume still returns a FileResponse — no exception propagates."""
+    pdf = tmp_path / "r.pdf"
+    pdf.write_bytes(b"%PDF")
+    md = tmp_path / "k_resume.md"
+    md.write_text("# Resume")
+
+    job = _job("classic", pdf)
+    job.generate_resume_pdf.side_effect = RuntimeError("page overflow")
+    monkeypatch.setattr(jobs_router.Job, "get", staticmethod(lambda *a, **k: job))
+    monkeypatch.setattr(
+        jobs_router.User,
+        "load",
+        staticmethod(lambda db, profile_id=None: _user("modern")),
+    )
+    monkeypatch.setattr(jobs_router, "_OUTPUTS_DIR", tmp_path)
+
+    from fastapi.responses import FileResponse
+
+    result = jobs_router.serve_resume(job_key="k", db=None, profile_id=1)
+
+    assert isinstance(result, FileResponse)
+    job.generate_resume_pdf.assert_called_once()
+
+
 def test_null_stamp_classic_profile_no_rerender(monkeypatch, tmp_path):
     """NULL stamp treated as 'classic'; classic profile → no re-render."""
     pdf = tmp_path / "r.pdf"

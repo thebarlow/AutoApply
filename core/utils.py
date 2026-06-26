@@ -73,8 +73,9 @@ def render_pdf(
 
     The template is a Jinja2 HTML file with two slots: ``{{ css }}`` (inlined
     into a ``<style>`` block) and ``{{ content_html }}`` (the pandoc HTML
-    fragment). The paired CSS file is loaded from ``<template_stem>.css`` in
-    the same directory as the template.
+    fragment). By default the paired CSS file is derived from the template stem
+    (e.g. ``resume.css`` for ``resume_template.html``); an explicit ``css_path``
+    argument overrides this stem-derived default.
 
     Args:
         md_path: Path to the source markdown file.
