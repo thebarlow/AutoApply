@@ -3,7 +3,7 @@ import { getProfileTree, putProfileTree } from '../../../api'
 import { SectionView } from './TreeNode'
 import {
   updateNode, removeNode, moveNode, addField, addListItem, addSection, reorderSiblings,
-  setLlmInstructions, toggleLlmWritten, deepEqual, toggleLocked, setNodePrompt,
+  setLlmInstructions, toggleLlmWritten, deepEqual, toggleLocked, setNodePrompt, setOutputFormat,
 } from './treeOps'
 import { SectionGallery } from './SectionGallery'
 import { SECTION_TEMPLATES, buildSectionFromTemplate } from './sectionCatalog'
@@ -52,6 +52,8 @@ export default function ProfileTreeEditor({ profileId }) {
     toggleWritten: useCallback((id) => setTree((t) => toggleLlmWritten(t, id)), []),
     toggleLocked: useCallback((id) => setTree((t) => toggleLocked(t, id)), []),
     setPrompt: useCallback((id, text) => setTree((t) => setNodePrompt(t, id, text)), []),
+    setOutputFormat: useCallback(
+      (id, formatId, kind) => setTree((t) => setOutputFormat(t, id, formatId, kind)), []),
   }
 
   const sensors = useSensors(

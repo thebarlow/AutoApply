@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getOutputFormats } from '../../../api'
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
@@ -15,6 +16,19 @@ import { PromptEditorModal } from './PromptEditorModal'
 const rowWrap = 'flex flex-col gap-1'
 const headerRow = 'flex items-center justify-between gap-2'
 
+// Module-level cache so every field doesn't refetch the small registry.
+let _formatsCache = null
+function useOutputFormats() {
+  const [formats, setFormats] = useState(_formatsCache || [])
+  useEffect(() => {
+    if (_formatsCache) return
+    const p = getOutputFormats()
+    if (!p || typeof p.then !== 'function') return
+    p.then((f) => { _formatsCache = f; setFormats(f) }).catch(() => {})
+  }, [])
+  return formats
+}
+
 // A single field: label (renamable only on custom groups) + eye (render) +
 // lock (LLM may write) + widget. When the LLM may write the field, a 💬 control
 // opens the prompt modal (bound to llm_instructions) — same idiom as section/item
@@ -23,6 +37,8 @@ const headerRow = 'flex items-center justify-between gap-2'
 function FieldView({ field, fieldsEditable, ops, tree }) {
   const written = !!field.llm_output
   const [promptOpen, setPromptOpen] = useState(false)
+  const formats = useOutputFormats()
+  const isProse = field.kind === 'markdown' || field.kind === 'bullets'
   return (
     <div className={rowWrap}>
       <div className={headerRow}>
@@ -30,9 +46,25 @@ function FieldView({ field, fieldsEditable, ops, tree }) {
           name={field.name} editable={fieldsEditable}
           onRename={(n) => ops.rename(field.id, n)}
         />
-        <span className="inline-flex items-center">
+        <span className="inline-flex items-center gap-1">
           <LlmWriteToggle written={written} onToggle={() => ops.toggleWritten(field.id)} />
           <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} label="in output" />
+          {written && isProse && formats.length > 0 && (
+            <select
+              aria-label="Output format"
+              className="bg-white/5 border border-space-border rounded text-xs text-space-text px-1 py-0.5"
+              value={field.output_format || ''}
+              onChange={(e) => {
+                const fmt = formats.find((x) => x.id === e.target.value)
+                if (fmt) ops.setOutputFormat(field.id, fmt.id, fmt.kind)
+              }}
+            >
+              {!field.output_format && <option value="">Format…</option>}
+              {formats.map((f) => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
+            </select>
+          )}
           {written && (
             <button
               type="button" aria-label="Edit field prompt" title="Field prompt"

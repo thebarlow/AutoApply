@@ -196,6 +196,11 @@ export function setLlmInstructions(tree, fieldId, text) {
   return updateNode(tree, fieldId, (f) => ({ ...f, llm_instructions: text }))
 }
 
+// Set a field's output format and align its storage kind to that format.
+export function setOutputFormat(tree, fieldId, formatId, kind) {
+  return updateNode(tree, fieldId, (f) => ({ ...f, output_format: formatId, kind }))
+}
+
 // Flip the "pin current value" lock.
 export function toggleRegenLock(tree, fieldId) {
   return updateNode(tree, fieldId, (f) => ({ ...f, regen_lock: !f.regen_lock }))
