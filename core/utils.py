@@ -67,13 +67,15 @@ def render_pdf(
     template_path: Path,
     max_pages: int | None = None,
     meta: dict | None = None,
+    css_path: Path | None = None,
 ) -> None:
     """Render a Markdown file to PDF via pandoc → Jinja2 HTML → Chromium.
 
     The template is a Jinja2 HTML file with two slots: ``{{ css }}`` (inlined
     into a ``<style>`` block) and ``{{ content_html }}`` (the pandoc HTML
-    fragment). The paired CSS file is loaded from ``<template_stem>.css`` in
-    the same directory as the template.
+    fragment). By default the paired CSS file is derived from the template stem
+    (e.g. ``resume.css`` for ``resume_template.html``); an explicit ``css_path``
+    argument overrides this stem-derived default.
 
     Args:
         md_path: Path to the source markdown file.
@@ -83,6 +85,9 @@ def render_pdf(
             until the output fits within this page count; raise ``RuntimeError``
             only if it still overflows at the minimum scale. ``None`` disables
             both the limit and auto-shrink.
+        css_path: Optional explicit CSS file to inline. When ``None``, the CSS
+            file is derived from the template stem (e.g. ``resume.css`` for
+            ``resume_template.html``).
 
     Raises:
         subprocess.CalledProcessError: If pandoc exits non-zero.
@@ -102,9 +107,11 @@ def render_pdf(
         encoding="utf-8",
     ).stdout
 
-    # CSS file is named after the doc type (e.g. resume.css for resume_template.html)
-    css_stem = template_path.stem.replace("_template", "")
-    css_path = template_path.parent / f"{css_stem}.css"
+    # CSS: explicit override wins; otherwise derive from the template stem
+    # (e.g. resume.css for resume_template.html).
+    if css_path is None:
+        css_stem = template_path.stem.replace("_template", "")
+        css_path = template_path.parent / f"{css_stem}.css"
     css = css_path.read_text(encoding="utf-8") if css_path.exists() else ""
 
     if meta is None:

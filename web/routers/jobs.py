@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from core.job import Job, JobState
+from generator.themes import resolve_theme
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
 from core.schemas import ResumeDocument, CoverDocument
@@ -409,6 +410,20 @@ def serve_resume(job_key: str, db: Session = Depends(get_db), profile_id: int = 
         raise HTTPException(status_code=404, detail="Job not found")
     if not job.resume_path:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Re-render on open if the profile's theme changed since the last render.
+    # Best-effort: any failure (profile lookup, render) falls back to serving
+    # the existing cached PDF rather than turning a download into a 500.
+    try:
+        user = User.load(db, profile_id=profile_id)
+        current = resolve_theme(user.resume_theme).id
+        stamped = job.resume_rendered_theme or "classic"
+        md_path = _OUTPUTS_DIR / f"{job_key}_resume.md"
+        if current != stamped and md_path.exists():
+            job.generate_resume_pdf(_RESUME_TEMPLATE, db)
+    except Exception:
+        pass
+
     path = Path(job.resume_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Resume file missing")

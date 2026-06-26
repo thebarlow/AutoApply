@@ -74,6 +74,8 @@ export const getProfileTree = (id) =>
 
 export const getOutputFormats = () => _fetch('/api/output-formats')
 
+export const getThemes = () => _fetch('/api/themes')
+
 export const putProfileTree = (id, tree) =>
   _fetch(`/api/config/profiles/${id}/tree`, {
     method: 'PUT',
