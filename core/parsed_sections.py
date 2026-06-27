@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from core.profile_tree import FieldNode, GroupNode, ListNode, RootNode, SectionNode
-from core.schemas import ExtraSection, ParseResponse
+from core.schemas import ExtraSection, ParsedEntry, ParseResponse
 
 
-def _union_labels(entries) -> list[str]:
+def _union_labels(entries: list[ParsedEntry]) -> list[str]:
     seen: list[str] = []
     for e in entries:
         for f in e.fields:
@@ -82,6 +82,7 @@ def builtin_sections_from_parse(parsed: ParseResponse) -> list[SectionNode]:
 
 
 def find_section(root: RootNode, *, name: str = "", role: str = "") -> SectionNode | None:
+    """Find a section by ``role`` (when given) or case-folded ``name``."""
     for s in root.children:
         if role and s.role == role:
             return s
@@ -91,28 +92,34 @@ def find_section(root: RootNode, *, name: str = "", role: str = "") -> SectionNo
 
 
 def add_section(root: RootNode, section: SectionNode) -> None:
+    """Append ``section`` to the root, stamping it with the next order."""
     section.order = len(root.children)
     root.children.append(section)
 
 
 def replace_section(existing: SectionNode, incoming: SectionNode) -> None:
+    """Swap ``existing``'s children for ``incoming``'s, preserving id/name/role."""
     existing.children = incoming.children
 
 
 def _single_field(section: SectionNode, kind: str) -> FieldNode | None:
-    if len(section.children) == 1 and getattr(section.children[0], "type", "") == "field" \
-            and section.children[0].kind == kind:
-        return section.children[0]
+    child = section.children[0] if len(section.children) == 1 else None
+    if isinstance(child, FieldNode) and child.kind == kind:
+        return child
     return None
 
 
 def _list_node(section: SectionNode) -> ListNode | None:
-    if section.children and getattr(section.children[0], "type", "") == "list":
-        return section.children[0]
-    return None
+    child = section.children[0] if section.children else None
+    return child if isinstance(child, ListNode) else None
 
 
 def merge_section(existing: SectionNode, incoming: SectionNode) -> None:
+    """Merge ``incoming`` into ``existing`` for mergeable shapes.
+
+    list → append records; taglist → case-insensitive union; bullets → append.
+    Raises ValueError for any other (non-mergeable) shape.
+    """
     el, il = _list_node(existing), _list_node(incoming)
     if el is not None and il is not None:
         el.children.extend(il.children)

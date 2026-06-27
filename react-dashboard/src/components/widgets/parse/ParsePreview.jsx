@@ -1,13 +1,29 @@
 import { useState } from 'react'
 
+// Render the backend's preview object as a short human summary.
+function formatPreview(preview) {
+  if (!preview || typeof preview !== 'object') return ''
+  if (typeof preview.count === 'number') return `${preview.count} entries`
+  if (Array.isArray(preview.items)) return preview.items.join(', ')
+  if (Array.isArray(preview.fields)) return preview.fields.join(', ')
+  if (typeof preview.chars === 'number') return `${preview.chars} characters`
+  return ''
+}
+
 export default function ParsePreview({ proposal, onApply, onCancel, applying }) {
   const sections = proposal.sections
 
   const [actions, setActions] = useState(() => sections.map((s) => s.default_action))
   const [names, setNames] = useState(() => sections.map((s) => s.name))
 
-  const builtins = sections.filter((s) => s.origin === 'builtin')
-  const novels = sections.filter((s) => s.origin === 'novel')
+  // Keep the original index alongside each row so filtered subsets map back to
+  // the flat actions/names state without an O(n²) indexOf or name-based key.
+  const builtins = sections
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.origin === 'builtin')
+  const novels = sections
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.origin === 'novel')
 
   const setAction = (i, val) =>
     setActions((prev) => prev.map((a, idx) => (idx === i ? val : a)))
@@ -32,10 +48,9 @@ export default function ParsePreview({ proposal, onApply, onCancel, applying }) 
       <div>
         <h3 className="text-sm font-semibold mb-2">Standard sections</h3>
         <div className="flex flex-col gap-2">
-          {builtins.map((s) => {
-            const i = sections.indexOf(s)
+          {builtins.map(({ s, i }) => {
             return (
-              <div key={s.name} className="flex items-center gap-3">
+              <div key={i} className="flex items-center gap-3">
                 <span className="text-sm flex-1">{s.name}</span>
                 <select
                   className={selectClass}
@@ -57,10 +72,10 @@ export default function ParsePreview({ proposal, onApply, onCancel, applying }) 
         <div>
           <h3 className="text-sm font-semibold mb-2">Additional sections found</h3>
           <div className="flex flex-col gap-2">
-            {novels.map((s) => {
-              const i = sections.indexOf(s)
+            {novels.map(({ s, i }) => {
+              const previewText = formatPreview(s.preview)
               return (
-                <div key={s.name} className="flex flex-col gap-1">
+                <div key={i} className="flex flex-col gap-1">
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-gray-400">{s.kind}</span>
                     <input
@@ -78,8 +93,8 @@ export default function ParsePreview({ proposal, onApply, onCancel, applying }) 
                       ))}
                     </select>
                   </div>
-                  {s.preview && (
-                    <p className="text-xs text-gray-400 pl-1">{s.preview}</p>
+                  {previewText && (
+                    <p className="text-xs text-gray-400 pl-1">{previewText}</p>
                   )}
                 </div>
               )

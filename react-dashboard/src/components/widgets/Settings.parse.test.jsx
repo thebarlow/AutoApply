@@ -86,7 +86,6 @@ vi.mock('../../api', () => ({
   updateJobFields: vi.fn().mockResolvedValue({}),
   flagJob: vi.fn().mockResolvedValue({}),
   getOwnedSkills: vi.fn().mockResolvedValue([]),
-  parseProfileResume: vi.fn().mockResolvedValue({}),
   getThemes: vi.fn().mockResolvedValue([]),
 }))
 
