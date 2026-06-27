@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -120,6 +120,35 @@ class ProjectItem(BaseModel):
     technologies: list[str] = Field(default_factory=list)
 
 
+class ParsedField(BaseModel):
+    """A label/value pair extracted from a novel résumé section."""
+
+    label: str = ""
+    value: str = ""
+
+
+class ParsedEntry(BaseModel):
+    """One record within a novel ``list`` section."""
+
+    fields: list[ParsedField] = Field(default_factory=list)
+
+
+class ExtraSection(BaseModel):
+    """A résumé section that does not map to a built-in profile field.
+
+    ``kind`` selects which payload field carries the content:
+    ``markdown`` → ``markdown``; ``bullets``/``taglist`` → ``items``;
+    ``fields`` → ``fields``; ``list`` → ``entries``.
+    """
+
+    name: str = ""
+    kind: Literal["markdown", "bullets", "taglist", "fields", "list"]
+    markdown: str = ""
+    items: list[str] = Field(default_factory=list)
+    fields: list[ParsedField] = Field(default_factory=list)
+    entries: list[ParsedEntry] = Field(default_factory=list)
+
+
 class ParseResponse(BaseModel):
     """Parsed output of the `resume_parse` prompt (a structured profile)."""
 
@@ -139,6 +168,7 @@ class ParseResponse(BaseModel):
     target_roles: list[str] = Field(default_factory=list)
     target_salary_min: float | None = None
     target_salary_max: float | None = None
+    extra_sections: list[ExtraSection] = Field(default_factory=list)
 
 
 # ── Structured résumé/cover documents (Phase 3a) ─────────────────────────────
