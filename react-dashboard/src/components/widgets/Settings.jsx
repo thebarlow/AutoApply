@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, parseProfileResume, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, proposeParse, applyParse, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills } from '../../api'
+import ParsePreview from './parse/ParsePreview'
 import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'
 import ProfileDetailView from './ProfileDetail'
@@ -1068,6 +1069,9 @@ function CreateProfile({ onBack, onCreated }) {
   const [file, setFile] = useState(null)
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState(null)
+  const [parseProposal, setParseProposal] = useState(null)
+  const [applyingParse, setApplyingParse] = useState(false)
+  const [resolvedName, setResolvedName] = useState(null)
 
   const handleStep1 = async () => {
     const errs = {}
@@ -1111,8 +1115,9 @@ function CreateProfile({ onBack, onCreated }) {
         name: current.name,
         data: { ...current.data, resume_path: path, resume_filename: filename },
       })
-      await parseProfileResume(createdId)
-      onCreated({ id: createdId, name: current.name })
+      const p = await proposeParse(createdId)
+      setResolvedName(current.name)
+      setParseProposal(p)
     } catch (e) {
       setParseError(e?.message?.includes('400') ? 'Parsing failed — check LLM config and prompt' : 'Upload/parse failed')
     } finally {
@@ -1120,7 +1125,38 @@ function CreateProfile({ onBack, onCreated }) {
     }
   }
 
+  const handleApplyParse = async (edited) => {
+    setApplyingParse(true)
+    try {
+      await applyParse(createdId, edited)
+      onCreated({ id: createdId, name: resolvedName })
+    } catch (e) {
+      setParseError(e?.message || 'Apply failed')
+    } finally {
+      setApplyingParse(false)
+    }
+  }
+
+  const handleCancelParse = () => {
+    setParseProposal(null)
+  }
+
   const handleSkip = () => onCreated({ id: createdId, name })
+
+  if (parseProposal) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-xs text-space-dim">Step 2 of 2 — Review parsed sections</p>
+        {parseError && <p className="text-xs text-red-400">{parseError}</p>}
+        <ParsePreview
+          proposal={parseProposal}
+          applying={applyingParse}
+          onApply={handleApplyParse}
+          onCancel={handleCancelParse}
+        />
+      </div>
+    )
+  }
 
   if (step === 1) {
     const fe = (key) => fieldErrors[key] ? ' !border-red-500/50' : ''
