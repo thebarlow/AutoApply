@@ -32,7 +32,14 @@ from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
 from core.schemas import ExtraSection, ParseResponse, ParseProposal, ProposedSection
-from core.parsed_sections import builtin_sections_from_parse, find_section
+from core.parsed_sections import (
+    add_section,
+    build_section_from_parsed,
+    builtin_sections_from_parse,
+    find_section,
+    merge_section,
+    replace_section,
+)
 from web.tenancy import current_profile_id
 
 router = APIRouter()
@@ -1170,6 +1177,130 @@ def parse_propose(
         sections=rows,
         is_onboarding=is_onboarding,
     )
+
+
+@router.post("/api/config/profiles/{profile_id}/parse/apply")
+def parse_apply(
+    profile_id: int,
+    proposal: ParseProposal,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    """Persist per-section parse decisions (add / replace / merge / skip) into the profile tree.
+
+    Accepts a ``ParseProposal`` where each ``ProposedSection.action`` has been
+    chosen by the user (or pre-filled with the default).  Builtin sections are
+    rebuilt from ``proposal.builtin``; novel sections are rebuilt from
+    ``proposal.extra_sections``.  The mutated ``RootNode`` is validated and
+    written back to the profile row using the same serialisation path as the
+    tree PUT endpoint.  File-pointer and LLM-config fields are preserved via the
+    ``{**existing, ...}`` spread (``tree_to_legacy`` does not emit those keys).
+
+    Args:
+        profile_id: The profile to update.
+        proposal: Parsed résumé data with per-section action choices.
+        db: SQLAlchemy session (injected).
+        caller_id: The authenticated profile id (injected).
+
+    Returns:
+        ``{"id": int, "name": str, "applied": int}`` where *applied* is the count
+        of sections whose action was not ``"skip"`` or empty.
+
+    Raises:
+        HTTPException 404: Profile not found, not owned by caller, or tree missing.
+        HTTPException 422: Tree validation failed, merge not possible, or
+            extra_index out of range.
+    """
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row = db.query(User).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    # Load the stored profile tree.
+    try:
+        stored_user = User.load(db, profile_id=profile_id)
+        root: RootNode = stored_user.profile_tree
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    # Pre-build a role → SectionNode map for all builtin parsed sections.
+    builtin_map: dict[str, SectionNode] = {
+        s.role: s
+        for s in builtin_sections_from_parse(proposal.builtin)
+        if s.role
+    }
+
+    applied = 0
+    for sect_row in proposal.sections:
+        action = sect_row.action or ""
+        if not action or action == "skip":
+            continue
+
+        # Reconstruct the authoritative incoming SectionNode.
+        if sect_row.origin == "builtin":
+            incoming = builtin_map.get(sect_row.builtin_role)
+            if incoming is None:
+                continue  # no data for this builtin role; skip silently
+        else:
+            idx = sect_row.extra_index
+            if idx < 0 or idx >= len(proposal.extra_sections):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"extra_index {idx} is out of range for extra_sections (len={len(proposal.extra_sections)})",
+                )
+            incoming = build_section_from_parsed(proposal.extra_sections[idx])
+            # Honour any user rename carried on the proposal row.
+            if sect_row.name and sect_row.name != incoming.name:
+                incoming.name = sect_row.name
+
+        if action == "add":
+            add_section(root, incoming)
+        elif action == "replace":
+            existing = find_section(root, name=sect_row.name, role=sect_row.builtin_role or "")
+            if existing is not None:
+                replace_section(existing, incoming)
+            else:
+                add_section(root, incoming)
+        elif action == "merge":
+            existing = find_section(root, name=sect_row.name, role=sect_row.builtin_role or "")
+            if existing is not None:
+                try:
+                    merge_section(existing, incoming)
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc))
+            else:
+                add_section(root, incoming)
+        else:
+            # Unknown action — treat as skip.
+            continue
+
+        applied += 1
+
+    # Validate the mutated tree before persisting.
+    try:
+        validate_tree_limits(root)
+        validate_tree(root)
+    except (ValueError, TreeValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    # Persist: spread existing data first so file-pointer + LLM-config fields
+    # are preserved (tree_to_legacy does not emit those keys, so {**existing, ...}
+    # carries them through unchanged).
+    existing_data = json.loads(row.data) if row.data else {}
+    derived = tree_to_legacy(root)
+    merged = {**existing_data, **derived, "profile_tree": root.model_dump(mode="json")}
+    row.data = json.dumps(merged)
+
+    # Optionally set row.name from builtin parsed name if currently blank.
+    parsed_name = (
+        (proposal.builtin.first_name or "") + " " + (proposal.builtin.last_name or "")
+    ).strip()
+    if parsed_name and not row.name:
+        row.name = parsed_name
+
+    db.commit()
+    return {"id": row.id, "name": row.name or "", "applied": applied}
 
 
 @router.post("/api/config/profile/upload")

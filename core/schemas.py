@@ -193,6 +193,7 @@ class ProposedSection(BaseModel):
     default_action: str
     allowed_actions: list[str]
     preview: dict = Field(default_factory=dict)
+    action: str = ""
 
 
 class ParseProposal(BaseModel):
