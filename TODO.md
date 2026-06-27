@@ -151,8 +151,16 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
       + legacy selector families); `User.resume_theme`; `jobs.resume_rendered_theme` col + migration
       `aa07themes01`; `serve_resume` best-effort re-theme-on-open; `GET /api/themes` + profile
       `<select>`. Classic byte-identical. Backend 904 + FE 140 green. Manual re-theme QA deferred to user.
-  - [ ] **#5 Onboarding parse** — map novel/uploaded résumé sections onto the schema during
-    first-run onboarding. After #6.
+  - [x] **#5 Onboarding parse** — schema-aware parse: open `extra_sections` in the parse schema;
+    v2 `resume_parse` prompt + idempotent reseed for stock profiles; `core/parsed_sections.py`
+    (build_section_from_parsed + add/replace/merge/find tree ops); two-phase API
+    `POST …/parse/propose` (no persist) + `…/parse/apply` (per-section add/replace/merge/skip,
+    caps→422, preserves file/LLM fields); `ParsePreview` React component; wired into onboarding
+    `StepResume` and the Settings new-profile wizard. Backend 927 + FE 148 green; opus whole-branch
+    review READY TO MERGE. **This is the LAST sub-project — the whole swap (#1–#5) is now complete.**
+    - [ ] **Follow-up:** no UI triggers re-parse on an EXISTING populated profile (backend apply
+      already supports it with add-only-safe skip defaults; only onboarding + new-profile wizard
+      surface it). Add a re-parse button in the profile/settings UI when reached.
 
 - [ ] **High-effort toggle.** A toggle (per-prompt and/or a general switch) that swaps to a
   more capable model for a request, consuming more credits in exchange for higher quality.

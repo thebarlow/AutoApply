@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -120,6 +120,35 @@ class ProjectItem(BaseModel):
     technologies: list[str] = Field(default_factory=list)
 
 
+class ParsedField(BaseModel):
+    """A label/value pair extracted from a novel résumé section."""
+
+    label: str = ""
+    value: str = ""
+
+
+class ParsedEntry(BaseModel):
+    """One record within a novel ``list`` section."""
+
+    fields: list[ParsedField] = Field(default_factory=list)
+
+
+class ExtraSection(BaseModel):
+    """A résumé section that does not map to a built-in profile field.
+
+    ``kind`` selects which payload field carries the content:
+    ``markdown`` → ``markdown``; ``bullets``/``taglist`` → ``items``;
+    ``fields`` → ``fields``; ``list`` → ``entries``.
+    """
+
+    name: str = ""
+    kind: Literal["markdown", "bullets", "taglist", "fields", "list"]
+    markdown: str = ""
+    items: list[str] = Field(default_factory=list)
+    fields: list[ParsedField] = Field(default_factory=list)
+    entries: list[ParsedEntry] = Field(default_factory=list)
+
+
 class ParseResponse(BaseModel):
     """Parsed output of the `resume_parse` prompt (a structured profile)."""
 
@@ -139,6 +168,48 @@ class ParseResponse(BaseModel):
     target_roles: list[str] = Field(default_factory=list)
     target_salary_min: float | None = None
     target_salary_max: float | None = None
+    extra_sections: list[ExtraSection] = Field(default_factory=list)
+
+
+# ── Parse proposal models (Task 5) ───────────────────────────────────────────
+
+SectionKind = Literal["markdown", "bullets", "taglist", "fields", "list"]
+
+
+class ProposedSection(BaseModel):
+    """Proposal metadata for a single résumé section, both built-in and novel.
+
+    Carries enough information for the frontend to present a smart default action
+    and let the user pick an alternative.
+    """
+
+    name: str
+    kind: SectionKind
+    origin: Literal["builtin", "novel"]
+    builtin_role: str = ""
+    extra_index: int = -1
+    matches_existing: bool
+    existing_has_data: bool
+    default_action: str
+    allowed_actions: list[str]
+    preview: dict = Field(default_factory=dict)
+    action: str = ""
+
+
+class ParseProposal(BaseModel):
+    """Result of a stateless parse-and-propose pass.
+
+    ``builtin`` holds the parsed built-in fields (``extra_sections`` stripped).
+    ``extra_sections`` carries the novel sections from the same parse.
+    ``sections`` is the ordered proposal list covering both kinds.
+    ``is_onboarding`` is True when the stored profile has no populated built-in
+    sections yet, which lets the frontend use more aggressive defaults.
+    """
+
+    builtin: ParseResponse
+    extra_sections: list[ExtraSection] = Field(default_factory=list)
+    sections: list[ProposedSection] = Field(default_factory=list)
+    is_onboarding: bool
 
 
 # ── Structured résumé/cover documents (Phase 3a) ─────────────────────────────

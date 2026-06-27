@@ -306,6 +306,12 @@ def init_db() -> None:
     finally:
         db.close()
     _seed_ats_parse_prompt()
+    from db.migrations_data import upgrade_resume_parse_prompt
+    _db = SessionLocal()
+    try:
+        upgrade_resume_parse_prompt(_db)
+    finally:
+        _db.close()
 
 
 def _seed_ats_parse_prompt() -> None:
