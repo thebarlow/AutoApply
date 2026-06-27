@@ -18,7 +18,10 @@ from db.database import get_db
 from db.database import Config, FieldHelp
 from core.user import User, PromptNotConfiguredError
 from core.profile_tree import (
+    FieldNode,
+    ListNode,
     RootNode,
+    SectionNode,
     TreeValidationError,
     merge_flat_into_stored,
     tree_to_legacy,
@@ -28,6 +31,8 @@ from core.profile_tree import (
 from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
+from core.schemas import ExtraSection, ParseResponse, ParseProposal, ProposedSection
+from core.parsed_sections import builtin_sections_from_parse, find_section
 from web.tenancy import current_profile_id
 
 router = APIRouter()
@@ -906,6 +911,265 @@ def parse_profile_from_resume(
     row.data = json.dumps(merge_flat_into_stored(existing, merged))
     db.commit()
     return {"id": row.id, "name": name}
+
+
+# ---------------------------------------------------------------------------
+# Parse/propose helpers (Task 5)
+# ---------------------------------------------------------------------------
+
+def _section_has_data(section: SectionNode) -> bool:
+    """Return True if a SectionNode contains any non-empty user data.
+
+    Inspects FieldNode values, ListNode children counts, and nested
+    GroupNode children for non-empty fields.
+
+    Args:
+        section: The SectionNode to inspect.
+
+    Returns:
+        True if at least one child holds a non-empty value.
+    """
+    for child in section.children:
+        child_type = getattr(child, "type", "")
+        if child_type == "field":
+            v = getattr(child, "value", None)
+            if isinstance(v, list) and v:
+                return True
+            if isinstance(v, str) and v.strip():
+                return True
+        elif child_type == "list":
+            if getattr(child, "children", None):
+                return True
+        elif child_type == "group":
+            for f in getattr(child, "children", []):
+                v = getattr(f, "value", None)
+                if isinstance(v, str) and v.strip():
+                    return True
+                if isinstance(v, list) and v:
+                    return True
+    return False
+
+
+def _derive_section_kind(section: SectionNode) -> str:
+    """Infer a kind string from the shape of a built-in SectionNode.
+
+    Args:
+        section: The built-in SectionNode whose kind to derive.
+
+    Returns:
+        One of ``"list"``, ``"taglist"``, ``"bullets"``, ``"markdown"``,
+        or ``"fields"``.
+    """
+    for child in section.children:
+        child_type = getattr(child, "type", "")
+        if child_type == "list":
+            return "list"
+        if child_type == "field":
+            kind = getattr(child, "kind", "")
+            if kind in ("taglist", "bullets", "markdown"):
+                return kind
+        if child_type == "group":
+            return "fields"
+    return "fields"
+
+
+def _preview_for_section(section: SectionNode, kind: str) -> dict:
+    """Build a small preview dict describing the parsed content.
+
+    Args:
+        section: Source SectionNode.
+        kind: The derived kind string for ``section``.
+
+    Returns:
+        A lightweight dict; shape depends on ``kind``.
+    """
+    if kind == "list":
+        list_node = next(
+            (c for c in section.children if getattr(c, "type", "") == "list"), None
+        )
+        count = len(list_node.children) if list_node else 0
+        return {"count": count}
+    if kind in ("taglist", "bullets"):
+        field = next(
+            (c for c in section.children if getattr(c, "type", "") == "field"), None
+        )
+        items = list(getattr(field, "value", []) or [])
+        return {"items": items[:5]}
+    if kind == "markdown":
+        field = next(
+            (c for c in section.children if getattr(c, "type", "") == "field"), None
+        )
+        text = getattr(field, "value", "") or ""
+        return {"chars": len(text)}
+    # fields / default
+    group = next(
+        (c for c in section.children if getattr(c, "type", "") == "group"), None
+    )
+    labels = [getattr(f, "name", "") for f in getattr(group, "children", [])]
+    return {"fields": labels}
+
+
+def _preview_for_extra(extra: ExtraSection) -> dict:
+    """Build a preview dict for a novel ExtraSection.
+
+    Args:
+        extra: The ExtraSection from the parse response.
+
+    Returns:
+        A lightweight dict; shape depends on ``extra.kind``.
+    """
+    if extra.kind == "list":
+        return {"count": len(extra.entries)}
+    if extra.kind in ("taglist", "bullets"):
+        return {"items": list(extra.items)[:5]}
+    if extra.kind == "markdown":
+        return {"chars": len(extra.markdown)}
+    # fields
+    return {"fields": [f.label for f in extra.fields]}
+
+
+def _allowed_actions(kind: str) -> list[str]:
+    """Return the allowed actions for a given section kind.
+
+    Args:
+        kind: Section kind string.
+
+    Returns:
+        List of action strings. Mergeable kinds include ``"merge"``.
+    """
+    base = ["add", "replace", "skip"]
+    if kind in {"list", "taglist", "bullets"}:
+        base.append("merge")
+    return base
+
+
+@router.post("/api/config/profiles/{profile_id}/parse/propose")
+def parse_propose(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    caller_id: int = Depends(current_profile_id),
+) -> ParseProposal:
+    """Run the résumé parse and return a ParseProposal without persisting anything.
+
+    Mirrors the ownership guards and résumé-path resolution of
+    ``parse_profile_from_resume``, but skips the merge/commit step.
+
+    Args:
+        profile_id: The profile to parse.
+        db: SQLAlchemy session (injected).
+        caller_id: The authenticated profile id (injected).
+
+    Returns:
+        A ``ParseProposal`` describing proposed actions for each parsed section.
+
+    Raises:
+        HTTPException 404: Profile not found or not owned by caller.
+        HTTPException 400: No résumé uploaded, or prompt not configured.
+        HTTPException 422: Parse failed (LLM or validation error).
+    """
+    if profile_id != caller_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row = db.query(User).filter_by(id=profile_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    data = json.loads(row.data) if row.data else {}
+    resume_path = data.get("resume_path") or data.get("md_path")
+    if not resume_path:
+        raise HTTPException(status_code=400, detail="No resume uploaded for this profile")
+    path = Path(resume_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Resume file not found on disk")
+    try:
+        if path.suffix.lower() == ".pdf":
+            raw_dict = User.from_pdf(path.read_bytes(), db, profile_id=profile_id)
+        else:
+            raw_dict = User.from_markdown(
+                path.read_text(encoding="utf-8", errors="replace"), db, profile_id=profile_id
+            )
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    parsed = ParseResponse.model_validate(raw_dict)
+
+    # Load stored tree to check existing state (do NOT mutate it).
+    try:
+        stored_user = User.load(db, profile_id=profile_id)
+        stored_root: RootNode = stored_user.profile_tree
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    # Determine onboarding: no built-in section currently has data.
+    builtin_parsed_sections = builtin_sections_from_parse(parsed)
+    def _stored_builtin_has_data(role: str) -> bool:
+        stored_s = find_section(stored_root, role=role)
+        return bool(stored_s and _section_has_data(stored_s))
+
+    is_onboarding = not any(
+        _stored_builtin_has_data(s.role)
+        for s in builtin_parsed_sections
+        if s.role
+    )
+
+    rows: list[ProposedSection] = []
+
+    # Built-in sections from parse
+    for s in builtin_parsed_sections:
+        if not _section_has_data(s):
+            continue  # skip empty parsed sections
+        kind = _derive_section_kind(s)
+        existing_has_data = _stored_builtin_has_data(s.role)
+        if is_onboarding:
+            default_action = "replace"
+        elif existing_has_data:
+            default_action = "skip"
+        else:
+            default_action = "replace"
+        rows.append(ProposedSection(
+            name=s.name,
+            kind=kind,
+            origin="builtin",
+            builtin_role=s.role or "",
+            extra_index=-1,
+            matches_existing=True,
+            existing_has_data=existing_has_data,
+            default_action=default_action,
+            allowed_actions=_allowed_actions(kind),
+            preview=_preview_for_section(s, kind),
+        ))
+
+    # Novel sections
+    for i, extra in enumerate(parsed.extra_sections):
+        matched = find_section(stored_root, name=extra.name)
+        matches_existing = matched is not None
+        existing_has_data = bool(matched and _section_has_data(matched))
+        if is_onboarding:
+            default_action = "add"
+        elif existing_has_data:
+            default_action = "skip"
+        elif matches_existing:
+            default_action = "replace"
+        else:
+            default_action = "add"
+        rows.append(ProposedSection(
+            name=extra.name,
+            kind=extra.kind,
+            origin="novel",
+            extra_index=i,
+            matches_existing=matches_existing,
+            existing_has_data=existing_has_data,
+            default_action=default_action,
+            allowed_actions=_allowed_actions(extra.kind),
+            preview=_preview_for_extra(extra),
+        ))
+
+    return ParseProposal(
+        builtin=parsed.model_copy(update={"extra_sections": []}),
+        extra_sections=parsed.extra_sections,
+        sections=rows,
+        is_onboarding=is_onboarding,
+    )
 
 
 @router.post("/api/config/profile/upload")
