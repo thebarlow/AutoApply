@@ -347,3 +347,12 @@ export const grantCredits = (profileId, amount) =>
 
 export const logout = () =>
   fetch('/auth/logout', { method: 'POST' }).then(() => { window.location.href = '/' })
+
+export const proposeParse = (profileId) =>
+  _fetch(`/api/config/profiles/${profileId}/parse/propose`, { method: 'POST' })
+
+export const applyParse = (profileId, proposal) =>
+  _fetch(`/api/config/profiles/${profileId}/parse/apply`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(proposal),
+  })
