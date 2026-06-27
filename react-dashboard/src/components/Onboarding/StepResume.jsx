@@ -1,9 +1,11 @@
 import { useState } from "react";
 import GatedButton from "../shared/GatedButton";
 import Spinner from "../shared/Spinner";
+import ParsePreview from "../widgets/parse/ParsePreview";
 import {
   uploadProfileResume,
-  parseProfileResume,
+  proposeParse,
+  applyParse,
   getProfiles,
   getProfile,
   updateProfile,
@@ -14,6 +16,9 @@ export default function StepResume({ onFinish }) {
   const [file, setFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState("");
+  const [proposal, setProposal] = useState(null);
+  const [applying, setApplying] = useState(false);
+  const [profileId, setProfileId] = useState(null);
 
   const onParse = async () => {
     if (!file) return;
@@ -25,20 +30,20 @@ export default function StepResume({ onFinish }) {
 
       // Resolve the already-provisioned active profile (no creation needed).
       const { profiles, active_id } = await getProfiles();
-      const profileId =
+      const resolvedProfileId =
         active_id ?? (profiles && profiles[0] && profiles[0].id);
-      if (!profileId) throw new Error("No profile found for this account");
+      if (!resolvedProfileId) throw new Error("No profile found for this account");
 
       // Make it the active profile so the dashboard (UserHome) resolves it
       // instead of falling back to the profile-picker list.
-      await setActiveProfile(profileId);
+      await setActiveProfile(resolvedProfileId);
 
       // Attach the uploaded file to the profile so parse can read it.
       // Fetch the full profile (the list response omits `data`) so we merge
       // onto existing fields instead of wiping them.
-      const profile = await getProfile(profileId);
+      const profile = await getProfile(resolvedProfileId);
       const existingData = profile.data || {};
-      await updateProfile(profileId, {
+      await updateProfile(resolvedProfileId, {
         name: profile.name,
         data: {
           ...existingData,
@@ -48,18 +53,54 @@ export default function StepResume({ onFinish }) {
         },
       });
 
-      // Parse — merges skills/work_history/education into the profile row,
-      // which flips /api/setup-status resume_parsed to true.
-      await parseProfileResume(profileId);
-
-      // Done — close the wizard (reloads so the dashboard resolves the profile).
-      onFinish();
+      // Propose — returns a preview of sections to merge; do NOT apply yet.
+      const p = await proposeParse(resolvedProfileId);
+      setProfileId(resolvedProfileId);
+      setProposal(p);
     } catch (e) {
       setError(e.message || "Parse failed");
     } finally {
       setParsing(false);
     }
   };
+
+  const handleApply = async (edited) => {
+    setApplying(true);
+    try {
+      await applyParse(profileId, edited);
+      onFinish();
+    } catch (e) {
+      setError(e.message || "Apply failed");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setProposal(null);
+  };
+
+  if (proposal) {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold mb-2">Review parsed sections</h2>
+        <p className="text-sm text-space-dim mb-5">
+          Choose which sections to import. You can edit names and actions below.
+        </p>
+        {error && (
+          <div className="mb-4 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+        <ParsePreview
+          proposal={proposal}
+          applying={applying}
+          onApply={handleApply}
+          onCancel={handleCancel}
+        />
+      </div>
+    );
+  }
 
   return (
     <div>
