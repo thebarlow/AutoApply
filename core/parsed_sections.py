@@ -1,8 +1,8 @@
 """Build schema tree sections from parsed novel résumé sections (#5)."""
 from __future__ import annotations
 
-from core.profile_tree import FieldNode, GroupNode, ListNode, SectionNode
-from core.schemas import ExtraSection
+from core.profile_tree import FieldNode, GroupNode, ListNode, RootNode, SectionNode
+from core.schemas import ExtraSection, ParseResponse
 
 
 def _union_labels(entries) -> list[str]:
@@ -49,3 +49,91 @@ def build_section_from_parsed(extra: ExtraSection, order: int = 0) -> SectionNod
         ]))
     lst = ListNode(name=name, item_template=template, children=children)
     return SectionNode(name=name, role="", order=order, children=[lst])
+
+
+# ---------------------------------------------------------------------------
+# Tree apply operations
+# ---------------------------------------------------------------------------
+
+def builtin_sections_from_parse(parsed: ParseResponse) -> list[SectionNode]:
+    """Return the preset SectionNodes (with roles) from a ParseResponse's fixed fields."""
+    from core.profile_tree import legacy_to_tree
+
+    flat: dict = {
+        "first_name": parsed.first_name,
+        "last_name": parsed.last_name,
+        "hero": parsed.hero,
+        "email": parsed.email,
+        "phone": parsed.phone,
+        "location": parsed.location,
+        "github": parsed.github,
+        "linkedin": parsed.linkedin,
+        "website": parsed.website,
+        "skills": list(parsed.skills or []),
+        "work_history": [e.model_dump() if hasattr(e, "model_dump") else e
+                         for e in (parsed.work_history or [])],
+        "education": [e.model_dump() if hasattr(e, "model_dump") else e
+                      for e in (parsed.education or [])],
+        "projects": [e.model_dump() if hasattr(e, "model_dump") else e
+                     for e in (parsed.projects or [])],
+    }
+    root = legacy_to_tree(flat)
+    return root.children
+
+
+def find_section(root: RootNode, *, name: str = "", role: str = "") -> SectionNode | None:
+    for s in root.children:
+        if role and s.role == role:
+            return s
+        if name and s.name.casefold() == name.casefold():
+            return s
+    return None
+
+
+def add_section(root: RootNode, section: SectionNode) -> None:
+    section.order = len(root.children)
+    root.children.append(section)
+
+
+def replace_section(existing: SectionNode, incoming: SectionNode) -> None:
+    existing.children = incoming.children
+
+
+def _single_field(section: SectionNode, kind: str) -> FieldNode | None:
+    if len(section.children) == 1 and getattr(section.children[0], "type", "") == "field" \
+            and section.children[0].kind == kind:
+        return section.children[0]
+    return None
+
+
+def _list_node(section: SectionNode) -> ListNode | None:
+    if section.children and getattr(section.children[0], "type", "") == "list":
+        return section.children[0]
+    return None
+
+
+def merge_section(existing: SectionNode, incoming: SectionNode) -> None:
+    el, il = _list_node(existing), _list_node(incoming)
+    if el is not None and il is not None:
+        el.children.extend(il.children)
+        return
+    for kind, combine in (("taglist", _union), ("bullets", _append)):
+        ef, inf = _single_field(existing, kind), _single_field(incoming, kind)
+        if ef is not None and inf is not None:
+            ef.value = combine(ef.value, inf.value)
+            return
+    raise ValueError("section shape is not mergeable")
+
+
+def _union(a: list, b: list) -> list:
+    out = list(a)
+    seen = {x.casefold() for x in a}
+    for x in b:
+        if x.casefold() not in seen:
+            out.append(x)
+            seen.add(x.casefold())
+    return out
+
+
+def _append(a: list, b: list) -> list:
+    return list(a) + list(b)
