@@ -1,3 +1,16 @@
+"""Idempotent data migrations for editable, DB-backed content (prompts)."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+_DEFAULTS_DIR = Path(__file__).resolve().parent.parent / "prompts" / "defaults"
+
+# Exact v1 shipped content of resume_parse.md — the upgrade-eligibility key.
+# Profiles whose resume_parse prompt equals this (whitespace-normalized) are on
+# the stock prompt and safe to upgrade; anything else is user-customized.
+_V1_BASELINE = """\
 You parse a Master Resume into a structured JSON profile.
 
 The user message contains the full resume text (Markdown or extracted PDF text). Extract all available information and emit it as a single JSON object matching the schema below.
@@ -63,43 +76,35 @@ The user message contains the full resume text (Markdown or extracted PDF text).
 - **work_history**: Order most-recent first. `summary` should concatenate the role's bullets/description into a single string, preserving bullet markers (`- `) and newlines.
 - **education**: Order most-recent first. `degree` = short form ("B.S.", "M.S.", "Ph.D."). `field` = field of study only ("Computer Science"), no degree prefix.
 - **projects**: Personal/side projects, not work projects. `technologies` is a flat list of tools used. If the resume doesn't separate projects from work, leave `[]`.
-- **target_roles** / **target_salary_min** / **target_salary_max**: Only populate if the resume explicitly states target roles or salary expectations. Otherwise `[]` and `null`.
+- **target_roles** / **target_salary_min** / **target_salary_max**: Only populate if the resume explicitly states target roles or salary expectations. Otherwise `[]` and `null`.\
+"""
 
-# Extra Sections
-Any résumé section that is NOT one of the fixed fields above (contact info, summary/hero, skills, work experience, education, projects) must be captured in the top-level `extra_sections` array. Leave `extra_sections: []` if no such sections exist.
 
-For each extra section:
-- `name`: the section heading exactly as written in the résumé.
-- `kind`: pick the closest kind from the following:
-  - `markdown` — a prose block (paragraph text)
-  - `bullets` — a bullet list of free-form items
-  - `taglist` — a flat list of short terms (e.g. languages, hobbies, interests)
-  - `fields` — one block of label/value pairs (e.g. "Clearance: Secret")
-  - `list` — repeating structured records; emit `entries`, each with `fields` (array of `{"label": "", "value": ""}`)
-- Preserve the résumé's wording exactly — do not rewrite or embellish.
-- Never invent sections that are not present.
+def _norm(s: str) -> str:
+    return "\n".join(line.rstrip() for line in (s or "").strip().splitlines())
 
-Add `extra_sections` to the top-level JSON output:
 
-```json
-"extra_sections": [
-  {
-    "name": "Certifications",
-    "kind": "list",
-    "entries": [
-      {
-        "fields": [
-          {"label": "Name", "value": "AWS Certified Solutions Architect"},
-          {"label": "Issuer", "value": "Amazon Web Services"},
-          {"label": "Date", "value": "2023-04"}
-        ]
-      }
-    ]
-  },
-  {
-    "name": "Languages",
-    "kind": "taglist",
-    "items": ["English (native)", "Spanish (professional)"]
-  }
-]
-```
+def upgrade_resume_parse_prompt(db: Session) -> int:
+    """Reseed the resume_parse prompt to v2 for stock (non-customized) profiles.
+
+    Updates the PromptDefault row to the current file content, then upgrades
+    every profile Prompt of type ``resume_parse`` whose content matches the v1
+    baseline. User-edited prompts are left untouched. Idempotent.
+
+    Returns:
+        Number of profile prompt rows upgraded.
+    """
+    from db.database import Prompt, PromptDefault
+
+    v2 = (_DEFAULTS_DIR / "resume_parse.md").read_text(encoding="utf-8")
+    default = db.query(PromptDefault).filter_by(type_key="resume_parse").first()
+    if default is not None:
+        default.content = v2
+    upgraded = 0
+    baseline = _norm(_V1_BASELINE)
+    for row in db.query(Prompt).filter_by(type_key="resume_parse").all():
+        if _norm(row.content) == baseline:
+            row.content = v2
+            upgraded += 1
+    db.commit()
+    return upgraded
