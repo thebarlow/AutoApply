@@ -15,7 +15,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.database import Config, FieldHelp
+from db.database import Config, FieldHelp, PromptDefault
+from core.job import _llm_json_with_retry
+from core.llm import get_client_for_profile
 from core.user import User, PromptNotConfiguredError
 from core.profile_tree import (
     FieldNode,
@@ -1517,3 +1519,70 @@ def export_master_resume(db: Session = Depends(get_db)) -> Response:
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=master_resume.pdf"},
     )
+
+
+# ---- Section Prompt Assist ----
+
+
+class SectionPromptDraft(BaseModel):
+    """LLM response schema for a drafted section-tailoring prompt."""
+
+    prompt: str = ""
+
+
+class _SectionPromptDraftBody(BaseModel):
+    """Request body for POST /api/config/section-prompt/draft."""
+
+    section_name: str = ""
+    purpose: str = ""
+    tailoring: str = ""
+
+
+@router.post("/api/config/section-prompt/draft")
+def draft_section_prompt(
+    body: _SectionPromptDraftBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict:
+    """Dry (no-persist, no-metering) endpoint that drafts a section tailoring prompt.
+
+    Args:
+        body: Section name, purpose, and per-job tailoring notes from the caller.
+        db: Database session.
+        profile_id: Resolved profile id from the auth seam.
+
+    Returns:
+        ``{"prompt": str}`` — the drafted tailoring instruction.
+
+    Raises:
+        HTTPException 500: ``section_prompt_assist`` seed row is missing.
+        HTTPException 502: LLM call failed.
+    """
+    user = User.load(db, profile_id=profile_id)
+    template_row = db.query(PromptDefault).filter_by(type_key="section_prompt_assist").first()
+    if template_row is None:
+        raise HTTPException(status_code=500, detail="section_prompt_assist prompt not seeded")
+
+    # Plain {key} substitution — replace tokens individually to avoid
+    # format_map colliding with literal JSON braces in the template.
+    prompt = (
+        template_row.content
+        .replace("{section_name}", body.section_name)
+        .replace("{purpose}", body.purpose)
+        .replace("{tailoring}", body.tailoring)
+    )
+
+    client, model = get_client_for_profile(user, user.prompt_resume_model)
+    try:
+        out = _llm_json_with_retry(
+            prompt,
+            client,
+            model,
+            SectionPromptDraft,
+            max_tokens=512,
+            empty_msg="Prompt draft returned empty content.",
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {"prompt": out.prompt}
