@@ -169,6 +169,11 @@ class ParseResponse(BaseModel):
     target_salary_min: float | None = None
     target_salary_max: float | None = None
     extra_sections: list[ExtraSection] = Field(default_factory=list)
+    summary_heading: str = ""
+    work_history_heading: str = ""
+    education_heading: str = ""
+    projects_heading: str = ""
+    skills_heading: str = ""
 
 
 # ── Parse proposal models (Task 5) ───────────────────────────────────────────
@@ -194,6 +199,8 @@ class ProposedSection(BaseModel):
     allowed_actions: list[str]
     preview: dict = Field(default_factory=dict)
     action: str = ""
+    customize: bool = False
+    prompt: str = ""
 
 
 class ParseProposal(BaseModel):
