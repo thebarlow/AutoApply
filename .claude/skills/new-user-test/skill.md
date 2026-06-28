@@ -20,6 +20,14 @@ Spin up a clean-slate environment to test the new-user onboarding flow without t
 ## Setup
 
 ```powershell
+# 0. Start from a clean slate — a stale test DB from a prior run silently skips
+#    onboarding (it already has a profile). Back it up rather than delete.
+if (Test-Path C:\Users\barlo\Projects\auto_apply\test_new_user.db) {
+    $ts = Get-Date -Format "yyyyMMdd-HHmmss"
+    Move-Item C:\Users\barlo\Projects\auto_apply\test_new_user.db* `
+      ("C:\Users\barlo\Projects\auto_apply\test_new_user.db.stale-$ts") -Force
+}
+
 # 1. Override the database
 $env:DATABASE_URL = "sqlite:///test_new_user.db"
 
