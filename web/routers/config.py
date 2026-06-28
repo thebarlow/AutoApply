@@ -32,6 +32,7 @@ from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
 from core.schemas import ExtraSection, ParseResponse, ParseProposal, ProposedSection
+from core.section_presets import SECTION_PROMPT_DEFAULTS
 from core.parsed_sections import (
     _section_has_data,
     add_section,
@@ -1089,6 +1090,7 @@ def parse_propose(
     )
 
     rows: list[ProposedSection] = []
+    _TAILORED = {"experience", "skills", "projects", "summary"}
 
     # Built-in sections from parse
     for s in builtin_parsed_sections:
@@ -1113,6 +1115,8 @@ def parse_propose(
             default_action=default_action,
             allowed_actions=_allowed_actions(kind),
             preview=_preview_for_section(s, kind),
+            customize=(s.role in _TAILORED),
+            prompt=SECTION_PROMPT_DEFAULTS.get(s.role or "", ""),
         ))
 
     # Novel sections
@@ -1138,6 +1142,8 @@ def parse_propose(
             default_action=default_action,
             allowed_actions=_allowed_actions(extra.kind),
             preview=_preview_for_extra(extra),
+            customize=False,
+            prompt="",
         ))
 
     return ParseProposal(
