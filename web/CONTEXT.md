@@ -208,6 +208,13 @@ Admin-gated, dev-only endpoints not intended for production user flows.
 
 ## Known Issues
 
+- **`parse/apply` trusts `is_onboarding` from the client.** When `proposal.is_onboarding`
+  is true, `parse_apply` REBUILDS the profile tree from scratch and replaces the stored
+  `profile_tree`. Safe today because intake only fires on empty profiles, but before any
+  existing-profile re-parse UI ships, `parse_apply` must re-derive `is_onboarding`
+  server-side from stored data (as `parse_propose` already does) — otherwise a stray
+  `is_onboarding=true` against a populated profile silently wipes the tree. Guard-rail
+  comment is at the branch in `config.py::parse_apply`.
 - `_serialize()` in `jobs.py` calls `Path.exists()` twice per job (resume_md_exists, cover_md_exists) on every `GET /api/jobs`. At current scale (<100 jobs) this is negligible. If job count grows, move to a per-job detail endpoint.
 - Salary sort is lexicographic for non-numeric salary strings (e.g. "$120k–$150k"). Values without parseable numbers sort as 0.
 - **Profile/prompt/setup endpoints must use the tenancy seam, not the legacy dev stub.**
