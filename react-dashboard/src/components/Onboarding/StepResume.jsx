@@ -83,9 +83,9 @@ export default function StepResume({ onFinish }) {
   if (proposal) {
     return (
       <div>
-        <h2 className="text-lg font-semibold mb-2">Review parsed sections</h2>
+        <h2 className="text-lg font-semibold mb-2">Customize your profile sections</h2>
         <p className="text-sm text-space-dim mb-5">
-          Choose which sections to import. You can edit names and actions below.
+          Check the sections you want to tailor per job, then click Finish to create your profile.
         </p>
         {error && (
           <div className="mb-4 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">
@@ -94,6 +94,7 @@ export default function StepResume({ onFinish }) {
         )}
         <ParsePreview
           proposal={proposal}
+          profileId={profileId}
           applying={applying}
           onApply={handleApply}
           onCancel={handleCancel}

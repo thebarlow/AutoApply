@@ -104,6 +104,15 @@ Two-panel layout split 3:2 in a 5-column grid:
 - In-Demand Skills recharts pie/bar charts; time-window selector (Today / Week / All Time) drives the counter via `getStats(win)`
 - Embeds `ProfileCards` for quick profile switching
 
+### parse/ParsePreview.jsx
+
+Customization checklist rendered during intake (onboarding `StepResume` and the new-profile wizard step 2 in `Settings`). Props: `proposal`, `profileId`, `onApply`, `onCancel`, `applying`.
+
+- Each section shows a checkbox (the `customize` flag). Checking a section reveals its **Tailoring prompt** textarea.
+- The prompt textarea is editable directly, or can be filled via the **Draft from questions** affordance: a `<details>`/`<summary>` panel that collects "purpose" and "tailoring" answers, then calls `POST /api/parse/draft-section-prompt` (`draftSectionPrompt` in `api.js`) with `profileId` and writes the returned `prompt` into the textarea.
+- The **Finish** button calls `onApply({ ...proposal, sections: rows })` — no add/replace/skip logic; only the `customize` flag and `prompt` field matter downstream.
+- **Known follow-up:** the per-section generator (`apply_parse` → `set_section_customize`) can author field *values* but cannot reorder or drop list entries — it only writes into the existing item slots.
+
 ### Onboarding/Wizard.jsx
 - "Create your User Profile" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The platform owns the LLM key via env, so onboarding no longer collects an API key (`StepLLM.jsx` was removed).
 - Two tabs under the "Skip for now" line: **"Use existing Resume"** (default) renders `StepResume`; **"Manual Entry"** shows a blurb + a **"Try it out"** link. Each tab shows a one-sentence explainer.

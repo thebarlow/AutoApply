@@ -73,7 +73,7 @@ describe('StepResume', () => {
     await waitFor(() => expect(proposeParse).toHaveBeenCalledWith(1))
 
     // ParsePreview heading visible
-    expect(await screen.findByText(/review parsed sections/i)).toBeInTheDocument()
+    expect(await screen.findByText(/customize your profile sections/i)).toBeInTheDocument()
     // New customization heading
     expect(screen.getByText(/which sections should we tailor/i)).toBeInTheDocument()
   })
@@ -87,7 +87,7 @@ describe('StepResume', () => {
     await user.click(screen.getByRole('button', { name: /parse with ai/i }))
 
     // Wait for preview to appear
-    await screen.findByText(/review parsed sections/i)
+    await screen.findByText(/customize your profile sections/i)
 
     await user.click(screen.getByRole('button', { name: /finish/i }))
 
@@ -103,7 +103,7 @@ describe('StepResume', () => {
     await user.upload(container.querySelector('input[type="file"]'), file)
     await user.click(screen.getByRole('button', { name: /parse with ai/i }))
 
-    await screen.findByText(/review parsed sections/i)
+    await screen.findByText(/customize your profile sections/i)
 
     await user.click(screen.getByRole('button', { name: /cancel/i }))
 

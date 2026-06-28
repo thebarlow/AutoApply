@@ -42,7 +42,7 @@ vi.mock('../shared/GatedButton', () => ({
 }))
 vi.mock('../shared/HelpIcon', () => ({ default: () => null }))
 
-// ParsePreview: minimal stub — exposes Apply and Cancel buttons so wiring can
+// ParsePreview: minimal stub — exposes Finish and Cancel buttons so wiring can
 // be asserted without rendering the real component tree.
 vi.mock('./parse/ParsePreview', () => ({
   default: ({ proposal, applying, onApply, onCancel }) => (
@@ -51,7 +51,7 @@ vi.mock('./parse/ParsePreview', () => ({
         onClick={() => onApply(proposal)}
         disabled={applying}
       >
-        Apply
+        Finish
       </button>
       <button onClick={onCancel}>Cancel</button>
     </div>
@@ -68,13 +68,17 @@ vi.mock('../../api', () => ({
   setActiveProfile: vi.fn().mockResolvedValue({}),
   uploadProfileResume: vi.fn().mockResolvedValue({ path: '/tmp/r.pdf', filename: 'r.pdf' }),
   proposeParse: vi.fn().mockResolvedValue({
+    is_onboarding: true,
+    builtin: {},
+    extra_sections: [],
     sections: [
       {
         name: 'Work Experience',
         origin: 'builtin',
+        builtin_role: 'experience',
         kind: 'list',
-        allowed_actions: ['merge', 'skip'],
-        default_action: 'merge',
+        customize: true,
+        prompt: 'Tailor.',
       },
     ],
   }),
@@ -180,7 +184,7 @@ describe('Settings CreateProfile — propose→preview→apply', () => {
 
     await screen.findByTestId('parse-preview')
 
-    await user.click(screen.getByRole('button', { name: /apply/i }))
+    await user.click(screen.getByRole('button', { name: /finish/i }))
 
     await waitFor(() =>
       expect(applyParse).toHaveBeenCalledWith(
