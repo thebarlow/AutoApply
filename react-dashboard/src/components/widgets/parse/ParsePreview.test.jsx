@@ -1,62 +1,70 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { vi, it, expect } from 'vitest'
 import ParsePreview from './ParsePreview'
+import { draftSectionPrompt } from '../../../api'
+
+vi.mock('../../../api', () => ({ draftSectionPrompt: vi.fn().mockResolvedValue({ prompt: 'drafted text' }) }))
 
 const proposal = {
-  profile_id: 1,
+  is_onboarding: true,
+  builtin: {}, extra_sections: [],
   sections: [
-    {
-      name: 'Skills',
-      origin: 'builtin',
-      default_action: 'merge',
-      allowed_actions: ['merge', 'replace', 'skip'],
-      kind: null,
-      preview: null,
-    },
-    {
-      name: 'Certifications',
-      origin: 'novel',
-      default_action: 'append',
-      allowed_actions: ['append', 'skip'],
-      kind: 'list',
-      preview: 'AWS Certified, GCP Certified',
-    },
+    { name: 'Employment History', origin: 'builtin', builtin_role: 'experience', kind: 'list', customize: true, prompt: 'Tailor.' },
+    { name: 'Certifications', origin: 'novel', extra_index: 0, kind: 'list', customize: false, prompt: '' },
   ],
 }
 
-test('renders Standard sections and Additional sections headings', () => {
-  render(
-    <ParsePreview
-      proposal={proposal}
-      onApply={vi.fn()}
-      onCancel={vi.fn()}
-      applying={false}
-    />
-  )
-  expect(screen.getByText(/Standard sections/i)).toBeInTheDocument()
-  expect(screen.getByText(/Additional sections/i)).toBeInTheDocument()
+it('checking a section reveals its prompt editor', async () => {
+  const user = userEvent.setup()
+  render(<ParsePreview proposal={proposal} onApply={() => {}} onCancel={() => {}} />)
+  // Certifications starts unchecked → no textarea
+  const certRow = screen.getByText('Certifications').closest('div')
+  const checkbox = certRow.querySelector('input[type=checkbox]')
+  expect(certRow.querySelector('textarea')).toBeNull()
+  await user.click(checkbox)
+  expect(certRow.querySelector('textarea')).not.toBeNull()
 })
 
-test('Apply calls onApply with sections carrying default actions, and Skills select has correct options', () => {
+it('Finish forwards edited sections', async () => {
   const onApply = vi.fn()
-  render(
-    <ParsePreview
-      proposal={proposal}
-      onApply={onApply}
-      onCancel={vi.fn()}
-      applying={false}
-    />
+  const user = userEvent.setup()
+  render(<ParsePreview proposal={proposal} onApply={onApply} onCancel={() => {}} />)
+  await user.click(screen.getByRole('button', { name: /finish/i }))
+  expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ sections: expect.any(Array) }))
+})
+
+it('Draft path: fills purpose+tailoring, calls draftSectionPrompt, and updates textarea', async () => {
+  const user = userEvent.setup()
+  render(<ParsePreview proposal={proposal} profileId={99} onApply={() => {}} onCancel={() => {}} />)
+
+  // Employment History starts with customize:true, so its textarea is already shown.
+  const empRow = screen.getByText('Employment History').closest('div')
+  expect(empRow.querySelector('textarea')).not.toBeNull()
+
+  // Open the "Draft from questions" details panel by clicking its summary.
+  const summary = empRow.querySelector('summary')
+  await user.click(summary)
+
+  // Fill the two question inputs.
+  const purposeInput = screen.getByPlaceholderText(/highlight relevant/i)
+  const tailoringInput = screen.getByPlaceholderText(/emphasise certs/i)
+  await user.type(purposeInput, 'Show career growth')
+  await user.type(tailoringInput, 'Match required skills')
+
+  // Click Draft and wait for the API to resolve.
+  await user.click(screen.getByRole('button', { name: /^draft$/i }))
+
+  await waitFor(() =>
+    expect(draftSectionPrompt).toHaveBeenCalledWith(99, expect.objectContaining({
+      section_name: 'Employment History',
+      purpose: 'Show career growth',
+      tailoring: 'Match required skills',
+    }))
   )
 
-  // Skills combobox options must equal exactly its allowed_actions
-  const skillsRow = screen.getAllByRole('combobox')[0]
-  const options = within(skillsRow).getAllByRole('option').map((o) => o.value)
-  expect(options).toEqual(['merge', 'replace', 'skip'])
-
-  // Click Apply
-  fireEvent.click(screen.getByRole('button', { name: /apply/i }))
-
-  expect(onApply).toHaveBeenCalledTimes(1)
-  const arg = onApply.mock.calls[0][0]
-  expect(arg.sections[0].action).toBe('merge')
-  expect(arg.sections[1].action).toBe('append')
+  // The textarea should now contain the drafted text.
+  await waitFor(() =>
+    expect(empRow.querySelector('textarea').value).toBe('drafted text')
+  )
 })

@@ -53,7 +53,12 @@ The user message contains the full resume text (Markdown or extracted PDF text).
   ],
   "target_roles": ["string", "..."],
   "target_salary_min": null,
-  "target_salary_max": null
+  "target_salary_max": null,
+  "summary_heading": "",
+  "work_history_heading": "",
+  "education_heading": "",
+  "projects_heading": "",
+  "skills_heading": ""
 }
 ```
 
@@ -64,6 +69,7 @@ The user message contains the full resume text (Markdown or extracted PDF text).
 - **education**: Order most-recent first. `degree` = short form ("B.S.", "M.S.", "Ph.D."). `field` = field of study only ("Computer Science"), no degree prefix.
 - **projects**: Personal/side projects, not work projects. `technologies` is a flat list of tools used. If the resume doesn't separate projects from work, leave `[]`.
 - **target_roles** / **target_salary_min** / **target_salary_max**: Only populate if the resume explicitly states target roles or salary expectations. Otherwise `[]` and `null`.
+- **\*_heading**: The exact heading text the résumé used for that section (e.g. "Employment History" for work_history, "Technical Skills" for skills). Copy the résumé's wording verbatim. Leave `""` if the section is absent or has no explicit heading.
 
 # Extra Sections
 Any résumé section that is NOT one of the fixed fields above (contact info, summary/hero, skills, work experience, education, projects) must be captured in the top-level `extra_sections` array. Leave `extra_sections: []` if no such sections exist.

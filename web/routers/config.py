@@ -15,7 +15,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.database import Config, FieldHelp
+from db.database import Config, FieldHelp, PromptDefault
+from core.job import _llm_json_with_retry
+from core.llm import get_client_for_profile
 from core.user import User, PromptNotConfiguredError
 from core.profile_tree import (
     FieldNode,
@@ -32,7 +34,9 @@ from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
 from core.schemas import ExtraSection, ParseResponse, ParseProposal, ProposedSection
+from core.section_presets import SECTION_PROMPT_DEFAULTS
 from core.parsed_sections import (
+    _section_has_data,
     add_section,
     build_section_from_parsed,
     builtin_sections_from_parse,
@@ -924,38 +928,6 @@ def parse_profile_from_resume(
 # Parse/propose helpers (Task 5)
 # ---------------------------------------------------------------------------
 
-def _section_has_data(section: SectionNode) -> bool:
-    """Return True if a SectionNode contains any non-empty user data.
-
-    Inspects FieldNode values, ListNode children counts, and nested
-    GroupNode children for non-empty fields.
-
-    Args:
-        section: The SectionNode to inspect.
-
-    Returns:
-        True if at least one child holds a non-empty value.
-    """
-    for child in section.children:
-        child_type = getattr(child, "type", "")
-        if child_type == "field":
-            v = getattr(child, "value", None)
-            if isinstance(v, list) and v:
-                return True
-            if isinstance(v, str) and v.strip():
-                return True
-        elif child_type == "list":
-            if getattr(child, "children", None):
-                return True
-        elif child_type == "group":
-            for f in getattr(child, "children", []):
-                v = getattr(f, "value", None)
-                if isinstance(v, str) and v.strip():
-                    return True
-                if isinstance(v, list) and v:
-                    return True
-    return False
-
 
 def _derive_section_kind(section: SectionNode) -> str:
     """Infer a kind string from the shape of a built-in SectionNode.
@@ -1120,6 +1092,7 @@ def parse_propose(
     )
 
     rows: list[ProposedSection] = []
+    _TAILORED = {"experience", "skills", "projects", "summary"}
 
     # Built-in sections from parse
     for s in builtin_parsed_sections:
@@ -1144,6 +1117,8 @@ def parse_propose(
             default_action=default_action,
             allowed_actions=_allowed_actions(kind),
             preview=_preview_for_section(s, kind),
+            customize=(s.role in _TAILORED),
+            prompt=SECTION_PROMPT_DEFAULTS.get(s.role or "", ""),
         ))
 
     # Novel sections
@@ -1169,6 +1144,8 @@ def parse_propose(
             default_action=default_action,
             allowed_actions=_allowed_actions(extra.kind),
             preview=_preview_for_extra(extra),
+            customize=False,
+            prompt="",
         ))
 
     return ParseProposal(
@@ -1223,6 +1200,31 @@ def parse_apply(
         root: RootNode = stored_user.profile_tree
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+    # Onboarding path: rebuild a fresh tree from only the selected sections.
+    # GUARD-RAIL: is_onboarding is taken from the client payload, and this branch
+    # REPLACES the stored profile_tree wholesale. That is safe today because intake
+    # only fires on empty profiles. Before any existing-profile re-parse UI ships,
+    # re-derive is_onboarding server-side from stored data (as `parse_propose` does)
+    # so a stray is_onboarding=True cannot wipe a populated tree.
+    if proposal.is_onboarding:
+        from core.parsed_sections import build_onboarding_root
+        new_root = build_onboarding_root(proposal)
+        try:
+            validate_tree_limits(new_root)
+            validate_tree(new_root)
+        except (ValueError, TreeValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        existing_data = json.loads(row.data) if row.data else {}
+        derived = tree_to_legacy(new_root)
+        row.data = json.dumps({**existing_data, **derived, "profile_tree": new_root.model_dump(mode="json")})
+        parsed_name = (
+            (proposal.builtin.first_name or "") + " " + (proposal.builtin.last_name or "")
+        ).strip()
+        if parsed_name and not row.name:
+            row.name = parsed_name
+        db.commit()
+        return {"id": row.id, "name": row.name or "", "applied": len(new_root.children)}
 
     # Pre-build a role → SectionNode map for all builtin parsed sections.
     builtin_map: dict[str, SectionNode] = {
@@ -1522,3 +1524,70 @@ def export_master_resume(db: Session = Depends(get_db)) -> Response:
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=master_resume.pdf"},
     )
+
+
+# ---- Section Prompt Assist ----
+
+
+class SectionPromptDraft(BaseModel):
+    """LLM response schema for a drafted section-tailoring prompt."""
+
+    prompt: str = ""
+
+
+class _SectionPromptDraftBody(BaseModel):
+    """Request body for POST /api/config/section-prompt/draft."""
+
+    section_name: str = ""
+    purpose: str = ""
+    tailoring: str = ""
+
+
+@router.post("/api/config/section-prompt/draft")
+def draft_section_prompt(
+    body: _SectionPromptDraftBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict:
+    """Dry (no-persist, no-metering) endpoint that drafts a section tailoring prompt.
+
+    Args:
+        body: Section name, purpose, and per-job tailoring notes from the caller.
+        db: Database session.
+        profile_id: Resolved profile id from the auth seam.
+
+    Returns:
+        ``{"prompt": str}`` — the drafted tailoring instruction.
+
+    Raises:
+        HTTPException 500: ``section_prompt_assist`` seed row is missing.
+        HTTPException 502: LLM call failed.
+    """
+    user = User.load(db, profile_id=profile_id)
+    template_row = db.query(PromptDefault).filter_by(type_key="section_prompt_assist").first()
+    if template_row is None:
+        raise HTTPException(status_code=500, detail="section_prompt_assist prompt not seeded")
+
+    # Plain {key} substitution — replace tokens individually to avoid
+    # format_map colliding with literal JSON braces in the template.
+    prompt = (
+        template_row.content
+        .replace("{section_name}", body.section_name)
+        .replace("{purpose}", body.purpose)
+        .replace("{tailoring}", body.tailoring)
+    )
+
+    client, model = get_client_for_profile(user, user.prompt_resume_model)
+    try:
+        out = _llm_json_with_retry(
+            prompt,
+            client,
+            model,
+            SectionPromptDraft,
+            max_tokens=512,
+            empty_msg="Prompt draft returned empty content.",
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {"prompt": out.prompt}

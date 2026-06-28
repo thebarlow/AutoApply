@@ -149,3 +149,36 @@ def test_propose_400_no_resume(client, db_session):
     profile_id = resp.json()["id"]
     r = client.post(f"/api/config/profiles/{profile_id}/parse/propose")
     assert r.status_code == 400
+
+
+# Fake parse dict that includes both work_history (→ experience) and education
+_FAKE_PARSE_WITH_EDU = {
+    "first_name": "Ada",
+    "last_name": "Lovelace",
+    "skills": ["Python", "Math"],
+    "work_history": [{"company": "Acme", "title": "Eng", "start": "", "end": "", "summary": ""}],
+    "education": [{"institution": "MIT", "degree": "BS", "field": "CS", "start": "", "end": ""}],
+    "extra_sections": [],
+}
+
+
+def test_propose_prechecks_tailored_roles(client, db_session, monkeypatch, a_profile_with_resume):
+    """Experience row has customize=True + non-empty prompt; education has customize=False."""
+    monkeypatch.setattr(
+        "core.user.User.from_pdf",
+        classmethod(lambda cls, b, db, profile_id=None: _FAKE_PARSE_WITH_EDU),
+    )
+    monkeypatch.setattr(
+        "core.user.User.from_markdown",
+        classmethod(lambda cls, t, db, profile_id=None: _FAKE_PARSE_WITH_EDU),
+    )
+    r = client.post(f"/api/config/profiles/{a_profile_with_resume}/parse/propose")
+    assert r.status_code == 200, r.text
+    rows = {s["builtin_role"]: s for s in r.json()["sections"] if s["origin"] == "builtin"}
+
+    assert "experience" in rows, "expected experience row"
+    assert rows["experience"]["customize"] is True
+    assert rows["experience"]["prompt"], "expected non-empty prompt for experience"
+
+    assert "education" in rows, "expected education row"
+    assert rows["education"]["customize"] is False

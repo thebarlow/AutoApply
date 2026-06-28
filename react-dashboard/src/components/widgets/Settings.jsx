@@ -1146,10 +1146,11 @@ function CreateProfile({ onBack, onCreated }) {
   if (parseProposal) {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-xs text-space-dim">Step 2 of 2 — Review parsed sections</p>
+        <p className="text-xs text-space-dim">Step 2 of 2 — Customize your sections</p>
         {parseError && <p className="text-xs text-red-400">{parseError}</p>}
         <ParsePreview
           proposal={parseProposal}
+          profileId={createdId}
           applying={applyingParse}
           onApply={handleApplyParse}
           onCancel={handleCancelParse}
