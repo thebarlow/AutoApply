@@ -23,21 +23,23 @@ vi.mock('../../api', () => ({
       {
         name: 'Work Experience',
         origin: 'builtin',
+        builtin_role: 'experience',
         kind: 'list',
-        allowed_actions: ['merge', 'skip'],
-        default_action: 'merge',
+        customize: true,
+        prompt: 'Tailor.',
       },
       {
         name: 'Certifications',
         origin: 'novel',
+        extra_index: 0,
         kind: 'list',
-        allowed_actions: ['add', 'skip'],
-        default_action: 'add',
-        preview: 'AWS Certified',
+        customize: false,
+        prompt: '',
       },
     ],
   }),
   applyParse: vi.fn().mockResolvedValue({}),
+  draftSectionPrompt: vi.fn().mockResolvedValue({ prompt: 'drafted' }),
 }))
 
 import {
@@ -72,10 +74,8 @@ describe('StepResume', () => {
 
     // ParsePreview heading visible
     expect(await screen.findByText(/review parsed sections/i)).toBeInTheDocument()
-    // Standard sections heading
-    expect(screen.getByText(/standard sections/i)).toBeInTheDocument()
-    // Novel sections heading
-    expect(screen.getByText(/additional sections found/i)).toBeInTheDocument()
+    // New customization heading
+    expect(screen.getByText(/which sections should we tailor/i)).toBeInTheDocument()
   })
 
   it('calls applyParse and onFinish when Apply is clicked', async () => {
@@ -89,7 +89,7 @@ describe('StepResume', () => {
     // Wait for preview to appear
     await screen.findByText(/review parsed sections/i)
 
-    await user.click(screen.getByRole('button', { name: /apply/i }))
+    await user.click(screen.getByRole('button', { name: /finish/i }))
 
     await waitFor(() => expect(applyParse).toHaveBeenCalledWith(1, expect.objectContaining({ sections: expect.any(Array) })))
     await waitFor(() => expect(onFinish).toHaveBeenCalled())

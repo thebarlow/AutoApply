@@ -356,3 +356,11 @@ export const applyParse = (profileId, proposal) =>
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(proposal),
   })
+
+// profileId kept for signature symmetry with proposeParse/applyParse; endpoint
+// resolves the caller's profile from the session — it is not in the URL.
+export const draftSectionPrompt = (_profileId, body) =>
+  _fetch(`/api/config/section-prompt/draft`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
