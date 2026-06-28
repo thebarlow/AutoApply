@@ -4,6 +4,134 @@ from __future__ import annotations
 from core.profile_tree import FieldNode, GroupNode, ListNode, RootNode, SectionNode
 from core.schemas import ExtraSection, ParsedEntry, ParseResponse
 
+# ---------------------------------------------------------------------------
+# Presence / emptiness helpers
+# ---------------------------------------------------------------------------
+
+_WRITABLE_KINDS = {"markdown", "bullets", "taglist"}
+
+_HEADING_BY_ROLE: dict[str, str] = {
+    "summary": "summary_heading",
+    "experience": "work_history_heading",
+    "education": "education_heading",
+    "projects": "projects_heading",
+    "skills": "skills_heading",
+}
+
+
+def _section_has_data(section: SectionNode) -> bool:
+    """Return True if a SectionNode contains any non-empty user data.
+
+    Inspects FieldNode values, ListNode children counts, and nested
+    GroupNode children for non-empty fields.
+
+    Args:
+        section: The SectionNode to inspect.
+
+    Returns:
+        True if at least one child holds a non-empty value.
+    """
+    for child in section.children:
+        child_type = getattr(child, "type", "")
+        if child_type == "field":
+            v = getattr(child, "value", None)
+            if isinstance(v, list) and v:
+                return True
+            if isinstance(v, str) and v.strip():
+                return True
+        elif child_type == "list":
+            if getattr(child, "children", None):
+                return True
+        elif child_type == "group":
+            for f in getattr(child, "children", []):
+                v = getattr(f, "value", None)
+                if isinstance(v, str) and v.strip():
+                    return True
+                if isinstance(v, list) and v:
+                    return True
+    return False
+
+
+def _item_name(role: str, values: dict) -> str:
+    """Best-guess display name for one list item from its own field values.
+
+    Args:
+        role: The section role (e.g. "experience", "education", "projects").
+        values: Mapping of field key/label → string value for this item.
+
+    Returns:
+        A human-readable name for the item, falling back to "<Role> Item".
+    """
+    def join(a: str, b: str, default: str) -> str:
+        parts = [p for p in (a.strip(), b.strip()) if p]
+        return " — ".join(parts) if parts else default
+
+    if role == "experience":
+        return join(values.get("company", ""), values.get("title", ""), "Experience Item")
+    if role == "education":
+        return join(values.get("institution", ""), values.get("degree", ""), "Education Item")
+    if role == "projects":
+        name = values.get("name", "").strip()
+        return name or "Project Item"
+    # novel list: first 1–2 non-empty values
+    vals = [str(v).strip() for v in values.values() if str(v).strip()]
+    return " — ".join(vals[:2]) if vals else "Item"
+
+
+def iter_leaf_fields(section: SectionNode) -> list[FieldNode]:
+    """All FieldNodes under a section (through groups, lists, and list templates).
+
+    Args:
+        section: The SectionNode to walk.
+
+    Returns:
+        Flat list of every FieldNode reachable from this section.
+    """
+    out: list[FieldNode] = []
+
+    def walk(node) -> None:
+        if isinstance(node, FieldNode):
+            out.append(node)
+        elif isinstance(node, GroupNode):
+            for c in node.children:
+                walk(c)
+        elif isinstance(node, ListNode):
+            for c in node.children:
+                walk(c)
+            walk(node.item_template)
+
+    for child in section.children:
+        walk(child)
+    return out
+
+
+def set_section_customize(section: SectionNode, customize: bool, prompt: str) -> None:
+    """Toggle per-job tailoring: writable fields become llm_output; set/clear prompt.
+
+    Args:
+        section: The SectionNode to modify in-place.
+        customize: If True, mark writable fields as LLM output and set prompt.
+        prompt: Prompt string to attach (ignored when customize=False).
+    """
+    for f in iter_leaf_fields(section):
+        if f.kind in _WRITABLE_KINDS:
+            f.llm_output = customize
+    section.prompt = prompt if customize else ""
+
+
+def _rename_items(section: SectionNode) -> None:
+    """Rename a list section's item GroupNodes to a best guess from their values.
+
+    Args:
+        section: The SectionNode whose ListNode children to rename.
+    """
+    for child in section.children:
+        if isinstance(child, ListNode):
+            for item in child.children:
+                values = {f.key or f.name: (f.value if isinstance(f.value, str) else "")
+                          for f in item.children}
+                item.name = _item_name(section.role or "", values)
+
 
 def _union_labels(entries: list[ParsedEntry]) -> list[str]:
     seen: list[str] = []
@@ -42,7 +170,8 @@ def build_section_from_parsed(extra: ExtraSection, order: int = 0) -> SectionNod
     children = []
     for e in extra.entries:
         by_label = {f.label: f.value for f in e.fields}
-        children.append(GroupNode(name=f"{name} Item", children=[
+        item_values = {lbl: by_label.get(lbl, "") for lbl in labels}
+        children.append(GroupNode(name=_item_name("", item_values), children=[
             FieldNode(name=lbl, kind="text", order=i, value=by_label.get(lbl, ""),
                       llm_output=False)
             for i, lbl in enumerate(labels)
@@ -56,7 +185,21 @@ def build_section_from_parsed(extra: ExtraSection, order: int = 0) -> SectionNod
 # ---------------------------------------------------------------------------
 
 def builtin_sections_from_parse(parsed: ParseResponse) -> list[SectionNode]:
-    """Return the preset SectionNodes (with roles) from a ParseResponse's fixed fields."""
+    """Return populated, heading-named, header-filtered preset sections from a ParseResponse.
+
+    Post-processing applied to legacy_to_tree output:
+    - Header section: empty fields removed; dropped if no fields remain.
+    - Other sections: dropped if _section_has_data returns False.
+    - Section names overridden by the résumé's heading fields when present.
+    - List item GroupNodes renamed via _item_name for best-guess display.
+    - order re-indexed to match final kept order.
+
+    Args:
+        parsed: A validated ParseResponse from the résumé parser.
+
+    Returns:
+        List of SectionNodes ready for profile-tree insertion.
+    """
     from core.profile_tree import legacy_to_tree
 
     flat: dict = {
@@ -78,7 +221,37 @@ def builtin_sections_from_parse(parsed: ParseResponse) -> list[SectionNode]:
                      for e in (parsed.projects or [])],
     }
     root = legacy_to_tree(flat)
-    return root.children
+
+    kept: list[SectionNode] = []
+    for s in root.children:
+        if s.role == "header":
+            # Filter empty fields from the header group
+            group = s.children[0] if s.children else None
+            if group is not None and isinstance(group, GroupNode):
+                group.children = [f for f in group.children if (f.value or "").strip()]
+                if not group.children:
+                    continue
+            kept.append(s)
+            continue
+
+        # Drop sections with no data
+        if not _section_has_data(s):
+            continue
+
+        # Override section name from résumé heading field
+        heading_attr = _HEADING_BY_ROLE.get(s.role or "")
+        if heading_attr:
+            heading = getattr(parsed, heading_attr, "") or ""
+            if heading.strip():
+                s.name = heading.strip()
+
+        _rename_items(s)
+        kept.append(s)
+
+    for i, s in enumerate(kept):
+        s.order = i
+
+    return kept
 
 
 def find_section(root: RootNode, *, name: str = "", role: str = "") -> SectionNode | None:

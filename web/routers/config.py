@@ -33,6 +33,7 @@ from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
 from core.schemas import ExtraSection, ParseResponse, ParseProposal, ProposedSection
 from core.parsed_sections import (
+    _section_has_data,
     add_section,
     build_section_from_parsed,
     builtin_sections_from_parse,
@@ -923,38 +924,6 @@ def parse_profile_from_resume(
 # ---------------------------------------------------------------------------
 # Parse/propose helpers (Task 5)
 # ---------------------------------------------------------------------------
-
-def _section_has_data(section: SectionNode) -> bool:
-    """Return True if a SectionNode contains any non-empty user data.
-
-    Inspects FieldNode values, ListNode children counts, and nested
-    GroupNode children for non-empty fields.
-
-    Args:
-        section: The SectionNode to inspect.
-
-    Returns:
-        True if at least one child holds a non-empty value.
-    """
-    for child in section.children:
-        child_type = getattr(child, "type", "")
-        if child_type == "field":
-            v = getattr(child, "value", None)
-            if isinstance(v, list) and v:
-                return True
-            if isinstance(v, str) and v.strip():
-                return True
-        elif child_type == "list":
-            if getattr(child, "children", None):
-                return True
-        elif child_type == "group":
-            for f in getattr(child, "children", []):
-                v = getattr(f, "value", None)
-                if isinstance(v, str) and v.strip():
-                    return True
-                if isinstance(v, list) and v:
-                    return True
-    return False
 
 
 def _derive_section_kind(section: SectionNode) -> str:
