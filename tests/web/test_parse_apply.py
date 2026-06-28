@@ -248,6 +248,135 @@ def test_apply_skip_is_noop_and_merge_unions(client, db_session, a_profile_with_
     assert len(skills) == 2, f"Expected 2 unique skills, got {skills}"
 
 
+def _get_tree_root(db, pid: int):
+    """Return the stored RootNode for a profile, or None."""
+    row = db.query(UserProfileModel).filter_by(id=pid).first()
+    data = json.loads(row.data) if row.data else {}
+    tree_dict = data.get("profile_tree")
+    if not tree_dict:
+        return None
+    return RootNode.model_validate(tree_dict)
+
+
+def test_onboarding_no_skills_section_in_tree(client, db_session, a_profile_with_resume):
+    """Onboarding apply with no skills in parse → no skills-role section in stored tree."""
+    proposal = {
+        "builtin": {
+            "first_name": "Alice",
+            "last_name": "Smith",
+            "skills": [],
+            "work_history": [
+                {"company": "Acme", "title": "Engineer", "start": "2020", "end": "2023", "summary": "Built things."}
+            ],
+            "education": [],
+            "projects": [],
+        },
+        "extra_sections": [],
+        "is_onboarding": True,
+        "sections": [
+            {
+                "name": "Experience",
+                "kind": "list",
+                "origin": "builtin",
+                "builtin_role": "experience",
+                "extra_index": -1,
+                "matches_existing": False,
+                "existing_has_data": False,
+                "default_action": "replace",
+                "allowed_actions": ["replace", "skip"],
+                "preview": {},
+                "action": "replace",
+                "customize": False,
+                "prompt": "",
+            },
+        ],
+    }
+    r = client.post(
+        f"/api/config/profiles/{a_profile_with_resume}/parse/apply", json=proposal
+    )
+    assert r.status_code == 200
+    root = _get_tree_root(db_session, a_profile_with_resume)
+    assert root is not None
+    roles = [s.role for s in root.children]
+    assert "skills" not in roles, f"skills section unexpectedly present; roles={roles}"
+
+
+def test_onboarding_customize_flips_llm_output(client, db_session, a_profile_with_resume):
+    """Onboarding apply: customize=True sets writable fields llm_output=True; False keeps False."""
+    proposal = {
+        "builtin": {
+            "first_name": "Bob",
+            "last_name": "Jones",
+            "skills": ["Python", "SQL"],
+            "work_history": [
+                {"company": "Corp", "title": "Dev", "start": "2019", "end": "2022", "summary": "Did stuff."}
+            ],
+            "education": [],
+            "projects": [],
+        },
+        "extra_sections": [],
+        "is_onboarding": True,
+        "sections": [
+            {
+                "name": "Experience",
+                "kind": "list",
+                "origin": "builtin",
+                "builtin_role": "experience",
+                "extra_index": -1,
+                "matches_existing": False,
+                "existing_has_data": False,
+                "default_action": "replace",
+                "allowed_actions": ["replace", "skip"],
+                "preview": {},
+                "action": "replace",
+                "customize": True,
+                "prompt": "Tailor experience to the job.",
+            },
+            {
+                "name": "Skills",
+                "kind": "taglist",
+                "origin": "builtin",
+                "builtin_role": "skills",
+                "extra_index": -1,
+                "matches_existing": False,
+                "existing_has_data": False,
+                "default_action": "replace",
+                "allowed_actions": ["replace", "skip"],
+                "preview": {},
+                "action": "replace",
+                "customize": False,
+                "prompt": "",
+            },
+        ],
+    }
+    r = client.post(
+        f"/api/config/profiles/{a_profile_with_resume}/parse/apply", json=proposal
+    )
+    assert r.status_code == 200, r.json()
+    root = _get_tree_root(db_session, a_profile_with_resume)
+    assert root is not None
+
+    from core.parsed_sections import iter_leaf_fields, find_section
+
+    # (b) experience writable fields → llm_output=True
+    exp = find_section(root, role="experience")
+    assert exp is not None, "experience section missing from tree"
+    exp_writable = [f for f in iter_leaf_fields(exp) if f.kind in {"markdown", "bullets", "taglist"}]
+    assert exp_writable, "no writable fields found in experience section"
+    assert all(f.llm_output for f in exp_writable), (
+        f"expected all experience writable fields llm_output=True; got {[(f.name, f.llm_output) for f in exp_writable]}"
+    )
+
+    # (c) skills writable fields → llm_output=False
+    skl = find_section(root, role="skills")
+    assert skl is not None, "skills section missing from tree"
+    skl_writable = [f for f in iter_leaf_fields(skl) if f.kind in {"markdown", "bullets", "taglist"}]
+    assert skl_writable, "no writable fields found in skills section"
+    assert all(not f.llm_output for f in skl_writable), (
+        f"expected all skills writable fields llm_output=False; got {[(f.name, f.llm_output) for f in skl_writable]}"
+    )
+
+
 def test_apply_caps_returns_422(client, db_session, a_profile_with_resume):
     """A proposal that would push the tree past 500 nodes returns 422."""
     # Build extra_sections with enough list entries to blow the node cap.

@@ -254,6 +254,42 @@ def builtin_sections_from_parse(parsed: ParseResponse) -> list[SectionNode]:
     return kept
 
 
+def build_onboarding_root(proposal) -> RootNode:
+    """Build a fresh RootNode from a ParseProposal's selected sections (intake).
+
+    Sections are taken in proposal order; builtin sections come heading-named and
+    presence-filtered from ``builtin_sections_from_parse``; novel sections from
+    ``build_section_from_parsed``. Each section's ``customize``/``prompt`` choice
+    is applied. Verbatim sections keep ``llm_output=False``.
+
+    Args:
+        proposal: A ``ParseProposal`` with ``builtin``, ``extra_sections``, and
+            ``sections`` (ordered list of ``ProposedSection`` rows).
+
+    Returns:
+        A fresh ``RootNode`` containing only the selected, populated sections.
+    """
+    builtin_by_role = {s.role: s for s in builtin_sections_from_parse(proposal.builtin) if s.role}
+    root = RootNode()
+    order = 0
+    for r in proposal.sections:
+        if r.origin == "builtin":
+            section = builtin_by_role.get(r.builtin_role)
+            if section is None:
+                continue
+        else:
+            if r.extra_index < 0 or r.extra_index >= len(proposal.extra_sections):
+                continue
+            section = build_section_from_parsed(proposal.extra_sections[r.extra_index])
+            if r.name and r.name != section.name:
+                section.name = r.name
+        set_section_customize(section, bool(r.customize), r.prompt or "")
+        section.order = order
+        order += 1
+        root.children.append(section)
+    return root
+
+
 def find_section(root: RootNode, *, name: str = "", role: str = "") -> SectionNode | None:
     """Find a section by ``role`` (when given) or case-folded ``name``."""
     for s in root.children:

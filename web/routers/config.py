@@ -1199,6 +1199,26 @@ def parse_apply(
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
+    # Onboarding path: rebuild a fresh tree from only the selected sections.
+    if proposal.is_onboarding:
+        from core.parsed_sections import build_onboarding_root
+        new_root = build_onboarding_root(proposal)
+        try:
+            validate_tree_limits(new_root)
+            validate_tree(new_root)
+        except (ValueError, TreeValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        existing_data = json.loads(row.data) if row.data else {}
+        derived = tree_to_legacy(new_root)
+        row.data = json.dumps({**existing_data, **derived, "profile_tree": new_root.model_dump(mode="json")})
+        parsed_name = (
+            (proposal.builtin.first_name or "") + " " + (proposal.builtin.last_name or "")
+        ).strip()
+        if parsed_name and not row.name:
+            row.name = parsed_name
+        db.commit()
+        return {"id": row.id, "name": row.name or "", "applied": len(new_root.children)}
+
     # Pre-build a role → SectionNode map for all builtin parsed sections.
     builtin_map: dict[str, SectionNode] = {
         s.role: s
