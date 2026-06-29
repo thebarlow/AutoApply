@@ -33,6 +33,9 @@ function Cell({ css, section, errored, registerFrame }) {
       title="section"
       srcDoc={srcDoc(css, section.html)}
       ref={registerFrame}
+      // allow-same-origin lets equalize() read contentDocument.scrollHeight;
+      // omitting allow-scripts keeps any injected <script> inert (defense-in-depth).
+      sandbox="allow-same-origin"
       className="w-full bg-white rounded border border-space-border"
       style={{ height: 80, border: 'none' }}
     />
