@@ -204,7 +204,7 @@ Admin-gated, dev-only endpoints not intended for production user flows.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/dev/resume-compare/{job_key}` | Run Model 1 (dry, single-call, existing `generate_resume_md` code path) and Model 2 (per-section, `core/section_generator`) against the same job; eval each result with `Job.evaluate_resume_body`; return `{model1, model2}` where each is `{markdown, score, issues}` or `{error}` if that model failed. Not metered, no ATS check, no document persistence. Per-model errors are isolated — one model failing does not prevent the other from running. |
+| `POST` | `/api/dev/resume-compare/{job_key}` | Run Model 1 (dry, single-call, existing `generate_resume_md` code path) and Model 2 (per-section, `core/section_generator`) against the same job; eval each result with `Job.evaluate_resume_body`; return `{css, model1, model2}` where each model is `{markdown, score, issues, sections}` or `{error}` if that model failed. `sections` is `[{heading, html}]` — the model's assembled Markdown run through pandoc (`core.utils.markdown_to_html`) then split at top-level `<h2>` boundaries (`_split_sections_html`; pre-first-`<h2>` content becomes a leading "Header" section). Top-level `css` is the contents of `generator/resume.css`, used by the UI to render each section in PDF styling. Not metered, no ATS check, no document persistence. Per-model errors are isolated — one model failing does not prevent the other from running (an errored model has no `sections`, but top-level `css` is still returned). |
 
 ## Known Issues
 
