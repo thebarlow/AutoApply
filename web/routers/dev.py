@@ -6,12 +6,14 @@ ATS) and returns both Markdowns + eval scores for side-by-side review.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from core.document_assembler import assemble_resume_markdown
+from core.utils import markdown_to_html
 from core.document_builder import build_resume_document
 from core.job import Job, _apply_template, _llm_json_with_retry
 from core.llm import get_client_for_profile
@@ -26,6 +28,8 @@ from web.routers.credits import require_admin
 from web.tenancy import current_profile_id
 
 router = APIRouter()
+
+_RESUME_CSS = Path(__file__).resolve().parents[2] / "generator" / "resume.css"
 
 _H2_RE = re.compile(r"<h2\b", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -109,14 +113,16 @@ def _one_model(fn, job, user, client, model, eval_prompt, db) -> dict:
         md = fn(job, user, client, model, db)
     except Exception as exc:  # noqa: BLE001 — surface to the page, never 500 the pair
         return {"error": str(exc)}
-    result = {"markdown": md}
+    result = {"markdown": md, "sections": _split_sections_html(markdown_to_html(md))}
     result.update(job.evaluate_resume_body(md, eval_prompt, user, client, model))
     return result
 
 
 def run_comparison(job, user, client, model, eval_prompt, db) -> dict:
-    """Run both models independently and return both results."""
+    """Run both models independently and return both results plus the résumé CSS."""
+    css = _RESUME_CSS.read_text(encoding="utf-8") if _RESUME_CSS.exists() else ""
     return {
+        "css": css,
         "model1": _one_model(_model1_markdown, job, user, client, model, eval_prompt, db),
         "model2": _one_model(_model2_markdown, job, user, client, model, eval_prompt, db),
     }

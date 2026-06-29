@@ -120,3 +120,39 @@ def test_split_sections_html_no_h2_is_single_header():
 
 def test_split_sections_html_empty():
     assert devmod._split_sections_html("   ") == []
+
+
+def test_run_comparison_includes_sections_and_css(monkeypatch):
+    monkeypatch.setattr(
+        devmod, "_model1_markdown",
+        lambda job, user, client, model, db: "## Profile\n\nONE body",
+    )
+    monkeypatch.setattr(
+        devmod, "_model2_markdown",
+        lambda job, user, client, model, db: "## Profile\n\nTWO body",
+    )
+    out = devmod.run_comparison(
+        _Job(), user=object(), client=object(), model="m",
+        eval_prompt="EVAL {current_document}", db=None,
+    )
+    assert isinstance(out["css"], str)
+    assert out["css"]  # resume.css is non-empty
+    headings = [s["heading"] for s in out["model1"]["sections"]]
+    assert "Profile" in headings
+
+
+def test_run_comparison_errored_model_still_has_css(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("nope")
+    monkeypatch.setattr(devmod, "_model1_markdown", boom)
+    monkeypatch.setattr(
+        devmod, "_model2_markdown",
+        lambda *a, **k: "## Profile\n\nok",
+    )
+    out = devmod.run_comparison(
+        _Job(), user=object(), client=object(), model="m",
+        eval_prompt="EVAL {current_document}", db=None,
+    )
+    assert "error" in out["model1"]
+    assert "sections" not in out["model1"]
+    assert isinstance(out["css"], str)
