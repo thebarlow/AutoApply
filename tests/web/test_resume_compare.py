@@ -95,3 +95,28 @@ def test_combined_resolver_substitutes_job_and_profile():
         resolve("{job.title} knows {profile:%s}" % skills_field.id)
         == "Engineer knows Python"
     )
+
+
+def test_split_sections_html_header_then_sections():
+    html = (
+        '<h1>Jane Doe</h1><p>jane@x.com</p>'
+        '<h2 id="profile">Profile</h2><p>Summary.</p>'
+        '<h2 id="skills">Skills</h2><ul><li>Python</li></ul>'
+    )
+    out = devmod._split_sections_html(html)
+    assert [s["heading"] for s in out] == ["Header", "Profile", "Skills"]
+    assert "Jane Doe" in out[0]["html"]
+    assert out[1]["html"].startswith("<h2")
+    assert "Summary." in out[1]["html"]
+    assert "Python" in out[2]["html"]
+    # Profile section must not bleed into Skills content.
+    assert "Python" not in out[1]["html"]
+
+
+def test_split_sections_html_no_h2_is_single_header():
+    out = devmod._split_sections_html("<p>just a blurb</p>")
+    assert out == [{"heading": "Header", "html": "<p>just a blurb</p>"}]
+
+
+def test_split_sections_html_empty():
+    assert devmod._split_sections_html("   ") == []

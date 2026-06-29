@@ -5,6 +5,7 @@ ATS) and returns both Markdowns + eval scores for side-by-side review.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,6 +26,52 @@ from web.routers.credits import require_admin
 from web.tenancy import current_profile_id
 
 router = APIRouter()
+
+_H2_RE = re.compile(r"<h2\b", re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _split_sections_html(html: str) -> list[dict]:
+    """Split a pandoc HTML fragment into top-level sections at ``<h2>`` boundaries.
+
+    Content preceding the first ``<h2>`` (e.g. a tree-v1 name ``<h1>`` and contact
+    ``<p>``) is returned as a leading ``"Header"`` section.
+
+    Args:
+        html: The HTML fragment to split.
+
+    Returns:
+        Ordered list of ``{"heading": str, "html": str}`` dicts. Empty input
+        yields ``[]``.
+    """
+    if not html or not html.strip():
+        return []
+
+    # Indices where each <h2 begins; everything before the first is the header.
+    starts = [m.start() for m in _H2_RE.finditer(html)]
+    sections: list[dict] = []
+
+    if not starts:
+        return [{"heading": "Header", "html": html.strip()}]
+
+    header = html[: starts[0]].strip()
+    if header:
+        sections.append({"heading": "Header", "html": header})
+
+    bounds = starts + [len(html)]
+    for i in range(len(starts)):
+        chunk = html[bounds[i] : bounds[i + 1]].strip()
+        # Heading text = inner text of the opening <h2>...</h2>.
+        end = chunk.lower().find("</h2>")
+        open_tag_end = chunk.find(">")
+        heading = (
+            _TAG_RE.sub("", chunk[open_tag_end + 1 : end]).strip()
+            if end != -1 and open_tag_end != -1
+            else "Section"
+        )
+        sections.append({"heading": heading, "html": chunk})
+
+    return sections
 
 
 def _model1_markdown(job: Job, user: Any, client: Any, model: str, db: Session) -> str:
