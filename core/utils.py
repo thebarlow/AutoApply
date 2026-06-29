@@ -61,6 +61,32 @@ def _parse_frontmatter(md_path: Path) -> dict[str, Any]:
     return {}
 
 
+def markdown_to_html(md_text: str) -> str:
+    """Convert a Markdown string to an HTML fragment via pandoc.
+
+    Applies the same tight-bullet-list normalization ``render_pdf`` uses so a
+    bullet immediately following a text line is parsed as a ``<ul>``.
+
+    Args:
+        md_text: The Markdown source.
+
+    Returns:
+        The pandoc-produced HTML fragment.
+
+    Raises:
+        subprocess.CalledProcessError: If pandoc exits non-zero.
+    """
+    md_text = re.sub(r"(?<=\S)\n(- )", r"\n\n\1", md_text)
+    return subprocess.run(
+        ["pandoc", "-t", "html"],
+        input=md_text,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout
+
+
 def render_pdf(
     md_path: Path,
     pdf_path: Path,
@@ -94,18 +120,7 @@ def render_pdf(
         RuntimeError: If ``max_pages`` cannot be met even at the minimum scale.
     """
     md_text = md_path.read_text(encoding="utf-8")
-    # Ensure bullet lists are preceded by a blank line so pandoc parses them
-    # as <ul> elements rather than inline text within a paragraph.
-    md_text = re.sub(r"(?<=\S)\n(- )", r"\n\n\1", md_text)
-
-    fragment = subprocess.run(
-        ["pandoc", "-t", "html"],
-        input=md_text,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    ).stdout
+    fragment = markdown_to_html(md_text)
 
     # CSS: explicit override wins; otherwise derive from the template stem
     # (e.g. resume.css for resume_template.html).
