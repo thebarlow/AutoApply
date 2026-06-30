@@ -100,6 +100,13 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
         if job is None:
             return
 
+        if not job.has_description():
+            job.unread_indicator = "error"
+            job.last_result_error = "Scrape failed: empty description."
+            db.commit()
+            _emit(job)
+            return
+
         # Step 1: description extraction
         llm_status.start(job_key, "description")
         extraction_ok = False

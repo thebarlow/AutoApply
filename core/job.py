@@ -451,6 +451,18 @@ class Job(Base):
         """
         return _apply_template(template, {"job": self, "user": user})
 
+    def has_description(self) -> bool:
+        """True if the raw scraped description has non-whitespace content.
+
+        A blank description means the scrape failed; such jobs are not
+        extracted, scored, or otherwise processed. This is the single source
+        of truth for the "failed scrape" rule.
+
+        Returns:
+            True when ``self.description`` holds non-whitespace text.
+        """
+        return bool((self.description or "").strip())
+
     def score(
         self,
         user: Any,
@@ -472,6 +484,8 @@ class Job(Base):
             db: SQLAlchemy session.
             prompt_content: Rendered scoring prompt template text.
         """
+        if not self.has_description():
+            raise RuntimeError("Cannot score: empty description (failed scrape).")
         import warnings
 
         prompt = self.build_score_prompt(user, prompt_content)
