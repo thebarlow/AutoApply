@@ -71,3 +71,4 @@ react-dashboard/test-output-*.txt
 
 # Superpowers skills lockfile (tooling state, regenerated locally)
 skills-lock.json
+.claude/skills/
