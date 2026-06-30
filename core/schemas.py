@@ -311,6 +311,39 @@ class ResumeGeneration(BaseModel):
     skills: list[ResumeSkillGroup] = Field(default_factory=list)
 
 
+def _escape_unescaped_controls(text: str) -> str:
+    """Escape literal control chars (newline/CR/tab) that appear inside JSON string
+    literals, leaving structural whitespace untouched. A best-effort repair for the
+    "markdown value broken across physical lines" failure mode."""
+    out: list[str] = []
+    in_str = False
+    escaped = False
+    for ch in text:
+        if in_str:
+            if escaped:
+                out.append(ch)
+                escaped = False
+            elif ch == "\\":
+                out.append(ch)
+                escaped = True
+            elif ch == '"':
+                out.append(ch)
+                in_str = False
+            elif ch == "\n":
+                out.append("\\n")
+            elif ch == "\r":
+                out.append("\\r")
+            elif ch == "\t":
+                out.append("\\t")
+            else:
+                out.append(ch)
+        else:
+            if ch == '"':
+                in_str = True
+            out.append(ch)
+    return "".join(out)
+
+
 def parse_llm_json(raw: str, model: type[T]) -> T:
     """Parse and validate a JSON object out of a raw LLM response.
 
@@ -351,9 +384,15 @@ def parse_llm_json(raw: str, model: type[T]) -> T:
     try:
         data = json.loads(text)
     except (json.JSONDecodeError, ValueError) as exc:
-        raise RuntimeError(
-            f"LLM response is not valid JSON: {exc}. Preview: {preview!r}"
-        ) from exc
+        # Common LLM slip: a markdown string value broken across physical lines,
+        # leaving literal newlines/tabs inside a JSON string. Escape those and
+        # retry once before giving up.
+        try:
+            data = json.loads(_escape_unescaped_controls(text))
+        except (json.JSONDecodeError, ValueError):
+            raise RuntimeError(
+                f"LLM response is not valid JSON: {exc}. Preview: {preview!r}"
+            ) from exc
     try:
         return model.model_validate(data)
     except ValidationError as exc:

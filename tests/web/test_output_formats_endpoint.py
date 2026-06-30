@@ -8,7 +8,7 @@ def test_output_formats_endpoint_lists_registry():
     assert r.status_code == 200
     data = r.json()
     ids = {d["id"] for d in data}
-    assert ids == {"bullets", "paragraph"}
+    assert ids == {"bullets", "paragraph", "skill_groups"}
     bullets = next(d for d in data if d["id"] == "bullets")
     assert bullets["label"] == "Bullet list"
     assert bullets["kind"] == "bullets"

@@ -31,10 +31,18 @@ def _critique_block(critique: "list[dict] | None") -> str:
 
 class SectionOutput(BaseModel):
     """One section's LLM output. Scalar sections fill ``fields``; list sections
-    fill ``entries`` (keyed by entry node id, then field key)."""
+    fill ``entries`` (keyed by entry node id, then field key). ``order`` is an
+    optional most-relevant-first list of entry ids, requested only for sections
+    that opt into relevance ordering (e.g. projects)."""
 
     fields: dict[str, Value] = Field(default_factory=dict)
     entries: dict[str, dict[str, Value]] = Field(default_factory=dict)
+    order: list[str] = Field(default_factory=list)
+
+
+# Sentinel key prefix in the authored map carrying a section's entry ordering
+# (``__order__:<section_id>`` -> list of entry ids, most-relevant-first).
+ORDER_PREFIX = "__order__:"
 
 
 def _outputable(field: FieldNode) -> bool:
@@ -120,8 +128,15 @@ def _build_scalar_prompt(section: SectionNode, group: GroupNode, job_ctx: str, c
     )
 
 
-def _build_list_prompt(section: SectionNode, lst: ListNode, job_ctx: str, critique=None) -> str:
-    """Prompt for a repeating-list section (one call authors every unlocked entry)."""
+def _build_list_prompt(
+    section: SectionNode, lst: ListNode, job_ctx: str, critique=None,
+    allow_order: bool = False,
+) -> str:
+    """Prompt for a repeating-list section (one call authors every unlocked entry).
+
+    When ``allow_order`` is set, the model is asked to additionally return an
+    ``order`` array ranking the entries most-relevant-first (used for projects).
+    """
     blocks = []
     for entry in lst.children:
         ctx = "\n".join(_group_context(entry)) or "(none)"
@@ -136,13 +151,24 @@ def _build_list_prompt(section: SectionNode, lst: ListNode, job_ctx: str, critiq
     folded = build_section_prompt(section)
     guide = f"{folded}\n\n" if folded else ""
     fmt_block = _format_block([f for e in lst.children for f in e.children])
+    order_spec = (
+        '\nAlso return "order": an array of ALL entry ids above (including FIXED '
+        "ones), sorted most-relevant-first by relevance to the job and strength "
+        "of the item."
+        if allow_order
+        else ""
+    )
+    return_shape = (
+        '{"entries": {"<entry_id>": {"<field_key>": "<value>"}}'
+        + (', "order": ["<entry_id>", ...]}' if allow_order else "}")
+    )
     return (
         f"{guide}You are tailoring the résumé section '{section.name}' to a job. Each "
         f"entry is a separate item; write its fields using its own anchors.\n\n"
         f"JOB:\n{job_ctx}\n\n{body}\n"
         f"{_critique_block(critique)}"
-        f"{fmt_block}\n"
-        'Return JSON: {"entries": {"<entry_id>": {"<field_key>": "<value>"}}} '
+        f"{fmt_block}{order_spec}\n"
+        f"Return JSON: {return_shape} "
         "with an object for every entry id above that is not FIXED."
     )
 
@@ -198,7 +224,11 @@ def generate_resume_by_section(
             ]
             if not entries_with_work:
                 continue
-            prompt = _build_list_prompt(section, child, job_ctx, critique=section_critique)
+            allow_order = section.role == "projects"
+            prompt = _build_list_prompt(
+                section, child, job_ctx, critique=section_critique,
+                allow_order=allow_order,
+            )
         elif isinstance(child, GroupNode):
             if child.locked or not any(_outputable(f) for f in child.children):
                 continue
@@ -231,6 +261,11 @@ def generate_resume_by_section(
                 for f in entry.children:
                     if _outputable(f) and f.key in kv:
                         out[f.id] = _coerce_to_format(kv[f.key], f)
+            if allow_order and result.order:
+                valid = {e.id for e in child.children}
+                ranked = [eid for eid in result.order if eid in valid]
+                if ranked:
+                    out[f"{ORDER_PREFIX}{section.id}"] = ranked
         else:
             group = child if isinstance(child, GroupNode) else None
             fields = group.children if group else [child]

@@ -406,7 +406,7 @@ def test_extract_description_stores_result(client, db_session, monkeypatch):
     monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db, profile_id=None: fake_user))
     monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
-    def mock_llm_call(client, model, prompt):
+    def mock_llm_call(client, model, prompt, label="extract"):
         return '{"required_skills": ["Python"]}'
 
     monkeypatch.setattr(jobs_router, "_call_llm_for_extraction", mock_llm_call)
@@ -470,7 +470,7 @@ def test_extract_description_llm_failure_returns_500(client, db_session, monkeyp
     monkeypatch.setattr("web.routers.jobs.User.load", classmethod(lambda cls, db, profile_id=None: fake_user))
     monkeypatch.setattr("web.routers.jobs.get_client_for_profile", lambda user, model: (None, "test-model"))
 
-    def raise_error(c, m, p):
+    def raise_error(c, m, p, label="extract"):
         raise RuntimeError("LLM down")
 
     monkeypatch.setattr(jobs_router, "_call_llm_for_extraction", raise_error)
@@ -497,7 +497,7 @@ def test_do_extract_description_parses_salary(db_session, monkeypatch):
     )
     monkeypatch.setattr(
         "web.routers.jobs._call_llm_for_extraction",
-        lambda client, model, prompt: '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[],"salary_min":80000,"salary_max":120000}',
+        lambda client, model, prompt, label="extract": '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[],"salary_min":80000,"salary_max":120000}',
     )
 
     _do_extract_description(job, db_session, 1)
@@ -524,7 +524,7 @@ def test_do_extract_description_handles_null_salary(db_session, monkeypatch):
     )
     monkeypatch.setattr(
         "web.routers.jobs._call_llm_for_extraction",
-        lambda client, model, prompt: '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[]}',
+        lambda client, model, prompt, label="extract": '{"seniority":"mid","role_type":"engineer","domain":"software","work_arrangement":"remote","employment_type":"full-time","required_skills":[],"preferred_skills":[],"tech_stack":[],"key_responsibilities":[],"company_signals":[]}',
     )
 
     _do_extract_description(job, db_session, 1)

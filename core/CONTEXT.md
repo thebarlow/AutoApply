@@ -89,7 +89,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Rendering cover letter PDF | `job.py` → `Job.generate_cover_pdf()` |
 | Evaluating resume quality (returns score + issues) | `job.py` → `Job.evaluate_resume_md()` |
 | Evaluating cover letter quality | `job.py` → `Job.evaluate_cover_md()` |
-| Rewriting resume to address eval issues (+ re-renders PDF) | `job.py` → `Job.refine_resume_md()` |
+| Rewriting resume to address eval issues | `intake_pipeline._run_resume_section_refinement` (per-section regen; no `Job` method) |
 | Rewriting cover letter to address eval issues | `job.py` → `Job.refine_cover_md()` |
 | Extracting structured job description fields | `job.py` → `Job.extract_description()` |
 | Post-intake background extraction trigger | `job.py` → `Job.intake()` |
@@ -185,7 +185,7 @@ Defined in `db/database.py` as `Document`. Columns: `id`, `job_key`, `doc_type` 
 
 ### Phase 3b: structured document as source of truth
 
-The structured `Document` table is now the **single source of truth**; the `.md` is purely derived. The `.md` is written only by `write_resume_markdown` / `write_cover_markdown` (assemble from the document + snapshot front matter), which are invoked from generation, structured editing, and refine — never edited directly. `_refine_doc_md` now patches the structured document (via `apply_resume_patch` for résumés), re-persists it, then re-derives `.md` + PDF; it takes `db` as a parameter.
+The structured `Document` table is now the **single source of truth**; the `.md` is purely derived. The `.md` is written only by `write_resume_markdown` / `write_cover_markdown` (assemble from the document + snapshot front matter), which are invoked from generation, structured editing, and refine — never edited directly. `_refine_doc_md` is **cover-only**: it rewrites the cover body prose, re-persists, then re-derives `.md` + PDF (it takes `db` as a parameter). Résumé refinement does not use it — tree-v1 résumés are refined per-section by `intake_pipeline._run_resume_section_refinement`.
 
 ## ATS Gate (`core/ats_gate.py`)
 
@@ -277,6 +277,6 @@ cross-widget read used by the navbar session-usage overlay.
 
 - `Job` methods that call the LLM receive an already-constructed client + model string — they do not read config themselves.
 - All DB writes inside `Job` methods use the session passed in; callers are responsible for commit/rollback.
-- `refine_resume_md` passes `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). The structured-edit path (`web/routers/jobs.py` `put_document`) also passes `max_pages=1`.
+- The résumé refine + structured-edit paths pass `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). (`web/routers/jobs.py` `put_document` also passes `max_pages=1`.)
 - `_refine_doc_md` uses `max_tokens=32768` to avoid truncation on rewrites.
 - Structured résumé generate/refine call the LLM through `_llm_json_with_retry` (module-level in `job.py`): it appends a strict-JSON instruction (`_JSON_RETRY_SUFFIX`) and retries once with a corrective nudge when `parse_llm_json` fails. This guards against small/fast models breaking a markdown value out of its JSON string.

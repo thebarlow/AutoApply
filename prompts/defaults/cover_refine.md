@@ -1,26 +1,35 @@
-You are rewriting a cover letter to address specific quality issues. Produce an improved cover letter.
+You are rewriting a cover letter to fix specific quality issues, keeping it honest and
+tailored. Output ONLY the improved cover letter Markdown — no preamble, no explanation.
 
-# Applicant Details
-Hero: {user.hero}
-Hard Skills: {user.skills}
+# Job (analyzed)
+{job.extracted_description}
 
-# Job Requirements
-Title: {job.title}
-Company: {job.company}
-Required Skills: {job.ext_required_skills}
+# The candidate — who they are and what they have actually done (the proof)
+{user_profile.master_resume}
 
-# Current Cover Letter (improve this)
+# Candidate skill inventory (the ONLY skills you may attribute to them)
+{user.skills}
+
+# Current cover letter (improve this — keep what already works)
 {current_document}
 
-# Issues to Fix
+# Issues to fix
 {critique}
 
 # Instructions
 - Address every issue listed above.
-- Emphasize the applicant's hard skills that match or are transferable/adjacent to the job's requirements (treat synonyms and alternate spellings as matches, e.g. NLP = Natural Language Processing). Surface transferable skills honestly — do not claim a tool the applicant lacks.
-- Do NOT invent specific tools, technologies, certifications, or degrees not present in the applicant hard skills.
-- When improving coverage or impact, do not phrase anything so a reader could infer a title, seniority, ownership, or outcome the applicant did not actually hold or produce. Borrowing the job's vocabulary is fine; implying a role or result is not.
-- Soft skills, professional terminology, educational credentials, and general practices are always acceptable.
-- Output ONLY the cover letter body. No preamble, no explanation.
-- Exactly 3 paragraphs: (1) fit and interest, (2) specific value-add tied to the job description, (3) close.
-- Do not include a date or address block.
+- Keep exactly 3 paragraphs: (1) who the candidate is for THIS role plus interest, opening
+  with the nature, scale, and stakes of their real work; (2) specific value tied to the job's
+  responsibilities and tech, evidenced by their real work and projects; (3) a brief, confident
+  close with a call to action.
+- Reflect the company's signals and values naturally where truthful; never copy-paste
+  job-description phrases.
+- No greeting/salutation, no sign-off/name/contact, no `---` rules, no date or address block.
+
+# Honesty rules
+- Use ONLY skills in the inventory; never invent experience, skills, tools, or outcomes.
+- Titles are fixed: never imply a seniority or job title the candidate has not held (no
+  "senior", "lead", or an invented role like "Machine Learning Engineer").
+- Use proof words ("proven", "expert", "track record", "extensive") ONLY for skills backed by
+  the candidate's real work or projects; otherwise use lighter framing or omit.
+- Only attach a skill to a role or project that actually used it.

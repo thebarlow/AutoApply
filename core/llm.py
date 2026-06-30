@@ -1,12 +1,30 @@
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 import openai
 
 _ENV_PATH = Path(__file__).parent.parent / ".env"
+
+# Per-request label propagated to the LLM provider (e.g. OpenRouter) via the
+# OpenAI ``user`` field, which surfaces in the provider's activity logs. Set it
+# around a high-level operation with ``llm_label(...)``; every ``create`` call
+# made through a client from ``get_client_for_profile`` picks it up.
+_llm_label: contextvars.ContextVar[str] = contextvars.ContextVar("_llm_label", default="")
+
+
+@contextlib.contextmanager
+def llm_label(label: str) -> Generator[None]:
+    """Tag all LLM requests made within this block with ``label`` (for log readability)."""
+    token = _llm_label.set(label)
+    try:
+        yield
+    finally:
+        _llm_label.reset(token)
 
 
 def _read_env_file() -> dict[str, str]:
@@ -53,7 +71,30 @@ def get_client_for_profile(user: Any = None, model_override: str = "") -> tuple:
     model = model_override or os.getenv("LLM_DEFAULT_MODEL") or _read_env_file().get("LLM_DEFAULT_MODEL", "")
     if not model:
         raise RuntimeError("No model resolved. Set LLM_DEFAULT_MODEL in .env or pass model_override.")
-    return openai.OpenAI(api_key=api_key, base_url=base_url), model
+    client = openai.OpenAI(api_key=api_key, base_url=base_url)
+    _install_request_labeling(client)
+    return client, model
+
+
+def _install_request_labeling(client: Any) -> Any:
+    """Wrap ``client.chat.completions.create`` to attach the current ``llm_label``.
+
+    The label is sent as the OpenAI ``user`` field, which OpenRouter records and
+    displays per-request in its activity logs. No-op when no label is set.
+    """
+    completions = client.chat.completions
+    original = completions.create
+
+    def create(*args: Any, **kwargs: Any) -> Any:
+        label = _llm_label.get()
+        if label and "user" not in kwargs:
+            extra_body = dict(kwargs.get("extra_body") or {})
+            extra_body.setdefault("user", label)
+            kwargs["extra_body"] = extra_body
+        return original(*args, **kwargs)
+
+    completions.create = create  # type: ignore[method-assign]
+    return client
 
 
 def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> str:

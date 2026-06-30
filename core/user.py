@@ -297,16 +297,18 @@ class User(Base):
             )
         except RuntimeError:
             raise
-        response = client.chat.completions.create(
-            model=model,
-            temperature=0,
-            timeout=30,
-            max_tokens=8000,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": md_text},
-            ],
-        )
+        from core.llm import llm_label
+        with llm_label("resume-parse"):
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0,
+                timeout=30,
+                max_tokens=8000,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": md_text},
+                ],
+            )
         from core.schemas import ParseResponse, parse_llm_json
 
         raw = response.choices[0].message.content or ""

@@ -181,15 +181,14 @@ class TestEvaluateResumeMd:
                 job.evaluate_resume_md("Eval", user, client, "gpt-4o")
 
 
-# ─── refine_resume_md ─────────────────────────────────────────────────────────
+# ─── _refine_doc_md ───────────────────────────────────────────────────────────
 #
-# refine_resume_md / _refine_doc_md now patch the stored structured Document
-# rather than rewriting the raw markdown file. The structured-patch behavior is
-# covered in detail by tests/core/test_job_refine_structured.py; here we only
-# assert the wrapper threads db and the not-found guard fires when no Document
-# row exists.
+# _refine_doc_md is now cover-only (tree-v1 résumés refine per-section via
+# intake_pipeline._run_resume_section_refinement). The cover rewrite behavior is
+# covered by tests/core/test_job_refine_structured.py; here we assert the
+# not-found guard fires and résumé is rejected.
 
-class TestRefineResumeMd:
+class TestRefineDocMd:
     def test_raises_file_not_found_when_no_document(self):
         import core.user  # noqa: F401
         engine = create_engine(
@@ -205,7 +204,13 @@ class TestRefineResumeMd:
             db.add(job)
             db.commit()
             with pytest.raises(FileNotFoundError):
-                job._refine_doc_md("resume", object(), "p", None, "m", [], db)
+                job._refine_doc_md("cover", object(), "p", None, "m", [], db)
         finally:
             db.close()
             Base.metadata.drop_all(engine)
+
+    def test_rejects_resume_doc_type(self):
+        job = Job(job_key="r", source="x", title="t",
+                  company="Acme", url="u", state="new", profile_id=1)
+        with pytest.raises(ValueError, match="only handles covers"):
+            job._refine_doc_md("resume", object(), "p", None, "m", [], None)

@@ -53,6 +53,34 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Features
 
+- **Guided section-prompt authoring for users (from the prompt-polish work).** Once we've
+  settled how to best structure section/item prompts (baseline-facts + tailoring direction;
+  honesty rules re: seniority/titles and proof-words; per-project technology surfacing), give
+  that structure to users instead of a blank textarea. Two options to explore:
+  1. **Pre-formatted template** — when a user adds/edits a section or list item, pre-fill the
+     prompt field with the agreed structure (labeled "Baseline facts", "What to emphasize",
+     "Do NOT claim", etc.) for them to fill in.
+  2. **Full GUI questionnaire** — a guided form that asks plain questions ("What exactly did
+     you do?", "What were your responsibilities?", "What technologies did you use?", "What
+     should we NOT claim about this role?") and compiles the answers into a well-formed
+     section/item prompt. Lowers the skill floor and enforces the honesty structure by design.
+  Reference the live profile-9 section/item prompts as the worked example of the target format.
+
+- **Pin / promote a generated value as the field's default, and use default text as a
+  generation baseline.** Two related gaps in the section-generation model:
+  1. **Promote-to-default:** when a user likes a particular LLM output for an item field
+     (e.g. an Experience summary or Project description), give them a way to save it back as
+     the field's stored `value` — optionally flipping the field to non-LLM-output so it then
+     renders verbatim and is no longer regenerated. No such "pin this generation" action
+     exists today.
+  2. **Default-as-baseline:** an LLM-output field's current stored `value` is NOT shown to the
+     generator (only the item/section `prompt` + non-output anchors are). Consider feeding the
+     existing value in as an optional baseline ("improve on this, don't discard it") so a liked
+     draft seeds the next generation instead of being ignored/overwritten. Decide the semantics
+     vs. the item `prompt` (which currently carries the baseline facts).
+  Note for context: today, marking an item field non-LLM-output renders its stored value
+  verbatim; marking it LLM-output overwrites it and ignores the prior value.
+
 - **Profile Schema Engine (user-defined résumé sections).** Replace the hardcoded 5-section
   résumé model with a user-definable recursive tree. Decomposed into 5 sub-projects, each
   with its own spec → plan → impl cycle. **RELEASE CONSTRAINT: each sub-project merges to

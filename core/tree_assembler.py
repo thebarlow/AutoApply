@@ -76,8 +76,16 @@ def _skills_section_md(section: SectionNode) -> str:
     child = section.children[0] if section.children else None
     if not isinstance(child, FieldNode):
         return ""
-    items = child.value if isinstance(child.value, list) else []
-    items = [str(x) for x in items if str(x).strip()]
+    # Grouped/tailored skills are authored as a markdown string of labeled
+    # ``**Category:** a, b`` lines — render it verbatim under the heading.
+    if isinstance(child.value, str):
+        body = child.value.strip()
+        if not body:
+            return ""
+        # Markdown collapses single newlines; make each group line a hard break.
+        body = "  \n".join(ln.strip() for ln in body.splitlines() if ln.strip())
+        return f"## {section.name}\n\n{body}"
+    items = [str(x) for x in child.value if str(x).strip()]
     if not items:
         return ""
     return f"## {section.name}\n\n**{child.name}:** {', '.join(items)}"

@@ -48,11 +48,13 @@ _RESUME_TEMPLATE = _GENERATOR_DIR / "resume_template.html"
 _COVER_TEMPLATE = _GENERATOR_DIR / "cover_template.html"
 
 
-def _call_llm_for_extraction(client, model: str, prompt: str) -> str:
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-    )
+def _call_llm_for_extraction(client, model: str, prompt: str, label: str = "extract") -> str:
+    from core.llm import llm_label
+    with llm_label(label):
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+        )
     content = response.choices[0].message.content or ""
     content = re.sub(r"^```(?:json)?\s*", "", content.strip(), flags=re.IGNORECASE)
     content = re.sub(r"\s*```$", "", content.strip())
@@ -633,7 +635,7 @@ def _do_extract_description(job: Job, db: Session, profile_id: int) -> None:
     actual_prompt = job.build_description_prompt(prompt_content)
     with meter_action(db, profile_id, action="extract", job_key=job.job_key):
         try:
-            raw = _call_llm_for_extraction(client, model, actual_prompt)
+            raw = _call_llm_for_extraction(client, model, actual_prompt, label=f"extract:{job.job_key}")
         except Exception as exc:
             raise RuntimeError(f"Description extraction failed: {exc}") from exc
     try:
@@ -649,8 +651,9 @@ def _do_extract_description(job: Job, db: Session, profile_id: int) -> None:
     job.ext_required_skills = ", ".join(data.get("required_skills") or [])
     job.ext_preferred_skills = ", ".join(data.get("preferred_skills") or [])
     job.ext_tech_stack = ", ".join(data.get("tech_stack") or [])
-    job.ext_key_responsibilities = ", ".join(data.get("key_responsibilities") or [])
-    job.ext_company_signals = ", ".join(data.get("company_signals") or [])
+    # Phrase fields may contain internal commas → newline-delimited storage.
+    job.ext_key_responsibilities = "\n".join(data.get("key_responsibilities") or [])
+    job.ext_company_signals = "\n".join(data.get("company_signals") or [])
     salary_min = data.get("salary_min")
     salary_max = data.get("salary_max")
     job.ext_salary_min = float(salary_min) if salary_min is not None else None

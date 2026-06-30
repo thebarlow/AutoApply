@@ -78,9 +78,51 @@ def _split_sections_html(html: str) -> list[dict]:
     return sections
 
 
+# Baseline single-call prompt (the original full-contract resume prompt). Kept
+# inline so the live "resume" slot can be repurposed as the lean per-section job
+# context without losing the Model-1 comparison baseline.
+_MODEL1_PROMPT = """You are tailoring a one-page resume for a job application. You write ONLY tailored prose; the applicant's contact info, job titles, dates, education, and project names are fixed facts supplied below and must not be invented or altered.
+
+# Applicant Details
+Hero: {user.hero}
+Skills: {user.skills}
+
+Work Experience (each line is `[index] title at company (dates): summary`):
+{user_profile.work_history_indexed}
+
+Projects (each line is `[index] name: description (url)`):
+{user_profile.projects_indexed}
+
+# Job Posting
+Title: {job.title}
+Company: {job.company}
+Location: {job.location}
+Description:
+{job.description}
+
+# Output contract
+Return ONLY a single JSON object (no code fences, no commentary) with exactly these keys:
+
+{
+  "profile_summary": "<markdown, max 500 chars>",
+  "experience": [ {"ref": <work index>, "description": "<markdown bullets>"} ],
+  "projects":   [ {"ref": <project index>, "description": "<markdown>"} ],
+  "skills":     [ {"category": "<name>", "items": ["<skill>", ...]} ]
+}
+
+Rules:
+- `experience`: include an object for EACH work index above, keyed by its `ref`. Max 2 bullets per entry, each bullet max 120 chars. Stress skills/responsibilities named in the job description. Do not reorder, rename, or invent entries — refer to them only by `ref`.
+- `projects`: SELECT the 2–4 most relevant projects and order them most-relevant-first. Reference each by its `ref`. Each description: max 120 chars, one sentence, no bullets. Omit irrelevant projects (do not include them).
+- `skills`: group into at most 6 categories (e.g. Languages, Frameworks, Tools); include only categories with 2+ relevant skills; list job-mentioned skills first.
+- `profile_summary`: lead with the candidate's identity for THIS role (nature, scale, stakes of their actual work), then weave in the role's keywords.
+- Never imply a title, level, ownership, or outcome the applicant details do not support.
+- Use ONLY the supplied indices. Do not invent a `ref` that is not listed above.
+"""
+
+
 def _model1_markdown(job: Job, user: Any, client: Any, model: str, db: Session) -> str:
     """Model 1 (single-call) résumé Markdown, dry — no Document.upsert, no file write."""
-    prompt = job.build_resume_prompt(user, user.resolve_prompt("resume"), db)
+    prompt = job.build_resume_prompt(user, _MODEL1_PROMPT, db)
     generation = _llm_json_with_retry(
         prompt, client, model, ResumeGeneration, max_tokens=16384,
         empty_msg="Model 1 returned empty content.",
@@ -92,11 +134,12 @@ def _model1_markdown(job: Job, user: Any, client: Any, model: str, db: Session) 
 def _model2_markdown(job: Job, user: Any, client: Any, model: str, db: Session) -> str:
     """Model 2 (per-section) résumé Markdown via the schema-driven generator.
 
-    Section/item prompts may inject ``{job.*}`` and ``{profile.*}`` tokens; both
-    are resolved against this job and the live profile tree before each call.
+    Mirrors the live path: the lean ``resume`` prompt slot (analyzed job + skill
+    inventory) is the shared job context. Section/item prompts may inject
+    ``{job.*}`` / ``{profile.*}`` tokens, resolved before each call.
     """
     root = user.profile_tree_root()
-    prompt = job.build_resume_prompt(user, "{job.extracted_description}", db)
+    prompt = job.build_resume_prompt(user, user.resolve_prompt("resume"), db)
 
     def resolve(text: str) -> str:
         text = resolve_profile_tokens(root, text)

@@ -27,20 +27,25 @@ from unittest.mock import MagicMock, patch
 
 def test_run_user_feedback_refine_keeps_user_version():
     """Applies refine with built issues, appends a user_feedback eval turn,
-    sets the score, and never restores a prior 'best' turn."""
-    notes = [{"section": "summary", "label": "Profile summary", "note": "punchier"}]
+    sets the score, and never restores a prior 'best' turn.
+
+    Exercised via the cover path: covers use the generic refine loop in
+    run_user_feedback_refine (résumés route to the tree-only
+    _run_resume_feedback_refine instead).
+    """
+    notes = [{"section": "body", "label": "Body", "note": "punchier"}]
 
     job = MagicMock()
-    job.resume_eval_log = json.dumps([
+    job.cover_eval_log = json.dumps([
         {"turn": 1, "score": 0.95, "issues": [], "passed": True},  # a higher prior turn
     ])
     refine_fn = MagicMock()
-    job.refine_resume_md = refine_fn
-    job.evaluate_resume_md = MagicMock(return_value={"score": 0.50, "issues": [{"category": "x", "description": "y"}]})
+    job.refine_cover_md = refine_fn
+    job.evaluate_cover_md = MagicMock(return_value={"score": 0.50, "issues": [{"category": "x", "description": "y"}]})
 
     user = MagicMock()
     user.resolve_prompt.return_value = "PROMPT"
-    user.resume_refine_pass_score = 0.80
+    user.cover_refine_pass_score = 0.80
 
     import web.intake_pipeline as ip
     with patch.object(ip, "SessionLocal") as SL, \
@@ -48,23 +53,21 @@ def test_run_user_feedback_refine_keeps_user_version():
          patch.object(ip.User, "load", return_value=user), \
          patch.object(ip, "get_client_for_profile", return_value=("client", "model")), \
          patch("core.metering.get_account_for_profile", return_value=None), \
-         patch.object(ip, "run_ats_gate") as ats, \
          patch.object(ip, "_emit"):
         SL.return_value = MagicMock()
-        ip.run_user_feedback_refine("k1", "resume", notes, 1)
+        ip.run_user_feedback_refine("k1", "cover", notes, 1)
 
     # refine called with our built issues
     args, kwargs = refine_fn.call_args
     passed_issues = args[5]  # (user, prompt, client, model, db, issues, template)
-    assert passed_issues == [{"category": "user_feedback", "description": "Profile summary: punchier", "section": "summary"}]
+    assert passed_issues == [{"category": "user_feedback", "description": "Body: punchier", "section": "body"}]
 
     # a user_feedback turn was appended with the new (lower) score; no restore to 0.95
-    log = json.loads(job.resume_eval_log)
+    log = json.loads(job.cover_eval_log)
     assert log[-1]["source"] == "user_feedback"
     assert log[-1]["score"] == 0.50
     assert log[-1]["passed"] is False  # 0.50 < pass_score 0.80
-    assert job.resume_eval_score == 0.50  # kept the user-directed result, not 0.95
-    ats.assert_called_once_with("k1", 1)
+    assert job.cover_eval_score == 0.50  # kept the user-directed result, not 0.95
 
 
 from fastapi.testclient import TestClient

@@ -377,13 +377,12 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
         if job is None:
             return
 
-        # Dispatch: tree-v1 résumés use the per-section refinement loop
+        # Dispatch: all résumés are tree-v1 (generation always produces a
+        # document tree), so résumé refinement is always the per-section loop.
+        # The generic evaluate→rewrite loop below is cover-only.
         if doc_type == "resume":
-            from core.resume_document_io import is_tree_v1
-            _row = Document.fetch(db, job_key, "resume", profile_id)
-            if _row is not None and is_tree_v1(_row.structured_json):
-                _run_resume_section_refinement(job_key, profile_id)
-                return
+            _run_resume_section_refinement(job_key, profile_id)
+            return
 
         user = User.load(db, profile_id)
 

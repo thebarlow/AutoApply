@@ -9,6 +9,7 @@ This pruned tree is the renderable, snapshot-safe résumé document.
 """
 from __future__ import annotations
 
+from core.output_formats import get_format
 from core.profile_tree import (
     FieldNode, GroupNode, ListNode, RootNode, SectionNode, _coerce_field_value,
 )
@@ -22,9 +23,20 @@ def _is_context_only(field: FieldNode) -> bool:
 
 
 def _bake(field: FieldNode, authored: dict[str, Value]) -> None:
-    """Overlay an authored value onto a field, coercing to its kind's type."""
-    if field.id in authored:
-        field.value = _coerce_field_value(field.kind, authored[field.id])
+    """Overlay an authored value onto a field, coercing to its kind's type.
+
+    When the field declares an ``output_format`` whose storage ``kind`` differs
+    from the field's own kind (e.g. a ``taglist`` skills inventory authored as a
+    grouped ``markdown`` block), the *document* field adopts the format's kind so
+    the authored value survives baking. The source profile field is untouched —
+    this operates on the deep-copied document tree only.
+    """
+    if field.id not in authored:
+        return
+    fmt = get_format(getattr(field, "output_format", "") or "")
+    if fmt is not None and fmt.kind != field.kind:
+        field.kind = fmt.kind  # type: ignore[assignment]  # format kinds are valid FieldNode kinds
+    field.value = _coerce_field_value(field.kind, authored[field.id])
 
 
 def _prune_group(group: GroupNode, authored: dict[str, Value]) -> None:
@@ -93,6 +105,13 @@ def build_resume_document_tree(
             for e in entries:
                 if not e.locked:
                     _prune_group(e, authored)
+            from core.section_generator import ORDER_PREFIX  # lazy: avoid import cycle
+
+            ranked = authored.get(f"{ORDER_PREFIX}{s.id}")
+            if isinstance(ranked, list):
+                pos = {eid: i for i, eid in enumerate(ranked)}
+                # Ranked entries first (in model order); unranked keep relative order.
+                entries.sort(key=lambda e: pos.get(e.id, len(pos)))
             child.children = entries
         elif isinstance(child, GroupNode):
             if not child.locked:

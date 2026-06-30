@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from core.output_formats import (
     OutputFormat, get_format, all_formats, DEFAULT_FORMAT_ID, BULLETS, PARAGRAPH,
+    SKILL_GROUPS,
 )
 
 
-def test_registry_has_exactly_two_formats():
+def test_registry_has_expected_formats():
     ids = {f.id for f in all_formats()}
-    assert ids == {"bullets", "paragraph"}
+    assert ids == {"bullets", "paragraph", "skill_groups"}
+
+
+def test_skill_groups_aligns_to_markdown_kind():
+    assert SKILL_GROUPS.id == "skill_groups"
+    assert SKILL_GROUPS.kind == "markdown"
+    assert SKILL_GROUPS.prompt_shape.strip()
 
 
 def test_bullets_aligns_to_bullets_kind():

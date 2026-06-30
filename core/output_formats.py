@@ -47,7 +47,22 @@ PARAGRAPH = OutputFormat(
     prompt_shape="a single flowing paragraph string, no bullet points",
 )
 
-_REGISTRY: dict[str, OutputFormat] = {f.id: f for f in (BULLETS, PARAGRAPH)}
+SKILL_GROUPS = OutputFormat(
+    id="skill_groups",
+    label="Grouped skills",
+    kind="markdown",
+    prompt_shape=(
+        "a single markdown string of labeled groups, one group per line, each "
+        'formatted exactly as "**<Category>:** skill, skill, skill". Order the '
+        "groups most-job-relevant first, and within each group list the most "
+        "job-relevant skills first. Separate the group lines with a single "
+        "newline (no blank lines, no leading bullet)."
+    ),
+)
+
+_REGISTRY: dict[str, OutputFormat] = {
+    f.id: f for f in (BULLETS, PARAGRAPH, SKILL_GROUPS)
+}
 
 DEFAULT_FORMAT_ID = "paragraph"
 

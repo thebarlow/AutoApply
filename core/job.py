@@ -16,11 +16,10 @@ from core.schemas import (
     EvalResponse,
     ExtractionResponse,
     ResumeDocument,
-    ResumeGeneration,
     ScoreResponse,
     parse_llm_json,
 )
-from core.llm import call_llm
+from core.llm import call_llm, llm_label
 from core.document_builder import build_resume_document, build_cover_document
 from core.document_assembler import assemble_resume_markdown, assemble_cover_markdown
 from core.tree_assembler import assemble_resume_tree_markdown
@@ -120,6 +119,18 @@ def _field_to_str(value: Any) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _split_ext_phrases(raw: "str | None") -> list[str]:
+    """Split a phrase-valued ext field (key_responsibilities / company_signals).
+
+    These items are full phrases that may contain internal commas, so they are
+    stored newline-delimited. Legacy rows joined with ", " are still split on
+    commas when no newline is present (lossy, but no worse than before).
+    """
+    text = raw or ""
+    parts = text.split("\n") if "\n" in text else text.split(",")
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _apply_template(template: str, sources: dict[str, Any]) -> str:
@@ -465,11 +476,12 @@ class Job(Base):
 
         prompt = self.build_score_prompt(user, prompt_content)
         try:
-            response = client.chat.completions.create(
-                model=model,
-                max_tokens=8192,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            with llm_label(f"score:{self.job_key}"):
+                response = client.chat.completions.create(
+                    model=model,
+                    max_tokens=8192,
+                    messages=[{"role": "user", "content": prompt}],
+                )
         except Exception as e:
             raise RuntimeError(f"LLM API error: {e}") from e
         usage = getattr(response, "usage", None)
@@ -539,7 +551,8 @@ class Job(Base):
         prompt = eval_prompt.replace("{current_document}", body)
         prompt = prompt.replace("{sections_to_score}", "\n".join(names))
         prompt = _apply_template(prompt, {"job": self, "user": user})
-        raw = call_llm(prompt, client, model, max_tokens=8192)
+        with llm_label(f"eval-resume-sections:{self.job_key}"):
+            raw = call_llm(prompt, client, model, max_tokens=8192)
         parsed = parse_llm_json(raw, SectionEvalResponse)
         allowed = set(names)
         return {
@@ -593,7 +606,8 @@ class Job(Base):
             }
         prompt = eval_prompt.replace("{current_document}", body)
         prompt = _apply_template(prompt, {"job": self, "user": user})
-        raw = call_llm(prompt, client, model, max_tokens=8192)
+        with llm_label(f"eval-{doc_type}:{self.job_key}"):
+            raw = call_llm(prompt, client, model, max_tokens=8192)
         parsed = parse_llm_json(raw, EvalResponse)
         return {
             "score": parsed.score,
@@ -638,20 +652,28 @@ class Job(Base):
         issues: list,
         db: Any,
     ) -> None:
-        """Refine a generated document by patching its structured form.
+        """Refine a generated cover letter by rewriting its body prose.
 
-        Loads the stored Document (source of truth). For résumés the LLM returns
-        a prose-only keyed patch (ResumeGeneration) applied to the document's
-        prose leaves — structural facts and the header snapshot are never
-        touched. For covers the LLM rewrites the body prose. The patched
-        document is re-persisted and the `.md` re-assembled. Caller renders the
-        PDF and commits eval fields.
+        Loads the stored Document (source of truth), has the LLM rewrite the
+        cover body, re-persists it, and re-assembles the `.md`. Caller renders
+        the PDF and commits eval fields.
+
+        Résumé refinement does not use this path — tree-v1 résumés are refined
+        per-section by ``intake_pipeline._run_resume_section_refinement``, which
+        reuses the generation prompts.
+
+        Args:
+            doc_type: Must be ``"cover"``.
 
         Raises:
             FileNotFoundError: If no stored Document exists for this job/doc_type.
-            RuntimeError: If the LLM returns empty or unparseable content.
+            RuntimeError: If the LLM returns empty content.
+            ValueError: If called for any doc_type other than "cover".
         """
-        from core.document_builder import apply_resume_patch
+        if doc_type != "cover":
+            raise ValueError(
+                f"_refine_doc_md only handles covers; got doc_type={doc_type!r}"
+            )
 
         row = Document.fetch(db, self.job_key, doc_type, profile_id=self.profile_id)
         if row is None:
@@ -662,81 +684,20 @@ class Job(Base):
         critique = json.dumps(issues)
         prompt = refine_prompt.replace("{critique}", critique)
 
-        if doc_type == "resume" and is_tree_v1(row.structured_json):
-            # Interim tree-v1 refine: re-author all llm_output sections with the
-            # critique in context, rebuild the document tree, re-persist + re-render.
-            # (Per-section scoring / selective regen is 4B-2.)
-            root = user.profile_tree_root()
-            refine_with_ctx = refine_prompt.replace("{critique}", critique) + "\n\n{job.extracted_description}"
-            job_ctx = self.build_resume_prompt(user, refine_with_ctx, db)
-
-            def resolve(text: str) -> str:
-                text = resolve_profile_tokens(root, text)
-                return _apply_template(text, {"job": self, "user": user})
-
-            authored = generate_resume_by_section(root, job_ctx, client, model, resolve=resolve)
-            doc_tree = build_resume_document_tree(root, authored)
-            Document.upsert(db, self.job_key, "resume",
-                            serialize_document_tree(doc_tree), profile_id=self.profile_id)
-            self.write_resume_markdown(doc_tree)
-            return
-
-        if doc_type == "resume":
-            doc = ResumeDocument.model_validate_json(row.structured_json)
-            prompt = prompt.replace("{current_profile_summary}", doc.profile_summary)
-            prompt = prompt.replace(
-                "{current_experience_indexed}",
-                "\n".join(
-                    f"[{i}] {e.title} at {e.company} ({e.start}–{e.end})"
-                    for i, e in enumerate(doc.experience)
-                ),
-            )
-            prompt = prompt.replace(
-                "{current_projects_indexed}",
-                "\n".join(f"[{i}] {p.name}" for i, p in enumerate(doc.projects)),
-            )
-            prompt = _apply_template(prompt, {"job": self, "user": user})
-            generation = _llm_json_with_retry(
-                prompt, client, model, ResumeGeneration,
-                max_tokens=32768, empty_msg="Resume refine returned empty content",
-            )
-            patched = apply_resume_patch(doc, generation)
-            Document.upsert(db, self.job_key, "resume", patched.model_dump_json(), profile_id=self.profile_id)
-            self.write_resume_markdown(patched)
-        else:
-            doc = CoverDocument.model_validate_json(row.structured_json)
-            prompt = prompt.replace("{current_document}", doc.body)
-            prompt = _apply_template(prompt, {"job": self, "user": user})
+        doc = CoverDocument.model_validate_json(row.structured_json)
+        # Route through build_cover_prompt so the grounding virtuals
+        # ({job.extracted_description}, {user_profile.master_resume}) resolve —
+        # the same context the cover generation prompt receives.
+        prompt = self.build_cover_prompt(
+            user, prompt.replace("{current_document}", doc.body), db
+        )
+        with llm_label(f"refine-cover:{self.job_key}"):
             content = call_llm(prompt, client, model, max_tokens=32768)
-            if not (content or "").strip():
-                raise RuntimeError("Cover refine returned empty content")
-            doc.body = (content or "").strip()
-            Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
-            self.write_cover_markdown(doc)
-
-    def refine_resume_md(
-        self,
-        user: Any,
-        refine_prompt: str,
-        client: Any,
-        model: str,
-        db: Any,
-        issues: list,
-        template_path: Any,
-    ) -> None:
-        """Patch the stored structured résumé, re-assemble the .md, and regenerate the PDF.
-
-        Args:
-            user: Hydrated User instance.
-            refine_prompt: Rewriter prompt template.
-            client: OpenAI-compatible client.
-            model: Model identifier string.
-            db: SQLAlchemy session (passed to generate_resume_pdf).
-            issues: List of issue dicts from evaluate_resume_md.
-            template_path: Path to the HTML resume template for PDF rendering.
-        """
-        self._refine_doc_md("resume", user, refine_prompt, client, model, issues, db)
-        self.generate_resume_pdf(template_path, db)
+        if not (content or "").strip():
+            raise RuntimeError("Cover refine returned empty content")
+        doc.body = (content or "").strip()
+        Document.upsert(db, self.job_key, "cover", doc.model_dump_json(), profile_id=self.profile_id)
+        self.write_cover_markdown(doc)
 
     def refine_cover_md(
         self,
@@ -808,11 +769,12 @@ class Job(Base):
         client, model = get_client_for_profile(user, user.prompt_extraction_model)
 
         actual_prompt = self.build_description_prompt(prompt_content)
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": actual_prompt}],
-        )
+        with llm_label(f"extract:{self.job_key}"):
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": actual_prompt}],
+            )
         usage = getattr(response, "usage", None)
         if usage is not None:
             from core import session_cost
@@ -831,8 +793,8 @@ class Job(Base):
         self.ext_required_skills = ", ".join(parsed.required_skills)
         self.ext_preferred_skills = ", ".join(parsed.preferred_skills)
         self.ext_tech_stack = ", ".join(parsed.tech_stack)
-        self.ext_key_responsibilities = ", ".join(parsed.key_responsibilities)
-        self.ext_company_signals = ", ".join(parsed.company_signals)
+        self.ext_key_responsibilities = "\n".join(parsed.key_responsibilities)
+        self.ext_company_signals = "\n".join(parsed.company_signals)
         self.ext_salary_min = parsed.salary_min
         self.ext_salary_max = parsed.salary_max
         db.flush()
@@ -898,13 +860,16 @@ class Job(Base):
         Returns:
             Rendered prompt string.
         """
-        template = template.replace(
-            "{user_profile.work_history_indexed}", user.render_work_history_indexed()
-        )
-        template = template.replace(
-            "{user_profile.projects_indexed}", user.render_projects_indexed()
-        )
-        template = template.replace("{user_profile.master_resume}", user.master_resume())
+        if "{user_profile.work_history_indexed}" in template:
+            template = template.replace(
+                "{user_profile.work_history_indexed}", user.render_work_history_indexed()
+            )
+        if "{user_profile.projects_indexed}" in template:
+            template = template.replace(
+                "{user_profile.projects_indexed}", user.render_projects_indexed()
+            )
+        if "{user_profile.master_resume}" in template:
+            template = template.replace("{user_profile.master_resume}", user.master_resume())
         if "{job.extracted_description}" in template:
             if not self.ext_seniority:
                 self.extract_description(db)
@@ -949,7 +914,8 @@ class Job(Base):
             text = resolve_profile_tokens(root, text)
             return _apply_template(text, {"job": self, "user": user})
 
-        authored = generate_resume_by_section(root, prompt, client, model, resolve=resolve)
+        with llm_label(f"generate-resume:{self.job_key}"):
+            authored = generate_resume_by_section(root, prompt, client, model, resolve=resolve)
         doc_tree = build_resume_document_tree(root, authored)
         Document.upsert(
             db, self.job_key, "resume",
@@ -977,7 +943,8 @@ class Job(Base):
             db: SQLAlchemy session.
         """
         prompt = self.build_cover_prompt(user, prompt_content, db)
-        content = call_llm(prompt, client, model, max_tokens=16384)
+        with llm_label(f"generate-cover:{self.job_key}"):
+            content = call_llm(prompt, client, model, max_tokens=16384)
         if not content.strip():
             raise RuntimeError(
                 "Cover letter generation returned empty content — the model likely hit "
@@ -1104,8 +1071,9 @@ class Job(Base):
         roundtrip_prompt = prompt_row.content if prompt_row else "{extracted_text}"
 
         pt = ats_gate.extract_text(pdf_path)
-        return ats_gate.run_gate(pt, doc, required, preferred, user_skills,
-                                 roundtrip_prompt, client, model)
+        with llm_label(f"ats-check:{self.job_key}"):
+            return ats_gate.run_gate(pt, doc, required, preferred, user_skills,
+                                     roundtrip_prompt, client, model)
 
     def store_ats_report(self, report: "AtsReport") -> None:
         """Persist an AtsReport onto the job's columns (caller commits).
@@ -1204,17 +1172,34 @@ class Job(Base):
                 meta.append(f"**{label}:** {val}")
         if meta:
             sections.append("## Overview\n\n" + "\n\n".join(meta))
-        for attr, heading in [
-            ("ext_required_skills", "Required Skills"),
-            ("ext_preferred_skills", "Preferred Skills"),
-            ("ext_tech_stack", "Tech Stack"),
-            ("ext_key_responsibilities", "Key Responsibilities"),
-            ("ext_company_signals", "Company Signals"),
+        phrase_fields = {"ext_key_responsibilities", "ext_company_signals"}
+        for attr, heading, directive in [
+            ("ext_required_skills", "Required Skills",
+             "Cover every one the candidate can TRUTHFULLY claim — surface the "
+             "matching or closely-related skill from their inventory in the prose. "
+             "Never claim one they lack."),
+            ("ext_preferred_skills", "Preferred Skills",
+             "Nice-to-haves — weave in any the candidate genuinely has; skip the rest."),
+            ("ext_tech_stack", "Tech Stack",
+             "Tools named in the posting — when describing the candidate's work, "
+             "prefer naming the tools here that they actually used."),
+            ("ext_key_responsibilities", "Key Responsibilities",
+             "What the role does — mirror this language where the candidate's real "
+             "experience supports it."),
+            ("ext_company_signals", "Company Signals",
+             "Values and culture cues — reflect alignment in the summary without "
+             "fabricating fit."),
         ]:
             raw = getattr(self, attr, "") or ""
-            items = [i.strip() for i in raw.split(",") if i.strip()]
+            if attr in phrase_fields:
+                items = _split_ext_phrases(raw)
+            else:
+                items = [i.strip() for i in raw.split(",") if i.strip()]
             if items:
-                sections.append(f"## {heading}\n" + "\n".join(f"- {item}" for item in items))
+                sections.append(
+                    f"## {heading}\n_{directive}_\n"
+                    + "\n".join(f"- {item}" for item in items)
+                )
         return "\n\n".join(sections)
 
     def _frontmatter_data(self, user: Any, db: Session) -> dict:
@@ -1374,8 +1359,8 @@ class Job(Base):
                 "required_skills": [s.strip() for s in (self.ext_required_skills or "").split(",") if s.strip()],
                 "preferred_skills": [s.strip() for s in (self.ext_preferred_skills or "").split(",") if s.strip()],
                 "tech_stack": [s.strip() for s in (self.ext_tech_stack or "").split(",") if s.strip()],
-                "key_responsibilities": [s.strip() for s in (self.ext_key_responsibilities or "").split(",") if s.strip()],
-                "company_signals": [s.strip() for s in (self.ext_company_signals or "").split(",") if s.strip()],
+                "key_responsibilities": _split_ext_phrases(self.ext_key_responsibilities),
+                "company_signals": _split_ext_phrases(self.ext_company_signals),
             } if has_extraction else None,
             "scraped_at": self.scraped_at or "",
             "unread_indicator": self.unread_indicator,

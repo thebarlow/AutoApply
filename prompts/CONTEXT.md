@@ -14,7 +14,7 @@ Prompts live in the database, not in files. Two tables (defined in `db/database.
 ```
 prompts/
 ├── defaults/               # SEED source for prompt_defaults (not read at runtime)
-│   ├── scoring.md   resume.md   resume_eval.md   resume_refine.md
+│   ├── scoring.md   resume.md   resume_eval.md   resume_eval_sectioned.md
 │   ├── cover.md     cover_eval.md   cover_refine.md
 │   └── extraction.md   resume_parse.md
 └── [root-level files]      # Dead legacy artifacts — unused, safe to delete
@@ -33,16 +33,16 @@ Per-profile editing is one slot per type (no file library): the dashboard (Profi
 | Job scoring | `defaults/scoring.md` |
 | Resume generation | `defaults/resume.md` |
 | Resume evaluation (refinement loop) | `defaults/resume_eval.md` |
-| Resume refinement (refinement loop) | `defaults/resume_refine.md` (keyed-patch contract — see below) |
+| Resume per-section evaluation | `defaults/resume_eval_sectioned.md` |
 | Cover letter generation | `defaults/cover.md` |
 | Cover letter evaluation (refinement loop) | `defaults/cover_eval.md` |
 | Cover letter refinement (refinement loop) | `defaults/cover_refine.md` |
 | Job description extraction | `defaults/extraction.md` |
 | Resume parsing (profile ingestion) | `defaults/resume_parse.md` |
 
-## Resume refine: keyed-patch contract (Phase 3b)
+## Resume refinement (no dedicated prompt)
 
-`resume_refine.md` no longer returns full Markdown. It now returns a JSON `ResumeGeneration` **patch** keyed by document position (experience/project refs), applied to the stored `ResumeDocument` via `apply_resume_patch`. The new default is force-reseeded into `prompt_defaults` and all profile résumé-refine slots by the `resume_refine_prompt_v2` Config gate migration in `db/database.py`.
+Résumé refinement has **no prompt template**. All résumés are tree-v1 documents, so the refine loop (`intake_pipeline._run_resume_section_refinement`) re-authors only the failing sections by re-running `generate_resume_by_section` with the eval critiques injected — reusing the `resume` generation prompt. The old `resume_refine.md` keyed-patch contract and the legacy `ResumeDocument` patch path were removed. The `resume_refine_*` user settings (enabled / max_turns / pass_score) and the `resume_refine` llm-status label still drive this section loop.
 
 ## Dead Files (safe to delete)
 
