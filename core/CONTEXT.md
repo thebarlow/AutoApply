@@ -273,6 +273,19 @@ credits via `grant_credits(reason="purchase")` on a verified
 `web/CONTEXT.md` for the route surface and the `window.__creditRate`
 cross-widget read used by the navbar session-usage overlay.
 
+## Failed scrapes (blank description)
+
+A job whose raw `description` is blank (NULL or whitespace-only) is a failed
+scrape. `Job.has_description()` is the single source of truth for the rule
+(`bool((self.description or "").strip())`). Such jobs are neither extracted nor
+scored: `run_pipeline` (`web/intake_pipeline.py`) short-circuits them on intake
+and `Job.score()` raises `RuntimeError` defensively for any other caller
+(manual/batch re-score). They are flagged with `unread_indicator='error'` +
+`last_result_error="Scrape failed: empty description."`, which the dashboard
+renders as the existing warning icon. To correct jobs mis-scored before this
+rule existed, run `python -m scripts.flag_failed_scrapes` (dry run) then
+`--confirm` (`--target live` for the hosted Postgres DB).
+
 ## Key Invariants
 
 - `Job` methods that call the LLM receive an already-constructed client + model string — they do not read config themselves.
