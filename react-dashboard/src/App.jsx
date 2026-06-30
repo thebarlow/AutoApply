@@ -215,6 +215,7 @@ export default function App() {
               onFinish={() => { window.location.reload(); }}
               onSkip={() => setWizardSkipped(true)}
               onManual={handleManualEntry}
+              onEdit={handleManualEntry}
             />
           )}
           {me?.impersonating && (

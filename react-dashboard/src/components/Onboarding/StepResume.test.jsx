@@ -54,60 +54,45 @@ import {
 
 describe('StepResume', () => {
   const onFinish = vi.fn()
+  const onEdit = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('calls proposeParse after upload and shows ParsePreview', async () => {
+  it('proposes, applies, then lists the parsed sections', async () => {
     const user = userEvent.setup()
-    const { container } = render(<StepResume onFinish={onFinish} />)
+    const { container } = render(<StepResume onFinish={onFinish} onEdit={onEdit} />)
 
     const file = new File(['resume content'], 'resume.pdf', { type: 'application/pdf' })
-    const input = container.querySelector('input[type="file"]')
-    await user.upload(input, file)
-
+    await user.upload(container.querySelector('input[type="file"]'), file)
     await user.click(screen.getByRole('button', { name: /parse with ai/i }))
 
-    // proposeParse called with profileId=1
     await waitFor(() => expect(proposeParse).toHaveBeenCalledWith(1))
+    await waitFor(() =>
+      expect(applyParse).toHaveBeenCalledWith(1, expect.objectContaining({ sections: expect.any(Array) })),
+    )
 
-    // ParsePreview heading visible
-    expect(await screen.findByText(/customize your profile sections/i)).toBeInTheDocument()
-    // New customization heading
-    expect(screen.getByText(/which sections should we tailor/i)).toBeInTheDocument()
+    // Confirmation message lists the parsed section names.
+    expect(await screen.findByText(/parsed the following sections/i)).toBeInTheDocument()
+    expect(screen.getByText(/Work Experience, Certifications/)).toBeInTheDocument()
   })
 
-  it('calls applyParse and onFinish when Apply is clicked', async () => {
+  it('OK calls onFinish; Edit calls onEdit', async () => {
     const user = userEvent.setup()
-    const { container } = render(<StepResume onFinish={onFinish} />)
+    const { container } = render(<StepResume onFinish={onFinish} onEdit={onEdit} />)
 
     const file = new File(['resume content'], 'resume.pdf', { type: 'application/pdf' })
     await user.upload(container.querySelector('input[type="file"]'), file)
     await user.click(screen.getByRole('button', { name: /parse with ai/i }))
 
-    // Wait for preview to appear
-    await screen.findByText(/customize your profile sections/i)
+    await screen.findByText(/parsed the following sections/i)
 
-    await user.click(screen.getByRole('button', { name: /finish/i }))
-
-    await waitFor(() => expect(applyParse).toHaveBeenCalledWith(1, expect.objectContaining({ sections: expect.any(Array) })))
-    await waitFor(() => expect(onFinish).toHaveBeenCalled())
-  })
-
-  it('returns to uploader when Cancel is clicked', async () => {
-    const user = userEvent.setup()
-    const { container } = render(<StepResume onFinish={onFinish} />)
-
-    const file = new File(['resume content'], 'resume.pdf', { type: 'application/pdf' })
-    await user.upload(container.querySelector('input[type="file"]'), file)
-    await user.click(screen.getByRole('button', { name: /parse with ai/i }))
-
-    await screen.findByText(/customize your profile sections/i)
-
-    await user.click(screen.getByRole('button', { name: /cancel/i }))
-
-    expect(screen.getByText(/upload your resume/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    expect(onEdit).toHaveBeenCalled()
     expect(onFinish).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /^ok$/i }))
+    expect(onFinish).toHaveBeenCalled()
   })
 })

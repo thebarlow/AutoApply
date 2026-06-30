@@ -14,7 +14,7 @@ const TABS = [
   },
 ];
 
-export default function Wizard({ onFinish, onSkip, onManual }) {
+export default function Wizard({ onFinish, onSkip, onManual, onEdit }) {
   const [tab, setTab] = useState("resume");
   const active = TABS.find((t) => t.key === tab);
 
@@ -56,7 +56,7 @@ export default function Wizard({ onFinish, onSkip, onManual }) {
         {/* Tab body — fixed min-height so the modal doesn't resize between tabs */}
         <div className="min-h-[340px]">
           {tab === "resume" ? (
-            <StepResume onFinish={onFinish} />
+            <StepResume onFinish={onFinish} onEdit={onEdit} />
           ) : (
             <div className="flex flex-col items-center justify-center gap-4 h-[340px] text-center">
               <p className="text-sm text-space-dim max-w-xs">

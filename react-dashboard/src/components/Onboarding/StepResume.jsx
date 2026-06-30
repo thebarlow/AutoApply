@@ -1,7 +1,6 @@
 import { useState } from "react";
 import GatedButton from "../shared/GatedButton";
 import Spinner from "../shared/Spinner";
-import ParsePreview from "../widgets/parse/ParsePreview";
 import {
   uploadProfileResume,
   proposeParse,
@@ -12,13 +11,11 @@ import {
   setActiveProfile,
 } from "../../api";
 
-export default function StepResume({ onFinish }) {
+export default function StepResume({ onFinish, onEdit }) {
   const [file, setFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState("");
-  const [proposal, setProposal] = useState(null);
-  const [applying, setApplying] = useState(false);
-  const [profileId, setProfileId] = useState(null);
+  const [sections, setSections] = useState(null);
 
   const onParse = async () => {
     if (!file) return;
@@ -53,10 +50,12 @@ export default function StepResume({ onFinish }) {
         },
       });
 
-      // Propose — returns a preview of sections to merge; do NOT apply yet.
+      // Propose the parsed sections, then apply them as-is. Onboarding no longer
+      // asks the user to triage sections here — they confirm and optionally jump
+      // to the profile editor to refine. (Per-job tailoring lives in the editor.)
       const p = await proposeParse(resolvedProfileId);
-      setProfileId(resolvedProfileId);
-      setProposal(p);
+      await applyParse(resolvedProfileId, p);
+      setSections(p.sections.map((s) => s.name));
     } catch (e) {
       setError(e.message || "Parse failed");
     } finally {
@@ -64,41 +63,33 @@ export default function StepResume({ onFinish }) {
     }
   };
 
-  const handleApply = async (edited) => {
-    setApplying(true);
-    try {
-      await applyParse(profileId, edited);
-      onFinish();
-    } catch (e) {
-      setError(e.message || "Apply failed");
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setProposal(null);
-  };
-
-  if (proposal) {
+  if (sections) {
     return (
       <div>
-        <h2 className="text-lg font-semibold mb-2">Customize your profile sections</h2>
-        <p className="text-sm text-space-dim mb-5">
-          Check the sections you want to tailor per job, then click Finish to create your profile.
+        <h2 className="text-lg font-semibold mb-2">Resume parsed</h2>
+        <p className="text-sm text-space-dim mb-4">
+          Parsed the following sections:{" "}
+          <span className="text-space-text">{sections.join(", ")}</span>
         </p>
         {error && (
           <div className="mb-4 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">
             {error}
           </div>
         )}
-        <ParsePreview
-          proposal={proposal}
-          profileId={profileId}
-          applying={applying}
-          onApply={handleApply}
-          onCancel={handleCancel}
-        />
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onEdit}
+            className="px-4 py-2 rounded-lg border border-space-border text-space-text hover:bg-white/10 text-sm font-semibold transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={onFinish}
+            className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors"
+          >
+            OK
+          </button>
+        </div>
       </div>
     );
   }
