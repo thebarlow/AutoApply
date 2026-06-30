@@ -22,9 +22,6 @@ from sqlalchemy import Engine, create_engine, text, bindparam
 _LOCAL_URL = "sqlite:///auto_apply.db"
 _ERROR_MSG = "Scrape failed: empty description."
 
-# Blank = NULL or only whitespace once trimmed.
-_BLANK_PRED = "(description IS NULL OR TRIM(description) = '')"
-
 
 def flag_failed_scrapes(engine: Engine, *, apply: bool) -> dict:
     """Find blank-description jobs; optionally clear scores and flag them.
