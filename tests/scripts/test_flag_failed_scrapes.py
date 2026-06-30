@@ -24,10 +24,14 @@ def _seed(engine):
         c.execute(text(
             "INSERT INTO jobs VALUES "
             "('bad', '', 0.83, 0.9, 0.83, 'looks great', 'ok', NULL)"))
-        # whitespace-only
+        # whitespace-only (spaces)
         c.execute(text(
             "INSERT INTO jobs VALUES "
             "('ws', '   ', 0.5, 0.5, 0.5, 'x', 'ok', NULL)"))
+        # tab/newline-only (tests .strip() semantics)
+        c.execute(text(
+            "INSERT INTO jobs VALUES "
+            "('tab_newline', '\t\n', 0.6, 0.6, 0.6, 'z', 'ok', NULL)"))
         # good job
         c.execute(text(
             "INSERT INTO jobs VALUES "
@@ -38,8 +42,8 @@ def test_dry_run_reports_without_writing():
     engine = create_engine("sqlite://")
     _seed(engine)
     result = flag_failed_scrapes(engine, apply=False)
-    assert result["matched"] == 2
-    assert set(result["sample"]) == {"bad", "ws"}
+    assert result["matched"] == 3
+    assert set(result["sample"]) == {"bad", "ws", "tab_newline"}
     with engine.connect() as c:
         row = c.execute(text(
             "SELECT final_score, unread_indicator FROM jobs WHERE job_key='bad'"
@@ -75,4 +79,4 @@ def test_idempotent():
     _seed(engine)
     flag_failed_scrapes(engine, apply=True)
     second = flag_failed_scrapes(engine, apply=False)
-    assert second["matched"] == 2  # still matches by description, but nothing to change
+    assert second["matched"] == 3  # still matches by description, but nothing to change

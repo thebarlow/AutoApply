@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, text, bindparam
 
 _LOCAL_URL = "sqlite:///auto_apply.db"
 _ERROR_MSG = "Scrape failed: empty description."
@@ -37,19 +37,24 @@ def flag_failed_scrapes(engine: Engine, *, apply: bool) -> dict:
         Dict with ``matched`` (count of blank-description jobs) and ``sample``
         (up to 10 affected ``job_key`` values).
     """
+    # Fetch all jobs and filter in Python to match .strip() semantics exactly.
+    # (SQL TRIM only strips ASCII spaces, not tabs/newlines/etc.)
     with engine.connect() as conn:
-        keys = [
-            r.job_key
-            for r in conn.execute(
-                text(f"SELECT job_key FROM jobs WHERE {_BLANK_PRED}")
-            )
-        ]
+        rows = conn.execute(
+            text("SELECT job_key, description FROM jobs")
+        ).fetchall()
+
+    # A job is blank when description is None or strip() yields empty string.
+    keys = [
+        r.job_key
+        for r in rows
+        if not (r.description or "").strip()
+    ]
 
     if apply and keys:
         with engine.begin() as conn:
             conn.execute(
-                text(
-                    f"""
+                text("""
                     UPDATE jobs SET
                         desirability_score = NULL,
                         fit_score = NULL,
@@ -57,8 +62,9 @@ def flag_failed_scrapes(engine: Engine, *, apply: bool) -> dict:
                         score_justification = NULL,
                         unread_indicator = 'error',
                         last_result_error = :msg
-                    WHERE {_BLANK_PRED}
-                    """
+                    WHERE job_key IN :keys
+                    """).bindparams(
+                    bindparam("keys", value=tuple(keys), expanding=True)
                 ),
                 {"msg": _ERROR_MSG},
             )
