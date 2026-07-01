@@ -97,6 +97,16 @@ class ExtractionResponse(BaseModel):
     salary_max: float | None = None
 
 
+class SkillMatchResponse(BaseModel):
+    """Parsed output of the `skill_match` prompt.
+
+    `matched` echoes back the exact input chip strings the candidate's full
+    profile satisfies (skills, education, work history, or projects).
+    """
+
+    matched: list[str] = Field(default_factory=list)
+
+
 class WorkHistoryItem(BaseModel):
     company: str = ""
     title: str = ""
