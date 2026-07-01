@@ -91,7 +91,8 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Evaluating cover letter quality | `job.py` → `Job.evaluate_cover_md()` |
 | Rewriting resume to address eval issues | `intake_pipeline._run_resume_section_refinement` (per-section regen; no `Job` method) |
 | Rewriting cover letter to address eval issues | `job.py` → `Job.refine_cover_md()` |
-| Extracting structured job description fields | `job.py` → `Job.extract_description()` |
+| Extracting structured job description fields | `job.py` → `Job.extract_description()` (also calls `match_profile_skills`) |
+| Semantic skill-match cache (run/re-run after extraction) | `job.py` → `Job.match_profile_skills()` |
 | Post-intake background extraction trigger | `job.py` → `Job.intake()` |
 | Per-section LLM generation (skips locked, injects section prompt, resolves tokens before LLM) | `section_generator.py` → `generate_resume_by_section()` |
 | Resolving node-id tokens `{profile:<nodeId>}` in prompts | `profile_tree.py` → `resolve_profile_tokens()` |
@@ -140,6 +141,8 @@ See project memory note: the project uses the **OpenAI SDK** with multi-provider
 ## Skill Matching and Hallucination Detection
 
 - Skill matching between user skills and job requirements is **fully delegated to the LLM** — the full user skills list is injected into scoring/generation prompts via `{user.skills}` placeholders; no Python-side filtering occurs.
+- **Semantic skill-match cache (`ext_skill_match` on `Job`)** — a JSON blob `{"matched":[...],"profile_hash":"..."}` set once at extraction time by `Job.match_profile_skills(user, client, model, db, prompt_content)`. The `matched` list contains the subset of the job's required/preferred/tech-stack skill chips that the full profile (skills + education + work history + projects) satisfies, determined via an LLM call using the `skill_match` prompt. Module-level helpers: `profile_skill_hash()` (stable hash of the full profile text used for staleness detection), `_skill_match_matched()` (parses the cached JSON), `_skill_match_stale()` (compares the stored `profile_hash` to the current profile). `Job.serialize()` exposes `matched_skills` (the matched list) and `skill_match_stale` (always `False` in serialize — it has no DB session, so stale detection is unavailable there; the UI ↻ button works regardless). The `skill_match` prompt is a DB-seeded `PromptDefault` (type key `"skill_match"`); like `ats_parse` it is **not** in `PROMPT_TYPE_KEYS` — not a per-profile override.
+- **Manual live-prompt note:** the active `extraction` prompt DB row (per profile) must be manually re-seeded/edited to pick up the Task 9 seed-file cleanup; the seed-file change does **not** auto-apply to existing profile rows. Do **not** push a re-seed to the live hosted instance without explicit user approval.
 - **Separate concern — analytics/UI skill grouping** (`skill_analytics.py`): grouping is case-folded (`FASTAPI`/`FastAPI` collapse) and resolved through an alias map. `skill_key`/`normalize_skill`/`aggregate_skill_frequency`/`job_has_skill` take an optional `aliases` dict; `None` falls back to the built-in `_ALIASES` map. At runtime `web/routers/stats.py` passes a merged map (`_ALIASES` base + DB `skill_aliases` overrides). This drives the In-Demand charts and the description chip ownership coloring — it does **not** affect what the LLM sees.
 - Eval prompts receive `{user.education_degrees}` (via `User.education_degrees`) to supply ground-truth degree data for hallucination detection. Degrees are **excluded** from hallucination penalties — only skills/experience claims are checked.
 
@@ -248,7 +251,10 @@ floor)`, the single chokepoint that wraps each billable `Job` method call from
 `Job.extract_description` / `_do_extract_description`) does not go through
 `call_llm`, so it never calls `record_call`. The extract action's floor gate
 still works (gating happens before the body runs), but its debit always sums
-to 0 — extraction is effectively free in v1.
+to 0 — extraction is effectively free in v1. Similarly, the `match_profile_skills`
+LLM call within extraction only logs cost via `session_cost.add_cost` and never
+reaches `record_call`, so when extraction metering is fixed the skill-match
+sub-call must be included.
 
 ## Payments (`core/payments.py`, `core/stripe_client.py`)
 

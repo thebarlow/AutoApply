@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from core.schemas import (
     ExtractionResponse,
     ResumeDocument,
     ScoreResponse,
+    SkillMatchResponse,
     parse_llm_json,
 )
 from core.llm import call_llm, llm_label
@@ -150,6 +152,43 @@ def _apply_template(template: str, sources: dict[str, Any]) -> str:
     return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
 
 
+def profile_skill_hash(skills: list[str]) -> str:
+    """Stable digest of a profile's skill set, order- and case-independent.
+
+    Used to detect whether a cached ext_skill_match predates the current
+    profile skills (so the UI can offer a re-check).
+    """
+    norm = sorted({s.strip().lower() for s in (skills or []) if s.strip()})
+    return hashlib.sha256(" ".join(norm).encode("utf-8")).hexdigest()[:16]
+
+
+def _skill_match_matched(raw: str | None) -> list[str]:
+    """Extract the matched chip strings from a cached ext_skill_match JSON blob."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return []
+        return list(parsed.get("matched", []))
+    except (ValueError, TypeError, AttributeError):
+        return []
+
+
+def _skill_match_stale(raw: str | None, current_skills: list[str]) -> bool:
+    """True when a cached match predates the current profile skill set."""
+    if not raw:
+        return False
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return False
+        stored = parsed.get("profile_hash", "")
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return bool(stored) and stored != profile_skill_hash(current_skills)
+
+
 def _strip_yaml_frontmatter(text: str) -> tuple[str, str]:
     """Split a markdown file with YAML front matter into (frontmatter, body).
 
@@ -236,6 +275,7 @@ class Job(Base):
     ext_employment_type = Column(String)
     ext_required_skills = Column(Text)
     ext_preferred_skills = Column(Text)
+    ext_skill_match = Column(Text)  # JSON {"matched": [...], "profile_hash": "..."} — cached semantic match
     ext_tech_stack = Column(Text)
     ext_key_responsibilities = Column(Text)
     ext_company_signals = Column(Text)
@@ -812,7 +852,69 @@ class Job(Base):
         self.ext_salary_min = parsed.salary_min
         self.ext_salary_max = parsed.salary_max
         db.flush()
+        # Semantic skill match — best-effort; a failure must not lose the extraction.
+        try:
+            from db.database import PromptDefault
+            row = db.query(PromptDefault).filter_by(type_key="skill_match").first()
+            if row is not None:
+                self.match_profile_skills(user, client, model, db, row.content)
+        except Exception:
+            pass
         db.commit()
+
+    def match_profile_skills(
+        self, user: Any, client: Any, model: str, db: Session, prompt_content: str
+    ) -> None:
+        """Cache which required/preferred/tech chips the full profile satisfies.
+
+        Sends the profile plus the combined chip list to the LLM and stores the
+        satisfied subset (verbatim chip strings) with a profile-skills hash in
+        ``ext_skill_match``. No LLM call is made when there are no chips. The
+        caller commits.
+
+        Args:
+            user: A User instance with profile data.
+            client: OpenAI-compatible client.
+            model: Model identifier.
+            db: SQLAlchemy session.
+            prompt_content: The skill_match prompt template.
+        """
+        chips: list[str] = []
+        for field in (self.ext_required_skills, self.ext_preferred_skills, self.ext_tech_stack):
+            chips += [s.strip() for s in (field or "").split(",") if s.strip()]
+        # De-dup preserving order.
+        seen: set[str] = set()
+        chips = [c for c in chips if not (c.lower() in seen or seen.add(c.lower()))]
+
+        phash = profile_skill_hash(list(getattr(user, "skills", []) or []))
+        if not chips:
+            self.ext_skill_match = json.dumps({"matched": [], "profile_hash": phash})
+            db.flush()
+            return
+
+        rendered = _apply_template(prompt_content, {"user": user})
+        rendered = rendered.replace("{skills_to_match}", "\n".join(f"- {c}" for c in chips))
+        with llm_label(f"skill-match:{self.job_key}"):
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": rendered}],
+            )
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            from core import session_cost
+            session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
+        raw = response.choices[0].message.content or "{}"
+        parsed = parse_llm_json(raw, SkillMatchResponse)
+        # Keep only echoes that correspond to a real chip (case-insensitive).
+        chip_by_lower = {c.lower(): c for c in chips}
+        matched = [
+            chip_by_lower[m.strip().lower()]
+            for m in parsed.matched
+            if m.strip().lower() in chip_by_lower
+        ]
+        self.ext_skill_match = json.dumps({"matched": matched, "profile_hash": phash})
+        db.flush()
 
     def intake(self) -> None:
         """Run post-intake processing (description extraction) in a background thread.
@@ -1375,6 +1477,10 @@ class Job(Base):
                 "tech_stack": [s.strip() for s in (self.ext_tech_stack or "").split(",") if s.strip()],
                 "key_responsibilities": _split_ext_phrases(self.ext_key_responsibilities),
                 "company_signals": _split_ext_phrases(self.ext_company_signals),
+                "matched_skills": _skill_match_matched(self.ext_skill_match),
+                # skill_match_stale: no db session in serialize(); staleness always False here.
+                # The ↻ button on the UI re-runs match_profile_skills via a dedicated endpoint.
+                "skill_match_stale": _skill_match_stale(self.ext_skill_match, []),
             } if has_extraction else None,
             "scraped_at": self.scraped_at or "",
             "unread_indicator": self.unread_indicator,

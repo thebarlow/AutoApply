@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -147,3 +148,79 @@ def test_assign_canonical_collides_with_existing_alias_key(client, db_session):
     r = client.post("/api/skills/aliases/assign", json={"skill": "reactjs", "canonical": "react"})
     assert r.json()["canonical"] == "React"
     assert "reactjs" in r.json()["members"]
+
+
+@pytest.fixture
+def make_job(db_session):
+    """Factory: inserts a Job row owned by profile_id=1."""
+    from core.job import Job
+
+    def _factory(job_key: str, ext_required_skills: str = "") -> Job:
+        job = Job(
+            job_key=job_key,
+            profile_id=1,
+            source="test",
+            title="Test Job",
+            company="Acme",
+            location="Remote",
+            url=f"https://example.com/{job_key}",
+            state="new",
+            ext_required_skills=ext_required_skills,
+        )
+        db_session.add(job)
+        db_session.commit()
+        return job
+
+    return _factory
+
+
+def test_owned_merges_cached_semantic_match(client, db_session, make_job):
+    # Profile has no literal "Bachelors degree" skill, but the cache says satisfied.
+    job = make_job(job_key="j1", ext_required_skills="Bachelors degree")
+    job.ext_skill_match = json.dumps({"matched": ["Bachelors degree"], "profile_hash": "x"})
+    db_session.commit()
+    _seed_profile(db_session, [])
+    res = client.post(
+        "/api/skills/owned",
+        json={"skills": ["Bachelors degree"], "job_key": "j1"},
+    )
+    assert res.json()["owned"] == ["Bachelors degree"]
+
+
+def test_owned_without_job_key_is_literal_only(client, db_session, make_job):
+    # Cache exists on the job but no job_key provided → literal path only → empty.
+    job = make_job(job_key="j2", ext_required_skills="Bachelors degree")
+    job.ext_skill_match = json.dumps({"matched": ["Bachelors degree"], "profile_hash": "x"})
+    db_session.commit()
+    _seed_profile(db_session, [])
+    res = client.post("/api/skills/owned", json={"skills": ["Bachelors degree"]})
+    assert res.json()["owned"] == []
+
+
+def test_owned_union_literal_and_cache(client, db_session, make_job):
+    # Skill is owned both literally (in profile) and in cache → returned exactly once.
+    job = make_job(job_key="j3", ext_required_skills="Python")
+    job.ext_skill_match = json.dumps({"matched": ["Python"], "profile_hash": "x"})
+    db_session.commit()
+    _seed_profile(db_session, ["Python"])
+    res = client.post(
+        "/api/skills/owned",
+        json={"skills": ["Python"], "job_key": "j3"},
+    )
+    assert res.json()["owned"] == ["Python"]
+
+
+def test_owned_handles_malformed_ext_skill_match(client, db_session, make_job):
+    """owned_skills degrades gracefully when ext_skill_match is non-dict JSON (e.g., null, list)."""
+    _seed_profile(db_session, [])
+    # Non-dict JSON values (null, list, string, number) should not crash endpoint.
+    for malformed in ['null', '[]', '"string"', '123']:
+        job = make_job(job_key=f"j_{malformed}", ext_required_skills="Skill")
+        job.ext_skill_match = malformed
+        db_session.commit()
+        res = client.post(
+            "/api/skills/owned",
+            json={"skills": ["Skill"], "job_key": f"j_{malformed}"},
+        )
+        assert res.status_code == 200
+        assert res.json()["owned"] == []
