@@ -307,6 +307,7 @@ def init_db() -> None:
         db.close()
     _seed_ats_parse_prompt()
     _seed_section_prompt_assist()
+    _seed_skill_match_prompt()
     from db.migrations_data import upgrade_resume_parse_prompt
     _db = SessionLocal()
     try:
@@ -350,6 +351,27 @@ def _seed_section_prompt_assist() -> None:
             Path(__file__).parent.parent / "prompts" / "defaults" / "section_prompt_assist.md"
         ).read_text(encoding="utf-8")
         db.add(PromptDefault(type_key="section_prompt_assist", content=content))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _seed_skill_match_prompt() -> None:
+    """Seed the skill_match prompt as a PromptDefault (idempotent).
+
+    Kept out of PROMPT_TYPE_KEYS so it is not exposed as a per-profile prompt;
+    the semantic skill matcher loads it directly from prompt_defaults.
+    """
+    from pathlib import Path
+
+    db = SessionLocal()
+    try:
+        if db.query(PromptDefault).filter_by(type_key="skill_match").first():
+            return
+        content = (
+            Path(__file__).parent.parent / "prompts" / "defaults" / "skill_match.md"
+        ).read_text(encoding="utf-8")
+        db.add(PromptDefault(type_key="skill_match", content=content))
         db.commit()
     finally:
         db.close()
