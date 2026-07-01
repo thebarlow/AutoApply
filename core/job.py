@@ -162,6 +162,27 @@ def profile_skill_hash(skills: list[str]) -> str:
     return hashlib.sha256(" ".join(norm).encode("utf-8")).hexdigest()[:16]
 
 
+def _skill_match_matched(raw: str | None) -> list[str]:
+    """Extract the matched chip strings from a cached ext_skill_match JSON blob."""
+    if not raw:
+        return []
+    try:
+        return list(json.loads(raw).get("matched", []))
+    except (ValueError, TypeError):
+        return []
+
+
+def _skill_match_stale(raw: str | None, current_skills: list[str]) -> bool:
+    """True when a cached match predates the current profile skill set."""
+    if not raw:
+        return False
+    try:
+        stored = json.loads(raw).get("profile_hash", "")
+    except (ValueError, TypeError):
+        return False
+    return bool(stored) and stored != profile_skill_hash(current_skills)
+
+
 def _strip_yaml_frontmatter(text: str) -> tuple[str, str]:
     """Split a markdown file with YAML front matter into (frontmatter, body).
 
@@ -1450,6 +1471,10 @@ class Job(Base):
                 "tech_stack": [s.strip() for s in (self.ext_tech_stack or "").split(",") if s.strip()],
                 "key_responsibilities": _split_ext_phrases(self.ext_key_responsibilities),
                 "company_signals": _split_ext_phrases(self.ext_company_signals),
+                "matched_skills": _skill_match_matched(self.ext_skill_match),
+                # skill_match_stale: no db session in serialize(); staleness always False here.
+                # The ↻ button on the UI re-runs match_profile_skills via a dedicated endpoint.
+                "skill_match_stale": _skill_match_stale(self.ext_skill_match, []),
             } if has_extraction else None,
             "scraped_at": self.scraped_at or "",
             "unread_indicator": self.unread_indicator,

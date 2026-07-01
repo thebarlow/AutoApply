@@ -24,6 +24,7 @@ class SkillBody(BaseModel):
 
 class SkillsBody(BaseModel):
     skills: list[str]
+    job_key: str | None = None
 
 
 def _raw_key(token: str) -> str | None:
@@ -141,7 +142,28 @@ def owned_skills(
     profile_keys = {
         k for k in (skill_key(s, aliases) for s in (user.skills or [])) if k
     }
-    owned = [s for s in body.skills if skill_key(s, aliases) in profile_keys]
+    literal = {s for s in body.skills if skill_key(s, aliases) in profile_keys}
+
+    # Merge cached semantic matches from ext_skill_match when a job_key is given.
+    # Chips the LLM already confirmed as matched count as owned even if they don't
+    # hit the literal/alias path (e.g. "Bachelors degree" vs a non-literal alias).
+    cached: set[str] = set()
+    if body.job_key:
+        from core.job import Job
+
+        job = Job.get(body.job_key, db, profile_id=profile_id)
+        if job is not None and job.ext_skill_match:
+            import json as _json
+
+            try:
+                cached = {
+                    m.lower()
+                    for m in _json.loads(job.ext_skill_match).get("matched", [])
+                }
+            except (ValueError, TypeError):
+                cached = set()
+
+    owned = [s for s in body.skills if s in literal or s.lower() in cached]
     return {"owned": owned}
 
 
