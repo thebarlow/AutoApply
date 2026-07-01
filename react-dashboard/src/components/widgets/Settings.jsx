@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, proposeParse, applyParse, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, proposeParse, applyParse, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills, rematchSkills } from '../../api'
 import ParsePreview from './parse/ParsePreview'
 import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'
@@ -97,7 +97,7 @@ const slideVariants = {
 const STATE_LABELS = { new: 'New', pending_review: 'Pending Review', ready: 'Ready', applied: 'Applied', contact: 'In Contact', rejected: 'Rejected', deleted: 'Deleted' }
 const ALL_STATES = Object.keys(STATE_LABELS)
 
-function ExtractionView({ data }) {
+function ExtractionView({ data, jobKey, onRematched }) {
   const metaKeys = ['seniority', 'role_type', 'domain', 'work_arrangement', 'employment_type']
   const meta = metaKeys.map((k) => data[k]).filter((v) => v && String(v).trim())
 
@@ -115,6 +115,19 @@ function ExtractionView({ data }) {
   const [modalSkill, setModalSkill] = useState(null)
   const [owned, setOwned] = useState(new Set())
   const [ownRefresh, setOwnRefresh] = useState(0)
+  const [rematching, setRematching] = useState(false)
+
+  const doRematch = async () => {
+    if (!jobKey) return
+    setRematching(true)
+    try {
+      await rematchSkills(jobKey)
+      setOwnRefresh((n) => n + 1)
+      onRematched?.()
+    } finally {
+      setRematching(false)
+    }
+  }
 
   // All distinct skill tokens across the three chip groups.
   const allSkills = [...new Set(chipGroups.flatMap(({ key }) => asList(data[key])))]
@@ -123,11 +136,11 @@ function ExtractionView({ data }) {
   useEffect(() => {
     if (allSkills.length === 0) { setOwned(new Set()); return }
     let active = true
-    getOwnedSkills(allSkills)
+    getOwnedSkills(allSkills, jobKey)
       .then((res) => { if (active) setOwned(new Set(res.owned)) })
       .catch(() => { if (active) setOwned(new Set()) })
     return () => { active = false }
-  }, [allSkillsKey, ownRefresh])
+  }, [allSkillsKey, ownRefresh, jobKey])
 
   // Three-state chip styling: green = I have it; amber = a required skill I lack
   // (a résumé gap); neutral = anything else I don't have.
@@ -148,7 +161,20 @@ function ExtractionView({ data }) {
         if (items.length === 0) return null
         return (
           <div key={key}>
-            <p className="text-xs font-semibold text-space-dim mb-1">{label}</p>
+            <p className="text-xs font-semibold text-space-dim mb-1 flex items-center gap-1">
+              {label}
+              {key === 'required_skills' && jobKey && (
+                <button
+                  type="button"
+                  onClick={doRematch}
+                  disabled={rematching}
+                  title="Re-check matches against your current profile"
+                  className={`text-space-dim hover:text-purple-400 ${data.skill_match_stale ? 'text-amber-400' : ''}`}
+                >
+                  {rematching ? '…' : '↻'}
+                </button>
+              )}
+            </p>
             <div className="flex flex-wrap gap-1">
               {items.map((v, i) => (
                 <button
@@ -792,7 +818,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
 
           {job.extraction
-            ? <ExtractionView data={job.extraction} />
+            ? <ExtractionView data={job.extraction} jobKey={job.job_key} />
             : <p className="text-xs text-space-dim">No extraction yet.</p>}
 
           <details className="border-t-2 border-space-border pt-2">

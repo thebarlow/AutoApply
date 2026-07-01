@@ -223,12 +223,15 @@ export const removeProfileSkill = (skill) =>
     body: JSON.stringify({ skill }),
   })
 
-export const getOwnedSkills = (skills) =>
+export const getOwnedSkills = (skills, jobKey = null) =>
   _fetch('/api/skills/owned', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ skills }),
+    body: JSON.stringify({ skills, job_key: jobKey }),
   })
+
+export const rematchSkills = (jobKey) =>
+  _fetch(`/api/jobs/${encodeURIComponent(jobKey)}/rematch-skills`, { method: 'POST' })
 
 export const uploadJob = (fields) => {
   const uuid = crypto.randomUUID()
