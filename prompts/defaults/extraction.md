@@ -11,8 +11,8 @@ Job Description:
 
 Return this exact schema:
 {
-"required_skills": ["required skills ranked by emphasis in the JD"],
-"preferred_skills": ["nice-to-have skills explicitly mentioned"],
+"required_skills": ["required SKILLS ranked by emphasis in the JD"],
+"preferred_skills": ["nice-to-have SKILLS explicitly mentioned"],
 "tech_stack": ["specific tools, frameworks, and languages named"],
 "seniority": "junior | mid | senior | staff | not specified",
 "role_type": "IC | manager | hybrid | not specified",
@@ -22,3 +22,9 @@ Return this exact schema:
 "work_arrangement": "remote | hybrid | onsite | not specified",
 "employment_type": "full-time | contract | not specified"
 }
+
+A "skill" is a concrete technology, tool, framework, language, methodology, or professional competency. For `required_skills` and `preferred_skills`, do NOT include:
+- Credentials or degrees (e.g. "Bachelor's degree") — these are not skills.
+- Job or role titles (e.g. "Software Engineer or Programmer", "Coder").
+- Generic filler like "proficiency in one programming language" — instead list the specific language(s) the JD names, or omit if none are named.
+Keep each skill a short noun phrase, not a sentence.
