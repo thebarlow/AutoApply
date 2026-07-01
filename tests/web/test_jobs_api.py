@@ -589,6 +589,59 @@ def test_do_extract_description_populates_skill_match(db_session, monkeypatch):
     assert stored["profile_hash"]
 
 
+# --- POST /api/jobs/{job_key}/rematch-skills ---
+
+
+def test_rematch_skills_updates_ext_skill_match(client, db_session, monkeypatch):
+    """POST /rematch-skills re-runs the semantic matcher and persists results."""
+    import json as _json
+    from unittest.mock import MagicMock
+    from db.database import PromptDefault
+
+    job = _make_job(db_session, "rematch_job", JobState.NEW)
+    job.description = "We need Python."
+    job.ext_required_skills = "Python"
+    job.ext_skill_match = None
+    db_session.commit()
+
+    db_session.add(
+        PromptDefault(type_key="skill_match", content="Match {skills_to_match} against user skills.")
+    )
+    db_session.commit()
+
+    mock_user = MagicMock()
+    mock_user.prompt_extraction_model = "gpt-4"
+    mock_user.skills = ["Python"]
+    monkeypatch.setattr("web.routers.jobs.User.load", lambda db, profile_id=None: mock_user)
+
+    mock_client = MagicMock()
+    sm_choice = MagicMock()
+    sm_choice.message.content = '{"matched": ["Python"]}'
+    sm_choice.finish_reason = "stop"
+    sm_response = MagicMock()
+    sm_response.choices = [sm_choice]
+    sm_response.usage = None
+    mock_client.chat.completions.create.return_value = sm_response
+    monkeypatch.setattr(
+        "web.routers.jobs.get_client_for_profile",
+        lambda user, model: (mock_client, "gpt-4"),
+    )
+
+    res = client.post("/api/jobs/rematch_job/rematch-skills")
+    assert res.status_code == 200
+
+    db_session.refresh(job)
+    assert job.ext_skill_match is not None
+    stored = _json.loads(job.ext_skill_match)
+    assert "Python" in stored["matched"]
+
+
+def test_rematch_skills_404_for_unknown_job(client):
+    """POST /rematch-skills returns 404 when the job_key does not exist."""
+    res = client.post("/api/jobs/no_such_job/rematch-skills")
+    assert res.status_code == 404
+
+
 # --- PATCH /api/jobs/{job_key}/fields ---
 
 def test_patch_job_fields_updates_provided_fields(client, db_session):

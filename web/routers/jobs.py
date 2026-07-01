@@ -703,6 +703,43 @@ def extract_description(
     return job.serialize()
 
 
+@router.post("/{job_key}/rematch-skills")
+def rematch_skills(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    """Re-run the semantic skill match for one job against the current profile."""
+    job = Job.get(job_key, db, profile_id=profile_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    user = User.load(db, profile_id=profile_id)
+    try:
+        client, model = get_client_for_profile(user, user.prompt_extraction_model)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    from db.database import PromptDefault
+
+    row = db.query(PromptDefault).filter_by(type_key="skill_match").first()
+    if row is None:
+        raise HTTPException(status_code=400, detail="skill_match prompt not configured")
+    llm_status.start(job_key, "rematch")
+    try:
+        with meter_action(db, profile_id, action="extract", job_key=job.job_key):
+            job.match_profile_skills(user, client, model, db, row.content)
+        db.commit()
+    except (HTTPException, InsufficientCredits):
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        llm_status.finish(job_key, "rematch")
+    db.refresh(job)
+    _emit(job)
+    return job.serialize()
+
+
 @router.post("/{job_key}/seen")
 def mark_job_seen(
     job_key: str,
