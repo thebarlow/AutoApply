@@ -236,6 +236,7 @@ class Job(Base):
     ext_employment_type = Column(String)
     ext_required_skills = Column(Text)
     ext_preferred_skills = Column(Text)
+    ext_skill_match = Column(Text)  # JSON {"matched": [...], "profile_hash": "..."} — cached semantic match
     ext_tech_stack = Column(Text)
     ext_key_responsibilities = Column(Text)
     ext_company_signals = Column(Text)
