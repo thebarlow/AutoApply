@@ -208,3 +208,19 @@ def test_owned_union_literal_and_cache(client, db_session, make_job):
         json={"skills": ["Python"], "job_key": "j3"},
     )
     assert res.json()["owned"] == ["Python"]
+
+
+def test_owned_handles_malformed_ext_skill_match(client, db_session, make_job):
+    """owned_skills degrades gracefully when ext_skill_match is non-dict JSON (e.g., null, list)."""
+    _seed_profile(db_session, [])
+    # Non-dict JSON values (null, list, string, number) should not crash endpoint.
+    for malformed in ['null', '[]', '"string"', '123']:
+        job = make_job(job_key=f"j_{malformed}", ext_required_skills="Skill")
+        job.ext_skill_match = malformed
+        db_session.commit()
+        res = client.post(
+            "/api/skills/owned",
+            json={"skills": ["Skill"], "job_key": f"j_{malformed}"},
+        )
+        assert res.status_code == 200
+        assert res.json()["owned"] == []

@@ -156,11 +156,13 @@ def owned_skills(
             import json as _json
 
             try:
-                cached = {
-                    m.lower()
-                    for m in _json.loads(job.ext_skill_match).get("matched", [])
-                }
-            except (ValueError, TypeError):
+                parsed = _json.loads(job.ext_skill_match)
+                if isinstance(parsed, dict):
+                    cached = {
+                        m.lower()
+                        for m in parsed.get("matched", [])
+                    }
+            except (ValueError, TypeError, AttributeError):
                 cached = set()
 
     owned = [s for s in body.skills if s in literal or s.lower() in cached]

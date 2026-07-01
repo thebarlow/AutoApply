@@ -940,3 +940,37 @@ def test_write_resume_markdown_roundtrips_assembler(tmp_path, monkeypatch):
     assert text.startswith("---\n")          # front matter present
     assert "## Experience" in text
     assert "- did things" in text
+
+
+def test_skill_match_matched_handles_non_dict_json():
+    """_skill_match_matched degrades gracefully on non-dict JSON values."""
+    from core.job import _skill_match_matched
+    # Valid dict case (should work)
+    assert _skill_match_matched('{"matched": ["Python", "Go"]}') == ["Python", "Go"]
+    # Non-dict cases (should return empty list, not raise)
+    assert _skill_match_matched('null') == []
+    assert _skill_match_matched('[]') == []
+    assert _skill_match_matched('"string"') == []
+    assert _skill_match_matched('123') == []
+    # Invalid JSON (should return empty list)
+    assert _skill_match_matched('invalid') == []
+    # None/empty (should return empty list)
+    assert _skill_match_matched(None) == []
+    assert _skill_match_matched('') == []
+
+
+def test_skill_match_stale_handles_non_dict_json():
+    """_skill_match_stale degrades gracefully on non-dict JSON values."""
+    from core.job import _skill_match_stale
+    # Valid dict case (should work)
+    assert _skill_match_stale('{"profile_hash": "abc123"}', ["Python"]) is True
+    # Non-dict cases (should return False, not raise)
+    assert _skill_match_stale('null', ["Python"]) is False
+    assert _skill_match_stale('[]', ["Python"]) is False
+    assert _skill_match_stale('"string"', ["Python"]) is False
+    assert _skill_match_stale('123', ["Python"]) is False
+    # Invalid JSON (should return False)
+    assert _skill_match_stale('invalid', ["Python"]) is False
+    # None/empty (should return False)
+    assert _skill_match_stale(None, ["Python"]) is False
+    assert _skill_match_stale('', ["Python"]) is False

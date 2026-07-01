@@ -251,7 +251,10 @@ floor)`, the single chokepoint that wraps each billable `Job` method call from
 `Job.extract_description` / `_do_extract_description`) does not go through
 `call_llm`, so it never calls `record_call`. The extract action's floor gate
 still works (gating happens before the body runs), but its debit always sums
-to 0 — extraction is effectively free in v1.
+to 0 — extraction is effectively free in v1. Similarly, the `match_profile_skills`
+LLM call within extraction only logs cost via `session_cost.add_cost` and never
+reaches `record_call`, so when extraction metering is fixed the skill-match
+sub-call must be included.
 
 ## Payments (`core/payments.py`, `core/stripe_client.py`)
 

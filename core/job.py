@@ -167,8 +167,11 @@ def _skill_match_matched(raw: str | None) -> list[str]:
     if not raw:
         return []
     try:
-        return list(json.loads(raw).get("matched", []))
-    except (ValueError, TypeError):
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return []
+        return list(parsed.get("matched", []))
+    except (ValueError, TypeError, AttributeError):
         return []
 
 
@@ -177,8 +180,11 @@ def _skill_match_stale(raw: str | None, current_skills: list[str]) -> bool:
     if not raw:
         return False
     try:
-        stored = json.loads(raw).get("profile_hash", "")
-    except (ValueError, TypeError):
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return False
+        stored = parsed.get("profile_hash", "")
+    except (ValueError, TypeError, AttributeError):
         return False
     return bool(stored) and stored != profile_skill_hash(current_skills)
 
