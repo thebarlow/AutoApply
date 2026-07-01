@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from core.schemas import (
     ExtractionResponse,
     ResumeDocument,
     ScoreResponse,
+    SkillMatchResponse,
     parse_llm_json,
 )
 from core.llm import call_llm, llm_label
@@ -148,6 +150,16 @@ def _apply_template(template: str, sources: dict[str, Any]) -> str:
             return m.group(0)
         return _field_to_str(getattr(obj, field))
     return re.sub(r'\{(\w+)\.(\w+)\}', _replace, template)
+
+
+def profile_skill_hash(skills: list[str]) -> str:
+    """Stable digest of a profile's skill set, order- and case-independent.
+
+    Used to detect whether a cached ext_skill_match predates the current
+    profile skills (so the UI can offer a re-check).
+    """
+    norm = sorted({s.strip().lower() for s in (skills or []) if s.strip()})
+    return hashlib.sha256(" ".join(norm).encode("utf-8")).hexdigest()[:16]
 
 
 def _strip_yaml_frontmatter(text: str) -> tuple[str, str]:
@@ -814,6 +826,60 @@ class Job(Base):
         self.ext_salary_max = parsed.salary_max
         db.flush()
         db.commit()
+
+    def match_profile_skills(
+        self, user: Any, client: Any, model: str, db: Session, prompt_content: str
+    ) -> None:
+        """Cache which required/preferred/tech chips the full profile satisfies.
+
+        Sends the profile plus the combined chip list to the LLM and stores the
+        satisfied subset (verbatim chip strings) with a profile-skills hash in
+        ``ext_skill_match``. No LLM call is made when there are no chips. The
+        caller commits.
+
+        Args:
+            user: A User instance with profile data.
+            client: OpenAI-compatible client.
+            model: Model identifier.
+            db: SQLAlchemy session.
+            prompt_content: The skill_match prompt template.
+        """
+        chips: list[str] = []
+        for field in (self.ext_required_skills, self.ext_preferred_skills, self.ext_tech_stack):
+            chips += [s.strip() for s in (field or "").split(",") if s.strip()]
+        # De-dup preserving order.
+        seen: set[str] = set()
+        chips = [c for c in chips if not (c.lower() in seen or seen.add(c.lower()))]
+
+        phash = profile_skill_hash(list(getattr(user, "skills", []) or []))
+        if not chips:
+            self.ext_skill_match = json.dumps({"matched": [], "profile_hash": phash})
+            db.flush()
+            return
+
+        rendered = _apply_template(prompt_content, {"user": user})
+        rendered = rendered.replace("{skills_to_match}", "\n".join(f"- {c}" for c in chips))
+        with llm_label(f"skill-match:{self.job_key}"):
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": rendered}],
+            )
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            from core import session_cost
+            session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
+        raw = response.choices[0].message.content or "{}"
+        parsed = parse_llm_json(raw, SkillMatchResponse)
+        # Keep only echoes that correspond to a real chip (case-insensitive).
+        chip_by_lower = {c.lower(): c for c in chips}
+        matched = [
+            chip_by_lower[m.strip().lower()]
+            for m in parsed.matched
+            if m.strip().lower() in chip_by_lower
+        ]
+        self.ext_skill_match = json.dumps({"matched": matched, "profile_hash": phash})
+        db.flush()
 
     def intake(self) -> None:
         """Run post-intake processing (description extraction) in a background thread.
