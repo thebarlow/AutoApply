@@ -69,11 +69,10 @@ def main() -> None:
         profile_ids = [pid for (pid,) in db.query(Job.profile_id).distinct().all()]
         total = 0
         for pid in profile_ids:
-            # Lambda cell-binding: capture pid by value via default arg.
             total += backfill_skill_match(
                 db,
                 pid,
-                lambda u, _pid=pid: get_client_for_profile(u, u.prompt_extraction_model),
+                lambda u: get_client_for_profile(u, u.prompt_extraction_model),
             )
         print(f"backfilled {total} job(s)")
     finally:

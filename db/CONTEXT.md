@@ -18,6 +18,8 @@ The table below records the columns that the now-deleted `_migrate_*` functions 
 add. These are all folded into the Alembic baseline (`3433821457fb`); the functions no
 longer exist.
 
+**Semantic skill-match column:** `ext_skill_match` (TEXT) on `jobs` — stores `{"matched":[...],"profile_hash":"..."}` set at extraction time by `Job.match_profile_skills`. Added via Alembic migration (semantic-skill-matching feature). See `core/CONTEXT.md` → "Skill Matching" for the JSON shape and staleness logic.
+
 | Column(s) | Table | Type | Migration fn |
 |-----------|-------|------|--------------|
 | `extraction_json` (renamed from `extraction_md`) | `jobs` | TEXT | — (manual, 2026-05-08) |
@@ -56,6 +58,7 @@ content-forcing migrations have been retired (the already-ported dev DB ran them
 | `seed_prompt_defaults` (`db/seed.py`) | Seeds `prompt_defaults` rows from `prompts/defaults/*.md`. |
 | `migrate_file_prompts_to_db` (`db/seed.py`) | One-time import of legacy file-based prompts into the `prompts` table. |
 | `_seed_ats_parse_prompt` (`db/database.py`) | Seeds the `ats_parse` `PromptDefault` row (used by the ATS semantic layer). |
+| `_seed_skill_match_prompt` (`db/database.py`) | Seeds the `skill_match` `PromptDefault` row (used by `Job.match_profile_skills`). Like `ats_parse`, it is **not** in `PROMPT_TYPE_KEYS` and is not a per-profile prompt. |
 
 ## Alembic migrations (Phase 1+)
 

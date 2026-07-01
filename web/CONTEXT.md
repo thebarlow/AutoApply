@@ -164,7 +164,8 @@ web/
 | `POST` | `/api/skills/aliases/assign` | Add/move `skill` into a group `canonical` (creates group if new) |
 | `DELETE` | `/api/skills/aliases/member` | Remove `skill` from its group (`400` if it's the canonical self-row) |
 | `POST/DELETE` | `/api/skills/profile` | Add/remove `skill` on the active profile (case-insensitive dedup) |
-| `POST` | `/api/skills/owned` | Given `{skills:[…]}`, return the subset the active profile owns (alias + case aware); echoes input strings |
+| `POST` | `/api/skills/owned` | Given `{skills:[…], job_key?}`, return the subset the active profile owns (alias + case aware, plus any skill in the job's cached `ext_skill_match` `matched` set when `job_key` is supplied); echoes input strings |
+| `POST` | `/api/jobs/{job_key}/rematch-skills` | Re-run the semantic skill matcher for a job (credit-metered like extract); updates `ext_skill_match` in-place and SSE-broadcasts the job |
 | `GET` | `/api/session-cost` | Cumulative LLM token cost for current session |
 | `GET` | `/api/credits` | Caller's `{balance, rate, recent[]}` (last 20 ledger rows) |
 | `POST` | `/api/admin/credits/grant` | Admin-only; grant credits to a profile by `profile_id` or `email`, reason `admin_grant` |
