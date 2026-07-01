@@ -825,6 +825,14 @@ class Job(Base):
         self.ext_salary_min = parsed.salary_min
         self.ext_salary_max = parsed.salary_max
         db.flush()
+        # Semantic skill match — best-effort; a failure must not lose the extraction.
+        try:
+            from db.database import PromptDefault
+            row = db.query(PromptDefault).filter_by(type_key="skill_match").first()
+            if row is not None:
+                self.match_profile_skills(user, client, model, db, row.content)
+        except Exception:
+            pass
         db.commit()
 
     def match_profile_skills(

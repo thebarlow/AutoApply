@@ -534,6 +534,61 @@ def test_do_extract_description_handles_null_salary(db_session, monkeypatch):
     assert job.ext_salary_max is None
 
 
+def test_do_extract_description_populates_skill_match(db_session, monkeypatch):
+    """After extraction via _do_extract_description, ext_skill_match is set."""
+    import json as _json
+    from web.routers.jobs import _do_extract_description
+    from unittest.mock import MagicMock
+    from db.database import PromptDefault
+
+    job = _make_job(db_session, "sm_web", JobState.NEW)
+    job.description = "We need Python."
+    db_session.commit()
+
+    # Seed the skill_match PromptDefault so the wiring activates.
+    db_session.add(PromptDefault(type_key="skill_match", content="Match {skills_to_match} against user skills."))
+    db_session.commit()
+
+    mock_user = MagicMock()
+    mock_user.resolve_prompt.return_value = "extract this"
+    mock_user.prompt_extraction_model = "gpt-4"
+    mock_user.skills = ["Python"]
+    monkeypatch.setattr("web.routers.jobs.User.load", lambda db, profile_id=None: mock_user)
+
+    # Mock client returns skill_match JSON when called by match_profile_skills.
+    mock_client = MagicMock()
+    sm_choice = MagicMock()
+    sm_choice.message.content = '{"matched": ["Python"]}'
+    sm_choice.finish_reason = "stop"
+    sm_response = MagicMock()
+    sm_response.choices = [sm_choice]
+    sm_response.usage = None
+    mock_client.chat.completions.create.return_value = sm_response
+    monkeypatch.setattr(
+        "web.routers.jobs.get_client_for_profile",
+        lambda user, model: (mock_client, "gpt-4"),
+    )
+
+    # Extraction payload — _call_llm_for_extraction is still patched out.
+    monkeypatch.setattr(
+        "web.routers.jobs._call_llm_for_extraction",
+        lambda client, model, prompt, label="extract": (
+            '{"seniority":"mid","role_type":"IC","domain":"web",'
+            '"work_arrangement":"remote","employment_type":"full-time",'
+            '"required_skills":["Python"],"preferred_skills":[],"tech_stack":[],'
+            '"key_responsibilities":[],"company_signals":[]}'
+        ),
+    )
+
+    _do_extract_description(job, db_session, 1)
+
+    db_session.refresh(job)
+    assert job.ext_skill_match is not None
+    stored = _json.loads(job.ext_skill_match)
+    assert "Python" in stored["matched"]
+    assert stored["profile_hash"]
+
+
 # --- PATCH /api/jobs/{job_key}/fields ---
 
 def test_patch_job_fields_updates_provided_fields(client, db_session):

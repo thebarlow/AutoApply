@@ -593,6 +593,21 @@ class _FakeCompletions:
         return _FakeResponse(self._content)
 
 
+class _FakeCompletionsSeq:
+    """Returns successive canned responses from an iterator."""
+
+    def __init__(self, responses: list[str]) -> None:
+        self._iter = iter(responses)
+
+    def create(self, **kwargs):
+        return _FakeResponse(next(self._iter))
+
+
+class _FakeClientSeq:
+    def __init__(self, responses: list[str]) -> None:
+        self.chat = type("C", (), {"completions": _FakeCompletionsSeq(responses)})()
+
+
 class _FakeClient:
     def __init__(self, content):
         self.chat = type("C", (), {"completions": _FakeCompletions(content)})()
@@ -703,6 +718,48 @@ def test_extract_description_coerces_salary(db_session, monkeypatch):
     job.extract_description(db_session)
     assert job.ext_salary_min == 90000.0
     assert job.ext_salary_max == 120000.0
+
+
+def test_extract_description_populates_skill_match(db_session, monkeypatch):
+    """After extraction, ext_skill_match is populated with matched skills and a profile hash."""
+    import json as _json
+    from core.job import Job
+    from db.database import PromptDefault
+    import core.user as user_mod
+    import core.llm as llm_mod
+
+    job = Job.from_scraped_for(_make_scraped(job_key="ex_sm", description="We need Python."), profile_id=1)
+    db_session.add(job)
+    # Seed the skill_match PromptDefault so the wiring activates.
+    db_session.add(PromptDefault(type_key="skill_match", content="Match {skills_to_match} against user skills."))
+    db_session.commit()
+
+    extraction_json = (
+        '{"seniority": "mid", "role_type": "IC", "domain": "web",'
+        ' "work_arrangement": "remote", "employment_type": "full-time",'
+        ' "required_skills": ["Python"], "preferred_skills": [], "tech_stack": [],'
+        ' "key_responsibilities": [], "company_signals": []}'
+    )
+    skill_match_json = '{"matched": ["Python"]}'
+
+    fake_user = type("U", (), {
+        "resolve_prompt": lambda self, k: "extract {job.description}",
+        "prompt_extraction_model": "m",
+        "skills": ["Python"],
+    })()
+    monkeypatch.setattr(user_mod.User, "load", classmethod(lambda cls, db: fake_user))
+    monkeypatch.setattr(
+        llm_mod, "get_client_for_profile",
+        lambda user, model: (_FakeClientSeq([extraction_json, skill_match_json]), "m"),
+    )
+
+    job.extract_description(db_session)
+
+    db_session.refresh(job)
+    assert job.ext_skill_match is not None
+    stored = _json.loads(job.ext_skill_match)
+    assert "Python" in stored["matched"]
+    assert stored["profile_hash"]
 
 
 def test_cover_generated_at_set_on_generate_pdf(db_session, tmp_path):

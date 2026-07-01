@@ -661,6 +661,14 @@ def _do_extract_description(job: Job, db: Session, profile_id: int) -> None:
     _add_pending_review(job, "description")
     job.unread_indicator = "ok"
     job.last_result_error = None
+    # Semantic skill match — best-effort; failure must not lose the extraction.
+    try:
+        from db.database import PromptDefault
+        row = db.query(PromptDefault).filter_by(type_key="skill_match").first()
+        if row is not None:
+            job.match_profile_skills(user, client, model, db, row.content)
+    except Exception:
+        pass
     db.commit()
 
 
