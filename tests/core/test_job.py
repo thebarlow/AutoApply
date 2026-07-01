@@ -341,6 +341,7 @@ def test_serialize_extraction_populated_when_ext_fields_set(db_session):
     assert ext["tech_stack"] == ["Python", "PostgreSQL"]
     # verify strip logic removes surrounding whitespace
     assert ext["preferred_skills"] == ["Kubernetes", "Go"]
+    assert ext["matched_skills"] == []
 
 
 def test_list_for_review_returns_only_new_and_pending_review(db_session):

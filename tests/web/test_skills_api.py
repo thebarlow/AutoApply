@@ -195,3 +195,16 @@ def test_owned_without_job_key_is_literal_only(client, db_session, make_job):
     _seed_profile(db_session, [])
     res = client.post("/api/skills/owned", json={"skills": ["Bachelors degree"]})
     assert res.json()["owned"] == []
+
+
+def test_owned_union_literal_and_cache(client, db_session, make_job):
+    # Skill is owned both literally (in profile) and in cache → returned exactly once.
+    job = make_job(job_key="j3", ext_required_skills="Python")
+    job.ext_skill_match = json.dumps({"matched": ["Python"], "profile_hash": "x"})
+    db_session.commit()
+    _seed_profile(db_session, ["Python"])
+    res = client.post(
+        "/api/skills/owned",
+        json={"skills": ["Python"], "job_key": "j3"},
+    )
+    assert res.json()["owned"] == ["Python"]
