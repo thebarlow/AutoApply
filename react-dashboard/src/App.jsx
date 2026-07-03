@@ -211,7 +211,12 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/about" element={<LandingPage me={me} />} />
+      <Route path="/about" element={
+        <div className="min-h-screen text-space-text">
+          <Navbar me={me} />
+          <LandingPage me={me} />
+        </div>
+      } />
       <Route path="/docs" element={<Docs />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={
