@@ -10,6 +10,11 @@ Two-panel layout split 3:2 in a 5-column grid:
 - **Header** — `Navbar.jsx`: branding, credits display, help button
 - **Onboarding** — `Onboarding/Wizard.jsx`: single-step "Upload Master Resume" modal shown on first login (no parsed résumé yet); the platform owns the LLM key, so there is no API-key step — just resume upload/parse (`StepResume.jsx`)
 - **Docs viewer** — `Docs.jsx`: full-page markdown docs viewer with sidebar nav; replaces dashboard when docs route active
+- **Landing / About page** (`src/components/landing/`): public marketing page shown to
+  logged-out visitors (all routes redirect to `/about`) and reachable at `/about` for
+  logged-in users via the navbar "About" link. Pure frontend, no API calls.
+  `src/components/LoginScreen.jsx` is now **orphaned** — its OAuth buttons + beta-closed
+  message were absorbed into `landing/SignInCard.jsx`. Safe to delete once confirmed.
 - **User home** — `widgets/UserHome.jsx`: stats dashboard (bar/pie charts via recharts) + profile card grid; shown as right-panel home tab
 
 ---

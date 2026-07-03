@@ -66,6 +66,14 @@ export default function Navbar({ me }) {
           </Link>
         )}
 
+        {/* About / marketing page */}
+        <Link
+          to="/about"
+          className="text-sm text-space-dim hover:text-purple-400 transition-colors"
+        >
+          About
+        </Link>
+
         {/* Help link */}
         <a
           href="/docs"
