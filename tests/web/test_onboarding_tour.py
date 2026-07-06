@@ -69,3 +69,13 @@ def test_patch_rejects_downgrade_from_terminal(db_session, seeded_profile):
     r = client.patch("/api/onboarding/tour", json={"state": "part1_done"})
     assert r.status_code == 409
     app.dependency_overrides.clear()
+
+
+def test_patch_no_profile_row_echoes_without_500(db_session):
+    # A brand-new user may finish the tour before a user_profile row exists
+    # (e.g. skipping the résumé wizard). Endpoint must echo 200, not 500.
+    client = _client(db_session, 1)
+    r = client.patch("/api/onboarding/tour", json={"state": "part1_done"})
+    assert r.status_code == 200
+    assert r.json()["onboarding_tour"] == "part1_done"
+    app.dependency_overrides.clear()

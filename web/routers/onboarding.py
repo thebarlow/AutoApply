@@ -34,6 +34,11 @@ def set_tour_state(
     """Persist the caller's onboarding tour progress."""
     if body.state not in _LEGAL:
         raise HTTPException(status_code=422, detail=f"Unknown tour state: {body.state}")
+    # A profile row is created at login in production, but the tour can finish
+    # before one exists (e.g. a user skips the résumé wizard). Echo the state
+    # without persisting rather than 500ing — there is nowhere to store it yet.
+    if db.query(User).filter_by(id=profile_id).first() is None:
+        return {"onboarding_tour": body.state}
     user = User.load(db, profile_id)
     if not _is_legal_transition(user.onboarding_tour, body.state):
         raise HTTPException(status_code=409, detail="Illegal tour state transition")
