@@ -235,9 +235,11 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   seam to read the session in prod; pure-ASGI gate on `/api/*` replaces the Basic gate; email-allowlist
   beta (`ALLOWED_EMAILS`); `ADMIN_EMAILS` bypass + first admin claims `profile_id=1`. **Gates 2–4.**
 
-- [ ] **(4) Onboarding UX rework** — needs its own brainstorm/spec. Drop the API-key step (platform
-  owns the key now); surface credit balance + buy flow; gate features on credits. Auth, Credits, and
-  Payments are all done — this is the last remaining dependency.
+- [ ] **(4) Onboarding UX rework** — **Guided tour DONE (2026-07-06):** react-joyride two-arc
+  tour (`PART1_STEPS` profile arc, `PART2_STEPS` score→generate→preview→credits); `TourController`,
+  `useOnboardingTour` state machine (`unstarted→part1_done→completed/skipped`); state persists via
+  `PATCH /api/onboarding/tour`; "Take a tour" replay button in navbar; `auto-apply:open-document`
+  wired in `Settings.jsx`. Remaining (4) work is the automated job-ingestion story below.
   **Job-ingestion — partly solved (verified 2026-07-06):** a manual add/paste path EXISTS and
   auto-scores — `UploadModal` (`Pipeline.jsx`) → `uploadJob` → `POST /api/scraper/stage-job` →
   `run_pipeline` (extract + score). So hosted users are NOT blocked from adding jobs. The remaining
