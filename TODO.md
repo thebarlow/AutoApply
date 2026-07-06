@@ -200,8 +200,10 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   simple but robust enough to ingest user feedback and iterate. (New `tickets` table; user
   submit endpoint + admin list/update endpoints; navbar entry + admin panel.)
 
-- [ ] **Auto-score jobs after upload.** Trigger scoring automatically once a job is ingested
-  (extension stage-job + manual upload), instead of requiring a manual score action.
+- [x] **Auto-score jobs after upload** — ALREADY DONE (verified 2026-07-06). `POST /api/scraper/stage-job`
+  (`web/routers/scraper.py`) fires `run_pipeline` in a background thread on every ingest — extension
+  stage-job AND manual upload (`UploadModal` → `uploadJob` → same endpoint). `run_pipeline`
+  (`web/intake_pipeline.py`) runs description extraction → scoring automatically; no manual score action.
 
 - [ ] **Remove "For Developers" from help docs.** Hosted users interact via the website,
   not a repo checkout; drop `Obsidian/Auto Apply/Docs/For Developers.md`.
@@ -234,10 +236,16 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   beta (`ALLOWED_EMAILS`); `ADMIN_EMAILS` bypass + first admin claims `profile_id=1`. **Gates 2–4.**
 
 - [ ] **(4) Onboarding UX rework** — needs its own brainstorm/spec. Drop the API-key step (platform
-  owns the key now); surface credit balance + buy flow; gate features on credits. **Also must solve
-  the job-ingestion gap:** with the browser extension unhooked from the hosted API, hosted users
-  currently have NO way to get jobs in — needs a manual add/paste path (or hosted scraping). Auth,
-  Credits, and Payments are all done — this is the last remaining dependency.
+  owns the key now); surface credit balance + buy flow; gate features on credits. Auth, Credits, and
+  Payments are all done — this is the last remaining dependency.
+  **Job-ingestion — partly solved (verified 2026-07-06):** a manual add/paste path EXISTS and
+  auto-scores — `UploadModal` (`Pipeline.jsx`) → `uploadJob` → `POST /api/scraper/stage-job` →
+  `run_pipeline` (extract + score). So hosted users are NOT blocked from adding jobs. The remaining
+  gap is *automated* server-side intake: the browser extension still points at localhost (not the
+  hosted API), and the Remotive/RemoteOK API scrapers (`scraper/`) are dormant / not UI-triggered.
+  Remaining work = **hosted scraping** (revive the API scrapers as a server-side job the hosted UI can
+  run) and/or **wire the extension to the hosted API** (point it at the hosted URL + bearer-auth the
+  `stage-job` call, which already accepts a token) — not "no way to add jobs."
 
 - [x] **Make landing page** — DONE (2026-07-06). Public `/about` marketing page shown to logged-out
   visitors (all routes redirect there) and reachable via the navbar "About" link for logged-in users.
