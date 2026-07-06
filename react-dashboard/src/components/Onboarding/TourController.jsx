@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Joyride, { STATUS, EVENTS, ACTIONS } from 'react-joyride'
 import { useOnboardingTour } from '../../hooks/useOnboardingTour'
 import { setTourState } from '../../api'
@@ -15,30 +16,66 @@ const JOYRIDE_STYLES = {
   },
 }
 
-export default function TourController({ tourState, jobCount, refreshPrereqs }) {
+const PROFILE_TARGET = '[data-tour="profile-tree"]'
+
+export default function TourController({
+  tourState,
+  jobCount,
+  refreshPrereqs,
+  // The first Part-1 step lives inside the profile editor modal, which opens
+  // via an async network call. We navigate to the dashboard, repeatedly ask it
+  // to open, and only start Joyride once that target exists (or we give up and
+  // let the TARGET_NOT_FOUND handler skip it). Tunable so tests resolve fast.
+  readyTimeoutMs = 2000,
+  readyPollMs = 100,
+}) {
+  const navigate = useNavigate()
   const persist = (state) => setTourState(state).finally(refreshPrereqs)
   const tour = useOnboardingTour({ tourState, jobCount, onStateChange: persist })
   const { run, part, launchPart1, launchPart2, finishPart1, finishTour, skip, replay } = tour
 
   const [stepIndex, setStepIndex] = useState(0)
   const replaying = useRef(false)
+  const pollTimer = useRef(null)
 
   // Reset step index whenever a run starts or the part changes mid-run (replay chains part1→part2).
   useEffect(() => {
     if (run) setStepIndex(0)
   }, [run, part])
 
-  // External triggers.
+  // External triggers. Both entry points route through beginTour so the tour
+  // starts on the dashboard with the first target actually present.
   useEffect(() => {
-    const onLaunch = () => launchPart1()
-    const onReplay = () => { replaying.current = true; replay() }
+    const beginTour = (launcher) => {
+      // Land on the dashboard: the tour targets only exist there, and (for
+      // replay from /admin, /docs, …) they must be mounted before we start.
+      navigate('/')
+      if (pollTimer.current) clearTimeout(pollTimer.current)
+      let elapsed = 0
+      const tick = () => {
+        if (document.querySelector(PROFILE_TARGET) || elapsed >= readyTimeoutMs) {
+          launcher()
+          return
+        }
+        // Keep asking the dashboard to open the profile editor — the listener
+        // may not have mounted on the first dispatch (right after navigate).
+        window.dispatchEvent(new CustomEvent('auto-apply:edit-profile'))
+        elapsed += readyPollMs
+        pollTimer.current = setTimeout(tick, readyPollMs)
+      }
+      tick()
+    }
+
+    const onLaunch = () => beginTour(launchPart1)
+    const onReplay = () => { replaying.current = true; beginTour(replay) }
     window.addEventListener('auto-apply:tour-launch-part1', onLaunch)
     window.addEventListener('auto-apply:tour-replay', onReplay)
     return () => {
       window.removeEventListener('auto-apply:tour-launch-part1', onLaunch)
       window.removeEventListener('auto-apply:tour-replay', onReplay)
+      if (pollTimer.current) clearTimeout(pollTimer.current)
     }
-  }, [launchPart1, replay])
+  }, [launchPart1, replay, navigate, readyTimeoutMs, readyPollMs])
 
   // Gate part 2 on the first job arriving after part 1.
   const prevJobCount = useRef(jobCount)

@@ -211,7 +211,13 @@ export default function App() {
   }
 
   return (
-    <Routes>
+    <>
+      <TourController
+        tourState={prereqs.onboardingTour}
+        jobCount={jobs.length}
+        refreshPrereqs={prereqs.refresh}
+      />
+      <Routes>
       <Route path="/about" element={
         <div className="min-h-screen text-space-text">
           <Navbar me={me} />
@@ -250,11 +256,6 @@ export default function App() {
               </button>
             </div>
           )}
-          <TourController
-            tourState={prereqs.onboardingTour}
-            jobCount={jobs.length}
-            refreshPrereqs={prereqs.refresh}
-          />
           <Navbar me={me} />
           {toasts.length > 0 && (
             <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-sm">
@@ -302,6 +303,7 @@ export default function App() {
           </Dashboard>
         </div>
       } />
-    </Routes>
+      </Routes>
+    </>
   )
 }
