@@ -90,6 +90,7 @@ export default function CreditBalance({ variant = 'nav', onClick, isAdmin = fals
 
   return (
     <span
+      data-tour="credit-balance"
       className="text-sm font-medium text-purple-400 cursor-pointer hover:text-purple-300"
       title={title ?? 'Session usage'}
       onClick={handleClick}

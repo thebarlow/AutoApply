@@ -51,6 +51,7 @@ function FieldView({ field, fieldsEditable, ops, tree }) {
           <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} label="in output" />
           {written && isProse && formats.length > 0 && (
             <select
+              data-tour="output-format"
               aria-label="Output format"
               className="bg-white/5 border border-space-border rounded text-xs text-space-text px-1 py-0.5"
               value={field.output_format || ''}
@@ -274,7 +275,7 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
   // and its aria-label stay bound to the explicit section.locked flag.
   const effLocked = locked || allEntriesLocked(section)
   return (
-    <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
+    <div data-tour="profile-section" className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
       <div className={`${headerRow} cursor-pointer`} onClick={toggle}>
         <span className="inline-flex items-center gap-2">
           {dragHandle}

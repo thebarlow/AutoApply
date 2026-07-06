@@ -29,6 +29,7 @@ export function VisibleToggle({ visible, onToggle, label }) {
 export function LlmWriteToggle({ written, onToggle }) {
   return (
     <button
+      data-tour="section-lock"
       type="button"
       aria-label={written ? 'Lock from LLM (keep as typed)' : 'Unlock for LLM to write'}
       title={written ? 'LLM writes this field — click to lock' : 'Locked — click to let the LLM write it'}

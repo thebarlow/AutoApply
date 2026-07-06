@@ -966,7 +966,7 @@ export default function ProfileDetailView({ profileId, onDelete }) {
 
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div data-tour="profile-tree" className="flex flex-col gap-3">
         <ProfileTreeEditor profileId={profileId} />
         <AccordionSection id="document" title="Document">
           <div className="flex flex-col gap-2">

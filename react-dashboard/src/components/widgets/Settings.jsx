@@ -728,7 +728,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             {job.company && <span className="text-xs text-space-dim">{job.company}</span>}
             {job.location && <span className="text-xs text-space-dim">{job.location}</span>}
             {job.salary && <span className="text-xs text-space-dim">{job.salary}</span>}
-            <span className="text-xs font-semibold text-purple-400">{score}</span>
+            <span data-tour="job-score" className="text-xs font-semibold text-purple-400">{score}</span>
             <select
               value={job.state}
               onChange={(e) => handleStateChange(e.target.value)}
@@ -894,6 +894,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             />
             <div className="flex items-center gap-1">
               <button
+                data-tour="document-preview"
                 onClick={() => setExpandDoc(contentTab)}
                 disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
                 title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Open document editor' : 'Generate before editing'}
@@ -904,6 +905,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               </button>
               <HelpIcon text="Generates a tailored resume and cover letter for this job, rendered to PDF. Uses more credits than scoring." />
               <GatedButton
+                data-tour="generate"
                 action="generate"
                 onClick={handleAction}
                 disabled={actionLoading || !promptOk}
