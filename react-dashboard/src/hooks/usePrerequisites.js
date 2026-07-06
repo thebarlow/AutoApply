@@ -5,6 +5,7 @@ export function usePrerequisites() {
   const [state, setState] = useState({
     llmReady: false,
     resumeReady: false,
+    onboardingTour: 'unstarted',
     loaded: false,
     error: null,
   });
@@ -15,6 +16,7 @@ export function usePrerequisites() {
       setState({
         llmReady: !!data.llm_configured,
         resumeReady: !!data.resume_parsed,
+        onboardingTour: data.onboarding_tour || 'unstarted',
         loaded: true,
         error: null,
       });
