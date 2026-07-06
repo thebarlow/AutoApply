@@ -162,6 +162,8 @@ class User(Base):
         self.resume_max_pages = _normalize_max_pages(raw.get("resume_max_pages"))
         # Résumé theme — see generator.themes.DEFAULT_THEME_ID
         self.resume_theme: str = raw.get("resume_theme") or DEFAULT_THEME_ID
+        # Onboarding tour progress — see web/routers/onboarding.py
+        self.onboarding_tour: str = raw.get("onboarding_tour") or "unstarted"
         return migrated_tree
 
     def _to_dict(self) -> dict:
@@ -194,6 +196,7 @@ class User(Base):
         d["cover_refine_pass_score"] = self.cover_refine_pass_score
         d["resume_max_pages"] = self.resume_max_pages
         d["resume_theme"] = self.resume_theme
+        d["onboarding_tour"] = self.onboarding_tour
         apply_flat_to_tree(self.profile_tree, d)
         d["profile_tree"] = self.profile_tree.model_dump(mode="json")
         return d

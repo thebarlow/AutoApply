@@ -62,6 +62,15 @@ def _has_parsed_resume(db: Session, profile_id: int) -> bool:
     return False
 
 
+def _tour_state(db: Session, profile_id: int) -> str:
+    """Return the caller's onboarding tour state (default 'unstarted')."""
+    row = db.query(User).filter_by(id=profile_id).first()
+    if row is None:
+        return "unstarted"
+    data = json.loads(row.data) if row.data else {}
+    return data.get("onboarding_tour") or "unstarted"
+
+
 @router.get("/api/setup-status")
 def get_setup_status(
     db: Session = Depends(get_db),
@@ -81,4 +90,5 @@ def get_setup_status(
     return {
         "llm_configured": _has_configured_llm_provider(db),
         "resume_parsed": _has_parsed_resume(db, profile_id),
+        "onboarding_tour": _tour_state(db, profile_id),
     }
