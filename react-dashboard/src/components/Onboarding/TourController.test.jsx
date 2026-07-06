@@ -8,7 +8,7 @@ vi.mock('react-joyride', () => ({
   default: (props) => { lastJoyrideProps = props; return null },
   STATUS: { FINISHED: 'finished', SKIPPED: 'skipped' },
   EVENTS: { STEP_AFTER: 'step:after', STEP_BEFORE: 'step:before', TARGET_NOT_FOUND: 'error:target_not_found' },
-  ACTIONS: { CLOSE: 'close' },
+  ACTIONS: { CLOSE: 'close', NEXT: 'next', PREV: 'prev' },
 }))
 
 import TourController from './TourController'
@@ -30,5 +30,21 @@ describe('TourController', () => {
     rerender(<TourController tourState="part1_done" jobCount={1} refreshPrereqs={vi.fn()} />)
     expect(lastJoyrideProps.run).toBe(true)
     expect(lastJoyrideProps.steps.length).toBe(4)
+  })
+
+  it('advances stepIndex past a missing target instead of stalling', () => {
+    render(<TourController tourState="unstarted" jobCount={0} refreshPrereqs={vi.fn()} />)
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
+    expect(lastJoyrideProps.stepIndex).toBe(0)
+    act(() => { lastJoyrideProps.callback({ type: 'error:target_not_found', index: 0 }) })
+    expect(lastJoyrideProps.stepIndex).toBe(1)
+  })
+
+  it('advances stepIndex on normal next step', () => {
+    render(<TourController tourState="unstarted" jobCount={0} refreshPrereqs={vi.fn()} />)
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
+    expect(lastJoyrideProps.stepIndex).toBe(0)
+    act(() => { lastJoyrideProps.callback({ type: 'step:after', action: 'next', index: 0 }) })
+    expect(lastJoyrideProps.stepIndex).toBe(1)
   })
 })

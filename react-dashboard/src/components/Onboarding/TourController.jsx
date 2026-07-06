@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Joyride, { STATUS, EVENTS, ACTIONS } from 'react-joyride'
 import { useOnboardingTour } from '../../hooks/useOnboardingTour'
 import { setTourState } from '../../api'
@@ -19,6 +19,13 @@ export default function TourController({ tourState, jobCount, refreshPrereqs }) 
   const persist = (state) => setTourState(state).finally(refreshPrereqs)
   const tour = useOnboardingTour({ tourState, jobCount, onStateChange: persist })
   const { run, part, launchPart1, launchPart2, finishPart1, finishTour, skip, replay } = tour
+
+  const [stepIndex, setStepIndex] = useState(0)
+
+  // Reset step index whenever a run starts.
+  useEffect(() => {
+    if (run) setStepIndex(0)
+  }, [run])
 
   // External triggers.
   useEffect(() => {
@@ -44,19 +51,27 @@ export default function TourController({ tourState, jobCount, refreshPrereqs }) 
   const steps = part === 2 ? PART2_STEPS : PART1_STEPS
 
   const handleCallback = (data) => {
-    const { status, type, action, step } = data
+    const { status, type, action, index, step } = data
     // Open the panel/modal a step needs before it shows.
     if (type === EVENTS.STEP_BEFORE && step?.openEvent) {
       window.dispatchEvent(new CustomEvent(step.openEvent))
     }
     if (type === EVENTS.TARGET_NOT_FOUND) {
-      return // joyride advances on its own; nothing to persist
+      // Skip the missing step — Joyride stalls when a target is absent, so we advance manually.
+      setStepIndex(index + 1)
+      return
+    }
+    if (type === EVENTS.STEP_AFTER) {
+      setStepIndex(index + (action === ACTIONS.PREV ? -1 : 1))
+      return
     }
     if (status === STATUS.SKIPPED || action === ACTIONS.CLOSE) {
+      setStepIndex(0)
       skip()
       return
     }
     if (status === STATUS.FINISHED) {
+      setStepIndex(0)
       if (part === 2) finishTour()
       else finishPart1()
     }
@@ -66,6 +81,7 @@ export default function TourController({ tourState, jobCount, refreshPrereqs }) 
     <Joyride
       run={run}
       steps={steps}
+      stepIndex={stepIndex}
       continuous
       showSkipButton
       showProgress
