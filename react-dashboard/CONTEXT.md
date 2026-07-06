@@ -9,6 +9,15 @@ Two-panel layout split 3:2 in a 5-column grid:
 - **Wrapper** — `Dashboard.jsx`: framer-motion animated grid container, height = `100vh - 53px`
 - **Header** — `Navbar.jsx`: branding, credits display, help button
 - **Onboarding** — `Onboarding/Wizard.jsx`: single-step "Upload Master Resume" modal shown on first login (no parsed résumé yet); the platform owns the LLM key, so there is no API-key step — just resume upload/parse (`StepResume.jsx`)
+- **Onboarding tour** (`src/components/Onboarding/`): react-joyride guided tour.
+  `TourController.jsx` mounts one controlled `<Joyride>`; `tourSteps.js` holds
+  `PART1_STEPS` (profile arc + add-a-job) and `PART2_STEPS` (score → generate →
+  preview → credits); `useOnboardingTour.js` is the state machine
+  (`unstarted → part1_done → completed`, `skipped`). State persists via
+  `PATCH /api/onboarding/tour` and is read from `GET /api/setup-status`
+  (`onboardingTour`). Part 1 auto-launches when the résumé wizard finishes/skips;
+  Part 2 gates on the first job (jobCount 0→1). Targets are `data-tour="…"`
+  attributes. "Take a tour" in the navbar dispatches `auto-apply:tour-replay`.
 - **Docs viewer** — `Docs.jsx`: full-page markdown docs viewer with sidebar nav; replaces dashboard when docs route active
 - **Landing / About page** (`src/components/landing/`): public marketing page shown to
   logged-out visitors (all routes redirect to `/about`) and reachable at `/about` for

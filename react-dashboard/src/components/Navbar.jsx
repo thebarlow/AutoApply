@@ -74,6 +74,14 @@ export default function Navbar({ me }) {
           About
         </Link>
 
+        {/* Replay the onboarding tour */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('auto-apply:tour-replay'))}
+          className="text-sm text-space-dim hover:text-purple-400 transition-colors bg-transparent border-0 p-0 cursor-pointer"
+        >
+          Take a tour
+        </button>
+
         {/* Help link */}
         <a
           href="/docs"

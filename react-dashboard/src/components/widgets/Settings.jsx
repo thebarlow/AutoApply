@@ -536,6 +536,15 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   const [showEditFields, setShowEditFields] = useState(false)
   const [expandDoc, setExpandDoc] = useState(null) // null | 'resume' | 'cover'
 
+  // Open the document modal when the onboarding tour requests it.
+  useEffect(() => {
+    const open = () => {
+      if (job) setExpandDoc('resume')
+    }
+    window.addEventListener('auto-apply:open-document', open)
+    return () => window.removeEventListener('auto-apply:open-document', open)
+  }, [job])
+
   useEffect(() => {
     if (!confirmDelete) return
     const onKey = (e) => {
