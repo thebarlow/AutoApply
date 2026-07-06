@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard'
 import Pipeline from './components/widgets/Pipeline'
 import Settings from './components/widgets/Settings'
 import Wizard from './components/Onboarding/Wizard'
+import TourController from './components/Onboarding/TourController'
 import Docs from './components/Docs'
 import AdminPage from './components/AdminPage'
 import LandingPage from './components/landing/LandingPage'
@@ -223,8 +224,17 @@ export default function App() {
         <div className="min-h-screen text-space-text">
           {showWizard && (
             <Wizard
-              onFinish={() => { window.location.reload(); }}
-              onSkip={() => setWizardSkipped(true)}
+              onFinish={() => {
+                prereqs.refresh()
+                window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1'))
+                setWizardSkipped(true)
+              }}
+              onSkip={() => {
+                setWizardSkipped(true)
+                if (prereqs.onboardingTour === 'unstarted') {
+                  window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1'))
+                }
+              }}
               onManual={handleManualEntry}
               onEdit={handleManualEntry}
             />
@@ -240,6 +250,11 @@ export default function App() {
               </button>
             </div>
           )}
+          <TourController
+            tourState={prereqs.onboardingTour}
+            jobCount={jobs.length}
+            refreshPrereqs={prereqs.refresh}
+          />
           <Navbar me={me} />
           {toasts.length > 0 && (
             <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-sm">
