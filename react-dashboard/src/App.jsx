@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
 import Pipeline from './components/widgets/Pipeline'
@@ -7,7 +7,7 @@ import Settings from './components/widgets/Settings'
 import Wizard from './components/Onboarding/Wizard'
 import Docs from './components/Docs'
 import AdminPage from './components/AdminPage'
-import LoginScreen from './components/LoginScreen'
+import LandingPage from './components/landing/LandingPage'
 import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe, stopImpersonation } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
 
@@ -201,11 +201,22 @@ export default function App() {
 
   if (me === null) {
     const betaClosed = new URLSearchParams(window.location.search).get('beta') === 'closed'
-    return <LoginScreen betaClosed={betaClosed} />
+    return (
+      <Routes>
+        <Route path="/about" element={<LandingPage me={null} betaClosed={betaClosed} />} />
+        <Route path="*" element={<Navigate to="/about" replace />} />
+      </Routes>
+    )
   }
 
   return (
     <Routes>
+      <Route path="/about" element={
+        <div className="min-h-screen text-space-text">
+          <Navbar me={me} />
+          <LandingPage me={me} />
+        </div>
+      } />
       <Route path="/docs" element={<Docs />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={

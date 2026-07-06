@@ -239,12 +239,12 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   currently have NO way to get jobs in — needs a manual add/paste path (or hosted scraping). Auth,
   Credits, and Payments are all done — this is the last remaining dependency.
 
-- [ ] **Make landing page.** A public marketing page whose purpose is to **sell the product**.
-  Must be viewable whether or not the user is signed in. Explain what AutoApply is, who it's for, and
-  what it does (scrape → tailor résumé/cover → apply), with a clear call-to-action (sign in / get
-  started / buy credits). Non-whitelisted/logged-out visitors currently hit the auth gate or an empty
-  app with no explanation — the landing page replaces that with a real pitch. Dashboard stays behind
-  auth; the landing page renders in front of it for everyone.
+- [x] **Make landing page** — DONE (2026-07-06). Public `/about` marketing page shown to logged-out
+  visitors (all routes redirect there) and reachable via the navbar "About" link for logged-in users.
+  Pure frontend `landing/` tree: `Hero` (headline + CTA), `HowItWorks` (scrape→tailor→apply),
+  `Features` (4 cards), `SignInCard` (Google/GitHub OAuth or "Go to dashboard" + closed-beta message).
+  `App.jsx` routing + `Navbar` link; orphaned `LoginScreen.jsx` (absorbed into `SignInCard`) deleted.
+  165/165 FE tests green. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-03-landing-page*`.
 
 - [ ] **Improve the document feedback system.**
   _Current system:_ In `DocumentModal`, the user attaches free-text notes to individual items
