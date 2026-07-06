@@ -47,4 +47,16 @@ describe('TourController', () => {
     act(() => { lastJoyrideProps.callback({ type: 'step:after', action: 'next', index: 0 }) })
     expect(lastJoyrideProps.stepIndex).toBe(1)
   })
+
+  it('chains replay directly into Part 2 when Part 1 finishes during replay', () => {
+    render(<TourController tourState="completed" jobCount={1} refreshPrereqs={vi.fn()} />)
+    // Trigger replay — should start Part 1.
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-replay')) })
+    expect(lastJoyrideProps.run).toBe(true)
+    expect(lastJoyrideProps.steps.length).toBe(7)
+    // Part 1 finishes — should chain into Part 2, not call finishPart1.
+    // Use type 'tour:end' (not 'step:after') so the STEP_AFTER guard doesn't intercept.
+    act(() => { lastJoyrideProps.callback({ status: 'finished', type: 'tour:end', index: 6 }) })
+    expect(lastJoyrideProps.steps.length).toBe(4)
+  })
 })

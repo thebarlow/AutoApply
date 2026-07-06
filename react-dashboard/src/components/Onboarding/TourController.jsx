@@ -21,16 +21,17 @@ export default function TourController({ tourState, jobCount, refreshPrereqs }) 
   const { run, part, launchPart1, launchPart2, finishPart1, finishTour, skip, replay } = tour
 
   const [stepIndex, setStepIndex] = useState(0)
+  const replaying = useRef(false)
 
-  // Reset step index whenever a run starts.
+  // Reset step index whenever a run starts or the part changes mid-run (replay chains part1→part2).
   useEffect(() => {
     if (run) setStepIndex(0)
-  }, [run])
+  }, [run, part])
 
   // External triggers.
   useEffect(() => {
     const onLaunch = () => launchPart1()
-    const onReplay = () => replay()
+    const onReplay = () => { replaying.current = true; replay() }
     window.addEventListener('auto-apply:tour-launch-part1', onLaunch)
     window.addEventListener('auto-apply:tour-replay', onReplay)
     return () => {
@@ -66,14 +67,22 @@ export default function TourController({ tourState, jobCount, refreshPrereqs }) 
       return
     }
     if (status === STATUS.SKIPPED || action === ACTIONS.CLOSE) {
+      replaying.current = false
       setStepIndex(0)
       skip()
       return
     }
     if (status === STATUS.FINISHED) {
       setStepIndex(0)
-      if (part === 2) finishTour()
-      else finishPart1()
+      if (part === 2) {
+        finishTour()
+        replaying.current = false
+      } else if (replaying.current) {
+        // Replay: chain directly into Part 2 without persisting part1_done.
+        launchPart2()
+      } else {
+        finishPart1()
+      }
     }
   }
 
