@@ -55,8 +55,13 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
   }
   return (
     <div className="flex flex-col gap-2">
-      {jobs.map((job) => (
-        <div key={job.job_key} onClick={() => onJobSelect(job)} className="cursor-pointer">
+      {jobs.map((job, i) => (
+        <div
+          key={job.job_key}
+          data-tour={i === 0 ? 'job-card' : undefined}
+          onClick={() => onJobSelect(job)}
+          className="cursor-pointer"
+        >
           <JobCard
             title={job.title || '(no title)'}
             company={job.company || ''}
@@ -331,6 +336,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
         </button>
         {activeTab === 'Inbox' && (
           <button
+            data-tour="add-job"
             onClick={() => setShowUpload(true)}
             className="text-xs font-medium text-purple-400 hover:text-purple-300 border border-purple-500/40 rounded px-2 py-0.5"
           >
@@ -365,7 +371,7 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div data-tour="job-inbox" className="flex-1 overflow-y-auto p-4">
         <JobList
           jobs={visibleJobs}
           processingKeys={processingKeys}

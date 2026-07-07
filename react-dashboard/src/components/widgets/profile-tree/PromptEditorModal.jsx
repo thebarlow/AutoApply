@@ -13,6 +13,12 @@ export function PromptEditorModal({ node, isSection, label, value, tree, onChang
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // Drive the onboarding tour's "open/close the prompt editor" gated steps.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('auto-apply:prompt-editor-opened'))
+    return () => window.dispatchEvent(new CustomEvent('auto-apply:prompt-editor-closed'))
+  }, [])
+
   const noun = label || (isSection ? 'Section' : 'Item')
   const locked = !!node.locked
   const text = value !== undefined ? value : (node.prompt || '')
@@ -25,6 +31,7 @@ export function PromptEditorModal({ node, isSection, label, value, tree, onChang
       onClick={onClose}
     >
       <div
+        data-tour="prompt-modal"
         className="bg-[#0f0f1a] border border-space-border rounded-2xl p-5 w-[60rem] max-w-[94vw] flex flex-col gap-3"
         onClick={(e) => e.stopPropagation()}
       >
@@ -32,6 +39,7 @@ export function PromptEditorModal({ node, isSection, label, value, tree, onChang
           <h2 className="text-sm font-semibold text-space-text">{title}</h2>
           <button
             type="button" aria-label="Close prompt editor" onClick={onClose}
+            data-tour="prompt-close"
             className="text-space-dim hover:text-space-text text-xl leading-none"
           >×</button>
         </div>

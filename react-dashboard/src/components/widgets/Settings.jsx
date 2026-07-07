@@ -536,6 +536,15 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
   const [showEditFields, setShowEditFields] = useState(false)
   const [expandDoc, setExpandDoc] = useState(null) // null | 'resume' | 'cover'
 
+  // Open the document modal when the onboarding tour requests it.
+  useEffect(() => {
+    const open = () => {
+      if (job) setExpandDoc('resume')
+    }
+    window.addEventListener('auto-apply:open-document', open)
+    return () => window.removeEventListener('auto-apply:open-document', open)
+  }, [job])
+
   useEffect(() => {
     if (!confirmDelete) return
     const onKey = (e) => {
@@ -609,6 +618,13 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
       markJobActionSeen(job.job_key, contentTab).catch(() => {})
     }
   }, [job?.job_key, contentTab, job?.pending_review_actions?.join(',')])
+
+  // Onboarding tour: surface the résumé tab so its Generate button is visible.
+  useEffect(() => {
+    const handler = () => setContentTab('resume')
+    window.addEventListener('auto-apply:show-resume-tab', handler)
+    return () => window.removeEventListener('auto-apply:show-resume-tab', handler)
+  }, [])
 
   // Reset all state when a different job is selected
   useEffect(() => {
@@ -728,7 +744,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             {job.company && <span className="text-xs text-space-dim">{job.company}</span>}
             {job.location && <span className="text-xs text-space-dim">{job.location}</span>}
             {job.salary && <span className="text-xs text-space-dim">{job.salary}</span>}
-            <span className="text-xs font-semibold text-purple-400">{score}</span>
+            <span data-tour="job-score" className="text-xs font-semibold text-purple-400">{score}</span>
             <select
               value={job.state}
               onChange={(e) => handleStateChange(e.target.value)}
@@ -894,6 +910,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
             />
             <div className="flex items-center gap-1">
               <button
+                data-tour="document-preview"
                 onClick={() => setExpandDoc(contentTab)}
                 disabled={!(contentTab === 'resume' ? hasResume : hasCover)}
                 title={(contentTab === 'resume' ? hasResume : hasCover) ? 'Open document editor' : 'Generate before editing'}
@@ -904,6 +921,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               </button>
               <HelpIcon text="Generates a tailored resume and cover letter for this job, rendered to PDF. Uses more credits than scoring." />
               <GatedButton
+                data-tour="generate"
                 action="generate"
                 onClick={handleAction}
                 disabled={actionLoading || !promptOk}

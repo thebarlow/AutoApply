@@ -140,6 +140,13 @@ export const getJobsForSkill = (skill) =>
 
 export const getSetupStatus = () => _fetch('/api/setup-status')
 
+export const setTourState = (state) =>
+  _fetch('/api/onboarding/tour', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state }),
+  })
+
 export const testLlmConnection = (body) =>
   _fetch('/api/llm/test-connection', {
     method: 'POST',

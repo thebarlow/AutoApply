@@ -213,4 +213,6 @@ def _provision_profile(db: Session) -> int:
     migrate_file_prompts_to_db(db)
     seed_skill_aliases(db, profile_id=user.id)
     db.commit()
+    from core.demo_data import seed_demo_job
+    seed_demo_job(db, user.id)
     return user.id

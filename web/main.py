@@ -23,6 +23,7 @@ from web.routers import prompts
 from web.routers import llm_status_router
 from web.routers import llm_test
 from web.routers import setup_status
+from web.routers import onboarding
 from web.routers import docs_router
 from web.routers import session_cost_router
 from web.routers import stats as stats_router
@@ -173,6 +174,7 @@ app.include_router(prompts.router)
 app.include_router(llm_status_router.router)
 app.include_router(llm_test.router)
 app.include_router(setup_status.router)
+app.include_router(onboarding.router)
 app.include_router(docs_router.router)
 app.include_router(session_cost_router.router)
 app.include_router(stats_router.router)

@@ -624,6 +624,8 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
     db.add(row)
     db.commit()
     db.refresh(row)
+    from core.demo_data import seed_demo_job
+    seed_demo_job(db, row.id)
     return {"id": row.id, "name": row.name, "data": _EMPTY_PROFILE_DATA}
 
 

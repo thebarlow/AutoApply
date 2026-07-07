@@ -1,0 +1,18 @@
+/* Pulsing ring drawn around a control the tour wants the user to click to
+   advance (e.g. the prompt editor's ✕). TourController sets
+   body[data-tour-ring="<name>"] to the current step's ringTarget. */
+body[data-tour-ring='prompt-close'] [data-tour='prompt-close'] {
+  border-radius: 9999px;
+  outline: none;
+  animation: tour-ring-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tour-ring-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.95);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(168, 85, 247, 0.3);
+  }
+}

@@ -51,6 +51,7 @@ function FieldView({ field, fieldsEditable, ops, tree }) {
           <VisibleToggle visible={field.visible} onToggle={() => ops.toggleVisible(field.id)} label="in output" />
           {written && isProse && formats.length > 0 && (
             <select
+              data-tour="output-format"
               aria-label="Output format"
               className="bg-white/5 border border-space-border rounded text-xs text-space-text px-1 py-0.5"
               value={field.output_format || ''}
@@ -119,7 +120,11 @@ function AddFieldForm({ groupId, ops }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [kind, setKind] = useState('text')
-  if (!open) return <AddButton label="+ Add field" onClick={() => setOpen(true)} />
+  if (!open) return (
+    <span data-tour="add-field" className="inline-flex">
+      <AddButton label="+ Add field" onClick={() => setOpen(true)} />
+    </span>
+  )
   return (
     <div className="flex items-center gap-2">
       <input
@@ -241,7 +246,9 @@ function ListView({ list, ops, tree, sectionLocked }) {
           ))}
         </SortableContext>
       </DndContext>
-      <AddButton label="+ Add entry" onClick={() => ops.addItem(list.id)} />
+      <span data-tour="add-field" className="inline-flex">
+        <AddButton label="+ Add entry" onClick={() => ops.addItem(list.id)} />
+      </span>
     </div>
   )
 }
@@ -268,13 +275,17 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
   const child = section.children[0]
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const [promptOpen, setPromptOpen] = useState(false)
-  const toggle = () => setCollapsed((c) => !c)
+  const toggle = () => setCollapsed((c) => {
+    // Announce expansion so the onboarding tour can advance past "open a section".
+    if (c) window.dispatchEvent(new CustomEvent('auto-apply:section-expanded'))
+    return !c
+  })
   const locked = !!section.locked
   // Glyph reflects effective lock (explicit OR every entry locked); the toggle
   // and its aria-label stay bound to the explicit section.locked flag.
   const effLocked = locked || allEntriesLocked(section)
   return (
-    <div className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
+    <div data-tour="profile-section" className={`border border-space-border rounded-xl p-4 flex flex-col gap-3 ${section.visible ? '' : 'opacity-60'}`}>
       <div className={`${headerRow} cursor-pointer`} onClick={toggle}>
         <span className="inline-flex items-center gap-2">
           {dragHandle}
@@ -283,6 +294,7 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
         <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
+            data-tour="section-lock"
             aria-label={locked ? 'Unlock section for LLM' : 'Lock section from LLM'}
             title={
               locked ? 'Locked — LLM leaves this section as typed'
@@ -292,9 +304,12 @@ export function SectionView({ section, isFirst, isLast, ops, dragHandle, tree, i
             className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
             onClick={() => ops.toggleLocked(section.id)}
           >{effLocked ? '🔒' : '🔓'}</button>
-          <VisibleToggle visible={section.visible} onToggle={() => ops.toggleVisible(section.id)} label="section" />
+          <span data-tour="section-visible" className="inline-flex">
+            <VisibleToggle visible={section.visible} onToggle={() => ops.toggleVisible(section.id)} label="section" />
+          </span>
           <button
             type="button" aria-label="Edit section prompt" title="Section prompt"
+            data-tour="section-prompt"
             className="px-1.5 py-0.5 text-space-dim hover:text-space-text transition-colors"
             onClick={() => setPromptOpen(true)}
           >💬</button>
