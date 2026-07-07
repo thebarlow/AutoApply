@@ -348,6 +348,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
             <button
               onClick={() => onSelect(activeProfile.id)}
               title="Edit your profile"
+              data-tour="user-name"
               className="max-w-full truncate px-4 py-1.5 rounded-lg border border-space-border text-lg font-semibold text-purple-300 hover:text-purple-200 hover:border-purple-500 transition-colors"
             >
               {displayName}

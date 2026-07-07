@@ -55,8 +55,13 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
   }
   return (
     <div className="flex flex-col gap-2">
-      {jobs.map((job) => (
-        <div key={job.job_key} onClick={() => onJobSelect(job)} className="cursor-pointer">
+      {jobs.map((job, i) => (
+        <div
+          key={job.job_key}
+          data-tour={i === 0 ? 'job-card' : undefined}
+          onClick={() => onJobSelect(job)}
+          className="cursor-pointer"
+        >
           <JobCard
             title={job.title || '(no title)'}
             company={job.company || ''}

@@ -293,7 +293,7 @@ export function PromptField({ value, onChange, tree, ariaLabel, placeholder }) {
     onChange(serializeNode(ref.current))
   }
   return (
-    <div data-tour="section-prompt" className="grid grid-cols-4 gap-3 items-start">
+    <div className="grid grid-cols-4 gap-3 items-start">
       <div className="col-span-3 flex flex-col gap-1.5">
         <Editor
           value={value} onChange={onChange} tree={tree}

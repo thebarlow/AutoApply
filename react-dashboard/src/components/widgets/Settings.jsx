@@ -619,6 +619,13 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
     }
   }, [job?.job_key, contentTab, job?.pending_review_actions?.join(',')])
 
+  // Onboarding tour: surface the résumé tab so its Generate button is visible.
+  useEffect(() => {
+    const handler = () => setContentTab('resume')
+    window.addEventListener('auto-apply:show-resume-tab', handler)
+    return () => window.removeEventListener('auto-apply:show-resume-tab', handler)
+  }, [])
+
   // Reset all state when a different job is selected
   useEffect(() => {
     setContentTab('description')

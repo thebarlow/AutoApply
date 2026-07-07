@@ -14,8 +14,8 @@ vi.mock('react-joyride', () => ({
 
 import TourController from './TourController'
 
-// readyTimeoutMs={0} makes the pre-launch "wait for the profile target" resolve
-// synchronously (the profile-tree element never exists in jsdom), so the launch
+// readyTimeoutMs={0} makes the pre-launch "wait for the first target" resolve
+// synchronously (the user-name element never exists in jsdom), so the launch
 // happens inside the dispatch act() and assertions can stay synchronous.
 function renderCtrl(props) {
   return render(
@@ -28,50 +28,55 @@ function renderCtrl(props) {
 beforeEach(() => { lastJoyrideProps = null })
 
 describe('TourController', () => {
-  it('launches part 1 on the launch event', () => {
-    renderCtrl({ tourState: 'unstarted', jobCount: 0 })
+  it('starts the tour on the launch event', () => {
+    renderCtrl()
     act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
     expect(lastJoyrideProps.run).toBe(true)
-    expect(lastJoyrideProps.steps.length).toBe(7)
-  })
-
-  it('auto-launches part 2 when a job arrives after part1_done', () => {
-    const { rerender } = renderCtrl({ tourState: 'part1_done', jobCount: 0 })
-    expect(lastJoyrideProps.run).toBe(false)
-    rerender(
-      <MemoryRouter>
-        <TourController readyTimeoutMs={0} refreshPrereqs={vi.fn()} tourState="part1_done" jobCount={1} />
-      </MemoryRouter>,
-    )
-    expect(lastJoyrideProps.run).toBe(true)
-    expect(lastJoyrideProps.steps.length).toBe(4)
-  })
-
-  it('advances stepIndex past a missing target instead of stalling', () => {
-    renderCtrl({ tourState: 'unstarted', jobCount: 0 })
-    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
     expect(lastJoyrideProps.stepIndex).toBe(0)
-    act(() => { lastJoyrideProps.callback({ type: 'error:target_not_found', index: 0 }) })
-    expect(lastJoyrideProps.stepIndex).toBe(1)
+    expect(lastJoyrideProps.steps.length).toBe(15)
   })
 
-  it('advances stepIndex on normal next step', () => {
-    renderCtrl({ tourState: 'unstarted', jobCount: 0 })
-    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
-    expect(lastJoyrideProps.stepIndex).toBe(0)
-    act(() => { lastJoyrideProps.callback({ type: 'step:after', action: 'next', index: 0 }) })
-    expect(lastJoyrideProps.stepIndex).toBe(1)
-  })
-
-  it('chains replay directly into Part 2 when Part 1 finishes during replay', () => {
-    renderCtrl({ tourState: 'completed', jobCount: 1 })
-    // Trigger replay — should start Part 1.
+  it('starts the tour on the replay event', () => {
+    renderCtrl()
     act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-replay')) })
     expect(lastJoyrideProps.run).toBe(true)
-    expect(lastJoyrideProps.steps.length).toBe(7)
-    // Part 1 finishes — should chain into Part 2, not call finishPart1.
-    // Use type 'tour:end' (not 'step:after') so the STEP_AFTER guard doesn't intercept.
-    act(() => { lastJoyrideProps.callback({ status: 'finished', type: 'tour:end', index: 6 }) })
-    expect(lastJoyrideProps.steps.length).toBe(4)
+  })
+
+  it('advances a gated step only when its action event fires', () => {
+    renderCtrl()
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
+    expect(lastJoyrideProps.stepIndex).toBe(0)
+    // Wrong event does nothing.
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:section-expanded')) })
+    expect(lastJoyrideProps.stepIndex).toBe(0)
+    // The step-0 gate is "profile editor opened".
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:profile-editor-opened')) })
+    expect(lastJoyrideProps.stepIndex).toBe(1)
+  })
+
+  it('advances a plain step via the Next button (step:after)', () => {
+    renderCtrl()
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:profile-editor-opened')) })
+    expect(lastJoyrideProps.stepIndex).toBe(1) // profile-tree (plain)
+    act(() => { lastJoyrideProps.callback({ type: 'step:after', action: 'next', index: 1 }) })
+    expect(lastJoyrideProps.stepIndex).toBe(2)
+  })
+
+  it('does not skip a gated step when its target is missing', () => {
+    renderCtrl()
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
+    // Step 0 is gated; a missing target must NOT auto-advance (it waits).
+    act(() => { lastJoyrideProps.callback({ type: 'error:target_not_found', index: 0 }) })
+    expect(lastJoyrideProps.stepIndex).toBe(0)
+  })
+
+  it('skips a plain step when its target is missing', () => {
+    renderCtrl()
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1')) })
+    act(() => { window.dispatchEvent(new CustomEvent('auto-apply:profile-editor-opened')) })
+    expect(lastJoyrideProps.stepIndex).toBe(1) // plain step
+    act(() => { lastJoyrideProps.callback({ type: 'error:target_not_found', index: 1 }) })
+    expect(lastJoyrideProps.stepIndex).toBe(2)
   })
 })

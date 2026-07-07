@@ -73,6 +73,13 @@ export default function App() {
     return () => window.removeEventListener('auto-apply:open-wizard', handler)
   }, [])
 
+  // Tour start: surface the User home (its name button is the tour's first step).
+  useEffect(() => {
+    const handler = () => { setSelectedJob(null); setSettingsTab('User') }
+    window.addEventListener('auto-apply:show-user-home', handler)
+    return () => window.removeEventListener('auto-apply:show-user-home', handler)
+  }, [])
+
   // "Try it out" under the wizard's Manual Entry tab: close the wizard and
   // open the manual profile editor (Settings listens for the event).
   const handleManualEntry = useCallback(() => {
@@ -191,6 +198,8 @@ export default function App() {
   const handleJobSelect = useCallback((job) => {
     setSelectedJob(job)
     setSettingsTab('Preview')
+    // Let the onboarding tour advance from "click the demo job".
+    window.dispatchEvent(new CustomEvent('auto-apply:job-opened'))
     // Auto-dismiss only for errors (so the warning banner clears on view).
     // "ok"/pending-review state clears per-subtab when the user views each one.
     if (job?.unread_indicator === 'error') {
@@ -212,11 +221,7 @@ export default function App() {
 
   return (
     <>
-      <TourController
-        tourState={prereqs.onboardingTour}
-        jobCount={jobs.length}
-        refreshPrereqs={prereqs.refresh}
-      />
+      <TourController refreshPrereqs={prereqs.refresh} />
       <Routes>
       <Route path="/about" element={
         <div className="min-h-screen text-space-text">
