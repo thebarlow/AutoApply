@@ -21,7 +21,6 @@ from web.routers import events
 from web.routers import tray
 from web.routers import prompts
 from web.routers import llm_status_router
-from web.routers import llm_test
 from web.routers import setup_status
 from web.routers import onboarding
 from web.routers import docs_router
@@ -172,7 +171,6 @@ app.include_router(events.router)
 app.include_router(tray.router)
 app.include_router(prompts.router)
 app.include_router(llm_status_router.router)
-app.include_router(llm_test.router)
 app.include_router(setup_status.router)
 app.include_router(onboarding.router)
 app.include_router(docs_router.router)

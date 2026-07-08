@@ -1,4 +1,3 @@
-import io
 import json
 import pytest
 from fastapi.testclient import TestClient
@@ -127,48 +126,6 @@ def test_put_active_profile_not_found(client):
     assert resp.status_code == 404
 
 
-def test_parse_endpoint_md_returns_profile_dict(client, monkeypatch):
-    from core.user import User
-    monkeypatch.setattr(User, "from_markdown", classmethod(lambda cls, text, db: {
-        "name": "Test User", "email": "t@t.com", "phone": "", "location": "",
-        "skills": ["Python"], "work_history": [], "education": [],
-        "target_salary_min": None, "target_salary_max": None,
-        "target_roles": [], "resume_path": "", "md_path": "",
-    }))
-
-    resp = client.post(
-        "/api/config/profile/parse",
-        files={"file": ("resume.md", io.BytesIO(b"# Test"), "text/plain")},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["email"] == "t@t.com"
-    assert data["skills"] == ["Python"]
-
-
-def test_parse_endpoint_pdf_calls_pdf_to_markdown(client, monkeypatch):
-    from core.user import User
-    pdf_calls = []
-
-    def fake_from_pdf(cls, b, db):
-        pdf_calls.append(b)
-        return {
-            "name": "", "email": "", "phone": "", "location": "",
-            "skills": [], "work_history": [], "education": [],
-            "target_salary_min": None, "target_salary_max": None,
-            "target_roles": [], "resume_path": "", "md_path": "",
-        }
-
-    monkeypatch.setattr(User, "from_pdf", classmethod(fake_from_pdf))
-
-    resp = client.post(
-        "/api/config/profile/parse",
-        files={"file": ("resume.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")},
-    )
-    assert resp.status_code == 200
-    assert len(pdf_calls) == 1
-
-
 def test_serve_profile_file_pdf_not_set(client, db_session):
     from core.user import User as UserProfileModel
     data = {"resume_path": "", "md_path": ""}
@@ -255,38 +212,6 @@ def test_serve_profile_file_invalid_type(client, db_session):
 
     resp = client.get(f"/api/config/profiles/{row.id}/file?type=xml")
     assert resp.status_code == 400
-
-
-def test_parse_endpoint_surfaces_no_provider_error(client, monkeypatch):
-    from core.user import User
-
-    def _raise(cls, *_):
-        raise RuntimeError("No active LLM provider configured")
-
-    monkeypatch.setattr(User, "from_markdown", classmethod(_raise))
-
-    resp = client.post(
-        "/api/config/profile/parse",
-        files={"file": ("resume.md", io.BytesIO(b"# Test"), "text/plain")},
-    )
-    assert resp.status_code == 422
-    assert "No active LLM provider" in resp.json()["detail"]
-
-
-def test_parse_endpoint_surfaces_bad_json_error(client, monkeypatch):
-    from core.user import User
-
-    def _raise(cls, *_):
-        raise ValueError("LLM returned invalid JSON: ...")
-
-    monkeypatch.setattr(User, "from_markdown", classmethod(_raise))
-
-    resp = client.post(
-        "/api/config/profile/parse",
-        files={"file": ("resume.md", io.BytesIO(b"# Test"), "text/plain")},
-    )
-    assert resp.status_code == 422
-    assert "LLM returned invalid JSON" in resp.json()["detail"]
 
 
 def test_get_profile_includes_llm_fields(client, db_session):
@@ -437,92 +362,6 @@ def test_put_profile_accepts_base64_padded_key(client, db_session, monkeypatch, 
     })
     assert resp.status_code == 200
     assert f"LLM_KEY_PROFILE_{row.id}=sk-validkey==" in env_file.read_text()
-
-
-def _make_md_profile(db_session, tmp_path, suffix=".md"):
-    """Helper: create a profile row with a real resume file on disk."""
-    from core.user import User as UserProfileModel
-    resume_file = tmp_path / f"resume{suffix}"
-    resume_file.write_text("# John Doe\nSoftware Engineer", encoding="utf-8")
-    data = {
-        "email": "", "phone": "", "location": "", "skills": [],
-        "work_history": [], "education": [], "target_salary_min": None,
-        "target_salary_max": None, "target_roles": [], "resume_path": str(resume_file),
-        "md_path": "", "cover_letter_path": "",
-        "resume_uploaded_at": "", "cover_uploaded_at": "",
-        "resume_filename": f"resume{suffix}", "cover_filename": "",
-    }
-    row = UserProfileModel(name="John Doe", data=json.dumps(data))
-    db_session.add(row)
-    db_session.commit()
-    return row
-
-
-_PARSED_RESULT = {
-    "name": "John Doe", "email": "john@example.com", "phone": "", "location": "",
-    "skills": ["Python"], "work_history": [], "education": [],
-    "target_salary_min": None, "target_salary_max": None,
-    "target_roles": [], "resume_path": "", "md_path": "",
-}
-
-
-def test_parse_profile_md_calls_from_markdown(client, db_session, monkeypatch, tmp_path):
-    from core.user import User
-    calls = []
-
-    def fake_from_markdown(cls, text, db, profile_id=None):
-        calls.append(text)
-        return dict(_PARSED_RESULT)
-
-    monkeypatch.setattr(User, "from_markdown", classmethod(fake_from_markdown))
-    row = _make_md_profile(db_session, tmp_path, ".md")
-
-    resp = client.post(f"/api/config/profiles/{row.id}/parse")
-    assert resp.status_code == 200, resp.text
-    assert len(calls) == 1
-    assert "John Doe" in calls[0]
-
-
-def test_parse_profile_txt_calls_from_markdown(client, db_session, monkeypatch, tmp_path):
-    from core.user import User
-    calls = []
-
-    def fake_from_markdown(cls, text, db, profile_id=None):
-        calls.append(text)
-        return dict(_PARSED_RESULT)
-
-    monkeypatch.setattr(User, "from_markdown", classmethod(fake_from_markdown))
-    row = _make_md_profile(db_session, tmp_path, ".txt")
-
-    resp = client.post(f"/api/config/profiles/{row.id}/parse")
-    assert resp.status_code == 200, resp.text
-    assert len(calls) == 1
-
-
-def test_parse_profile_runtime_error_returns_422(client, db_session, monkeypatch, tmp_path):
-    from core.user import User
-
-    def fake_from_markdown(cls, text, db, profile_id=None):
-        raise RuntimeError("No API key for user profile 1.")
-
-    monkeypatch.setattr(User, "from_markdown", classmethod(fake_from_markdown))
-    row = _make_md_profile(db_session, tmp_path, ".md")
-
-    resp = client.post(f"/api/config/profiles/{row.id}/parse")
-    assert resp.status_code == 422
-    assert "No API key" in resp.json()["detail"]
-
-
-def test_parse_profile_no_resume_returns_400(client, db_session):
-    from core.user import User as UserProfileModel
-    row = UserProfileModel(name="Empty", data=json.dumps({
-        "resume_path": "", "md_path": "",
-    }))
-    db_session.add(row)
-    db_session.commit()
-
-    resp = client.post(f"/api/config/profiles/{row.id}/parse")
-    assert resp.status_code == 400
 
 
 def test_get_profiles_includes_first_last_name(client, db_session):

@@ -116,13 +116,6 @@ def test_serve_profile_file_denies_other_tenant(two_tenants, tmp_path):
     assert r.status_code == 404
 
 
-def test_parse_profile_denies_other_tenant(two_tenants):
-    """Tenant 2 must not be able to parse (and mutate/charge) tenant 1's profile."""
-    client = _client(two_tenants, caller_profile_id=2)
-    r = client.post("/api/config/profiles/1/parse")
-    assert r.status_code == 404
-
-
 def test_get_prompt_denies_other_tenant(two_tenants):
     """Tenant 2 must not read tenant 1's prompt overrides."""
     client = _client(two_tenants, caller_profile_id=2)

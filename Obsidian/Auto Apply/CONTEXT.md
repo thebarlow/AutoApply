@@ -4,7 +4,7 @@ This is a structured repository of documentation and developer notes for enablin
 
 | Folder / File | Contents | Entry Point |
 |---|---|---|
-| `Docs/` | User-facing docs served via the dashboard (Getting Started, Help Page, For Developers, Making a Good Master Resume) | `Docs/Getting Started.md` |
+| `Docs/` | User-facing docs served via the dashboard (Getting Started, Making a Good Master Resume) | `Docs/Getting Started.md` |
 | `Notes/` | Developer reference notes (Architecture, dev server, FastAPI, React) | `Notes/Architecture.md` |
 | `Excalidraw/` | Storage of all Excalidraw diagrams referenced within the vault | None |
 | `_templates/` | Obsidian note templates (untracked; not served) | None |
