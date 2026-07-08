@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from db.database import get_db
 from db.database import Base, Config
+from db.seed import PROFILE_CONFIG_DEFAULTS
 from web.main import app
 
 
@@ -76,8 +77,10 @@ def test_get_templates_defaults(client):
     data = resp.json()
     assert data["resume_template_path"] == "generator/resume_template.html"
     assert data["cover_template_path"] == "generator/cover_template.html"
-    assert data["resume_prompt_template"] == ""
-    assert data["cover_prompt_template"] == ""
+    # resume/cover_prompt_template default to the seeded PROFILE_CONFIG_DEFAULTS
+    # prompt text (not empty) since Task 4 dropped the endpoint's inline "" default.
+    assert data["resume_prompt_template"] == PROFILE_CONFIG_DEFAULTS["resume_prompt_template"]
+    assert data["cover_prompt_template"] == PROFILE_CONFIG_DEFAULTS["cover_prompt_template"]
     assert data["github"] == ""
     assert data["linkedin"] == ""
     assert data["website"] == ""
@@ -108,8 +111,9 @@ def test_get_scoring_defaults(client):
     data = resp.json()
     assert data["w1"] == pytest.approx(0.5)
     assert data["w2"] == pytest.approx(0.5)
-    assert data["auto_reject_threshold"] == pytest.approx(0.5)
-    assert data["auto_approve_threshold"] == pytest.approx(0.5)
+    # PROFILE_CONFIG_DEFAULTS (Task 4 dropped the endpoint's inline "0.5" default).
+    assert data["auto_reject_threshold"] == pytest.approx(0.3)
+    assert data["auto_approve_threshold"] == pytest.approx(0.8)
 
 
 def test_put_scoring_persists(client):

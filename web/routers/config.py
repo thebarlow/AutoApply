@@ -277,28 +277,35 @@ class TemplatesBody(BaseModel):
 
 
 @router.get("/api/config/templates")
-def get_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_templates(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
     return {
-        "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.html"),
-        "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.html"),
-        "resume_prompt_template": _get(db, "resume_prompt_template", ""),
-        "cover_prompt_template": _get(db, "cover_prompt_template", ""),
-        "github": _get(db, "resume_github", ""),
-        "linkedin": _get(db, "resume_linkedin", ""),
-        "website": _get(db, "resume_website", ""),
+        "resume_template_path": _get(db, "resume_template_path", profile_id),
+        "cover_template_path": _get(db, "cover_template_path", profile_id),
+        "resume_prompt_template": _get(db, "resume_prompt_template", profile_id),
+        "cover_prompt_template": _get(db, "cover_prompt_template", profile_id),
+        "github": _get(db, "resume_github", profile_id),
+        "linkedin": _get(db, "resume_linkedin", profile_id),
+        "website": _get(db, "resume_website", profile_id),
     }
 
 
 @router.put("/api/config/templates")
-def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "resume_template_path", body.resume_template_path)
-    _set(db, "cover_template_path", body.cover_template_path)
-    _set(db, "resume_prompt_template", body.resume_prompt_template)
-    _set(db, "cover_prompt_template", body.cover_prompt_template)
-    _set(db, "resume_github", body.github)
-    _set(db, "resume_linkedin", body.linkedin)
-    _set(db, "resume_website", body.website)
-    return get_templates(db)
+def put_templates(
+    body: TemplatesBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "resume_template_path", body.resume_template_path, profile_id)
+    _set(db, "cover_template_path", body.cover_template_path, profile_id)
+    _set(db, "resume_prompt_template", body.resume_prompt_template, profile_id)
+    _set(db, "cover_prompt_template", body.cover_prompt_template, profile_id)
+    _set(db, "resume_github", body.github, profile_id)
+    _set(db, "resume_linkedin", body.linkedin, profile_id)
+    _set(db, "resume_website", body.website, profile_id)
+    return get_templates(db, profile_id)
 
 
 # ---- Scoring ----
@@ -311,17 +318,24 @@ class ScoringBody(BaseModel):
 
 
 @router.get("/api/config/scoring")
-def get_scoring(db: Session = Depends(get_db)) -> dict[str, float]:
+def get_scoring(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, float]:
     return {
-        "w1": float(_get(db, "w1", "0.5")),
-        "w2": float(_get(db, "w2", "0.5")),
-        "auto_reject_threshold": float(_get(db, "auto_reject_threshold", "0.5")),
-        "auto_approve_threshold": float(_get(db, "auto_approve_threshold", "0.5")),
+        "w1": float(_get(db, "w1", profile_id)),
+        "w2": float(_get(db, "w2", profile_id)),
+        "auto_reject_threshold": float(_get(db, "auto_reject_threshold", profile_id)),
+        "auto_approve_threshold": float(_get(db, "auto_approve_threshold", profile_id)),
     }
 
 
 @router.put("/api/config/scoring")
-def put_scoring(body: ScoringBody, db: Session = Depends(get_db)) -> dict[str, float]:
+def put_scoring(
+    body: ScoringBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, float]:
     if abs(body.w1 + body.w2 - 1.0) > 0.001:
         raise HTTPException(status_code=422, detail="w1 + w2 must equal 1.0")
     if body.auto_reject_threshold >= body.auto_approve_threshold:
@@ -329,10 +343,10 @@ def put_scoring(body: ScoringBody, db: Session = Depends(get_db)) -> dict[str, f
             status_code=422,
             detail="auto_reject_threshold must be less than auto_approve_threshold",
         )
-    _set(db, "w1", str(body.w1))
-    _set(db, "w2", str(body.w2))
-    _set(db, "auto_reject_threshold", str(body.auto_reject_threshold))
-    _set(db, "auto_approve_threshold", str(body.auto_approve_threshold))
+    _set(db, "w1", str(body.w1), profile_id)
+    _set(db, "w2", str(body.w2), profile_id)
+    _set(db, "auto_reject_threshold", str(body.auto_reject_threshold), profile_id)
+    _set(db, "auto_approve_threshold", str(body.auto_approve_threshold), profile_id)
     return body.model_dump()
 
 
@@ -1100,16 +1114,23 @@ class SourcesBody(BaseModel):
 
 
 @router.get("/api/config/sources")
-def get_sources(db: Session = Depends(get_db)) -> dict[str, Any]:
-    remotive = _get(db, "source_remotive", "false") == "true"
-    remoteok = _get(db, "source_remoteok", "false") == "true"
+def get_sources(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    remotive = _get(db, "source_remotive", profile_id) == "true"
+    remoteok = _get(db, "source_remoteok", profile_id) == "true"
     return {"remotive": remotive, "remoteok": remoteok}
 
 
 @router.put("/api/config/sources")
-def put_sources(body: SourcesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "source_remotive", "true" if body.remotive else "false")
-    _set(db, "source_remoteok", "true" if body.remoteok else "false")
+def put_sources(
+    body: SourcesBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "source_remotive", "true" if body.remotive else "false", profile_id)
+    _set(db, "source_remoteok", "true" if body.remoteok else "false", profile_id)
     return {"remotive": body.remotive, "remoteok": body.remoteok}
 
 
@@ -1122,18 +1143,25 @@ class SearchBody(BaseModel):
 
 
 @router.get("/api/config/search")
-def get_search(db: Session = Depends(get_db)) -> dict[str, Any]:
-    whitelist = json.loads(_get(db, "keywords_whitelist", "[]"))
-    blacklist = json.loads(_get(db, "keywords_blacklist", "[]"))
-    max_jobs = int(_get(db, "max_jobs_per_source", "50"))
+def get_search(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    whitelist = json.loads(_get(db, "keywords_whitelist", profile_id))
+    blacklist = json.loads(_get(db, "keywords_blacklist", profile_id))
+    max_jobs = int(_get(db, "max_jobs_per_source", profile_id))
     return {"keywords_whitelist": whitelist, "keywords_blacklist": blacklist, "max_jobs_per_source": max_jobs}
 
 
 @router.put("/api/config/search")
-def put_search(body: SearchBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "keywords_whitelist", json.dumps(body.keywords_whitelist))
-    _set(db, "keywords_blacklist", json.dumps(body.keywords_blacklist))
-    _set(db, "max_jobs_per_source", str(body.max_jobs_per_source))
+def put_search(
+    body: SearchBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "keywords_whitelist", json.dumps(body.keywords_whitelist), profile_id)
+    _set(db, "keywords_blacklist", json.dumps(body.keywords_blacklist), profile_id)
+    _set(db, "max_jobs_per_source", str(body.max_jobs_per_source), profile_id)
     return body.model_dump()
 
 
@@ -1150,14 +1178,21 @@ class JobSearchesBody(BaseModel):
 
 
 @router.get("/api/config/job_searches")
-def get_job_searches(db: Session = Depends(get_db)) -> dict[str, Any]:
-    raw = _get(db, "job_searches", "[]")
+def get_job_searches(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    raw = _get(db, "job_searches", profile_id)
     return {"searches": json.loads(raw)}
 
 
 @router.put("/api/config/job_searches")
-def put_job_searches(body: JobSearchesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]))
+def put_job_searches(
+    body: JobSearchesBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]), profile_id)
     return body.model_dump()
 
 
