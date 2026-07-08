@@ -116,18 +116,18 @@ class ActivePromptBody(BaseModel):
 
 
 def _get_prompts(db: Session, type_: str) -> list[dict]:
-    return json.loads(_get(db, f"{type_}_prompts", "[]"))
+    return json.loads(_get_global(db, f"{type_}_prompts", "[]"))
 
 
 def _set_prompts(db: Session, type_: str, prompts: list[dict]) -> None:
-    _set(db, f"{type_}_prompts", json.dumps(prompts))
+    _set_global(db, f"{type_}_prompts", json.dumps(prompts))
 
 
 def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[dict]) -> None:
     """Keep the legacy template key in sync so the generator always reads current content."""
     legacy_key = f"{type_}_prompt_template"
     match = next((p for p in prompts if p["id"] == active_id), None)
-    _set(db, legacy_key, match["content"] if match else "")
+    _set_global(db, legacy_key, match["content"] if match else "")
 
 
 @router.get("/api/config/prompts")
@@ -150,7 +150,7 @@ def get_all_prompts(db: Session = Depends(get_db)) -> dict[str, Any]:
 def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
     """Return whether each prompt type has a usable active configuration."""
     def _has_latex_template(type_: str) -> bool:
-        active_id = _get(db, f"active_{type_}_prompt_id")
+        active_id = _get_global(db, f"active_{type_}_prompt_id")
         if not active_id:
             return False
         prompts = _get_prompts(db, type_)
@@ -160,13 +160,13 @@ def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
         template_name = prompt.get("template_name", "")
         if not template_name:
             return False
-        templates = json.loads(_get(db, "latex_templates", "[]"))
+        templates = json.loads(_get_global(db, "latex_templates", "[]"))
         match = next((t for t in templates if t["name"] == template_name), None)
         if not match:
             return False
         return Path(match["path"]).exists()
 
-    active_desc_id = _get(db, "active_description_prompt_id")
+    active_desc_id = _get_global(db, "active_description_prompt_id")
     desc_prompts = _get_prompts(db, "description")
     has_description = bool(active_desc_id and any(p["id"] == active_desc_id for p in desc_prompts))
 
@@ -182,7 +182,7 @@ def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
-    active_id = _get(db, f"active_{type_}_prompt_id")
+    active_id = _get_global(db, f"active_{type_}_prompt_id")
     return {"prompts": [{"id": p["id"], "name": p["name"]} for p in prompts], "active_id": active_id}
 
 
@@ -213,7 +213,7 @@ def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(
     prompts = _get_prompts(db, type_)
     if not any(p["id"] == body.active_id for p in prompts):
         raise HTTPException(status_code=404, detail="Prompt not found")
-    _set(db, f"active_{type_}_prompt_id", body.active_id)
+    _set_global(db, f"active_{type_}_prompt_id", body.active_id)
     _sync_active_prompt(db, type_, body.active_id, prompts)
     return {"active_id": body.active_id}
 
@@ -243,7 +243,7 @@ def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = De
     match["model_id"] = body.model_id
     match["template_name"] = body.template_name
     _set_prompts(db, type_, prompts)
-    active_id = _get(db, f"active_{type_}_prompt_id")
+    active_id = _get_global(db, f"active_{type_}_prompt_id")
     if active_id == prompt_id:
         _sync_active_prompt(db, type_, prompt_id, prompts)
     return {"id": prompt_id, "name": body.name}
@@ -258,9 +258,9 @@ def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> 
     if len(remaining) == len(prompts):
         raise HTTPException(status_code=404, detail="Prompt not found")
     _set_prompts(db, type_, remaining)
-    active_id = _get(db, f"active_{type_}_prompt_id")
+    active_id = _get_global(db, f"active_{type_}_prompt_id")
     if active_id == prompt_id:
-        _set(db, f"active_{type_}_prompt_id", "")
+        _set_global(db, f"active_{type_}_prompt_id", "")
         _sync_active_prompt(db, type_, "", remaining)
 
 
@@ -372,7 +372,7 @@ def _validate_api_key(key: str) -> str:
 # key detection). The named-provider write endpoints were retired; on the hosted
 # app the platform owns the LLM key, so `named_providers` is normally empty.
 def _get_providers(db: Session) -> list[dict]:
-    return json.loads(_get(db, "named_providers", "[]"))
+    return json.loads(_get_global(db, "named_providers", "[]"))
 
 
 def _env_key_name(provider_id: str) -> str:
@@ -453,7 +453,7 @@ def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -
     row = db.query(User).filter_by(id=body.active_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
-    _set(db, "dev_tenant_id", str(body.active_id))
+    _set_global(db, "dev_tenant_id", str(body.active_id))
     return {"active_id": body.active_id}
 
 
@@ -563,7 +563,7 @@ def delete_profile(
         raise HTTPException(status_code=404, detail="Profile not found")
     data = json.loads(row.data)
     db.delete(row)
-    active_raw = _get(db, "dev_tenant_id")
+    active_raw = _get_global(db, "dev_tenant_id")
     if active_raw and int(active_raw) == profile_id:
         cfg = db.query(Config).filter_by(key="dev_tenant_id").first()
         if cfg:
