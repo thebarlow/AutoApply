@@ -84,7 +84,7 @@ def _do_score(job: Job, db, profile_id: int) -> None:
     except RuntimeError:
         raise
 
-    config = _load_score_config(db)
+    config = _load_score_config(db, profile_id)
     with meter_action(db, profile_id, action="score", job_key=job.job_key):
         job.score(user, config, client, model, db, prompt_content)
     job.unread_indicator = "ok"

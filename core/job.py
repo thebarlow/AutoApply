@@ -1321,11 +1321,16 @@ class Job(Base):
     def _frontmatter_data(self, user: Any, db: Session) -> dict:
         """Build the frontmatter dict for resume/cover letter templates."""
         import dataclasses
-        from db.database import Config
+        from db.database import ProfileConfig
+        from db.seed import PROFILE_CONFIG_DEFAULTS
 
         def _cfg(key: str) -> str:
-            row = db.query(Config).filter_by(key=key).first()
-            return row.value if row else ""
+            row = (
+                db.query(ProfileConfig)
+                .filter_by(profile_id=self.profile_id, key=key)
+                .first()
+            )
+            return row.value if row else PROFILE_CONFIG_DEFAULTS.get(key, "")
 
         first = user.first_name or ""
         last = user.last_name or ""
