@@ -69,6 +69,8 @@ def test_scoring_is_per_tenant(two_tenants):
         "w1": 0.7, "w2": 0.3,
         "auto_reject_threshold": 0.2, "auto_approve_threshold": 0.9,
     })
+    # Tenant 1's write persisted.
+    assert c1.get("/api/config/scoring").json()["w1"] == 0.7
     # Tenant 2 still sees defaults, not tenant 1's values.
     got = c2.get("/api/config/scoring").json()
     assert got["w1"] == 0.5

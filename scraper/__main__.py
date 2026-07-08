@@ -22,6 +22,16 @@ def _enabled_from_config(db) -> list[str]:
     return [s.strip() for s in row.value.split(",") if s.strip() in _SOURCES]
 
 
+def _resolve_profile_id(db) -> int:
+    row = db.query(Config).filter_by(key="dev_tenant_id").first()
+    if row and row.value:
+        try:
+            return int(row.value)
+        except (ValueError, TypeError):
+            pass
+    return 1
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run job scrapers.")
     parser.add_argument(
@@ -47,7 +57,7 @@ if __name__ == "__main__":
 
         sources = [_SOURCES[sid]() for sid in source_ids]
         print(f"[scraper] running: {', '.join(source_ids)}")
-        total = run_scraper(db, sources)
+        total = run_scraper(db, sources, _resolve_profile_id(db))
         print(f"[scraper] done. {total} new jobs saved.")
     finally:
         db.close()

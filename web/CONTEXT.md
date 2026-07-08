@@ -241,3 +241,10 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   and the legacy prompt-picker keys. See
   `docs/superpowers/specs/2026-07-08-config-table-tenancy-design.md` and
   `docs/superpowers/plans/2026-07-08-config-table-tenancy.md`.
+- **Prompt-template store divergence (latent trap, not a live bug).** The legacy
+  prompt-picker's `_sync_active_prompt` writes `{type_}_prompt_template` keys to the
+  GLOBAL `config` table (`_set_global`), while `put_templates` (`/api/config/templates`)
+  writes same-named `resume_prompt_template`/`cover_prompt_template` keys to the
+  per-tenant `profile_config` table. These are two disconnected stores under the same
+  key names; no runtime consumer currently reads the legacy picker's global copy
+  (the picker is dead), but don't assume the two are in sync if the picker is revived.
