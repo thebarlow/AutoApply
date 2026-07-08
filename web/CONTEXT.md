@@ -25,7 +25,8 @@ web/
     ├── llm_test.py          # POST /api/llm/test (verify LLM connectivity)
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
-    ├── setup_status.py      # GET /api/setup-status (onboarding completeness: llm_configured | resume_parsed)
+    ├── setup_status.py      # GET /api/setup-status (onboarding completeness: llm_configured | resume_parsed | onboarding_tour)
+    ├── onboarding.py        # PATCH /api/onboarding/tour (persist guided-tour progress; validated state machine)
     ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, POST /api/admin/credits/tier, GET /api/admin/system-balance; require_admin dependency
     ├── admin.py             # Admin-only endpoints: invites + user management + impersonation (see Routing Rules and Auth below)
     ├── payments.py          # GET /api/payments/packs, POST /checkout, GET /verify, POST /webhook (Stripe), GET /history
@@ -53,6 +54,7 @@ web/
 | LLM connectivity test | `routers/llm_test.py` |
 | Active LLM task status (for UI polling) | `routers/llm_status_router.py` |
 | Onboarding/setup state | `routers/setup_status.py` |
+| Onboarding guided-tour progress (PATCH) | `routers/onboarding.py` |
 | Tray app job card data | `routers/tray.py` |
 | Real-time job update stream | `routers/events.py` |
 | Documentation content for Docs page | `routers/docs_router.py` |

@@ -323,8 +323,16 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
    login (no parsed résumé), parsing against the auto-provisioned profile using
    the platform key and the account's signup credit grant
    (`CREDIT_SIGNUP_GRANT`). `setup-status.llm_configured` counts the platform
-   `LLM_API_KEY` so credit-gated actions aren't blocked.
-   Spec: `docs/superpowers/specs/2026-06-15-resume-first-onboarding-design.md`.
-   Still open: surface the credits/buy flow in onboarding, and close the
-   job-ingestion gap (the unhooked browser extension means hosted users currently
-   have no way to add jobs).
+   `LLM_API_KEY` so credit-gated actions aren't blocked. After the wizard, a
+   single **action-gated guided tour** (react-joyride; `react-dashboard/src/
+   components/Onboarding/`, `TOUR_STEPS`) walks the user through the profile
+   editor, job inbox, scoring, and generation. It drives against a pre-seeded
+   **demo job** (`core/demo_data.py` `seed_demo_job`, inserted pre-scored at
+   profile creation so no LLM call is needed) and persists progress via
+   `PATCH /api/onboarding/tour` (`web/routers/onboarding.py`) →
+   `user.onboarding_tour`.
+   Specs: `docs/superpowers/specs/2026-06-15-resume-first-onboarding-design.md`,
+   `…/2026-07-06-onboarding-guided-tour-design.md`. Still open: surface the
+   credits/buy flow in onboarding, and close the *automated* job-ingestion gap
+   (a manual paste path exists and auto-scores; the browser extension still
+   points at localhost and the API scrapers are dormant).

@@ -9,15 +9,23 @@ Two-panel layout split 3:2 in a 5-column grid:
 - **Wrapper** — `Dashboard.jsx`: framer-motion animated grid container, height = `100vh - 53px`
 - **Header** — `Navbar.jsx`: branding, credits display, help button
 - **Onboarding** — `Onboarding/Wizard.jsx`: single-step "Upload Master Resume" modal shown on first login (no parsed résumé yet); the platform owns the LLM key, so there is no API-key step — just resume upload/parse (`StepResume.jsx`)
-- **Onboarding tour** (`src/components/Onboarding/`): react-joyride guided tour.
-  `TourController.jsx` mounts one controlled `<Joyride>`; `tourSteps.js` holds
-  `PART1_STEPS` (profile arc + add-a-job) and `PART2_STEPS` (score → generate →
-  preview → credits); `useOnboardingTour.js` is the state machine
-  (`unstarted → part1_done → completed`, `skipped`). State persists via
+- **Onboarding tour** (`src/components/Onboarding/`): a single **action-gated**
+  react-joyride walkthrough. `TourController.jsx` mounts one controlled
+  `<Joyride>`; `tourSteps.js` holds one linear `TOUR_STEPS` array
+  (profile editor → sections/lock/visibility/prompt → job inbox → open the demo
+  job → score → generate → credits). Steps carry two custom fields read by the
+  controller: `openEvent` (dispatched to open a panel the step needs) and
+  `advanceOn` (a window event the user must fire to advance a "gated" step, which
+  hides the Next button; `spotlightClicks` lets them click the highlighted control
+  through the overlay). `useOnboardingTour.js` is the state machine
+  (`unstarted → part1_done → completed`, `skipped`); state persists via
   `PATCH /api/onboarding/tour` and is read from `GET /api/setup-status`
-  (`onboardingTour`). Part 1 auto-launches when the résumé wizard finishes/skips;
-  Part 2 gates on the first job (jobCount 0→1). Targets are `data-tour="…"`
-  attributes. "Take a tour" in the navbar dispatches `auto-apply:tour-replay`.
+  (API key `onboarding_tour`, mapped to `prereqs.onboardingTour` in
+  `usePrerequisites.js`). The tour auto-launches after the résumé wizard finishes/skips
+  and drives against a pre-seeded **demo job** (`core/demo_data.py`, inserted at
+  profile creation) so the score/open/generate steps have real content. Targets are
+  `data-tour="…"` attributes. "Take a tour" in the navbar dispatches
+  `auto-apply:tour-replay`.
 - **Docs viewer** — `Docs.jsx`: full-page markdown docs viewer with sidebar nav; replaces dashboard when docs route active
 - **Landing / About page** (`src/components/landing/`): public marketing page shown to
   logged-out visitors (all routes redirect to `/about`) and reachable at `/about` for

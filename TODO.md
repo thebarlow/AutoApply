@@ -235,11 +235,17 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   seam to read the session in prod; pure-ASGI gate on `/api/*` replaces the Basic gate; email-allowlist
   beta (`ALLOWED_EMAILS`); `ADMIN_EMAILS` bypass + first admin claims `profile_id=1`. **Gates 2–4.**
 
-- [ ] **(4) Onboarding UX rework** — **Guided tour DONE (2026-07-06):** react-joyride two-arc
-  tour (`PART1_STEPS` profile arc, `PART2_STEPS` score→generate→preview→credits); `TourController`,
-  `useOnboardingTour` state machine (`unstarted→part1_done→completed/skipped`); state persists via
-  `PATCH /api/onboarding/tour`; "Take a tour" replay button in navbar; `auto-apply:open-document`
-  wired in `Settings.jsx`. Remaining (4) work is the automated job-ingestion story below.
+- [ ] **(4) Onboarding UX rework** — **Guided tour DONE (2026-07-07):** reworked from the initial
+  two-arc design into a single **action-gated** react-joyride walkthrough (`tourSteps.js` `TOUR_STEPS`:
+  profile editor → sections/lock/visibility/prompt → job inbox → open demo job → score → generate →
+  credits). Gated steps hide Next and wait on an `advanceOn` window event the user fires (`openEvent`
+  opens the panel a step needs); `spotlightClicks` lets the user click the highlighted control through
+  the overlay. `TourController` + `useOnboardingTour` state machine (`unstarted→part1_done→completed/
+  skipped`); state persists via `PATCH /api/onboarding/tour` (`web/routers/onboarding.py`); "Take a
+  tour" replay in navbar. **Demo job DONE (2026-07-07):** `core/demo_data.py` `seed_demo_job` inserts
+  one pre-scored demo job at profile creation (idempotent by URL, best-effort) so the tour's score/open/
+  generate steps have real content without an LLM call. Remaining (4) work is the automated
+  job-ingestion story below.
   **Job-ingestion — partly solved (verified 2026-07-06):** a manual add/paste path EXISTS and
   auto-scores — `UploadModal` (`Pipeline.jsx`) → `uploadJob` → `POST /api/scraper/stage-job` →
   `run_pipeline` (extract + score). So hosted users are NOT blocked from adding jobs. The remaining
@@ -276,6 +282,24 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
 - [ ] **User skill interview** — Combines job analysis + persistent memory. Interview the user on
   comfort level with specific techs; confidence tier governs how the LLM references them
   (omit low-confidence, slight upsell on mid-confidence, full claim on high-confidence).
+
+- [ ] **Full codebase audit (security + redundancy + improvements).** Now that the SaaS stack
+  (auth, credits, payments, onboarding) and the profile-schema-engine swap are all in, do a
+  structured pass over the whole codebase before the next feature push. Cover:
+  - **Security holes** — tenant-scoping gaps (esp. the global `config` table bug above and
+    `PUT /api/config/profiles/active`), auth-gate exemptions (`_EXEMPT_PATHS`), the Stripe webhook
+    signature path, admin-only endpoint guards, impersonation, secret handling / env-key writes in
+    prod, SSRF/injection surfaces in the scrapers and LLM I/O, and any endpoint trusting client-sent
+    fields (e.g. `is_onboarding`, server-computed credit amounts).
+  - **Redundant / dead features** — dormant API scrapers, the legacy multi-profile switcher, orphaned
+    modules (`core/tree_render.py`), duplicated test fixtures, and any UI paths retired by the schema-engine
+    rework that still have backend remnants.
+  - **Improvements** — the known-limitation list (extraction cost not metered, navbar balance not
+    auto-refreshing, refund clawback, invite-email deliverability), test coverage gaps, and error-handling
+    consistency.
+  Produce a written findings doc (`docs/` audit note) with severity-ranked items, then convert the
+  actionable ones into their own TODO entries. Consider running it through the `security-review` /
+  `code-review` skills per-area rather than one giant pass.
 
 - [ ] **Nicer process/skill formatting** — Format process descriptions with more tables, fewer
   bullet points, less prose. Condense phrasing:

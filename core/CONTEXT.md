@@ -14,6 +14,7 @@ core/
 ├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
 ├── session_cost.py      # Thread-safe accumulator for per-session LLM spend (from usage.cost)
 ├── skill_analytics.py   # Skill token normalization + frequency aggregation across jobs (no LLM)
+├── demo_data.py         # seed_demo_job: inserts one pre-scored demo job at profile creation (onboarding tour content; no LLM)
 ├── schemas.py           # Pydantic models for structured résumé/cover generation (ResumeDocument, CoverDocument, ResumeGeneration, sub-models)
 ├── document_builder.py  # Snapshots profile data at generation time and joins LLM prose to structured profile data
 ├── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
