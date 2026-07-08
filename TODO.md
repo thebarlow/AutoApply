@@ -16,15 +16,15 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   in `core/email.py`. Now needs `RESEND_API_KEY` (+ optional `RESEND_FROM`) env vars;
   `ZOHO_SMTP_*` removed. Sends from a Resend-verified domain (matthewbarlow.me).
 
-- [ ] **Improve invite-email deliverability (lands in spam).** Resend sends work but
-  Gmail files them as spam. To fix, in order of impact:
-  1. **Add a DMARC record** (Resend sets SPF+DKIM on verification but not DMARC). TXT at
-     `_dmarc.matthewbarlow.me` = `v=DMARC1; p=none; rua=mailto:dmarc@matthewbarlow.me;`.
-     Start `p=none` (monitor), tighten to `p=quarantine` after SPF/DKIM align cleanly.
-  2. Confirm SPF + DKIM show green/verified in the Resend dashboard.
-  3. **Switch to a sending subdomain** to isolate reputation from the root domain: verify
-     `send.matthewbarlow.me` in Resend and set `RESEND_FROM=Auto Apply <noreply@send.matthewbarlow.me>`.
-  4. Have early recipients mark "Not spam" — positive engagement signal during warm-up.
+- [x] **Improve invite-email deliverability (lands in spam).** Fixed (auth records live):
+  1. DMARC published at `_dmarc.matthewbarlow.me` (`p=none`, Cloudflare DMARC Management
+     `rua`). Tighten to `p=quarantine` after a week of clean reports.
+  2. SPF + DKIM verified in Resend. DKIM (`resend._domainkey`) signs `d=matthewbarlow.me`
+     → aligns with the From domain, so DMARC passes via DKIM; Resend routes Return-Path
+     through `send.matthewbarlow.me` (amazonses) so SPF passes on the bounce domain.
+  3. Sending-subdomain switch **not needed** — DKIM already aligns on the root domain, so
+     `RESEND_FROM=@matthewbarlow.me` is fine.
+  4. Remaining is warm-up only: early recipients mark "Not spam" / reply for engagement.
 
 - [ ] **`config` table is global, not tenant-scoped (multi-tenant settings bleak).**
   `Config` is a pure key-value store (PK = `key` only), so per-user settings stored there
