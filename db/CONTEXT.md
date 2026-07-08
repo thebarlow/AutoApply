@@ -99,7 +99,7 @@ doesn't catch it.
 
 ### Tenant scoping (Phase 2)
 
-Every tenant-owned table (`jobs`, `documents`, `skill_aliases`) carries
+Every tenant-owned table (`jobs`, `documents`, `skill_aliases`, `profile_config`) carries
 `profile_id` (= `user_profile.id`). **Rule:** never `db.query(Job/Document/SkillAlias)`
 directly — read through `web.tenancy.scoped(db, Model, profile_id)`; writes set
 `profile_id`. Routers inject `current_profile_id` (dev stub → `Config['dev_tenant_id']`,
