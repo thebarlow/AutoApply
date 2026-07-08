@@ -31,6 +31,19 @@ class Config(Base):
     value = Column(Text)
 
 
+class ProfileConfig(Base):
+    """Per-tenant key-value settings. Composite PK (profile_id, key).
+
+    The global ``config`` table holds infra keys (seam pointer, migration gates,
+    platform LLM); anything a tenant configures lives here instead.
+    """
+
+    __tablename__ = "profile_config"
+    profile_id = Column(Integer, primary_key=True)
+    key = Column(String, primary_key=True)
+    value = Column(Text)
+
+
 class FieldHelp(Base):
     """Human-readable descriptions for database columns, used by the UI."""
 
