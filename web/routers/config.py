@@ -15,7 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.database import Config, FieldHelp, PromptDefault
+from db.database import Config, FieldHelp, PromptDefault, ProfileConfig
+from db.seed import PROFILE_CONFIG_DEFAULTS
 from core.job import _llm_json_with_retry
 from core.llm import get_client_for_profile
 from core.user import User, PromptNotConfiguredError
@@ -52,12 +53,46 @@ router = APIRouter()
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
 
 
-def _get(db: Session, key: str, default: str = "") -> str:
+def _get(db: Session, key: str, profile_id: int, default: str | None = None) -> str:
+    """Read a per-tenant setting from profile_config.
+
+    Falls back to the caller-supplied ``default`` when given, else to
+    ``PROFILE_CONFIG_DEFAULTS[key]`` (empty string if the key is unknown).
+    """
+    row = (
+        db.query(ProfileConfig)
+        .filter_by(profile_id=profile_id, key=key)
+        .first()
+    )
+    if row is not None:
+        return row.value
+    if default is not None:
+        return default
+    return PROFILE_CONFIG_DEFAULTS.get(key, "")
+
+
+def _set(db: Session, key: str, value: str, profile_id: int) -> None:
+    """Upsert a per-tenant setting into profile_config."""
+    row = (
+        db.query(ProfileConfig)
+        .filter_by(profile_id=profile_id, key=key)
+        .first()
+    )
+    if row:
+        row.value = value
+    else:
+        db.add(ProfileConfig(profile_id=profile_id, key=key, value=value))
+    db.commit()
+
+
+def _get_global(db: Session, key: str, default: str = "") -> str:
+    """Read a global infra setting from the config table."""
     row = db.query(Config).filter_by(key=key).first()
     return row.value if row else default
 
 
-def _set(db: Session, key: str, value: str) -> None:
+def _set_global(db: Session, key: str, value: str) -> None:
+    """Upsert a global infra setting into the config table."""
     row = db.query(Config).filter_by(key=key).first()
     if row:
         row.value = value
