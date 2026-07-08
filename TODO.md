@@ -26,6 +26,14 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
      `RESEND_FROM=@matthewbarlow.me` is fine.
   4. Remaining is warm-up only: early recipients mark "Not spam" / reply for engagement.
 
+- [ ] **Follow-ups for email deliverability (non-blocking).**
+  1. **Verify auth in practice:** send a real invite to Gmail → "Show original" → confirm
+     SPF/DKIM/DMARC all say PASS. Beats the Cloudflare dashboard widget (report-driven,
+     24–72h lag; empty/stale until traffic flows).
+  2. **Tighten DMARC to `p=quarantine`** after ~a week of clean aggregate reports.
+  3. Ignore Cloudflare's "BIMI in use — fail" — BIMI is optional (needs `p=quarantine`+
+     often a paid VMC cert); irrelevant to spam placement.
+
 - [ ] **`config` table is global, not tenant-scoped (multi-tenant settings bleak).**
   `Config` is a pure key-value store (PK = `key` only), so per-user settings stored there
   are shared across all tenants and any user can change them for everyone. Found during the
