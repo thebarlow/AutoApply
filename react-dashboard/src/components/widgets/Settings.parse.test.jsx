@@ -65,7 +65,6 @@ vi.mock('../../api', () => ({
   createProfile: vi.fn().mockResolvedValue({ id: 42 }),
   getProfile: vi.fn().mockResolvedValue({ name: 'Test Profile', data: {} }),
   updateProfile: vi.fn().mockResolvedValue({}),
-  setActiveProfile: vi.fn().mockResolvedValue({}),
   uploadProfileResume: vi.fn().mockResolvedValue({ path: '/tmp/r.pdf', filename: 'r.pdf' }),
   proposeParse: vi.fn().mockResolvedValue({
     is_onboarding: true,

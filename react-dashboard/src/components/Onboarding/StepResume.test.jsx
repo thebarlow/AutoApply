@@ -15,7 +15,6 @@ vi.mock('../shared/Spinner', () => ({ default: () => <span>…</span> }))
 vi.mock('../../api', () => ({
   uploadProfileResume: vi.fn().mockResolvedValue({ path: '/tmp/r.pdf', filename: 'r.pdf' }),
   getProfiles: vi.fn().mockResolvedValue({ active_id: 1, profiles: [{ id: 1 }] }),
-  setActiveProfile: vi.fn().mockResolvedValue({}),
   getProfile: vi.fn().mockResolvedValue({ name: 'P', data: {} }),
   updateProfile: vi.fn().mockResolvedValue({}),
   proposeParse: vi.fn().mockResolvedValue({
@@ -45,7 +44,6 @@ vi.mock('../../api', () => ({
 import {
   uploadProfileResume,
   getProfiles,
-  setActiveProfile,
   getProfile,
   updateProfile,
   proposeParse,

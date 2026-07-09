@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import { getProfiles, createProfile, getProfile, updateProfile, setActiveProfile, uploadProfileResume, proposeParse, applyParse, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills, rematchSkills } from '../../api'
+import { getProfiles, createProfile, getProfile, updateProfile, uploadProfileResume, proposeParse, applyParse, markJobActionSeen, deleteJob, updateJobState, updateJobFields, flagJob, getOwnedSkills, rematchSkills } from '../../api'
 import ParsePreview from './parse/ParsePreview'
 import DocumentModal from './DocumentModal'
 import SkillChipModal from './SkillChipModal'

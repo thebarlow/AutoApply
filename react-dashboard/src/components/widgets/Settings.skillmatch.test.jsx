@@ -18,7 +18,6 @@ vi.mock('../../api', () => ({
   createProfile: vi.fn().mockResolvedValue({ id: 1 }),
   getProfile: vi.fn().mockResolvedValue({ name: 'P', data: {} }),
   updateProfile: vi.fn().mockResolvedValue({}),
-  setActiveProfile: vi.fn().mockResolvedValue({}),
   uploadProfileResume: vi.fn().mockResolvedValue({}),
   proposeParse: vi.fn().mockResolvedValue({ sections: [] }),
   applyParse: vi.fn().mockResolvedValue({}),

@@ -8,7 +8,6 @@ import {
   getProfiles,
   getProfile,
   updateProfile,
-  setActiveProfile,
 } from "../../api";
 
 export default function StepResume({ onFinish, onEdit }) {
@@ -30,10 +29,6 @@ export default function StepResume({ onFinish, onEdit }) {
       const resolvedProfileId =
         active_id ?? (profiles && profiles[0] && profiles[0].id);
       if (!resolvedProfileId) throw new Error("No profile found for this account");
-
-      // Make it the active profile so the dashboard (UserHome) resolves it
-      // instead of falling back to the profile-picker list.
-      await setActiveProfile(resolvedProfileId);
 
       // Attach the uploaded file to the profile so parse can read it.
       // Fetch the full profile (the list response omits `data`) so we merge

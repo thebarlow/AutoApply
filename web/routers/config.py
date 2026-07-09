@@ -416,10 +416,6 @@ class ProfileBody(BaseModel):
     llm_api_key: str = ""
 
 
-class ActiveProfileBody(BaseModel):
-    active_id: int
-
-
 @router.get("/api/config/profiles")
 def get_profiles(
     db: Session = Depends(get_db),
@@ -458,17 +454,6 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
     from core.demo_data import seed_demo_job
     seed_demo_job(db, row.id)
     return {"id": row.id, "name": row.name, "data": _EMPTY_PROFILE_DATA}
-
-
-# IMPORTANT: /active must be registered before /{profile_id} so FastAPI does not
-# attempt to coerce the literal string "active" to an integer profile_id.
-@router.put("/api/config/profiles/active")
-def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    row = db.query(User).filter_by(id=body.active_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    _set_global(db, "dev_tenant_id", str(body.active_id))
-    return {"active_id": body.active_id}
 
 
 _PROFILE_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_parse")

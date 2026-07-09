@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.database import get_db
-from db.database import Base, Config
+from db.database import Base
 from core.user import User as UserProfileModel
 from web.main import app
 
@@ -106,24 +106,6 @@ def test_delete_profile(client, db_session):
     resp = client.delete(f"/api/config/profiles/{row.id}")
     assert resp.status_code == 204
     assert db_session.query(UserProfileModel).count() == 0
-
-
-def test_put_active_sets_config(client, db_session):
-    db_session.add(UserProfileModel(name="Profile A", data=EMPTY_DATA))
-    db_session.commit()
-    row = db_session.query(UserProfileModel).first()
-
-    resp = client.put("/api/config/profiles/active", json={"active_id": row.id})
-    assert resp.status_code == 200
-
-    cfg = db_session.query(Config).filter_by(key="dev_tenant_id").first()
-    assert cfg is not None
-    assert int(cfg.value) == row.id
-
-
-def test_put_active_profile_not_found(client):
-    resp = client.put("/api/config/profiles/active", json={"active_id": 999})
-    assert resp.status_code == 404
 
 
 def test_serve_profile_file_pdf_not_set(client, db_session):

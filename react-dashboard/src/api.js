@@ -73,13 +73,6 @@ export const deleteProfile = (id) =>
 export const resetProfile = (id) =>
   _fetch(`/api/config/profiles/${id}/reset`, { method: 'POST' })
 
-export const setActiveProfile = (id) =>
-  _fetch('/api/config/profiles/active', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ active_id: id }),
-  })
-
 export const getActivePromptStatus = () =>
   _fetch('/api/config/profiles/active/prompt-status')
 
@@ -127,50 +120,6 @@ export const setTourState = (state) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ state }),
   })
-
-
-/**
- * Ensures a profile named `name` exists, with the given LLM provider linked,
- * and sets it as the active profile.
- *
- * If a profile with that name already exists, it reuses it and updates the
- * LLM link. Otherwise creates a new profile.
- *
- * @param {string} name - Profile display name (e.g. "Master")
- * @param {{ providerType: string, model: string, apiKey: string, baseUrl?: string }} llm
- * @returns {Promise<{ id: number, name: string }>}
- */
-export async function ensureProfileWithProvider(name, llm) {
-  const { profiles, active_id } = await getProfiles()
-
-  // Find existing profile by name (case-insensitive), or the active one.
-  let profile = profiles.find((p) => p.name.toLowerCase() === name.toLowerCase())
-
-  if (!profile) {
-    profile = await createProfile(name)
-  }
-
-  // Link the LLM provider onto the profile row.
-  const existingData = profile.data || {}
-  const llmData = {
-    llm_provider_type: llm.providerType,
-    llm_model: llm.model,
-  }
-  if (llm.baseUrl) llmData.llm_base_url = llm.baseUrl
-  await updateProfile(profile.id, {
-    name: profile.name || name,
-    data: {
-      ...existingData,
-      ...llmData,
-    },
-    llm_api_key: llm.apiKey,
-  })
-
-  // Make it the active profile.
-  await setActiveProfile(profile.id)
-
-  return { id: profile.id, name: profile.name || name }
-}
 
 export const getSkillAliases = () => _fetch('/api/skills/aliases')
 
