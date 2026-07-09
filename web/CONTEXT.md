@@ -227,10 +227,24 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   `User.first()` / the raw URL id, which in production served profile 1 to everyone and let
   any tenant read/overwrite/delete another's profile, files, resume-parse, and prompts. When
   adding profile-scoped endpoints, depend on `current_profile_id` — never `dev_tenant_id`.
-- **The `config` table is global (not tenant-scoped).** PK is `key` only, so settings stored
-  there (scoring weights/thresholds, scraper prefs, LLM/template config) are shared across
-  all tenants and any user can change them for everyone. The scoring weights
-  (`web/routers/jobs.py:_load_weights`) feed every tenant's scoring — a live shared-tuning
-  bug, not a data leak. Proper fix is a schema change (add `profile_id` to the PK) + a
-  tenant-aware `_get`/`_set`; tracked in `TODO.md` → Bugs. Until then treat config writes as
-  app-global.
+- **Config is split global vs per-tenant (DONE).** `routers/config.py::_get`/`_set` are
+  per-tenant, backed by the tenant-guarded `profile_config` table (composite PK
+  `profile_id, key`, seeded from `PROFILE_CONFIG_DEFAULTS`, backfilled for every existing
+  profile by Alembic `aa08profcfg01`); `_get_global`/`_set_global` still hit the original
+  global `config` table (PK = `key` only). Per-tenant key classes: scoring weights/thresholds
+  (`w1`, `w2`, `auto_reject_threshold`, `auto_approve_threshold`, read in
+  `web/routers/jobs.py:_load_score_config`), contact links, template paths, and scraper prefs
+  (`source_remotive`/`source_remoteok`, `keywords_whitelist/blacklist`,
+  `max_jobs_per_source`, `job_searches`). Global key classes (deliberately not tenant-scoped):
+  `dev_tenant_id` (must stay global — `web/tenancy.py:get_dev_tenant_id` resolves the tenant
+  before any tenant is known), migration gates, `named_providers`/`llm_*`, `latex_templates`,
+  and the legacy prompt-picker keys. See
+  `docs/superpowers/specs/2026-07-08-config-table-tenancy-design.md` and
+  `docs/superpowers/plans/2026-07-08-config-table-tenancy.md`.
+- **Prompt-template store divergence (latent trap, not a live bug).** The legacy
+  prompt-picker's `_sync_active_prompt` writes `{type_}_prompt_template` keys to the
+  GLOBAL `config` table (`_set_global`), while `put_templates` (`/api/config/templates`)
+  writes same-named `resume_prompt_template`/`cover_prompt_template` keys to the
+  per-tenant `profile_config` table. These are two disconnected stores under the same
+  key names; no runtime consumer currently reads the legacy picker's global copy
+  (the picker is dead), but don't assume the two are in sync if the picker is revived.

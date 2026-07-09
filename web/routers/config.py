@@ -9,13 +9,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.database import Config, FieldHelp, PromptDefault
+from db.database import Config, FieldHelp, PromptDefault, ProfileConfig
+from db.seed import PROFILE_CONFIG_DEFAULTS
 from core.job import _llm_json_with_retry
 from core.llm import get_client_for_profile
 from core.user import User, PromptNotConfiguredError
@@ -51,20 +52,47 @@ router = APIRouter()
 
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
 
-_LLM_BASE_URLS: dict[str, str] = {
-    "openrouter": "https://openrouter.ai/api/v1",
-    "anthropic": "https://api.anthropic.com/v1",
-    "openai": "https://api.openai.com/v1",
-    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
-}
+
+def _get(db: Session, key: str, profile_id: int, default: str | None = None) -> str:
+    """Read a per-tenant setting from profile_config.
+
+    Falls back to the caller-supplied ``default`` when given, else to
+    ``PROFILE_CONFIG_DEFAULTS[key]`` (empty string if the key is unknown).
+    """
+    row = (
+        db.query(ProfileConfig)
+        .filter_by(profile_id=profile_id, key=key)
+        .first()
+    )
+    if row is not None:
+        return row.value
+    if default is not None:
+        return default
+    return PROFILE_CONFIG_DEFAULTS.get(key, "")
 
 
-def _get(db: Session, key: str, default: str = "") -> str:
+def _set(db: Session, key: str, value: str, profile_id: int) -> None:
+    """Upsert a per-tenant setting into profile_config."""
+    row = (
+        db.query(ProfileConfig)
+        .filter_by(profile_id=profile_id, key=key)
+        .first()
+    )
+    if row:
+        row.value = value
+    else:
+        db.add(ProfileConfig(profile_id=profile_id, key=key, value=value))
+    db.commit()
+
+
+def _get_global(db: Session, key: str, default: str = "") -> str:
+    """Read a global infra setting from the config table."""
     row = db.query(Config).filter_by(key=key).first()
     return row.value if row else default
 
 
-def _set(db: Session, key: str, value: str) -> None:
+def _set_global(db: Session, key: str, value: str) -> None:
+    """Upsert a global infra setting into the config table."""
     row = db.query(Config).filter_by(key=key).first()
     if row:
         row.value = value
@@ -88,18 +116,18 @@ class ActivePromptBody(BaseModel):
 
 
 def _get_prompts(db: Session, type_: str) -> list[dict]:
-    return json.loads(_get(db, f"{type_}_prompts", "[]"))
+    return json.loads(_get_global(db, f"{type_}_prompts", "[]"))
 
 
 def _set_prompts(db: Session, type_: str, prompts: list[dict]) -> None:
-    _set(db, f"{type_}_prompts", json.dumps(prompts))
+    _set_global(db, f"{type_}_prompts", json.dumps(prompts))
 
 
 def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[dict]) -> None:
     """Keep the legacy template key in sync so the generator always reads current content."""
     legacy_key = f"{type_}_prompt_template"
     match = next((p for p in prompts if p["id"] == active_id), None)
-    _set(db, legacy_key, match["content"] if match else "")
+    _set_global(db, legacy_key, match["content"] if match else "")
 
 
 @router.get("/api/config/prompts")
@@ -122,7 +150,7 @@ def get_all_prompts(db: Session = Depends(get_db)) -> dict[str, Any]:
 def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
     """Return whether each prompt type has a usable active configuration."""
     def _has_latex_template(type_: str) -> bool:
-        active_id = _get(db, f"active_{type_}_prompt_id")
+        active_id = _get_global(db, f"active_{type_}_prompt_id")
         if not active_id:
             return False
         prompts = _get_prompts(db, type_)
@@ -132,13 +160,13 @@ def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
         template_name = prompt.get("template_name", "")
         if not template_name:
             return False
-        templates = json.loads(_get(db, "latex_templates", "[]"))
+        templates = json.loads(_get_global(db, "latex_templates", "[]"))
         match = next((t for t in templates if t["name"] == template_name), None)
         if not match:
             return False
         return Path(match["path"]).exists()
 
-    active_desc_id = _get(db, "active_description_prompt_id")
+    active_desc_id = _get_global(db, "active_description_prompt_id")
     desc_prompts = _get_prompts(db, "description")
     has_description = bool(active_desc_id and any(p["id"] == active_desc_id for p in desc_prompts))
 
@@ -154,7 +182,7 @@ def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     if type_ not in ("resume", "cover", "description"):
         raise HTTPException(status_code=400, detail="type must be resume or cover")
     prompts = _get_prompts(db, type_)
-    active_id = _get(db, f"active_{type_}_prompt_id")
+    active_id = _get_global(db, f"active_{type_}_prompt_id")
     return {"prompts": [{"id": p["id"], "name": p["name"]} for p in prompts], "active_id": active_id}
 
 
@@ -185,7 +213,7 @@ def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(
     prompts = _get_prompts(db, type_)
     if not any(p["id"] == body.active_id for p in prompts):
         raise HTTPException(status_code=404, detail="Prompt not found")
-    _set(db, f"active_{type_}_prompt_id", body.active_id)
+    _set_global(db, f"active_{type_}_prompt_id", body.active_id)
     _sync_active_prompt(db, type_, body.active_id, prompts)
     return {"active_id": body.active_id}
 
@@ -215,7 +243,7 @@ def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = De
     match["model_id"] = body.model_id
     match["template_name"] = body.template_name
     _set_prompts(db, type_, prompts)
-    active_id = _get(db, f"active_{type_}_prompt_id")
+    active_id = _get_global(db, f"active_{type_}_prompt_id")
     if active_id == prompt_id:
         _sync_active_prompt(db, type_, prompt_id, prompts)
     return {"id": prompt_id, "name": body.name}
@@ -230,9 +258,9 @@ def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> 
     if len(remaining) == len(prompts):
         raise HTTPException(status_code=404, detail="Prompt not found")
     _set_prompts(db, type_, remaining)
-    active_id = _get(db, f"active_{type_}_prompt_id")
+    active_id = _get_global(db, f"active_{type_}_prompt_id")
     if active_id == prompt_id:
-        _set(db, f"active_{type_}_prompt_id", "")
+        _set_global(db, f"active_{type_}_prompt_id", "")
         _sync_active_prompt(db, type_, "", remaining)
 
 
@@ -249,28 +277,35 @@ class TemplatesBody(BaseModel):
 
 
 @router.get("/api/config/templates")
-def get_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_templates(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
     return {
-        "resume_template_path": _get(db, "resume_template_path", "generator/resume_template.html"),
-        "cover_template_path": _get(db, "cover_template_path", "generator/cover_template.html"),
-        "resume_prompt_template": _get(db, "resume_prompt_template", ""),
-        "cover_prompt_template": _get(db, "cover_prompt_template", ""),
-        "github": _get(db, "resume_github", ""),
-        "linkedin": _get(db, "resume_linkedin", ""),
-        "website": _get(db, "resume_website", ""),
+        "resume_template_path": _get(db, "resume_template_path", profile_id),
+        "cover_template_path": _get(db, "cover_template_path", profile_id),
+        "resume_prompt_template": _get(db, "resume_prompt_template", profile_id),
+        "cover_prompt_template": _get(db, "cover_prompt_template", profile_id),
+        "github": _get(db, "resume_github", profile_id),
+        "linkedin": _get(db, "resume_linkedin", profile_id),
+        "website": _get(db, "resume_website", profile_id),
     }
 
 
 @router.put("/api/config/templates")
-def put_templates(body: TemplatesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "resume_template_path", body.resume_template_path)
-    _set(db, "cover_template_path", body.cover_template_path)
-    _set(db, "resume_prompt_template", body.resume_prompt_template)
-    _set(db, "cover_prompt_template", body.cover_prompt_template)
-    _set(db, "resume_github", body.github)
-    _set(db, "resume_linkedin", body.linkedin)
-    _set(db, "resume_website", body.website)
-    return get_templates(db)
+def put_templates(
+    body: TemplatesBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "resume_template_path", body.resume_template_path, profile_id)
+    _set(db, "cover_template_path", body.cover_template_path, profile_id)
+    _set(db, "resume_prompt_template", body.resume_prompt_template, profile_id)
+    _set(db, "cover_prompt_template", body.cover_prompt_template, profile_id)
+    _set(db, "resume_github", body.github, profile_id)
+    _set(db, "resume_linkedin", body.linkedin, profile_id)
+    _set(db, "resume_website", body.website, profile_id)
+    return get_templates(db, profile_id)
 
 
 # ---- Scoring ----
@@ -283,17 +318,24 @@ class ScoringBody(BaseModel):
 
 
 @router.get("/api/config/scoring")
-def get_scoring(db: Session = Depends(get_db)) -> dict[str, float]:
+def get_scoring(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, float]:
     return {
-        "w1": float(_get(db, "w1", "0.5")),
-        "w2": float(_get(db, "w2", "0.5")),
-        "auto_reject_threshold": float(_get(db, "auto_reject_threshold", "0.5")),
-        "auto_approve_threshold": float(_get(db, "auto_approve_threshold", "0.5")),
+        "w1": float(_get(db, "w1", profile_id)),
+        "w2": float(_get(db, "w2", profile_id)),
+        "auto_reject_threshold": float(_get(db, "auto_reject_threshold", profile_id)),
+        "auto_approve_threshold": float(_get(db, "auto_approve_threshold", profile_id)),
     }
 
 
 @router.put("/api/config/scoring")
-def put_scoring(body: ScoringBody, db: Session = Depends(get_db)) -> dict[str, float]:
+def put_scoring(
+    body: ScoringBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, float]:
     if abs(body.w1 + body.w2 - 1.0) > 0.001:
         raise HTTPException(status_code=422, detail="w1 + w2 must equal 1.0")
     if body.auto_reject_threshold >= body.auto_approve_threshold:
@@ -301,10 +343,10 @@ def put_scoring(body: ScoringBody, db: Session = Depends(get_db)) -> dict[str, f
             status_code=422,
             detail="auto_reject_threshold must be less than auto_approve_threshold",
         )
-    _set(db, "w1", str(body.w1))
-    _set(db, "w2", str(body.w2))
-    _set(db, "auto_reject_threshold", str(body.auto_reject_threshold))
-    _set(db, "auto_approve_threshold", str(body.auto_approve_threshold))
+    _set(db, "w1", str(body.w1), profile_id)
+    _set(db, "w2", str(body.w2), profile_id)
+    _set(db, "auto_reject_threshold", str(body.auto_reject_threshold), profile_id)
+    _set(db, "auto_approve_threshold", str(body.auto_approve_threshold), profile_id)
     return body.model_dump()
 
 
@@ -340,226 +382,15 @@ def _validate_api_key(key: str) -> str:
     return key
 
 
-# ---- LLM ----
-
-class LLMProviderIn(BaseModel):
-    name: str
-    model: str
-    api_key: str = ""
-
-
-class LLMBody(BaseModel):
-    providers: list[LLMProviderIn]
-    active: str
-
-
-@router.get("/api/config/llm")
-def get_llm(db: Session = Depends(get_db)) -> dict[str, Any]:
-    providers = json.loads(_get(db, "llm_providers", "[]"))
-    active = _get(db, "llm_active_provider")
-    env = _read_env()
-    result = [
-        {
-            "name": p["name"],
-            "base_url": p["base_url"],
-            "model": p["model"],
-            "has_key": bool(env.get(f"LLM_KEY_{p['name'].upper()}")),
-        }
-        for p in providers
-    ]
-    return {"providers": result, "active": active}
-
-
-@router.put("/api/config/llm")
-def put_llm(body: LLMBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    env = _read_env()
-    to_store = []
-    for p in body.providers:
-        name = p.name.lower()
-        base_url = _LLM_BASE_URLS.get(name)
-        if not base_url:
-            raise HTTPException(status_code=422, detail=f"Unknown provider: {p.name}")
-        if p.api_key:
-            env[f"LLM_KEY_{name.upper()}"] = _validate_api_key(p.api_key)
-        to_store.append({"name": name, "base_url": base_url, "model": p.model})
-    _write_env(env)
-    _set(db, "llm_providers", json.dumps(to_store))
-    _set(db, "llm_active_provider", body.active)
-    return get_llm(db)
-
-
-# ---- Named Providers ----
-
-_VALID_PROVIDER_TYPES = {"openrouter", "anthropic", "openai", "gemini"}
-
-
-class ProviderIn(BaseModel):
-    name: str
-    provider_type: str
-    default_model: str = ""
-    api_key: str = ""
-
-
+# Read-only helpers retained for the setup-status probe (local-mode per-provider
+# key detection). The named-provider write endpoints were retired; on the hosted
+# app the platform owns the LLM key, so `named_providers` is normally empty.
 def _get_providers(db: Session) -> list[dict]:
-    return json.loads(_get(db, "named_providers", "[]"))
-
-
-def _set_providers(db: Session, providers: list[dict]) -> None:
-    _set(db, "named_providers", json.dumps(providers))
+    return json.loads(_get_global(db, "named_providers", "[]"))
 
 
 def _env_key_name(provider_id: str) -> str:
     return f"LLM_KEY_{provider_id.upper().replace('-', '_')}"
-
-
-def _mask_key(key: str) -> str:
-    if not key:
-        return ""
-    visible = min(8, len(key))
-    return key[:visible] + "•" * max(0, len(key) - visible)
-
-
-@router.get("/api/config/providers")
-def get_providers(db: Session = Depends(get_db)) -> dict[str, Any]:
-    providers = _get_providers(db)
-    env = _read_env()
-    result = []
-    for p in providers:
-        raw_key = env.get(_env_key_name(p["id"]), "")
-        result.append({
-            "id": p["id"],
-            "name": p["name"],
-            "provider_type": p["provider_type"],
-            "default_model": p.get("default_model", ""),
-            "has_key": bool(raw_key),
-            "masked_key": _mask_key(raw_key),
-        })
-    return {"providers": result}
-
-
-@router.post("/api/config/providers")
-def create_provider(body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if body.provider_type not in _VALID_PROVIDER_TYPES:
-        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
-    providers = _get_providers(db)
-    new_id = uuid.uuid4().hex
-    providers.append({"id": new_id, "name": body.name, "provider_type": body.provider_type, "default_model": body.default_model})
-    _set_providers(db, providers)
-    if body.api_key:
-        env = _read_env()
-        env[_env_key_name(new_id)] = _validate_api_key(body.api_key)
-        _write_env(env)
-    return {"id": new_id, "name": body.name, "provider_type": body.provider_type}
-
-
-@router.put("/api/config/providers/{provider_id}")
-def update_provider(provider_id: str, body: ProviderIn, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if body.provider_type not in _VALID_PROVIDER_TYPES:
-        raise HTTPException(status_code=422, detail=f"Unknown provider_type: {body.provider_type}")
-    providers = _get_providers(db)
-    match = next((p for p in providers if p["id"] == provider_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail="Provider not found")
-    match["name"] = body.name
-    match["provider_type"] = body.provider_type
-    match["default_model"] = body.default_model
-    _set_providers(db, providers)
-    env = _read_env()
-    if body.api_key:
-        env[_env_key_name(provider_id)] = _validate_api_key(body.api_key)
-    else:
-        env.pop(_env_key_name(provider_id), None)
-    _write_env(env)
-    return {"id": provider_id, "name": body.name, "provider_type": body.provider_type}
-
-
-@router.delete("/api/config/providers/{provider_id}", status_code=204)
-def delete_provider(provider_id: str, db: Session = Depends(get_db)) -> None:
-    providers = _get_providers(db)
-    remaining = [p for p in providers if p["id"] != provider_id]
-    if len(remaining) == len(providers):
-        raise HTTPException(status_code=404, detail="Provider not found")
-    _set_providers(db, remaining)
-    env = _read_env()
-    env.pop(_env_key_name(provider_id), None)
-    _write_env(env)
-
-
-# ---- LaTeX Templates ----
-
-_TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
-
-
-class LatexTemplateNameBody(BaseModel):
-    name: str
-
-
-def _get_latex_templates(db: Session) -> list[dict]:
-    return json.loads(_get(db, "latex_templates", "[]"))
-
-
-def _set_latex_templates(db: Session, templates: list[dict]) -> None:
-    _set(db, "latex_templates", json.dumps(templates))
-
-
-@router.get("/api/config/latex-templates")
-def get_latex_templates(db: Session = Depends(get_db)) -> dict[str, Any]:
-    return {"templates": _get_latex_templates(db)}
-
-
-@router.post("/api/config/latex-templates")
-def create_latex_template(
-    name: str = Form(...),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    contents = file.file.read()
-    if len(contents) > 2 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large (max 2 MB)")
-    filename = file.filename or ""
-    suffix = Path(filename).suffix.lower()
-    if suffix not in (".tex", ".html"):
-        raise HTTPException(status_code=400, detail="Only .tex and .html files are accepted")
-    _TEMPLATES_DIR.mkdir(exist_ok=True)
-    new_id = uuid.uuid4().hex
-    dest = _TEMPLATES_DIR / f"{new_id}{suffix}"
-    dest.write_bytes(contents)
-    try:
-        templates = _get_latex_templates(db)
-        templates.append({"id": new_id, "name": name, "path": str(dest.resolve())})
-        _set_latex_templates(db, templates)
-    except Exception:
-        dest.unlink(missing_ok=True)
-        raise
-    return {"id": new_id, "name": name, "path": str(dest.resolve())}
-
-
-@router.put("/api/config/latex-templates/{template_id}")
-def update_latex_template(
-    template_id: str,
-    body: LatexTemplateNameBody,
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    templates = _get_latex_templates(db)
-    match = next((t for t in templates if t["id"] == template_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail="Template not found")
-    match["name"] = body.name
-    _set_latex_templates(db, templates)
-    return match
-
-
-@router.delete("/api/config/latex-templates/{template_id}", status_code=204)
-def delete_latex_template(template_id: str, db: Session = Depends(get_db)) -> None:
-    templates = _get_latex_templates(db)
-    match = next((t for t in templates if t["id"] == template_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail="Template not found")
-    remaining = [t for t in templates if t["id"] != template_id]
-    _set_latex_templates(db, remaining)
-    path = Path(match.get("path", ""))
-    if path.exists():
-        path.unlink(missing_ok=True)
 
 
 # ---- User Profiles ----
@@ -636,7 +467,7 @@ def set_active_profile(body: ActiveProfileBody, db: Session = Depends(get_db)) -
     row = db.query(User).filter_by(id=body.active_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
-    _set(db, "dev_tenant_id", str(body.active_id))
+    _set_global(db, "dev_tenant_id", str(body.active_id))
     return {"active_id": body.active_id}
 
 
@@ -746,7 +577,7 @@ def delete_profile(
         raise HTTPException(status_code=404, detail="Profile not found")
     data = json.loads(row.data)
     db.delete(row)
-    active_raw = _get(db, "dev_tenant_id")
+    active_raw = _get_global(db, "dev_tenant_id")
     if active_raw and int(active_raw) == profile_id:
         cfg = db.query(Config).filter_by(key="dev_tenant_id").first()
         if cfg:
@@ -877,55 +708,6 @@ def serve_profile_file(
     return FileResponse(path, media_type=media_type)
 
 
-@router.post("/api/config/profiles/{profile_id}/parse")
-def parse_profile_from_resume(
-    profile_id: int,
-    db: Session = Depends(get_db),
-    caller_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    """Parse the already-uploaded resume for a profile and merge extracted data back into it."""
-    if profile_id != caller_id:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    row = db.query(User).filter_by(id=profile_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    data = json.loads(row.data) if row.data else {}
-    resume_path = data.get("resume_path") or data.get("md_path")
-    if not resume_path:
-        raise HTTPException(status_code=400, detail="No resume uploaded for this profile")
-    path = Path(resume_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Resume file not found on disk")
-    try:
-        if path.suffix.lower() == ".pdf":
-            parsed = User.from_pdf(path.read_bytes(), db, profile_id=profile_id)
-        else:
-            # .md, .txt, or any plain-text format: pass content directly to the LLM
-            parsed = User.from_markdown(path.read_text(encoding="utf-8", errors="replace"), db, profile_id=profile_id)
-    except PromptNotConfiguredError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except (ValueError, RuntimeError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    merged = {**_EMPTY_PROFILE_DATA, **parsed}
-    merged["resume_path"] = data.get("resume_path", "")
-    merged["md_path"] = data.get("md_path", "")
-    merged["cover_letter_path"] = data.get("cover_letter_path", "")
-    merged["resume_uploaded_at"] = data.get("resume_uploaded_at", "")
-    merged["cover_uploaded_at"] = data.get("cover_uploaded_at", "")
-    merged["resume_filename"] = data.get("resume_filename", "")
-    merged["cover_filename"] = data.get("cover_filename", "")
-    # Preserve LLM config — the parse step must not overwrite provider/model/base_url
-    for _key in ("llm_provider_type", "llm_model", "llm_base_url"):
-        if data.get(_key):
-            merged[_key] = data[_key]
-    name = parsed.get("name") or row.name
-    row.name = name
-    existing = json.loads(row.data) if row.data else {}
-    row.data = json.dumps(merge_flat_into_stored(existing, merged))
-    db.commit()
-    return {"id": row.id, "name": name}
-
-
 # ---------------------------------------------------------------------------
 # Parse/propose helpers (Task 5)
 # ---------------------------------------------------------------------------
@@ -1032,8 +814,8 @@ def parse_propose(
 ) -> ParseProposal:
     """Run the résumé parse and return a ParseProposal without persisting anything.
 
-    Mirrors the ownership guards and résumé-path resolution of
-    ``parse_profile_from_resume``, but skips the merge/commit step.
+    Applies the standard ownership guard and résumé-path resolution, but skips
+    the merge/commit step (the caller applies changes via ``parse/apply``).
 
     Args:
         profile_id: The profile to parse.
@@ -1332,16 +1114,23 @@ class SourcesBody(BaseModel):
 
 
 @router.get("/api/config/sources")
-def get_sources(db: Session = Depends(get_db)) -> dict[str, Any]:
-    remotive = _get(db, "source_remotive", "false") == "true"
-    remoteok = _get(db, "source_remoteok", "false") == "true"
+def get_sources(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    remotive = _get(db, "source_remotive", profile_id) == "true"
+    remoteok = _get(db, "source_remoteok", profile_id) == "true"
     return {"remotive": remotive, "remoteok": remoteok}
 
 
 @router.put("/api/config/sources")
-def put_sources(body: SourcesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "source_remotive", "true" if body.remotive else "false")
-    _set(db, "source_remoteok", "true" if body.remoteok else "false")
+def put_sources(
+    body: SourcesBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "source_remotive", "true" if body.remotive else "false", profile_id)
+    _set(db, "source_remoteok", "true" if body.remoteok else "false", profile_id)
     return {"remotive": body.remotive, "remoteok": body.remoteok}
 
 
@@ -1354,18 +1143,25 @@ class SearchBody(BaseModel):
 
 
 @router.get("/api/config/search")
-def get_search(db: Session = Depends(get_db)) -> dict[str, Any]:
-    whitelist = json.loads(_get(db, "keywords_whitelist", "[]"))
-    blacklist = json.loads(_get(db, "keywords_blacklist", "[]"))
-    max_jobs = int(_get(db, "max_jobs_per_source", "50"))
+def get_search(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    whitelist = json.loads(_get(db, "keywords_whitelist", profile_id))
+    blacklist = json.loads(_get(db, "keywords_blacklist", profile_id))
+    max_jobs = int(_get(db, "max_jobs_per_source", profile_id))
     return {"keywords_whitelist": whitelist, "keywords_blacklist": blacklist, "max_jobs_per_source": max_jobs}
 
 
 @router.put("/api/config/search")
-def put_search(body: SearchBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "keywords_whitelist", json.dumps(body.keywords_whitelist))
-    _set(db, "keywords_blacklist", json.dumps(body.keywords_blacklist))
-    _set(db, "max_jobs_per_source", str(body.max_jobs_per_source))
+def put_search(
+    body: SearchBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "keywords_whitelist", json.dumps(body.keywords_whitelist), profile_id)
+    _set(db, "keywords_blacklist", json.dumps(body.keywords_blacklist), profile_id)
+    _set(db, "max_jobs_per_source", str(body.max_jobs_per_source), profile_id)
     return body.model_dump()
 
 
@@ -1382,34 +1178,22 @@ class JobSearchesBody(BaseModel):
 
 
 @router.get("/api/config/job_searches")
-def get_job_searches(db: Session = Depends(get_db)) -> dict[str, Any]:
-    raw = _get(db, "job_searches", "[]")
+def get_job_searches(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    raw = _get(db, "job_searches", profile_id)
     return {"searches": json.loads(raw)}
 
 
 @router.put("/api/config/job_searches")
-def put_job_searches(body: JobSearchesBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]))
+def put_job_searches(
+    body: JobSearchesBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]), profile_id)
     return body.model_dump()
-
-
-@router.post("/api/config/profile/parse")
-def parse_profile(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Parse an uploaded PDF or Markdown resume into a profile dict using the active LLM."""
-    MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-    contents = file.file.read()
-    if len(contents) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
-    filename = file.filename or ""
-    try:
-        if filename.lower().endswith(".pdf"):
-            return User.from_pdf(contents, db)
-        else:
-            return User.from_markdown(contents.decode("utf-8", errors="replace"), db)
-    except PromptNotConfiguredError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
 
 
 # ---- Job Fields ----

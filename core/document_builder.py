@@ -26,9 +26,11 @@ from core.document_assembler import resume_section_order
 _log = logging.getLogger(__name__)
 
 
-def _cfg(db: Session, key: str) -> str:
-    row = db.query(Config).filter_by(key=key).first()
-    return (row.value if row else "") or ""
+def _cfg(db: Session, key: str, profile_id: int) -> str:
+    from db.database import ProfileConfig
+    from db.seed import PROFILE_CONFIG_DEFAULTS
+    row = db.query(ProfileConfig).filter_by(profile_id=profile_id, key=key).first()
+    return (row.value if row else PROFILE_CONFIG_DEFAULTS.get(key, "")) or ""
 
 
 def build_resume_header(user: Any, db: Session) -> ResumeHeader:
@@ -44,9 +46,9 @@ def build_resume_header(user: Any, db: Session) -> ResumeHeader:
         email=user.email or "",
         phone=user.phone or "",
         location=user.location or "",
-        github=(user.github or "") or _cfg(db, "resume_github"),
-        linkedin=(user.linkedin or "") or _cfg(db, "resume_linkedin"),
-        website=(user.website or "") or _cfg(db, "resume_website"),
+        github=(user.github or "") or _cfg(db, "resume_github", user.id),
+        linkedin=(user.linkedin or "") or _cfg(db, "resume_linkedin", user.id),
+        website=(user.website or "") or _cfg(db, "resume_website", user.id),
     )
 
 

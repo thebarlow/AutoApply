@@ -211,12 +211,12 @@ def update_job_flag(
     return job.serialize()
 
 
-def _load_score_config(db: Session) -> dict:
-    """Load scoring weights from the config table."""
+def _load_score_config(db: Session, profile_id: int) -> dict:
+    """Load this tenant's scoring weights from profile_config."""
+    from web.routers.config import _get
     result = {}
     for key in ("w1", "w2", "auto_reject_threshold", "auto_approve_threshold"):
-        row = db.query(Config).filter_by(key=key).first()
-        result[key] = float(row.value) if row else 0.5
+        result[key] = float(_get(db, key, profile_id))
     return result
 
 
@@ -240,7 +240,7 @@ def score_job_endpoint(
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    config = _load_score_config(db)
+    config = _load_score_config(db, profile_id)
     llm_status.start(job_key, "score")
     try:
         with meter_action(db, profile_id, action="score", job_key=job.job_key):

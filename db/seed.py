@@ -17,20 +17,25 @@ PROMPT_TYPE_KEYS = (
 )
 
 DEFAULT_CONFIG: dict[str, str] = {
-    "w1": "0.5",
-    "w2": "0.5",
-    "auto_reject_threshold": "0.3",
-    "auto_approve_threshold": "0.8",
-    "keywords_whitelist": "[]",
-    "keywords_blacklist": "[]",
     "location": "",
     "remote_only": "true",
     "full_time_only": "true",
     "target_salary_min": "0",
     "benefits_priorities": "[]",
+    "scraper_sources": "remotive,remoteok",
+}
+
+
+PROFILE_CONFIG_DEFAULTS: dict[str, str] = {
+    "w1": "0.5",
+    "w2": "0.5",
+    "auto_reject_threshold": "0.3",
+    "auto_approve_threshold": "0.8",
     "resume_github": "",
     "resume_linkedin": "",
     "resume_website": "",
+    "resume_template_path": "generator/resume_template.html",
+    "cover_template_path": "generator/cover_template.html",
     "resume_prompt_template": textwrap.dedent("""\
     You are writing a tailored one-page resume in Markdown for a job application.
 
@@ -89,8 +94,12 @@ DEFAULT_CONFIG: dict[str, str] = {
     - Do not include a sign-off, name, or contact information at the end — those are added automatically.
     - Do not invent experience or skills not in the candidate profile.
     """),
+    "source_remotive": "false",
+    "source_remoteok": "false",
+    "keywords_whitelist": "[]",
+    "keywords_blacklist": "[]",
     "max_jobs_per_source": "50",
-    "scraper_sources": "remotive,remoteok",
+    "job_searches": "[]",
 }
 
 

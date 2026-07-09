@@ -5,7 +5,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 # Tables that must always be tenant-stamped on insert.
-_TENANT_TABLES = {"jobs", "documents", "skill_aliases"}
+_TENANT_TABLES = {"jobs", "documents", "skill_aliases", "profile_config"}
 _registered = False
 
 

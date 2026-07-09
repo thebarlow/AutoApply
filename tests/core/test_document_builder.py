@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 @pytest.fixture
 def db_session():
-    from db.database import Base, Config
+    from db.database import Base, ProfileConfig
     import core.job   # noqa: F401 — register ORM models with Base.metadata
     import core.user  # noqa: F401
     engine = create_engine(
@@ -19,7 +19,8 @@ def db_session():
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
-    session.add(Config(key="resume_github", value="gh/jane"))
+    # user created in _user() below gets id=1 (first row in a fresh in-memory DB)
+    session.add(ProfileConfig(profile_id=1, key="resume_github", value="gh/jane"))
     session.commit()
     yield session
     session.close()

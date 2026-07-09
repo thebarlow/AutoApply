@@ -44,22 +44,6 @@ export const createProfile = (name) =>
     body: JSON.stringify({ name }),
   })
 
-export const getProviders = () => _fetch('/api/config/providers')
-
-export const createProvider = (body) =>
-  _fetch('/api/config/providers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
-export const saveProvider = (id, body) =>
-  _fetch(`/api/config/providers/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
 export const getProfile = (id) => _fetch(`/api/config/profiles/${id}`)
 
 export const updateProfile = (id, body) =>
@@ -120,9 +104,6 @@ export const uploadProfileResume = (file) => {
   return _fetch('/api/config/profile/upload', { method: 'POST', body: form })
 }
 
-export const parseProfileResume = (profileId) =>
-  _fetch(`/api/config/profiles/${profileId}/parse`, { method: 'POST' })
-
 export const markJobSeen = (jobKey) =>
   _fetch(`/api/jobs/${jobKey}/seen`, { method: 'POST' })
 
@@ -147,12 +128,6 @@ export const setTourState = (state) =>
     body: JSON.stringify({ state }),
   })
 
-export const testLlmConnection = (body) =>
-  _fetch('/api/llm/test-connection', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
 
 /**
  * Ensures a profile named `name` exists, with the given LLM provider linked,

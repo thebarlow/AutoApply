@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from core.job import Job, JobState
 from scraper.base import SearchConfig, JobSource, ScrapedJob
-from db.database import Base, Config
+from db.database import Base, Config, ProfileConfig
 from scraper.runner import (
     load_max_jobs,
     load_search_config,
@@ -129,15 +129,15 @@ def test_run_scraper_continues_on_source_error(db_session):
 # --- load_search_config ---
 
 def test_load_search_config_from_db(db_session):
-    db_session.add(Config(key="keywords_whitelist", value='["python", "django"]'))
-    db_session.add(Config(key="keywords_blacklist", value='["senior"]'))
+    db_session.add(ProfileConfig(profile_id=1, key="keywords_whitelist", value='["python", "django"]'))
+    db_session.add(ProfileConfig(profile_id=1, key="keywords_blacklist", value='["senior"]'))
     db_session.add(Config(key="remote_only", value="true"))
     db_session.add(Config(key="full_time_only", value="false"))
     db_session.add(Config(key="location", value="New York"))
     db_session.add(Config(key="benefits_priorities", value='["401k"]'))
     db_session.commit()
 
-    config = load_search_config(db_session)
+    config = load_search_config(db_session, profile_id=1)
     assert config.keywords_whitelist == ["python", "django"]
     assert config.keywords_blacklist == ["senior"]
     assert config.remote_only is True
@@ -147,7 +147,7 @@ def test_load_search_config_from_db(db_session):
 
 
 def test_load_search_config_uses_defaults_when_missing(db_session):
-    config = load_search_config(db_session)
+    config = load_search_config(db_session, profile_id=1)
     assert config.keywords_whitelist == []
     assert config.keywords_blacklist == []
     assert config.remote_only is True
@@ -156,25 +156,25 @@ def test_load_search_config_uses_defaults_when_missing(db_session):
 # --- load_max_jobs ---
 
 def test_load_max_jobs_defaults_to_50(db_session):
-    assert load_max_jobs(db_session) == 50
+    assert load_max_jobs(db_session, profile_id=1) == 50
 
 
 def test_load_max_jobs_from_db(db_session):
-    db_session.add(Config(key="max_jobs_per_source", value="25"))
+    db_session.add(ProfileConfig(profile_id=1, key="max_jobs_per_source", value="25"))
     db_session.commit()
-    assert load_max_jobs(db_session) == 25
+    assert load_max_jobs(db_session, profile_id=1) == 25
 
 
 def test_load_search_config_target_salary_min(db_session):
     # "0" should become None (falsy int treated as no minimum)
     db_session.add(Config(key="target_salary_min", value="0"))
     db_session.commit()
-    config = load_search_config(db_session)
+    config = load_search_config(db_session, profile_id=1)
     assert config.target_salary_min is None
 
     # Valid non-zero integer should be preserved
     db_session.query(Config).filter_by(key="target_salary_min").delete()
     db_session.add(Config(key="target_salary_min", value="100000"))
     db_session.commit()
-    config2 = load_search_config(db_session)
+    config2 = load_search_config(db_session, profile_id=1)
     assert config2.target_salary_min == 100000
