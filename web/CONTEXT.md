@@ -20,9 +20,8 @@ web/
 └── routers/
     ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
     ├── scraper.py           # POST /api/scraper/stage-job (browser ext) + POST /api/scraper/run (API scrapers)
-    ├── config.py            # GET/PUT config key-value pairs
+    ├── config.py            # GET/PUT config key-value (per-tenant → profile_config; global infra → config)
     ├── prompts.py           # GET/PUT per-profile prompt overrides
-    ├── llm_test.py          # POST /api/llm/test (verify LLM connectivity)
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup-status (onboarding completeness: llm_configured | resume_parsed | onboarding_tour)
@@ -49,9 +48,8 @@ web/
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Credit balance / history, admin grants, system balance | `routers/credits.py` |
 | Stripe Checkout (packs/checkout/verify/webhook/history) | `routers/payments.py` |
-| LLM provider/model/key config | `routers/config.py` |
+| App config key-value (scoring weights, templates, scraper prefs, legacy prompt-picker) | `routers/config.py` — per-tenant keys via `_get`/`_set` (`profile_config`); global infra keys via `_get_global`/`_set_global` (`config`) |
 | Prompt template get/set per profile | `routers/prompts.py` |
-| LLM connectivity test | `routers/llm_test.py` |
 | Active LLM task status (for UI polling) | `routers/llm_status_router.py` |
 | Onboarding/setup state | `routers/setup_status.py` |
 | Onboarding guided-tour progress (PATCH) | `routers/onboarding.py` |
