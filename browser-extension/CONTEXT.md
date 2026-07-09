@@ -61,6 +61,7 @@ Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_
 
 - **Auto-mark as applied on submission** — when the user clicks an Apply or Easy Apply button on LinkedIn/Indeed and the application is successfully submitted, the extension should detect the submission event and call `PATCH /api/jobs/{job_key}/state` with `state=applied`. This requires identifying the post-submission confirmation signal for each site (e.g., a DOM change, redirect, or confirmation modal). Tracked as a future goal in the dashboard design spec.
 - **Store packaging (sub-project B, deferred)** — publishing to Chrome Web Store / Firefox Add-on store requires a stable pinned extension ID (assigned by the store). That ID determines the permanent `xb.identity.getRedirectURL()` value, which in turn must be added to `EXTENSION_REDIRECT_URLS` on the server. Do not package for stores until the redirect URL is captured from the pinned ID and allowlisted.
+- **Pin a Chrome `key` in `manifest.json` to stabilize the redirect URL.** Chrome has no `key`, so load-unpacked derives the extension ID (and thus `chrome.identity.getRedirectURL()` → `https://<id>.chromiumapp.org/`) from the install path. Reinstalling or loading from a different folder/machine changes the ID, so its redirect URL silently drops off the `EXTENSION_REDIRECT_URLS` allowlist and `/auth/ext/login/{provider}` starts 400-ing ("redirect_uri not allowed" → "Sign-in failed" with no Google page). Add a fixed `"key"` (the base64 public key) to `manifest.json` so the dev ID — and its redirect URL — stays constant. Firefox is already stable via `browser_specific_settings.gecko.id`.
 
 ## Known Issues (open)
 
@@ -70,6 +71,35 @@ The full OAuth + scrape flow (sign-in on both Chrome and Firefox, LinkedIn and I
 Selectors to check during the smoke test:
 - `indeed.js` — `getJobData()` field extraction, `getDescription()`, and `detailReadySelector` (Indeed changes its DOM regularly).
 - `linkedin.js` — card selector (`[componentkey^="job-card-component-ref"]`), positional `<p>` extraction for company/location in `getJobData()`, `_findAboutHeader()` / `_ABOUT_RE` for description, and the saved-jobs card selector.
+
+### Resolved
+- **Chrome extension sign-in failed with no Google redirect (2026-07-09)** — `/auth/ext/login/google`
+  returned `400 redirect_uri not allowed` because the server's `EXTENSION_REDIRECT_URLS` only held the
+  Firefox redirect; this Chrome install's `https://bblnkpilhkoaaadanhdmnamiolegodjl.chromiumapp.org/`
+  was never allowlisted. Fixed by adding it (comma-separated, alongside Firefox) to the Railway env var
+  and redeploying; verified both browsers' redirect URIs now `307 → accounts.google.com`. The allowlist
+  is multi-value by design — no need to choose one browser. Root fragility (unstable Chrome ID) tracked
+  under Future Work → pin a Chrome `key`.
+- **Indeed description was empty / stale on the current layout (2026-07-09)** — two root causes,
+  both fixed in `indeed.js` and verified live via Claude-in-Chrome:
+  1. **Wrong selector.** Indeed migrated the detail pane to a react-native container
+     (`div.react-native-html-content.simple-job-description-html`) and dropped the legacy
+     `#jobDescriptionText` id, so `getDescription()` returned `""` and readiness never fired.
+     Now uses `_DESCRIPTION_SELECTORS` (`.simple-job-description-html` → legacy `#jobDescriptionText`).
+  2. **Stale-pane race.** The detail pane persists across card clicks and is REPLACED (new node)
+     when a different job loads, so the shared `_waitForReady` resolved immediately on the PRIOR
+     job's pane and read the wrong/old description on any repeat scrape. Added `_markStale` /
+     `_isDetailReady` (mirroring `linkedin.js`): ready only once a *different*, populated
+     (`innerText > 100`) container has mounted. Confirmed Indeed replaces the node on switch, so
+     node-identity works.
+  3. **CSS leaking into the description.** Indeed embeds `<style>@layer htmlContent{…}</style>`
+     blocks INSIDE the description container. When fully laid out they're `display:none` so
+     `innerText` excludes them, but if read before the pane paints, `innerText` falls back to
+     `textContent` and splices the raw CSS into the scraped description. `getDescription` now goes
+     through `_extractDescription`: clone the container, remove `style`/`script`, return
+     `textContent` — clean regardless of render timing. `_isDetailReady` also measures the stripped
+     length so a transient CSS-only container isn't treated as ready. reloading the *extension* does not re-inject content scripts into
+  already-open tabs — you must reload the Indeed **page** (or open a new one) to pick up new code.
 
 ### Open selector issues (pre-smoke-test state)
 - **LinkedIn DOM is fully hashed** — LinkedIn replaced all CSS class names with hashed tokens (e.g. `d5efdad9`) that change on deploys. The search card selector now uses `[componentkey^="job-card-component-ref"]`, which is stable, but company/location extraction relies on positional `<p>` order and may drift. If company or location fields are wrong after a LinkedIn update, inspect the card DOM and recount `<p>` element order in `getJobData()`.

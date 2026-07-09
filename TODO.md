@@ -5,11 +5,13 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Bugs
 
-- [ ] **Indeed job descriptions are not fully captured by the scraper.** The browser
-  extension's Indeed content script (`browser-extension/content/indeed.js`) returns a
-  truncated/partial description for at least some Indeed job layouts. Audit
-  `getDescription`/`detailReadySelector` against current Indeed DOM and capture the full
-  description body.
+- [x] **Indeed job descriptions not captured by the scraper — FIXED** (2026-07-09). Root cause
+  (confirmed live via Claude-in-Chrome, not truncation): Indeed migrated the detail pane to
+  `div.react-native-html-content.simple-job-description-html` and dropped the legacy
+  `#jobDescriptionText` id, so `getDescription()` returned `""` and `detailReadySelector` never
+  fired. `indeed.js` now uses a fallback selector chain (`_DESCRIPTION_SELECTORS`) for both, keeping
+  `innerText` to strip Indeed's embedded `<style>` block. Verified full body captured on two live jobs.
+  See `browser-extension/CONTEXT.md` → Resolved.
 
 - [x] **Invite email times out to Zoho SMTP.** Fixed: replaced raw Zoho SMTP
   (`smtp.zoho.com:465`, blocked/throttled by Railway egress) with the Resend HTTP API
@@ -43,12 +45,12 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   `docs/superpowers/specs/2026-07-08-config-table-tenancy-design.md` and
   `docs/superpowers/plans/2026-07-08-config-table-tenancy.md`.
 
-- [ ] **`PUT /api/config/profiles/active` is a dead/legacy multi-profile switcher in hosted
-  mode.** It writes the global `dev_tenant_id` Config row, which production's
-  `current_profile_id` ignores (1 account = 1 profile via the session seam). Harmless but
-  confusing and lets a user clobber the shared dev-stub row. Remove the endpoint (and the
-  frontend profile switcher) in hosted mode, or gate it to dev/admin-only. Verify no
-  React caller depends on it before deleting.
+- [x] **`PUT /api/config/profiles/active` dead/legacy multi-profile switcher — REMOVED**
+  (2026-07-09). Endpoint + `ActiveProfileBody` deleted from `web/routers/config.py`; frontend
+  `setActiveProfile` (api.js) and the dead `ensureProfileWithProvider` helper removed; the only
+  live caller (onboarding `StepResume`) no longer needs it since `getProfiles` returns `active_id`
+  straight from the `current_profile_id` seam. Stale mocks + backend endpoint tests dropped;
+  CONTEXT.md updated. Backend + FE tests green.
 
 ## Features
 

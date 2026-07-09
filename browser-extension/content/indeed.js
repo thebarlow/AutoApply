@@ -1,6 +1,59 @@
 const _IS_SEARCH = location.hostname === "www.indeed.com";
 const _IS_SAVED = location.hostname === "myjobs.indeed.com";
 
+// Description container selectors, most-current first. Indeed rotates its
+// detail-pane DOM; `.simple-job-description-html` is the react-native layout,
+// `#jobDescriptionText` is the legacy container kept as a fallback.
+const _DESCRIPTION_SELECTORS = [
+  ".simple-job-description-html",
+  "#jobDescriptionText",
+];
+
+// First matching description container, most-current layout first.
+function _findDescriptionEl() {
+  for (const sel of _DESCRIPTION_SELECTORS) {
+    const el = document.querySelector(sel);
+    if (el) return el;
+  }
+  return null;
+}
+
+// Extract clean description text from a container. Indeed embeds `<style>`
+// blocks (`@layer htmlContent {…}`) INSIDE the description container. When the
+// element is fully laid out those `<style>` nodes are `display:none`, so
+// `innerText` excludes them — but if we read before the pane is painted,
+// `innerText` falls back to `textContent` and splices the raw CSS into the
+// description. Strip `style`/`script` from a clone so the result is clean
+// regardless of render timing.
+function _extractDescription(el) {
+  if (!el) return "";
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll("style, script").forEach((n) => n.remove());
+  return (clone.textContent || "").trim();
+}
+
+// Indeed's search page opens a detail pane that persists across card clicks and
+// is REPLACED (new node) when a different job loads. Without this guard,
+// `_waitForReady` sees the previous job's pane still present and resolves
+// immediately, so a repeat scrape reads the PRIOR job's description. Mirror the
+// LinkedIn approach: remember the container at click-time and only report ready
+// once a different, populated container has mounted.
+let _lastSeenContainer = null;
+
+function _markStale() {
+  _lastSeenContainer = _findDescriptionEl();
+}
+
+function _isDetailReady() {
+  const el = _findDescriptionEl();
+  if (!el) return false;
+  // Measure the CSS-stripped description so a container holding only Indeed's
+  // injected `<style>` blocks (transient, pre-render) isn't mistaken for ready.
+  if (_extractDescription(el).length <= 100) return false;
+  if (_lastSeenContainer && el === _lastSeenContainer) return false;
+  return true;
+}
+
 if (_IS_SEARCH || _IS_SAVED) {
   registerSource({
     cardSelector: _IS_SEARCH
@@ -35,7 +88,7 @@ if (_IS_SEARCH || _IS_SAVED) {
     },
 
     getDescription() {
-      return document.querySelector("#jobDescriptionText")?.innerText?.trim() ?? "";
+      return _extractDescription(_findDescriptionEl());
     },
 
     clickCard(card) {
@@ -46,7 +99,9 @@ if (_IS_SEARCH || _IS_SAVED) {
       }
     },
 
-    detailReadySelector: "#jobDescriptionText",
+    isDetailReady: _isDetailReady,
+    markStale: _markStale,
+    detailReadySelector: _DESCRIPTION_SELECTORS.join(", "),
 
     bookmarkCard: _IS_SEARCH
       ? (card) => {
