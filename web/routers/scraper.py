@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import threading
 from typing import Any
 
@@ -8,11 +9,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import SessionLocal, get_db
-from db.database import Config
+from db.database import Config, ProfileConfig
 from scraper.remotive import RemotiveSource
 from scraper.remoteok import RemoteOKSource
-from core.job import Job
+from core.job import Job, JobState
 from scraper.runner import run_scraper
+from scraper.search import search_sources
 from web.sse import send as _sse_send
 from web.intake_pipeline import run_pipeline
 from web.tenancy import current_profile_id
@@ -126,3 +128,85 @@ def stage_job(
             print(f"[stage_job] broadcast failed for {job.job_key}: {exc}", flush=True)
         threading.Thread(target=run_pipeline, args=(job.job_key, profile_id), daemon=True).start()
     return {"status": status, "job_key": body.job_key}
+
+
+_APPLIED_STATES = {
+    JobState.APPLIED.value, JobState.CONTACT.value, JobState.REJECTED.value,
+}
+_SCRAPED_STATES = {
+    JobState.NEW.value, JobState.PENDING_REVIEW.value, JobState.READY.value,
+}
+
+
+def _status_for(db: Session, urls: list[str], profile_id: int) -> dict[str, str]:
+    """Map each url to its interaction status against the profile's jobs."""
+    if not urls:
+        return {}
+    rows = (
+        db.query(Job.url, Job.state)
+        .filter(Job.profile_id == profile_id, Job.url.in_(urls))
+        .all()
+    )
+    status: dict[str, str] = {}
+    for url, state in rows:
+        if state in _APPLIED_STATES:
+            status[url] = "applied"
+        elif state in _SCRAPED_STATES:
+            status[url] = "scraped"
+        else:  # deleted / anything else
+            status[url] = "none"
+    return status
+
+
+def _profile_config_set(db: Session, key: str, value: str, profile_id: int) -> None:
+    row = (
+        db.query(ProfileConfig)
+        .filter_by(profile_id=profile_id, key=key)
+        .first()
+    )
+    if row:
+        row.value = value
+    else:
+        db.add(ProfileConfig(profile_id=profile_id, key=key, value=value))
+    db.commit()
+
+
+class SearchRequest(BaseModel):
+    query: str
+
+
+@router.post("/search")
+def search(
+    body: SearchRequest,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, Any]:
+    """Live-preview job search across the API sources (does not persist jobs).
+
+    Runs the sources for the keyword, tags each candidate with its status
+    relative to this profile's existing jobs, and remembers the query.
+    """
+    candidates = search_sources(body.query)
+    status = _status_for(db, [c.url for c in candidates], profile_id)
+    _profile_config_set(db, "last_job_search", body.query, profile_id)
+    return {
+        "query": body.query,
+        "candidates": [
+            {**dataclasses.asdict(c), "status": status.get(c.url, "none")}
+            for c in candidates
+        ],
+    }
+
+
+@router.get("/last-search")
+def last_search(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict[str, str]:
+    """Return the profile's remembered Find Jobs query (empty if none)."""
+    row = (
+        db.query(ProfileConfig)
+        .filter_by(profile_id=profile_id, key="last_job_search")
+        .first()
+    )
+    return {"query": row.value if row else ""}
