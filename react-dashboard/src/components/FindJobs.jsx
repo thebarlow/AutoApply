@@ -1,15 +1,21 @@
 import { useEffect, useState, useCallback } from 'react'
 import JobCard from './shared/JobCard'
+import Navbar from './Navbar'
 import { effectiveStatus } from './findjobs/borderStatus'
-import { searchJobs, scrapeSelected, getLastSearch } from '../api'
+import { searchJobs, scrapeSelected, getLastSearch, getMe } from '../api'
 
 export default function FindJobs() {
+  const [me, setMe] = useState(null)
   const [query, setQuery] = useState('')
   const [candidates, setCandidates] = useState([])
   const [selected, setSelected] = useState(() => new Set())
   const [viewed, setViewed] = useState(() => new Set())
   const [detail, setDetail] = useState(null)  // candidate shown in preview
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    getMe().then(setMe)
+  }, [])
 
   const runSearch = useCallback(async (q) => {
     if (!q || !q.trim()) return
@@ -53,7 +59,9 @@ export default function FindJobs() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-53px)]">
+    <>
+      <Navbar me={me} />
+      <div className="flex flex-col h-[calc(100vh-53px)]">
       <div className="sticky top-0 z-10 flex gap-2 p-4 bg-space-bg border-b border-space-border">
         <input
           className="flex-1 rounded-md bg-white/5 border border-white/10 px-3 py-2 text-sm text-space-text"
@@ -116,6 +124,7 @@ export default function FindJobs() {
           className="rounded-md bg-purple-600 hover:bg-purple-500 disabled:opacity-40 px-5 py-2 text-sm font-semibold text-white"
         >Scrape ({selected.size})</button>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
