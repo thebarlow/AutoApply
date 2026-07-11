@@ -7,7 +7,6 @@ from sqlalchemy.pool import StaticPool
 from db.database import get_db
 from db.database import Base
 from web.main import app
-import web.routers.scraper as scraper_router
 
 
 @pytest.fixture
