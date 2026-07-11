@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { BORDER_CLASS } from '../findjobs/borderStatus'
 
 function ProcessingIcon() {
   const dots = Array.from({ length: 8 }, (_, i) => {
@@ -29,7 +30,7 @@ function TrashIcon() {
   )
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, salaryMin, salaryMax, salaryRaw, flagged = false }) {
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, salaryMin, salaryMax, salaryRaw, flagged = false, borderStatus = null, leading = null }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
 
@@ -80,11 +81,11 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
       whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.06)' }}
       transition={{ duration: 0.15 }}
       className={`flex items-stretch justify-between rounded-lg px-3 py-2 border gap-3 transition-colors
-        ${selected
-          ? 'bg-purple-900/30 border-purple-500/50'
-          : 'bg-white/[0.03] border-white/5'
-        }`}
+        ${selected ? 'bg-purple-900/30' : 'bg-white/[0.03]'}
+        ${borderStatus ? BORDER_CLASS[borderStatus]
+          : selected ? 'border-purple-500/50' : 'border-white/5'}`}
     >
+      {leading}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           {flagged && <FlagIconFilled />}

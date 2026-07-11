@@ -298,3 +298,19 @@ export const draftSectionPrompt = (_profileId, body) =>
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+
+export const searchJobs = (query) =>
+  _fetch('/api/scraper/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
+
+export const scrapeSelected = (jobs) =>
+  _fetch('/api/scraper/scrape-selected', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobs }),
+  })
+
+export const getLastSearch = () => _fetch('/api/scraper/last-search')
