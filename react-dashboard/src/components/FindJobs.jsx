@@ -12,6 +12,7 @@ export default function FindJobs() {
   const [viewed, setViewed] = useState(() => new Set())
   const [detail, setDetail] = useState(null)  // candidate shown in preview
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     getMe().then(setMe)
@@ -51,11 +52,17 @@ export default function FindJobs() {
   async function doScrape() {
     const payloads = candidates.filter((c) => selected.has(c.job_key))
     if (payloads.length === 0) return
-    await scrapeSelected(payloads)
-    const scrapedKeys = new Set(payloads.map((c) => c.job_key))
-    setCandidates((prev) =>
-      prev.map((c) => (scrapedKeys.has(c.job_key) ? { ...c, status: 'scraped' } : c)))
-    setSelected(new Set())
+    try {
+      const res = await scrapeSelected(payloads)
+      const statusByKey = new Map((res.results || []).map((r) => [r.job_key, r.status]))
+      setCandidates((prev) =>
+        prev.map((c) =>
+          statusByKey.get(c.job_key) === 'staged' ? { ...c, status: 'scraped' } : c))
+      setError(null)
+      setSelected(new Set())
+    } catch (e) {
+      setError('Scrape failed. Please try again.')
+    }
   }
 
   return (
@@ -117,12 +124,15 @@ export default function FindJobs() {
         </div>
       )}
 
-      <div className="sticky bottom-0 flex justify-end gap-3 p-4 bg-space-bg border-t border-space-border">
+      <div className="sticky bottom-0 flex flex-col items-end gap-1 p-4 bg-space-bg border-t border-space-border">
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        <div className="flex justify-end gap-3">
         <button
           onClick={doScrape}
           disabled={selected.size === 0}
           className="rounded-md bg-purple-600 hover:bg-purple-500 disabled:opacity-40 px-5 py-2 text-sm font-semibold text-white"
         >Scrape ({selected.size})</button>
+        </div>
       </div>
       </div>
     </>

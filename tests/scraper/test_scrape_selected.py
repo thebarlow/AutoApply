@@ -59,6 +59,14 @@ def test_scrape_selected_reports_duplicates(client, db_session):
     assert db_session.query(Job).count() == 1
 
 
+def test_scrape_selected_rejects_oversized_batch(client, db_session):
+    body = {"jobs": [_payload(f"https://x.com/{i}", f"r{i}") for i in range(26)]}
+    with patch("web.routers.scraper.run_pipeline"):
+        resp = client.post("/api/scraper/scrape-selected", json=body)
+    assert resp.status_code == 400
+    assert db_session.query(Job).count() == 0
+
+
 def test_run_endpoint_is_gone(client):
     # The SPA catch-all mount returns 405 (not 404) for any unmatched POST
     # path, since it only serves GET/HEAD. Either way, POST is no longer

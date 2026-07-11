@@ -4,7 +4,7 @@ import dataclasses
 import threading
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,8 @@ from web.tenancy import current_profile_id
 from web.auth.ext_token import bearer_or_session_profile
 
 router = APIRouter(prefix="/api/scraper")
+
+MAX_SCRAPE_BATCH = 25
 
 
 class StageJobRequest(BaseModel):
@@ -101,6 +103,12 @@ def scrape_selected(
     Returns:
         Dict with a 'results' list of {'job_key', 'status'} entries.
     """
+    if len(body.jobs) > MAX_SCRAPE_BATCH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many jobs selected (max {MAX_SCRAPE_BATCH}).",
+        )
+
     from scraper.base import ScrapedJob
 
     scraped = [
