@@ -19,7 +19,7 @@ web/
 │   └── middleware.py        # Pure-ASGI prod gate: 401s unauthenticated /api/* (SSE-safe)
 └── routers/
     ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
-    ├── scraper.py           # POST /api/scraper/stage-job (browser ext) + POST /api/scraper/run (API scrapers)
+    ├── scraper.py           # POST /api/scraper/stage-job (browser ext); POST /api/scraper/search + GET /last-search + POST /scrape-selected (Find Jobs tab: preview/persist API-scraper candidates)
     ├── config.py            # GET/PUT config key-value (per-tenant → profile_config; global infra → config)
     ├── prompts.py           # GET/PUT per-profile prompt overrides
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
@@ -41,7 +41,7 @@ web/
 | Task | File |
 |---|---|
 | Job CRUD, scoring, resume/cover generation | `routers/jobs.py` |
-| Ingesting a job from the browser extension or triggering API scrapers | `routers/scraper.py` |
+| Ingesting a job from the browser extension, or searching/staging API-scraper candidates (Find Jobs tab) | `routers/scraper.py` |
 | Pipeline activity stats by time window | `routers/stats.py` |
 | Skill frequency across extracted jobs | `routers/stats.py` (delegates to `core/skill_analytics.py`) |
 | Skill alias groups + marking profile skills | `routers/skills.py` (invalidates `stats.py` skill cache on mutation) |
@@ -155,7 +155,9 @@ web/
 | `PUT` | `/api/jobs/{job_key}/{doc_type}/document` | Upsert an edited structured document; re-assembles `.md` + re-renders PDF |
 | `POST` | `/api/jobs/{job_key}/{doc_type}/feedback` | Accept user section/item feedback (`{notes:[{section,label,note}]}`); ensures a `documents` row exists, backfilling+persisting from the `.md` if needed (`_ensure_document_row`); `404` if no row and no `.md`; drops empty notes (`400` if none); spawns `run_user_feedback_refine` background job (reuses refine path, eval-for-score, no restore-best, résumés trigger ATS gate); appends a Refinement-History turn tagged `source="user_feedback"`; returns 202 + job |
 | `POST` | `/api/scraper/stage-job` | Ingest job from browser extension or scraper |
-| `POST` | `/api/scraper/run` | Trigger background run of enabled API scrapers |
+| `POST` | `/api/scraper/search` | Body `{query}`; runs `search_sources` (Remotive + RemoteOK), returns `{query, candidates:[{...ScrapedJob, status}]}` (`status` computed against this profile's jobs: `applied`/`scraped`/`none`); persists `query` to `profile_config['last_job_search']`; candidates are NOT persisted |
+| `GET` | `/api/scraper/last-search` | Returns `{query}` — the profile's last search term |
+| `POST` | `/api/scraper/scrape-selected` | Body `{jobs:[...]}`; batched intake of user-selected candidates — saves, runs `intake()` + `run_pipeline()` (threaded, SSE-updated); returns `{results:[{job_key, status: staged|duplicate}]}` |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
 | `GET` | `/api/skill-frequency` | Combined required+preferred skill counts (`skills`) plus `tech_stack`, distinct jobs, across all extracted jobs; no window. Also returns `profile_skills` (active user's skills, normalized) so the UI can flag covered skills. The job aggregation is cached in-process keyed by extracted-job count with a 60s TTL — a re-extraction that doesn't change the count can be up to 60s stale; tests reset `stats._SKILL_CACHE` via an autouse fixture. |
 | `GET` | `/api/skill-frequency/jobs` | Job keys whose extraction data lists a given `skill` (normalized, any field) |
@@ -233,7 +235,7 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   (`w1`, `w2`, `auto_reject_threshold`, `auto_approve_threshold`, read in
   `web/routers/jobs.py:_load_score_config`), contact links, template paths, and scraper prefs
   (`source_remotive`/`source_remoteok`, `keywords_whitelist/blacklist`,
-  `max_jobs_per_source`, `job_searches`). Global key classes (deliberately not tenant-scoped):
+  `max_jobs_per_source`, `job_searches`, `last_job_search`). Global key classes (deliberately not tenant-scoped):
   `dev_tenant_id` (must stay global — `web/tenancy.py:get_dev_tenant_id` resolves the tenant
   before any tenant is known), migration gates, `named_providers`/`llm_*`, `latex_templates`,
   and the legacy prompt-picker keys. See

@@ -236,7 +236,7 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   seam to read the session in prod; pure-ASGI gate on `/api/*` replaces the Basic gate; email-allowlist
   beta (`ALLOWED_EMAILS`); `ADMIN_EMAILS` bypass + first admin claims `profile_id=1`. **Gates 2–4.**
 
-- [ ] **(4) Onboarding UX rework** — **Guided tour DONE (2026-07-07):** reworked from the initial
+- [x] **(4) Onboarding UX rework** — **Guided tour DONE (2026-07-07):** reworked from the initial
   two-arc design into a single **action-gated** react-joyride walkthrough (`tourSteps.js` `TOUR_STEPS`:
   profile editor → sections/lock/visibility/prompt → job inbox → open demo job → score → generate →
   credits). Gated steps hide Next and wait on an `advanceOn` window event the user fires (`openEvent`
@@ -245,16 +245,21 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   skipped`); state persists via `PATCH /api/onboarding/tour` (`web/routers/onboarding.py`); "Take a
   tour" replay in navbar. **Demo job DONE (2026-07-07):** `core/demo_data.py` `seed_demo_job` inserts
   one pre-scored demo job at profile creation (idempotent by URL, best-effort) so the tour's score/open/
-  generate steps have real content without an LLM call. Remaining (4) work is the automated
-  job-ingestion story below.
-  **Job-ingestion — partly solved (verified 2026-07-06):** a manual add/paste path EXISTS and
-  auto-scores — `UploadModal` (`Pipeline.jsx`) → `uploadJob` → `POST /api/scraper/stage-job` →
-  `run_pipeline` (extract + score). So hosted users are NOT blocked from adding jobs. The remaining
-  gap is *automated* server-side intake: the browser extension still points at localhost (not the
-  hosted API), and the Remotive/RemoteOK API scrapers (`scraper/`) are dormant / not UI-triggered.
-  Remaining work = **hosted scraping** (revive the API scrapers as a server-side job the hosted UI can
-  run) and/or **wire the extension to the hosted API** (point it at the hosted URL + bearer-auth the
-  `stage-job` call, which already accepts a token) — not "no way to add jobs."
+  generate steps have real content without an LLM call. **Job-ingestion DONE (2026-07-10):** all
+  three hosted intake paths now work:
+  1. **Manual add/paste** (verified 2026-07-06) — `UploadModal` (`Pipeline.jsx`) → `uploadJob` →
+     `POST /api/scraper/stage-job` → `run_pipeline` (extract + score).
+  2. **Browser extension → hosted API — DONE (verified live 2026-07-09).** The extension is wired
+     to the hosted server: `service_worker.js` hardcodes `SERVER = https://autoapply.matthewbarlow.me`
+     and POSTs `stage-job` with an OAuth bearer token (`popup.js` login flow, `manifest.json` host
+     permission). LinkedIn/Indeed scrapes land on the live account. (Earlier TODO claim that it "still
+     points at localhost" was stale.)
+  3. **Find Jobs tab — DONE (2026-07-10).** Server-side, UI-triggered intake of remote boards:
+     the Remotive/RemoteOK API scrapers (`scraper/search.py::search_sources`) run behind
+     `POST /api/scraper/search` (preview candidates, no persist) and `POST /api/scraper/scrape-selected`
+     (persist selected + run pipeline), driven from the new `FindJobs.jsx` navbar tab
+     (`/find-jobs`). The old dormant `POST /api/scraper/run` + `scraper_sources` config gate
+     were retired. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-10-find-jobs*`.
 
 - [x] **Make landing page** — DONE (2026-07-06). Public `/about` marketing page shown to logged-out
   visitors (all routes redirect there) and reachable via the navbar "About" link for logged-in users.

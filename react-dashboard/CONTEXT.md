@@ -27,6 +27,7 @@ Two-panel layout split 3:2 in a 5-column grid:
   `data-tour="…"` attributes. "Take a tour" in the navbar dispatches
   `auto-apply:tour-replay`.
 - **Docs viewer** — `Docs.jsx`: full-page markdown docs viewer with sidebar nav; replaces dashboard when docs route active
+- **Find Jobs** — `FindJobs.jsx`: navbar-level full-page view (like `Docs.jsx`, renders its own `<Navbar>`), reached via a "Find Jobs" navbar link and the `/find-jobs` route. Searches remote job boards (Remotive + RemoteOK) server-side; results render as candidate cards (reusing `shared/JobCard.jsx`) with checkbox multi-select and a sticky Scrape bar. Border color follows a precedence order — applied (green) > scraped (yellow) > viewed (gray) > none/new (blue) — via `findjobs/borderStatus.js` (`effectiveStatus`, `BORDER_CLASS`); applied/scraped/none are computed server-side per search, while "viewed" is client-only (set when the user opens a card's in-app detail preview; in-memory, clears on reload).
 - **Landing / About page** (`src/components/landing/`): public marketing page shown to
   logged-out visitors (all routes redirect to `/about`) and reachable at `/about` for
   logged-in users via the navbar "About" link. Pure frontend, no API calls. The old
@@ -70,6 +71,8 @@ Two-panel layout split 3:2 in a 5-column grid:
 | First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
 | Docs viewer (markdown rendering, sidebar nav) | `src/components/Docs.jsx` |
+| Find Jobs page (search remote boards, candidate cards, checkbox multi-select, sticky Scrape bar, viewed-on-preview) | `src/components/FindJobs.jsx` |
+| Find Jobs border-status precedence (applied > scraped > viewed > none) | `src/components/findjobs/borderStatus.js` — `effectiveStatus`, `BORDER_CLASS` |
 | Inline docs markdown content | `src/docs-content/` |
 | Prerequisite check hook (llmReady, resumeReady) | `src/hooks/usePrerequisites.js` |
 | Form validation helpers (provider, prompt) | `src/validation.js` |
