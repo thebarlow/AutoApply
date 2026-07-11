@@ -74,6 +74,14 @@ export default function Navbar({ me }) {
           About
         </Link>
 
+        {/* Find remote jobs */}
+        <Link
+          to="/find-jobs"
+          className="text-sm text-space-dim hover:text-purple-400 transition-colors"
+        >
+          Find Jobs
+        </Link>
+
         {/* Replay the onboarding tour */}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('auto-apply:tour-replay'))}
