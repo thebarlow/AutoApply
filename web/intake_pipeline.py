@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json as _json
+import logging
 
 from db.database import SessionLocal
 from core.job import Job
@@ -15,6 +16,8 @@ from core.section_generator import generate_resume_by_section
 from pathlib import Path as _Path
 
 _OUTPUTS_DIR = _Path(__file__).parent.parent / "generator" / "outputs"
+
+logger = logging.getLogger(__name__)
 
 
 def _render_doc_from_json(job, doc_type: str, structured_json: str, template_path, db) -> None:
@@ -69,7 +72,7 @@ def _emit(job: Job) -> None:
     try:
         _sse_send("job", job.serialize())
     except Exception as exc:
-        print(f"[intake_pipeline] SSE emit failed for {job.job_key}: {exc}", flush=True)
+        logger.warning("SSE emit failed for %s: %s", job.job_key, exc)
 
 
 def _do_score(job: Job, db, profile_id: int) -> None:
@@ -244,7 +247,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                 job.unread_indicator = "error"
                 db.commit()
                 _emit(job)
-                print(f"[section-refine] {job_key}: eval turn {turn} failed — {exc}", flush=True)
+                logger.exception("%s: section eval turn %s failed", job_key, turn)
                 _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
                 return
             finally:
@@ -294,7 +297,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                 job.unread_indicator = "error"
                 db.commit()
                 _emit(job)
-                print(f"[section-refine] {job_key}: refine turn {turn} failed — {exc}", flush=True)
+                logger.exception("%s: section refine turn %s failed", job_key, turn)
                 _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
                 return
             finally:
@@ -344,7 +347,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
             else:
                 print(f"[refinement:{doc_type}] {job_key}: snapshot turn {n}: no Document row — skipped", flush=True)
         except Exception as e:
-            print(f"[refinement:{doc_type}] {job_key}: snapshot turn {n} failed: {e}", flush=True)
+            logger.exception("%s: %s snapshot turn %s failed", job_key, doc_type, n)
         finally:
             sdb.close()
 
@@ -373,7 +376,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
                 _emit(job2)
                 print(f"[refinement:{doc_type}] {job_key}: restored turn {best_n} (best={best['score']:.2f})", flush=True)
         except Exception as e:
-            print(f"[refinement:{doc_type}] {job_key}: restore failed: {e}", flush=True)
+            logger.exception("%s: %s restore failed", job_key, doc_type)
             db2.rollback()
         finally:
             db2.close()
@@ -464,7 +467,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
                 job.unread_indicator = "error"
                 db.commit()
                 _emit(job)
-                print(f"[refinement:{doc_type}] {job_key}: eval failed — {exc}", flush=True)
+                logger.exception("%s: %s eval failed", job_key, doc_type)
                 _restore_best(eval_log)
                 return
             finally:
@@ -498,7 +501,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
                 job.unread_indicator = "error"
                 db.commit()
                 _emit(job)
-                print(f"[refinement:{doc_type}] {job_key}: rewrite failed — {exc}", flush=True)
+                logger.exception("%s: %s rewrite failed", job_key, doc_type)
                 _restore_best(eval_log)
                 return
             finally:
@@ -547,7 +550,7 @@ def run_ats_gate(job_key: str, profile_id: int) -> None:
         )
     except Exception as exc:
         db.rollback()
-        print(f"[ats] {job_key}: gate run failed — {exc}", flush=True)
+        logger.exception("%s: ATS gate run failed", job_key)
     finally:
         db.close()
         llm_status.finish(job_key, "ats")
@@ -566,7 +569,7 @@ def run_resume_refinement(job_key: str, profile_id: int) -> None:
     try:
         _run_doc_refinement(job_key, "resume", profile_id)
     except Exception as exc:
-        print(f"[refinement:resume] {job_key}: refinement failed — {exc}", flush=True)
+        logger.exception("%s: resume refinement failed", job_key)
     run_ats_gate(job_key, profile_id)
 
 
@@ -647,7 +650,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
                 job.unread_indicator = "error"
                 db.commit()
                 _emit(job)
-                print(f"[feedback:resume] {job_key}: refine failed — {exc}", flush=True)
+                logger.exception("%s: resume feedback refine failed", job_key)
                 return
             finally:
                 llm_status.finish(job_key, "resume_refine")
@@ -676,7 +679,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
                 _emit(job)
         except Exception as exc:
             db.rollback()
-            print(f"[feedback:resume] {job_key}: post-feedback eval failed (non-fatal) — {exc}", flush=True)
+            logger.exception("%s: post-feedback resume eval failed (non-fatal)", job_key)
         finally:
             llm_status.finish(job_key, "resume_eval")
     finally:
@@ -771,7 +774,7 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
             job.unread_indicator = "error"
             db.commit()
             _emit(job)
-            print(f"[feedback:{doc_type}] {job_key}: refine failed — {exc}", flush=True)
+            logger.exception("%s: %s feedback refine failed", job_key, doc_type)
             return
         finally:
             llm_status.finish(job_key, f"{doc_type}_refine")
@@ -805,7 +808,7 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
             _emit(job)
         except Exception as exc:
             db.rollback()
-            print(f"[feedback:{doc_type}] {job_key}: post-feedback eval failed (non-fatal) — {exc}", flush=True)
+            logger.exception("%s: %s post-feedback eval failed (non-fatal)", job_key, doc_type)
         finally:
             llm_status.finish(job_key, f"{doc_type}_eval")
     finally:
