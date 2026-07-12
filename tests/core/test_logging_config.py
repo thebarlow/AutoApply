@@ -16,6 +16,9 @@ def _reset_logging():
     root = logging.getLogger()
     saved_handlers = root.handlers[:]
     saved_level = root.level
+    # Clear leftover handlers so tests are isolated from any prior setup_logging()
+    # (e.g. another test importing web.main installs a real RotatingFileHandler).
+    root.handlers[:] = []
     logging_config._CONFIGURED = False
     yield
     root.handlers[:] = saved_handlers
