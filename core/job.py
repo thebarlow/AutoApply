@@ -823,20 +823,35 @@ class Job(Base):
         client, model = get_client_for_profile(user, user.prompt_extraction_model)
 
         actual_prompt = self.build_description_prompt(prompt_content)
-        with llm_label(f"extract:{self.job_key}"):
-            response = client.chat.completions.create(
-                model=model,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": actual_prompt}],
+        # Verbose descriptions can exceed the token budget, truncating the JSON
+        # (finish_reason='length' → empty/invalid output). Start with a generous
+        # budget and retry once with a larger one before giving up.
+        max_tokens = 4096
+        raw = None
+        choice = None
+        for _attempt in range(2):
+            with llm_label(f"extract:{self.job_key}"):
+                response = client.chat.completions.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": actual_prompt}],
+                )
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                from core import session_cost
+                session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
+            choice = response.choices[0]
+            raw = choice.message.content
+            if raw and choice.finish_reason != "length":
+                break
+            max_tokens *= 2  # truncated — retry with a larger budget
+
+        finish_reason = choice.finish_reason if choice is not None else None
+        if not raw or finish_reason == "length":
+            raise RuntimeError(
+                "LLM extraction truncated or empty after retry "
+                f"(finish_reason={finish_reason!r})"
             )
-        usage = getattr(response, "usage", None)
-        if usage is not None:
-            from core import session_cost
-            session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
-        choice = response.choices[0]
-        raw = choice.message.content
-        if not raw:
-            raise RuntimeError(f"LLM returned empty extraction response (finish_reason={choice.finish_reason!r})")
         parsed = parse_llm_json(raw, ExtractionResponse)
 
         self.ext_seniority = parsed.seniority

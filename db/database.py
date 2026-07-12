@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    event,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, validates
 
@@ -280,6 +281,26 @@ def make_connect_args(url: str) -> dict:
 
 engine = create_engine(DATABASE_URL, connect_args=make_connect_args(DATABASE_URL))
 SessionLocal = sessionmaker(bind=engine)
+
+
+if DATABASE_URL.startswith("sqlite"):
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_conn, _record) -> None:
+        """Enable WAL + a busy timeout so background pipeline threads don't hit
+        ``database is locked``.
+
+        The app writes from multiple threads (intake/scrape pipelines). Default
+        SQLite journaling blocks readers during a write and makes a second writer
+        fail immediately. WAL lets readers proceed during a write, and
+        ``busy_timeout`` makes a contending writer wait for the lock instead of
+        raising ``OperationalError: database is locked``.
+        """
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=10000")  # ms
+        cursor.close()
 
 
 def init_db() -> None:
