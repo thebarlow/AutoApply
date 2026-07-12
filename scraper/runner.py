@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
-import warnings
+import logging
 
 from sqlalchemy.orm import Session
 
 from core.job import Job
 from scraper.base import JobSource, SearchConfig
 from db.database import Config
+
+logger = logging.getLogger(__name__)
 
 
 def load_search_config(db: Session, profile_id: int) -> SearchConfig:
@@ -93,8 +95,8 @@ def run_scraper(db: Session, sources: list[JobSource], profile_id: int) -> list[
             jobs = source.fetch(config, max_jobs)
             print(f"[scraper] {source.source_id}: fetched {len(jobs)} jobs")
             all_scraped.extend(jobs)
-        except Exception as e:
-            warnings.warn(f"[scraper] {source.source_id} failed: {e}")
+        except Exception:
+            logger.exception("[scraper] %s failed", source.source_id)
 
     new_jobs = Job.save_batch_returning(all_scraped, db, profile_id)
     print(f"[scraper] saved {len(new_jobs)} new jobs (skipped {len(all_scraped) - len(new_jobs)} duplicates)")

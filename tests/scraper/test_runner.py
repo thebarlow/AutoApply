@@ -1,5 +1,5 @@
 import json
-import warnings
+import logging
 
 import pytest
 from sqlalchemy import create_engine
@@ -117,13 +117,12 @@ def test_run_scraper_aggregates_sources(db_session):
     assert db_session.query(Job).count() == 3
 
 
-def test_run_scraper_continues_on_source_error(db_session):
+def test_run_scraper_continues_on_source_error(db_session, caplog):
     sources = [_FailingSource(), _MockSource("remoteok", [_scraped(1)])]
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
+    with caplog.at_level(logging.ERROR, logger="scraper.runner"):
         new_jobs = run_scraper(db_session, sources, profile_id=1)
     assert len(new_jobs) == 1
-    assert any("failing" in str(w.message) for w in caught)
+    assert any("failing" in r.getMessage() for r in caplog.records)
 
 
 # --- load_search_config ---
