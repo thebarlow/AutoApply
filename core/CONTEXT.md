@@ -11,6 +11,7 @@ core/
 ├── profile_tree.py      # Recursive typed profile/résumé tree (closed node vocab) + validate_tree + tree_to_legacy adapter + legacy_to_tree migration
 ├── section_presets.py   # Preset section subtrees mirroring the legacy master profile (header/summary/experience/education/projects/skills)
 ├── llm.py               # LLM client construction and model resolution
+├── logging_config.py    # setup_logging(): root logger → stdout + size-rotating file (5MB×5) + thread/sys excepthook; env-configurable (LOG_LEVEL/LOG_DIR/LOG_FILE); idempotent, never crashes startup
 ├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
 ├── session_cost.py      # Thread-safe accumulator for per-session LLM spend (from usage.cost)
 ├── skill_analytics.py   # Skill token normalization + frequency aggregation across jobs (no LLM)

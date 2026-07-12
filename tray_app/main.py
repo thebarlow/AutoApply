@@ -10,8 +10,11 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from core.logging_config import setup_logging
 from tray_app.panel import TrayPanel
 from tray_app.ws_client import WsClient
+
+setup_logging()
 
 
 def _make_icon(_app: QApplication) -> QIcon:

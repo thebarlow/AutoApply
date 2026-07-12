@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from enum import Enum
@@ -32,6 +33,8 @@ from core.document_tree import build_resume_document_tree
 from core.utils import render_pdf
 from core.paths import OUTPUTS_DIR as _OUTPUTS_DIR
 from generator.themes import resolve_theme, Theme
+
+logger = logging.getLogger(__name__)
 
 _MAX_PAGES_UNSET = object()  # "resolve the page limit from the job's profile"
 
@@ -966,7 +969,7 @@ class Job(Base):
                     thread_job.last_result_error = str(exc)
                     thread_db.commit()
                     _sse_send("job", thread_job.serialize())
-                    print(f"[intake] {job_key}: extraction failed — {exc}", flush=True)
+                    logger.exception("%s: extraction failed", job_key)
             finally:
                 llm_status.finish(job_key)
                 thread_db.close()

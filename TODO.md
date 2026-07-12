@@ -5,14 +5,19 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Bugs
 
-- [ ] **Implement structured error logging.** Currently the only way to see a backend
-  failure is to copy-paste the traceback out of the terminal. Add persistent, queryable
-  error logging so failures (esp. background intake/pipeline threads) are captured to a
-  file/table and surfaced — e.g. Python `logging` to a rotating file + optionally a
-  `job.last_result_error` viewer in the dashboard. Goal: stop hand-copying terminal output.
+- [x] **Implement structured error logging — DONE (2026-07-12, v1).** Central
+  `core/logging_config.py` (`setup_logging()`) installs a stdout handler + size-based
+  `RotatingFileHandler` (5MB×5) on the root logger and a `threading.excepthook`/`sys.excepthook`;
+  wired at `web/main.py` + `tray_app/main.py` startup; env-configurable via
+  `LOG_LEVEL`/`LOG_DIR`/`LOG_FILE`; `logs/` gitignored. Failure-path prints in the intake
+  pipeline, `core/job.py`, and scrapers now use `logger.exception` (full tracebacks in the file).
+  `job.last_result_error` unchanged (still the short user-facing message). **Deferred v2:**
+  queryable DB error table + dashboard error viewer. Spec/plan in
+  `docs/superpowers/{specs,plans}/2026-07-12-structured-error-logging*`.
+  Original ask: persistent, queryable error logging so failures (esp. background
+  intake/pipeline threads) are captured and surfaced — goal: stop hand-copying terminal output.
   Observed 2026-07-10 (motivating examples, both in the intake pipeline `_run` thread,
-  `core/job.py`) — **both root causes now FIXED (2026-07-12)**, but the logging infra itself
-  is still TODO:
+  `core/job.py`) — **both root causes also FIXED (2026-07-12)**:
   1. **LLM extraction returns empty with `finish_reason='length'`** — FIXED. `extract_description`
      now starts at `max_tokens=4096` and retries once with a doubled budget on truncation, then
      raises a clear "truncated or empty after retry" error instead of a bare empty-response error.

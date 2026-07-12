@@ -103,6 +103,7 @@ PDF rendering: `core/utils.render_pdf` runs **pandoc → Jinja2 HTML template + 
 | `core/utils.py` | `render_pdf` (pandoc→HTML→Chromium), sanitization, path helpers |
 | `core/skill_analytics.py` | Skill token normalization + frequency aggregation across jobs (no LLM) |
 | `core/session_cost.py` | Thread-safe per-session LLM spend accumulator |
+| `core/logging_config.py` | `setup_logging()`: configures root logging (stdout + size-rotating file, 5MB×5) and a thread/sys excepthook so background-thread failures are captured with tracebacks; env-configurable, idempotent, called at `web`/`tray_app` startup. Failure paths log via `logger.exception` |
 | `db/` | SQLAlchemy models (`Job`, `Config`, `ProfileConfig`, `Prompt`, `PromptDefault`, `Document`, `SkillAlias`, user profile), engine/session setup, config + prompt seeding, idempotent column/prompt migrations. `Config` is a **global** key-value store (infra keys only); `ProfileConfig` is its per-tenant counterpart (composite PK `profile_id`+`key`) holding scoring weights, contact links, template paths, and scraper prefs — a tenant guard blocks unstamped inserts |
 | `prompts/` | `defaults/*.md` seed source for the DB-backed prompt tables (not read at runtime) |
 | `generator/` | Jinja2 HTML + CSS PDF templates and generated output artifacts (`outputs/`) |

@@ -23,6 +23,7 @@ Read the target directory's `CONTEXT.md` before making changes there.
 | Job entity methods (score, generate/refine/eval resume+cover, extract) | `core/job.py` | Read `core/CONTEXT.md` first; all LLM-driven logic lives here |
 | Shared types, enums, dataclasses | `core/job.py`, `core/user.py` | Read `core/CONTEXT.md` first |
 | LLM client construction, model resolution | `core/llm.py` | Read `core/CONTEXT.md` first |
+| Logging setup / error logging (rotating file, tracebacks) | `core/logging_config.py` | `setup_logging()` wired at `web`/`tray_app` startup; env vars `LOG_LEVEL`/`LOG_DIR`/`LOG_FILE`; failure paths use `logger.exception` |
 | Pydantic schemas (LLM response + stored document models) | `core/schemas.py` | `parse_llm_json`; `ResumeGeneration`, `ResumeDocument`/`CoverDocument` |
 | Build/assemble structured documents (snapshot, patch, render to MD) | `core/document_builder.py`, `core/document_assembler.py` | Read `core/CONTEXT.md` first |
 | Reconstruct a structured document from rendered Markdown (inverse of assembler) | `core/document_parser.py` | Read `core/CONTEXT.md` first; tolerates legacy LLM markdown; used to backfill missing `documents` rows |
