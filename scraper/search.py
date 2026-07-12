@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from scraper.base import ScrapedJob, SearchConfig
 from scraper.remoteok import RemoteOKSource
 from scraper.remotive import RemotiveSource
+
+logger = logging.getLogger(__name__)
 
 
 def _identity(job: ScrapedJob) -> tuple[str, str, str]:
@@ -52,8 +56,8 @@ def search_sources(
     for source_cls in (RemotiveSource, RemoteOKSource):
         try:
             results = source_cls().fetch(config, max_jobs)
-        except Exception as exc:  # best-effort: skip a failing source
-            print(f"[search] {source_cls!r} failed: {exc}", flush=True)
+        except Exception:  # best-effort: skip a failing source
+            logger.exception("%r failed", source_cls)
             continue
         for job in results:
             if not job.url or job.url in seen_urls:
