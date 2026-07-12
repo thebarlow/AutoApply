@@ -42,6 +42,12 @@ class RemoteOKSource(JobSource):
             if blacklist and any(term in text for term in blacklist):
                 continue
 
+            def _int(v):
+                try:
+                    return int(v) if v else None
+                except (TypeError, ValueError):
+                    return None
+
             results.append(ScrapedJob(
                 source=self.source_id,
                 job_key=f"remoteok_{job.get('id', '')}",
@@ -50,6 +56,8 @@ class RemoteOKSource(JobSource):
                 url=url,
                 description=description,
                 location=job.get("location", "") or "",
+                salary_min=_int(job.get("salary_min")),
+                salary_max=_int(job.get("salary_max")),
                 remote=True,
                 posted_at=job.get("date", ""),
             ))

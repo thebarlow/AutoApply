@@ -29,6 +29,8 @@ class ScrapedJob:
     description: str
     location: str = ""
     salary: str = ""
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
     remote: bool = False
     posted_at: str = ""
 

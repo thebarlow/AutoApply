@@ -8,6 +8,7 @@ import Wizard from './components/Onboarding/Wizard'
 import TourController from './components/Onboarding/TourController'
 import Docs from './components/Docs'
 import AdminPage from './components/AdminPage'
+import FindJobs from './components/FindJobs'
 import LandingPage from './components/landing/LandingPage'
 import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe, stopImpersonation } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
@@ -231,6 +232,7 @@ export default function App() {
       } />
       <Route path="/docs" element={<Docs />} />
       <Route path="/admin" element={<AdminPage />} />
+      <Route path="/find-jobs" element={<FindJobs />} />
       <Route path="*" element={
         <div className="min-h-screen text-space-text">
           {showWizard && (

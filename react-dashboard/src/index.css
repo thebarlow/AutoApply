@@ -74,3 +74,24 @@ body::before {
   pointer-events: none;
   z-index: 1;
 }
+
+/* Find Jobs — rendered job-description preview (sanitized third-party HTML) */
+/* Neutralize any surviving inline presentation so pasted descriptions inherit
+   the dark theme instead of showing white boxes / unreadable black text. */
+.job-preview, .job-preview * {
+  background-color: transparent !important;
+  color: inherit !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+.job-preview { line-height: 1.6; word-break: break-word; }
+.job-preview p { margin: 0 0 0.75rem; }
+.job-preview ul, .job-preview ol { margin: 0 0 0.75rem; padding-left: 1.25rem; }
+.job-preview ul { list-style: disc; }
+.job-preview ol { list-style: decimal; }
+.job-preview li { margin: 0.25rem 0; }
+.job-preview h1, .job-preview h2, .job-preview h3, .job-preview h4 {
+  font-weight: 600; margin: 1rem 0 0.5rem;
+}
+.job-preview a { color: #c084fc !important; text-decoration: underline; }
+.job-preview strong, .job-preview b { font-weight: 600; }
+.job-preview br { line-height: 1.6; }

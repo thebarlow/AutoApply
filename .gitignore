@@ -30,6 +30,9 @@ __pycache__/
 # Database
 auto_apply.db
 db/*.db
+# SQLite WAL sidecar files (created by journal_mode=WAL)
+*.db-wal
+*.db-shm
 
 # Claude local
 .claude/worktrees/

@@ -22,6 +22,7 @@ class RemotiveSource(JobSource):
         )
         response.raise_for_status()
 
+        whitelist = [term.lower() for term in config.keywords_whitelist]
         blacklist = [term.lower() for term in config.keywords_blacklist]
         results: list[ScrapedJob] = []
 
@@ -34,6 +35,10 @@ class RemotiveSource(JobSource):
             description = job.get("description", "")
             text = (title + " " + description).lower()
 
+            # Remotive's API ignores the `search` param (returns a fixed feed),
+            # so we filter by keyword client-side, same as RemoteOK.
+            if whitelist and not any(term in text for term in whitelist):
+                continue
             if blacklist and any(term in text for term in blacklist):
                 continue
 

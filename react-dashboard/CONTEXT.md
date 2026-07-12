@@ -27,6 +27,7 @@ Two-panel layout split 3:2 in a 5-column grid:
   `data-tour="…"` attributes. "Take a tour" in the navbar dispatches
   `auto-apply:tour-replay`.
 - **Docs viewer** — `Docs.jsx`: full-page markdown docs viewer with sidebar nav; replaces dashboard when docs route active
+- **Find Jobs** — `FindJobs.jsx`: navbar-level full-page view (like `Docs.jsx`, renders its own `<Navbar>`), reached via a "Find Jobs" navbar link and the `/find-jobs` route. Searches remote job boards (Remotive + RemoteOK) server-side, plus an **Exclude words** input (banned keywords) and a **location region dropdown** (Remote/USA/UK/Europe/Asia/Africa/Australia with live per-region counts, filtered client-side via `findjobs/regions.js`). **Two-column layout**: left column is candidate cards (reusing `shared/JobCard.jsx`); right column previews the selected job with **sanitized rendered HTML** (DOMPurify strips presentational markup; `.job-preview` CSS in `index.css` forces theme colors) — the first result auto-previews. Each card + the preview header has a per-item **✓ scrape** and **✗ delete** widget (no multi-select/sticky bar); both remove the card with an exit animation. Scraped jobs are hidden from future searches server-side (via `candidate_id`); deleted ids persist in a `localStorage` cache (`findjobs:deletedIds`) and are filtered client-side. Cards show salary + location + "Posted Xd ago". Border color: viewed (gray, client-only on preview) vs new (blue) via `findjobs/borderStatus.js` (`effectiveStatus`, `BORDER_CLASS`); scraped/applied are excluded from results entirely so those colors are no longer reachable in this flow.
 - **Landing / About page** (`src/components/landing/`): public marketing page shown to
   logged-out visitors (all routes redirect to `/about`) and reachable at `/about` for
   logged-in users via the navbar "About" link. Pure frontend, no API calls. The old
@@ -70,6 +71,9 @@ Two-panel layout split 3:2 in a 5-column grid:
 | First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
 | Docs viewer (markdown rendering, sidebar nav) | `src/components/Docs.jsx` |
+| Find Jobs page (search remote boards, two-column cards+HTML preview, per-card ✓scrape/✗delete, exclude words, region dropdown, posted-age) | `src/components/FindJobs.jsx` |
+| Find Jobs region classification + per-region counts | `src/components/findjobs/regions.js` |
+| Find Jobs border-status precedence (applied > scraped > viewed > none) | `src/components/findjobs/borderStatus.js` — `effectiveStatus`, `BORDER_CLASS` |
 | Inline docs markdown content | `src/docs-content/` |
 | Prerequisite check hook (llmReady, resumeReady) | `src/hooks/usePrerequisites.js` |
 | Form validation helpers (provider, prompt) | `src/validation.js` |

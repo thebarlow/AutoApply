@@ -686,6 +686,94 @@ def test_extract_description_maps_fields(db_session, monkeypatch):
     assert job.ext_salary_max is None
 
 
+def test_extract_description_retries_on_length_truncation(db_session, monkeypatch):
+    """A first truncated (finish_reason='length') response is retried with a
+    larger token budget before succeeding."""
+    from core.job import Job
+    import core.user as user_mod
+    import core.llm as llm_mod
+
+    job = Job.from_scraped_for(_make_scraped(job_key="ex_len"), profile_id=1)
+    db_session.add(job)
+    db_session.commit()
+
+    fake_user = type("U", (), {
+        "resolve_prompt": lambda self, k: "extract {job.description}",
+        "prompt_extraction_model": "m",
+    })()
+    monkeypatch.setattr(user_mod.User, "load", classmethod(lambda cls, db: fake_user))
+
+    good = (
+        '{"required_skills": ["Python"], "preferred_skills": [],'
+        ' "tech_stack": [], "seniority": "mid", "role_type": "IC",'
+        ' "domain": "web", "key_responsibilities": [], "company_signals": [],'
+        ' "work_arrangement": "remote", "employment_type": "full-time"}'
+    )
+
+    calls = []
+
+    class _Completions:
+        def create(self, **kwargs):
+            calls.append(kwargs["max_tokens"])
+            if len(calls) == 1:  # first attempt: truncated
+                choice = type("Ch", (), {
+                    "message": type("M", (), {"content": None})(),
+                    "finish_reason": "length",
+                })()
+            else:
+                choice = type("Ch", (), {
+                    "message": type("M", (), {"content": good})(),
+                    "finish_reason": "stop",
+                })()
+            return type("R", (), {"choices": [choice], "usage": _FakeUsage()})()
+
+    client = type("Client", (), {
+        "chat": type("C", (), {"completions": _Completions()})(),
+    })()
+    monkeypatch.setattr(
+        llm_mod, "get_client_for_profile", lambda user, model: (client, "m"))
+
+    job.extract_description(db_session)
+
+    assert job.ext_seniority == "mid"
+    assert len(calls) == 2            # retried once
+    assert calls[1] > calls[0]        # with a larger budget
+
+
+def test_extract_description_raises_after_persistent_truncation(db_session, monkeypatch):
+    """If every attempt truncates, a clear error is raised (not silent empty)."""
+    from core.job import Job
+    import core.user as user_mod
+    import core.llm as llm_mod
+
+    job = Job.from_scraped_for(_make_scraped(job_key="ex_len2"), profile_id=1)
+    db_session.add(job)
+    db_session.commit()
+
+    fake_user = type("U", (), {
+        "resolve_prompt": lambda self, k: "extract {job.description}",
+        "prompt_extraction_model": "m",
+    })()
+    monkeypatch.setattr(user_mod.User, "load", classmethod(lambda cls, db: fake_user))
+
+    class _Completions:
+        def create(self, **kwargs):
+            choice = type("Ch", (), {
+                "message": type("M", (), {"content": None})(),
+                "finish_reason": "length",
+            })()
+            return type("R", (), {"choices": [choice], "usage": _FakeUsage()})()
+
+    client = type("Client", (), {
+        "chat": type("C", (), {"completions": _Completions()})(),
+    })()
+    monkeypatch.setattr(
+        llm_mod, "get_client_for_profile", lambda user, model: (client, "m"))
+
+    with pytest.raises(RuntimeError, match="truncated or empty"):
+        job.extract_description(db_session)
+
+
 def test_extract_description_coerces_salary(db_session, monkeypatch):
     from core.job import Job
     import core.user as user_mod

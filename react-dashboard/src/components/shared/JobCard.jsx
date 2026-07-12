@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { BORDER_CLASS } from '../findjobs/borderStatus'
 
 function ProcessingIcon() {
   const dots = Array.from({ length: 8 }, (_, i) => {
@@ -29,7 +30,19 @@ function TrashIcon() {
   )
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, salaryMin, salaryMax, salaryRaw, flagged = false }) {
+export function relativeAge(iso) {
+  if (!iso) return null
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return null
+  const days = Math.floor((Date.now() - then) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return '1d ago'
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return `${Math.floor(days / 30)}mo ago`
+}
+
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, postedAt, salaryMin, salaryMax, salaryRaw, location = null, flagged = false, borderStatus = null, leading = null, trailing = null }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
 
@@ -72,7 +85,8 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
   }
 
   const salaryText = formatSalary()
-  const dateText = formatDate()
+  const postedText = postedAt ? `Posted ${relativeAge(postedAt)}` : null
+  const dateText = formatDate() ?? postedText
   const hasMetadata = salaryText || dateText
 
   return (
@@ -80,18 +94,21 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
       whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.06)' }}
       transition={{ duration: 0.15 }}
       className={`flex items-stretch justify-between rounded-lg px-3 py-2 border gap-3 transition-colors
-        ${selected
-          ? 'bg-purple-900/30 border-purple-500/50'
-          : 'bg-white/[0.03] border-white/5'
-        }`}
+        ${selected ? 'bg-purple-900/30' : 'bg-white/[0.03]'}
+        ${borderStatus ? BORDER_CLASS[borderStatus]
+          : selected ? 'border-purple-500/50' : 'border-white/5'}`}
     >
+      {leading}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           {flagged && <FlagIconFilled />}
           <p className="text-sm font-medium text-space-text truncate">{title}</p>
         </div>
         <p className="text-xs text-space-dim">{company}</p>
-        {hasMetadata && (
+        {location && (
+          <p className="text-xs text-space-dim truncate">📍 {location}</p>
+        )}
+        {(hasMetadata || salaryText) && (
           <div className="flex justify-between mt-0.5">
             <span className="text-xs text-space-dim">{salaryText ?? ''}</span>
             <span className="text-xs text-space-dim">{dateText ?? ''}</span>
@@ -114,6 +131,7 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
         <ScorePill />
         {state === 'deleted' && <TrashIcon />}
         {statusIcon}
+        {trailing}
       </div>
     </motion.div>
   )

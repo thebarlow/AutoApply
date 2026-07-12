@@ -17,9 +17,9 @@ Read the target directory's `CONTEXT.md` before making changes there.
 | Task | Location | Notes |
 |---|---|---|
 | Browser extension (LinkedIn, Indeed scraping) | `browser-extension/` | Has `CONTEXT.md` with selector docs and known issues |
-| API scrapers (Remotive, RemoteOK) — dormant | `scraper/` | Has `CONTEXT.md`; `POST /api/scraper/run` is registered but not called from the React UI (only via raw HTTP, requires `scraper_sources` config) |
+| API scrapers (Remotive, RemoteOK) | `scraper/` | Has `CONTEXT.md`; active via the "Find Jobs" tab — `POST /api/scraper/search` (preview) + `POST /api/scraper/scrape-selected` (persist + pipeline); the old dormant `POST /api/scraper/run` was retired |
 | React dashboard UI, components, layout | `react-dashboard/src/` | `CONTEXT.md` at `react-dashboard/` has the per-file routing table |
-| REST API endpoints (all routes) | `web/routers/` | Has `CONTEXT.md` (at `web/`); score/generate logic delegated to `core/job.py`; `routers/scraper.py` has `stage-job` (manual/extension intake, used by UI) and `run` (API scrapers, dormant) |
+| REST API endpoints (all routes) | `web/routers/` | Has `CONTEXT.md` (at `web/`); score/generate logic delegated to `core/job.py`; `routers/scraper.py` has `stage-job` (manual/extension intake), `search`/`last-search` (Find Jobs preview), and `scrape-selected` (Find Jobs persist + pipeline) |
 | Job entity methods (score, generate/refine/eval resume+cover, extract) | `core/job.py` | Read `core/CONTEXT.md` first; all LLM-driven logic lives here |
 | Shared types, enums, dataclasses | `core/job.py`, `core/user.py` | Read `core/CONTEXT.md` first |
 | LLM client construction, model resolution | `core/llm.py` | Read `core/CONTEXT.md` first |

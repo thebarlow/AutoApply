@@ -1,6 +1,6 @@
 # Scraper Context
 
-API-based job scrapers for Remotive and RemoteOK. Fetches jobs and saves them to the DB. An endpoint exists (`POST /api/scraper/run` in `web/routers/scraper.py`) that runs them as a background thread and feeds new jobs into `intake_pipeline` — but it is **dormant**: nothing in the React UI calls it, it is only reachable via raw HTTP, and it requires a `scraper_sources` config row (else returns 400). Not currently part of the active workflow.
+API-based job scrapers for Remotive and RemoteOK. Now **live and UI-triggered** via the "Find Jobs" tab (`react-dashboard/src/components/FindJobs.jsx`): `scraper/search.py::search_sources(query, max_jobs=50, exclude=None, location=None)` runs both sources best-effort and merges/dedupes results by **URL and by normalized title/company/location identity**. It applies `exclude` (banned words → source blacklist) and an optional `location` substring filter (Worldwide/Anywhere always pass). `POST /api/scraper/search` (`web/routers/scraper.py`) previews candidates (no DB persist), stamps each with a stable `candidate_id` (sha1 of title/company/location), and **hides jobs already in the profile's inbox/archives**; the user scrapes jobs one at a time and `POST /api/scraper/scrape-selected` persists them and runs the intake pipeline. The old dormant `POST /api/scraper/run` endpoint and the `scraper_sources` config gate were removed. `ScrapedJob` now carries `salary_min`/`salary_max` (populated from RemoteOK).
 
 ## Architecture
 
@@ -10,17 +10,17 @@ scraper/
 ├── base.py         # JobSource ABC, ScrapedJob dataclass
 ├── remotive.py     # Remotive API scraper
 ├── remoteok.py     # RemoteOK API scraper
+├── search.py       # search_sources(query, max_jobs) — runs both sources, merges/dedupes by URL; used by POST /api/scraper/search
 ├── runner.py       # Orchestrates sources, loads config, saves jobs
 └── __main__.py     # CLI entry point (direct invocation)
 ```
 
 ## How It Works
 
-1. `web/routers/scraper.py` reads `scraper_sources` from the Config table (comma-separated, e.g. `"remotive,remoteok"`) to determine which sources to run.
-2. `runner.py` loads `SearchConfig` and `max_jobs_per_source` from the Config DB table.
-3. Each source's `fetch()` is called with the config and max job count.
-4. Results are deduped by URL and saved to the DB with `state=scraped`.
-5. Each new job is passed to `job.intake()` and then `run_pipeline()` (scoring + generation).
+1. `POST /api/scraper/search` (body `{query}`) calls `search.py::search_sources(query)`; a blank query returns `[]` without calling either source. Each candidate's status (`applied`/`scraped`/`none`) is computed against this profile's existing jobs. The query is persisted to `profile_config['last_job_search']`; candidates themselves are NOT persisted.
+2. The user checkbox-selects candidates in the Find Jobs UI and calls `POST /api/scraper/scrape-selected` (body `{jobs:[...]}`), which saves the batch, runs `job.intake()`, and kicks off `run_pipeline()` (scoring + generation) via a threaded background job with SSE updates.
+3. Each source's `fetch()` is called with the config and max job count (shared by both `search_sources` and the underlying scraper logic).
+4. Results are deduped by URL.
 
 ## Search Config Keys (Config table)
 
@@ -37,5 +37,6 @@ scraper/
 
 ## Known Issues (open)
 
-- **Remotive only uses first whitelist keyword** — `fetch()` sends only `config.keywords_whitelist[0]` as the `search` param. Should either iterate over all keywords (one request per keyword, dedupe results) or join them. Remotive accepts full phrases (e.g. "Python Dev"), not just single words.
-- **Remotive missing client-side whitelist filter** — after the API response, results are not filtered against the full whitelist. Only the blacklist is applied client-side. Should add whitelist filtering matching RemoteOK's approach.
+- **Remotive's public API ignores query params** — as of 2026-07 the endpoint returns a fixed ~39-job default feed regardless of `search`, `limit`, or `category`. `fetch()` still sends `search` (harmless) but now filters the returned feed **client-side** against `keywords_whitelist` (matching RemoteOK), so different queries no longer return identical cards. Upstream limitation: Remotive contributes only whatever jobs are in its small default feed. If Remotive restores server-side search, the client-side whitelist filter can stay (it's a safe superset).
+- **RemoteOK has no server-side search** — it returns the latest ~100 postings; we filter by whitelist client-side, so niche keywords may yield few/zero hits. Not a bug, an API limitation.
+- **Small result sets** — because both sources effectively return small latest-feed snapshots, searches are shallow. A future improvement would add more sources or a paid API.
