@@ -12,6 +12,15 @@ The **test suite still uses `create_all`** (each test builds an in-memory SQLite
 `Base.metadata.create_all` and overrides `get_db`) for speed — it does not run Alembic.
 `tests/db/test_alembic_parity.py` gates that the two schemas stay identical.
 
+### SQLite concurrency (WAL)
+
+On SQLite, a `connect` event listener in `database.py` sets `PRAGMA journal_mode=WAL`,
+`synchronous=NORMAL`, and `busy_timeout=10000` (SQLite-only; skipped for Postgres). The
+app writes from multiple threads (intake/scrape pipelines); without WAL a second writer
+raised `OperationalError: database is locked`. WAL lets readers proceed during a write and
+the busy timeout makes a contending writer wait. WAL creates `*.db-wal`/`*.db-shm` sidecar
+files (gitignored).
+
 ### Migration history (retired)
 
 The table below records the columns that the now-deleted `_migrate_*` functions used to
