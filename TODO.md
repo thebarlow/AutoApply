@@ -5,6 +5,23 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
 
 ## Bugs
 
+- [ ] **Implement structured error logging.** Currently the only way to see a backend
+  failure is to copy-paste the traceback out of the terminal. Add persistent, queryable
+  error logging so failures (esp. background intake/pipeline threads) are captured to a
+  file/table and surfaced — e.g. Python `logging` to a rotating file + optionally a
+  `job.last_result_error` viewer in the dashboard. Goal: stop hand-copying terminal output.
+  Observed 2026-07-10 (motivating examples, both in the intake pipeline `_run` thread,
+  `core/job.py`) — **both root causes now FIXED (2026-07-12)**, but the logging infra itself
+  is still TODO:
+  1. **LLM extraction returns empty with `finish_reason='length'`** — FIXED. `extract_description`
+     now starts at `max_tokens=4096` and retries once with a doubled budget on truncation, then
+     raises a clear "truncated or empty after retry" error instead of a bare empty-response error.
+  2. **`sqlite3.OperationalError: database is locked`** — FIXED. `db/database.py` now sets
+     `PRAGMA journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=10000` on every SQLite
+     connect (via a `connect` event listener, SQLite-only). WAL lets readers proceed during a
+     write and the busy timeout makes a contending writer wait instead of raising. Postgres in
+     prod was already unaffected.
+
 - [x] **Indeed job descriptions not captured by the scraper — FIXED** (2026-07-09). Root cause
   (confirmed live via Claude-in-Chrome, not truncation): Indeed migrated the detail pane to
   `div.react-native-html-content.simple-job-description-html` and dropped the legacy
