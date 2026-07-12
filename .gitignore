@@ -67,6 +67,9 @@ node_modules/
 # Obsidian
 .obsidian/
 
+# Runtime logs
+logs/
+
 # Test artifacts
 test_new_user.db
 test_results.xml
