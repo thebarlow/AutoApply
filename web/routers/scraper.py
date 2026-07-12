@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import threading
 from typing import Any
 
@@ -140,32 +141,38 @@ def scrape_selected(
     }
 
 
-_APPLIED_STATES = {
-    JobState.APPLIED.value, JobState.CONTACT.value, JobState.REJECTED.value,
-}
-_SCRAPED_STATES = {
-    JobState.NEW.value, JobState.PENDING_REVIEW.value, JobState.READY.value,
-}
+def candidate_id(title: str, company: str, location: str) -> str:
+    """Stable identity for a job posting, independent of source/tracking URL.
+
+    Hashes the normalized title/company/location so the same posting maps to
+    one id across sources and re-searches. Used to hide jobs the user has
+    already scraped (present in inbox/archives) or deleted (client cache).
+    """
+    key = "|".join(
+        [
+            (title or "").strip().lower(),
+            (company or "").strip().lower(),
+            (location or "").strip().lower(),
+        ]
+    )
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()
 
 
-def _status_for(db: Session, urls: list[str], profile_id: int) -> dict[str, str]:
-    """Map each url to its interaction status against the profile's jobs."""
-    if not urls:
-        return {}
+def _existing_candidate_ids(db: Session, profile_id: int) -> set[str]:
+    """Candidate ids for the profile's non-deleted jobs (inbox + archives).
+
+    Deleted jobs are treated as not-interacted, so they are excluded from the
+    set and may resurface in a search.
+    """
     rows = (
-        db.query(Job.url, Job.state)
-        .filter(Job.profile_id == profile_id, Job.url.in_(urls))
+        db.query(Job.title, Job.company, Job.location)
+        .filter(
+            Job.profile_id == profile_id,
+            Job.state != JobState.DELETED.value,
+        )
         .all()
     )
-    status: dict[str, str] = {}
-    for url, state in rows:
-        if state in _APPLIED_STATES:
-            status[url] = "applied"
-        elif state in _SCRAPED_STATES:
-            status[url] = "scraped"
-        else:  # deleted / anything else
-            status[url] = "none"
-    return status
+    return {candidate_id(t, c, loc) for t, c, loc in rows}
 
 
 def _profile_config_set(db: Session, key: str, value: str, profile_id: int) -> None:
@@ -183,6 +190,8 @@ def _profile_config_set(db: Session, key: str, value: str, profile_id: int) -> N
 
 class SearchRequest(BaseModel):
     query: str
+    exclude: list[str] = []
+    location: str = ""
 
 
 @router.post("/search")
@@ -193,30 +202,47 @@ def search(
 ) -> dict[str, Any]:
     """Live-preview job search across the API sources (does not persist jobs).
 
-    Runs the sources for the keyword, tags each candidate with its status
-    relative to this profile's existing jobs, and remembers the query.
+    Runs the sources for the keyword, drops candidates the profile has
+    already scraped (present in inbox/archives), stamps each survivor with a
+    stable ``candidate_id``, and remembers the query, banned words, and
+    location filter. Deleted-job filtering is handled client-side via a cached
+    id list.
     """
-    candidates = search_sources(body.query)
-    status = _status_for(db, [c.url for c in candidates], profile_id)
+    candidates = search_sources(
+        body.query, exclude=body.exclude, location=body.location
+    )
+    existing = _existing_candidate_ids(db, profile_id)
     _profile_config_set(db, "last_job_search", body.query, profile_id)
-    return {
-        "query": body.query,
-        "candidates": [
-            {**dataclasses.asdict(c), "status": status.get(c.url, "none")}
-            for c in candidates
-        ],
-    }
+    _profile_config_set(
+        db, "last_job_exclude", ",".join(body.exclude), profile_id
+    )
+    _profile_config_set(db, "last_job_location", body.location, profile_id)
+    out = []
+    for c in candidates:
+        cid = candidate_id(c.title, c.company, c.location)
+        if cid in existing:
+            continue  # already scraped/applied — hide it
+        out.append({**dataclasses.asdict(c), "candidate_id": cid})
+    return {"query": body.query, "candidates": out}
 
 
 @router.get("/last-search")
 def last_search(
     db: Session = Depends(get_db),
     profile_id: int = Depends(current_profile_id),
-) -> dict[str, str]:
-    """Return the profile's remembered Find Jobs query (empty if none)."""
-    row = (
-        db.query(ProfileConfig)
-        .filter_by(profile_id=profile_id, key="last_job_search")
-        .first()
-    )
-    return {"query": row.value if row else ""}
+) -> dict[str, Any]:
+    """Return the profile's remembered Find Jobs query/filters (empty if none)."""
+    def _get(key: str) -> str:
+        row = (
+            db.query(ProfileConfig)
+            .filter_by(profile_id=profile_id, key=key)
+            .first()
+        )
+        return str(row.value) if row and row.value else ""
+
+    exclude = _get("last_job_exclude")
+    return {
+        "query": _get("last_job_search"),
+        "exclude": [w for w in exclude.split(",") if w] if exclude else [],
+        "location": _get("last_job_location"),
+    }

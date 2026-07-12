@@ -57,6 +57,20 @@ def test_remotive_maps_fields_correctly():
     assert job.posted_at == "2026-01-15"
 
 
+def test_remotive_filters_by_whitelist_client_side():
+    # Remotive's API ignores `search`, so we filter the returned feed locally.
+    jobs = [
+        _api_job(id=1, title="Python Dev", description="Django backend.",
+                 url="https://remotive.com/remote-jobs/1"),
+        _api_job(id=2, title="Sales Rep", description="Cold calling.",
+                 url="https://remotive.com/remote-jobs/2"),
+    ]
+    with patch("scraper.remotive.httpx.get", return_value=_mock_response(jobs)):
+        results = RemotiveSource().fetch(_config(keywords_whitelist=["python"]), max_jobs=10)
+
+    assert [r.job_key for r in results] == ["remotive_1"]
+
+
 def test_remotive_filters_blacklist_in_title():
     jobs = [
         _api_job(id=1, title="Senior Python Dev", url="https://remotive.com/remote-jobs/1"),

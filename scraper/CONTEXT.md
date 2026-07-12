@@ -37,5 +37,6 @@ scraper/
 
 ## Known Issues (open)
 
-- **Remotive only uses first whitelist keyword** — `fetch()` sends only `config.keywords_whitelist[0]` as the `search` param. Should either iterate over all keywords (one request per keyword, dedupe results) or join them. Remotive accepts full phrases (e.g. "Python Dev"), not just single words.
-- **Remotive missing client-side whitelist filter** — after the API response, results are not filtered against the full whitelist. Only the blacklist is applied client-side. Should add whitelist filtering matching RemoteOK's approach.
+- **Remotive's public API ignores query params** — as of 2026-07 the endpoint returns a fixed ~39-job default feed regardless of `search`, `limit`, or `category`. `fetch()` still sends `search` (harmless) but now filters the returned feed **client-side** against `keywords_whitelist` (matching RemoteOK), so different queries no longer return identical cards. Upstream limitation: Remotive contributes only whatever jobs are in its small default feed. If Remotive restores server-side search, the client-side whitelist filter can stay (it's a safe superset).
+- **RemoteOK has no server-side search** — it returns the latest ~100 postings; we filter by whitelist client-side, so niche keywords may yield few/zero hits. Not a bug, an API limitation.
+- **Small result sets** — because both sources effectively return small latest-feed snapshots, searches are shallow. A future improvement would add more sources or a paid API.

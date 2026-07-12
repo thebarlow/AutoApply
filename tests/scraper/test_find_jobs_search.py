@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from db.database import Base, get_db, ProfileConfig
+from db.database import Base, get_db
 from core.job import Job, JobState
 from web.main import app
 
@@ -32,51 +32,62 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _candidate(url: str, key: str):
+def _candidate(url: str, key: str, title: str):
     from scraper.base import ScrapedJob
-    return ScrapedJob(source="remotive", job_key=key, title="Eng",
+    return ScrapedJob(source="remotive", job_key=key, title=title,
                       company="Acme", url=url, description="d")
 
 
-def _seed_job(db, profile_id, url, key, state):
+def _seed_job(db, profile_id, url, key, state, title):
     db.add(Job(profile_id=profile_id, job_key=key, source="remotive",
-               title="Eng", company="Acme", url=url, description="d",
+               title=title, company="Acme", url=url, description="d",
                state=state))
     db.commit()
 
 
-def test_search_returns_candidates_with_status(client, db_session):
-    # profile 1 is the default test tenant (same as stage-job tests)
+def test_search_excludes_scraped_and_applied(client, db_session):
+    # profile 1 is the default test tenant (same as stage-job tests).
+    # Matching is by candidate_id = hash(title/company/location), so seeded
+    # jobs and candidates must share those fields to collide.
     _seed_job(db_session, 1, "https://x.com/applied", "k_app",
-              JobState.APPLIED.value)
+              JobState.APPLIED.value, "Applied Eng")
     _seed_job(db_session, 1, "https://x.com/scraped", "k_scr",
-              JobState.NEW.value)
+              JobState.NEW.value, "Scraped Eng")
     _seed_job(db_session, 1, "https://x.com/deleted", "k_del",
-              JobState.DELETED.value)
-    cands = [_candidate("https://x.com/applied", "r1"),
-             _candidate("https://x.com/scraped", "r2"),
-             _candidate("https://x.com/deleted", "r3"),
-             _candidate("https://x.com/fresh", "r4")]
+              JobState.DELETED.value, "Deleted Eng")
+    cands = [_candidate("https://x.com/applied", "r1", "Applied Eng"),
+             _candidate("https://x.com/scraped", "r2", "Scraped Eng"),
+             _candidate("https://x.com/deleted", "r3", "Deleted Eng"),
+             _candidate("https://x.com/fresh", "r4", "Fresh Eng")]
     with patch("web.routers.scraper.search_sources", return_value=cands):
         resp = client.post("/api/scraper/search", json={"query": "eng"})
     assert resp.status_code == 200
-    by_url = {c["url"]: c["status"] for c in resp.json()["candidates"]}
-    assert by_url == {
-        "https://x.com/applied": "applied",
-        "https://x.com/scraped": "scraped",
-        "https://x.com/deleted": "none",
-        "https://x.com/fresh": "none",
+    cs = resp.json()["candidates"]
+    # Applied + scraped are hidden; deleted resurfaces; fresh shown.
+    assert {c["url"] for c in cs} == {
+        "https://x.com/deleted", "https://x.com/fresh",
+    }
+    # Every survivor carries a stable candidate_id.
+    assert all(c.get("candidate_id") for c in cs)
+
+
+def test_search_persists_query_and_filters(client, db_session):
+    with patch("web.routers.scraper.search_sources", return_value=[]) as mock:
+        client.post("/api/scraper/search", json={
+            "query": "rust dev", "exclude": ["senior", "lead"],
+            "location": "USA",
+        })
+    # filters are forwarded to the source layer
+    _, kwargs = mock.call_args
+    assert kwargs["exclude"] == ["senior", "lead"]
+    assert kwargs["location"] == "USA"
+    # and remembered for next time
+    assert client.get("/api/scraper/last-search").json() == {
+        "query": "rust dev", "exclude": ["senior", "lead"], "location": "USA",
     }
 
 
-def test_search_persists_last_query(client, db_session):
-    with patch("web.routers.scraper.search_sources", return_value=[]):
-        client.post("/api/scraper/search", json={"query": "rust dev"})
-    row = db_session.query(ProfileConfig).filter_by(
-        profile_id=1, key="last_job_search").first()
-    assert row is not None and row.value == "rust dev"
-    assert client.get("/api/scraper/last-search").json() == {"query": "rust dev"}
-
-
 def test_last_search_defaults_empty(client):
-    assert client.get("/api/scraper/last-search").json() == {"query": ""}
+    assert client.get("/api/scraper/last-search").json() == {
+        "query": "", "exclude": [], "location": "",
+    }
