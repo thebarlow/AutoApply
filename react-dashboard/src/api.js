@@ -299,11 +299,11 @@ export const draftSectionPrompt = (_profileId, body) =>
     body: JSON.stringify(body),
   })
 
-export const searchJobs = (query) =>
+export const searchJobs = (query, exclude = [], location = '') =>
   _fetch('/api/scraper/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, exclude, location }),
   })
 
 export const scrapeSelected = (jobs) =>
