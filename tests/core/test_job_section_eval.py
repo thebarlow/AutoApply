@@ -46,7 +46,7 @@ def test_evaluate_resume_sections_maps_by_name_and_filters(db_session, monkeypat
     db_session.add(job); db_session.commit()
     Document.upsert(db_session, "ev1", "resume", serialize_document_tree(tree), profile_id=1)
     (_OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
-    (_OUTPUTS_DIR / "ev1_resume.md").write_text("# Jane Doe\n\n## Summary\n\nx\n", encoding="utf-8")
+    (_OUTPUTS_DIR / "1_ev1_resume.md").write_text("# Jane Doe\n\n## Summary\n\nx\n", encoding="utf-8")
 
     # LLM returns a score for a regenerable section + a bogus non-regenerable one.
     def fake_call(prompt, client, model, **kw):

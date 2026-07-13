@@ -31,7 +31,7 @@ def test_rerenders_when_theme_differs(monkeypatch, tmp_path):
     """Re-renders when profile theme != stamped theme and markdown is present."""
     pdf = tmp_path / "r.pdf"
     pdf.write_bytes(b"%PDF")
-    md = tmp_path / "k_resume.md"
+    md = tmp_path / "1_k_resume.md"
     md.write_text("# Resume")
 
     job = _job("classic", pdf)
@@ -52,7 +52,7 @@ def test_no_rerender_when_theme_same(monkeypatch, tmp_path):
     """Does NOT re-render when the stamped theme matches the profile theme."""
     pdf = tmp_path / "r.pdf"
     pdf.write_bytes(b"%PDF")
-    md = tmp_path / "k_resume.md"
+    md = tmp_path / "1_k_resume.md"
     md.write_text("# Resume")
 
     job = _job("modern", pdf)
@@ -74,7 +74,7 @@ def test_rerender_failure_falls_back_to_existing_pdf(monkeypatch, tmp_path):
     serve_resume still returns a FileResponse — no exception propagates."""
     pdf = tmp_path / "r.pdf"
     pdf.write_bytes(b"%PDF")
-    md = tmp_path / "k_resume.md"
+    md = tmp_path / "1_k_resume.md"
     md.write_text("# Resume")
 
     job = _job("classic", pdf)
@@ -99,7 +99,7 @@ def test_null_stamp_classic_profile_no_rerender(monkeypatch, tmp_path):
     """NULL stamp treated as 'classic'; classic profile → no re-render."""
     pdf = tmp_path / "r.pdf"
     pdf.write_bytes(b"%PDF")
-    md = tmp_path / "k_resume.md"
+    md = tmp_path / "1_k_resume.md"
     md.write_text("# Resume")
 
     job = _job(None, pdf)

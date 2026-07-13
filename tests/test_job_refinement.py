@@ -42,6 +42,7 @@ class TestStripYamlFrontmatter:
 def _make_job(job_key: str = "test_job") -> Job:
     job = Job.__new__(Job)
     job.job_key = job_key
+    job.profile_id = 1
     job.title = "Backend Engineer"
     job.company = "Acme"
     job.location = "Remote"
@@ -92,7 +93,7 @@ class TestEvaluateResumeMd:
     def test_returns_score_and_issues(self, tmp_path):
         job = _make_job()
         user = _make_user()
-        (tmp_path / "test_job_resume.md").write_text(
+        (tmp_path / "1_test_job_resume.md").write_text(
             "---\nname: Jane Doe\n---\n\n## Profile\nExperienced engineer.",
             encoding="utf-8",
         )
@@ -108,7 +109,7 @@ class TestEvaluateResumeMd:
     def test_clamps_score_above_1(self, tmp_path):
         job = _make_job()
         user = _make_user()
-        (tmp_path / "test_job_resume.md").write_text(
+        (tmp_path / "1_test_job_resume.md").write_text(
             "---\nname: Jane\n---\n\n## Profile\nContent.", encoding="utf-8"
         )
         client = _make_llm_client(json.dumps({"score": 1.5, "issues": []}))
@@ -119,7 +120,7 @@ class TestEvaluateResumeMd:
     def test_clamps_score_below_0(self, tmp_path):
         job = _make_job()
         user = _make_user()
-        (tmp_path / "test_job_resume.md").write_text(
+        (tmp_path / "1_test_job_resume.md").write_text(
             "---\nname: Jane\n---\n\n## Profile\nContent.", encoding="utf-8"
         )
         client = _make_llm_client(json.dumps({"score": -0.5, "issues": []}))
@@ -130,7 +131,7 @@ class TestEvaluateResumeMd:
     def test_strips_frontmatter_before_injecting(self, tmp_path):
         job = _make_job()
         user = _make_user()
-        (tmp_path / "test_job_resume.md").write_text(
+        (tmp_path / "1_test_job_resume.md").write_text(
             "---\nname: Jane\n---\n\n## Profile\nActual body.",
             encoding="utf-8",
         )
@@ -161,7 +162,7 @@ class TestEvaluateResumeMd:
     def test_raises_on_invalid_json(self, tmp_path):
         job = _make_job()
         user = _make_user()
-        (tmp_path / "test_job_resume.md").write_text(
+        (tmp_path / "1_test_job_resume.md").write_text(
             "---\nname: Jane\n---\n\n## Profile\nContent.", encoding="utf-8"
         )
         client = _make_llm_client("not json at all")
@@ -172,7 +173,7 @@ class TestEvaluateResumeMd:
     def test_raises_on_missing_keys(self, tmp_path):
         job = _make_job()
         user = _make_user()
-        (tmp_path / "test_job_resume.md").write_text(
+        (tmp_path / "1_test_job_resume.md").write_text(
             "---\nname: Jane\n---\n\n## Profile\nContent.", encoding="utf-8"
         )
         client = _make_llm_client(json.dumps({"only_score": 0.5}))

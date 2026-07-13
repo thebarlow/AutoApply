@@ -603,7 +603,7 @@ class Job(Base):
         names = self._regenerable_section_names(db)
         if not names:
             return {}
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.md"
         body = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
         prompt = eval_prompt.replace("{current_document}", body)
         prompt = prompt.replace("{sections_to_score}", "\n".join(names))
@@ -641,7 +641,7 @@ class Job(Base):
             FileNotFoundError: If the document markdown file does not exist.
             RuntimeError: If the LLM returns unparseable or malformed JSON.
         """
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_{doc_type}.md"
+        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_{doc_type}.md"
         if not md_path.exists():
             raise FileNotFoundError(
                 f"{doc_type.capitalize()} markdown not found: {md_path}"
@@ -1098,7 +1098,7 @@ class Job(Base):
         legacy ``ResumeDocument`` keeps the front matter + fixed assembler path.
         """
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.md"
         if isinstance(doc, RootNode):
             md_path.write_text(assemble_resume_tree_markdown(doc), encoding="utf-8")
             return
@@ -1115,7 +1115,7 @@ class Job(Base):
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         frontmatter = self._build_frontmatter_from_header(doc.header, [])
         body = assemble_cover_markdown(doc)
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
+        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_cover.md"
         md_path.write_text(frontmatter + body, encoding="utf-8")
 
     def _resolve_resume_max_pages(self, db: Session) -> int | None:
@@ -1149,10 +1149,10 @@ class Job(Base):
         """
         if max_pages is _MAX_PAGES_UNSET:
             max_pages = self._resolve_resume_max_pages(db)
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
-        pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
+        pdf_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.pdf"
         theme = self._resolve_resume_theme(db)
         css_path = template_path.parent / theme.css_filename
         meta = self._render_meta("resume", db)
@@ -1186,7 +1186,7 @@ class Job(Base):
         from core.schemas import ResumeDocument
         from db.database import Document, PromptDefault
 
-        pdf_path = _OUTPUTS_DIR / f"{self.job_key}_resume.pdf"
+        pdf_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.pdf"
         if not pdf_path.exists():
             raise FileNotFoundError(f"Resume PDF not found: {pdf_path}")
         row = Document.fetch(db, self.job_key, "resume", profile_id=self.profile_id)
@@ -1246,10 +1246,10 @@ class Job(Base):
         Raises:
             FileNotFoundError: If the cover letter markdown file does not exist.
         """
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_cover.md"
+        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_cover.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Cover markdown not found: {md_path}")
-        pdf_path = _OUTPUTS_DIR / f"{self.job_key}_cover.pdf"
+        pdf_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_cover.pdf"
         meta = self._render_meta("cover", db)
         render_pdf(md_path, pdf_path, template_path, meta=meta)
         self.cover_path = str(pdf_path)
@@ -1272,10 +1272,10 @@ class Job(Base):
         """
         import subprocess
 
-        md_path = _OUTPUTS_DIR / f"{self.job_key}_resume.md"
+        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.md"
         if not md_path.exists():
             raise FileNotFoundError(f"Resume markdown not found: {md_path}")
-        out_path = _OUTPUTS_DIR / f"{self.job_key}_resume.docx"
+        out_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.docx"
         # Resolve to repo root: core/job.py → core/ → repo root → generator/
         reference = Path(__file__).parent.parent / "generator" / "reference.docx"
         cmd = ["pandoc", str(md_path), "-o", str(out_path)]
@@ -1487,8 +1487,8 @@ class Job(Base):
                 json.loads(self.ats_report_json).get("issues", [])
                 if self.ats_report_json else []
             ),
-            "resume_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_resume.md").exists(),
-            "cover_md_exists": (_OUTPUTS_DIR / f"{self.job_key}_cover.md").exists(),
+            "resume_md_exists": (_OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.md").exists(),
+            "cover_md_exists": (_OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_cover.md").exists(),
             "extraction_json_exists": (has_extraction := bool(self.ext_required_skills or self.ext_seniority)),
             "extraction": {
                 "seniority": self.ext_seniority,

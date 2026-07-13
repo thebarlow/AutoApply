@@ -78,7 +78,7 @@ def test_render_tree_v1_resume_no_frontmatter(db_session, monkeypatch, tmp_path)
     template_path = Path("generator/resume_template.html")
     _render_doc_from_json(job, "resume", tree_json, template_path, db_session)
 
-    md_path = OUTPUTS_DIR / f"{job.job_key}_resume.md"
+    md_path = OUTPUTS_DIR / f"{job.profile_id}_{job.job_key}_resume.md"
     md_content = md_path.read_text(encoding="utf-8")
     assert not md_content.startswith("---"), "tree-v1 resume should NOT have frontmatter"
 
@@ -98,6 +98,6 @@ def test_render_legacy_resume_has_frontmatter(db_session, monkeypatch, tmp_path)
     template_path = Path("generator/resume_template.html")
     _render_doc_from_json(job, "resume", legacy_json, template_path, db_session)
 
-    md_path = OUTPUTS_DIR / f"{job.job_key}_resume.md"
+    md_path = OUTPUTS_DIR / f"{job.profile_id}_{job.job_key}_resume.md"
     md_content = md_path.read_text(encoding="utf-8")
     assert md_content.startswith("---"), "Legacy resume SHOULD have frontmatter"

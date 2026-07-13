@@ -47,7 +47,7 @@ def test_get_document_backfills_from_markdown(client, db_session, tmp_path, monk
     import web.routers.jobs as jobs_mod
     out_dir = tmp_path
     monkeypatch.setattr(jobs_mod, "_OUTPUTS_DIR", out_dir, raising=False)
-    (out_dir / "bf1_resume.md").write_text(
+    (out_dir / "1_bf1_resume.md").write_text(
         "---\nname: Jane Doe\nemail: jane@x.com\n---\n## Profile\n\nEngineer who ships.\n",
         encoding="utf-8",
     )
@@ -67,7 +67,7 @@ def test_get_document_backfills_cover_from_markdown(client, db_session, tmp_path
     import web.routers.jobs as jobs_mod
     out_dir = tmp_path
     monkeypatch.setattr(jobs_mod, "_OUTPUTS_DIR", out_dir, raising=False)
-    (out_dir / "bf3_cover.md").write_text(
+    (out_dir / "1_bf3_cover.md").write_text(
         "---\nname: Jane Doe\n---\nDear Hiring Manager,\n\nI am excited to apply.\n",
         encoding="utf-8",
     )

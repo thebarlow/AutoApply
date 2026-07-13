@@ -80,5 +80,5 @@ def test_generate_resume_md_writes_tree_v1(db_session, tmp_path, monkeypatch):
     row = Document.fetch(db_session, "genjk", "resume", profile_id=user.id)
     assert row is not None
     assert is_tree_v1(row.structured_json)
-    md = (tmp_path / "genjk_resume.md").read_text(encoding="utf-8")
+    md = (tmp_path / "1_genjk_resume.md").read_text(encoding="utf-8")
     assert not md.startswith("---")

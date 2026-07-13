@@ -402,7 +402,7 @@ def test_generate_resume_md_writes_file(db_session, tmp_path):
             patch("core.job.call_llm", lambda *a, **k: fake):
         job.generate_resume_md(user, "Write resume for {job.title}", object(), "gpt-4", db_session)
 
-    md_file = outputs / "remotive_1_resume.md"
+    md_file = outputs / "1_remotive_1_resume.md"
     assert md_file.exists()
     content = md_file.read_text()
     assert "## Skills" in content
@@ -489,8 +489,8 @@ def test_evaluate_empty_doc_short_circuits_to_zero(db_session, tmp_path, monkeyp
     from core.job import Job
 
     monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
-    job = Job(job_key="empty-eval", source="test", url="https://example.com/e", state="new")
-    (tmp_path / "empty-eval_cover.md").write_text("---\ncompany: X\n---\n\n   \n", encoding="utf-8")
+    job = Job(job_key="empty-eval", source="test", url="https://example.com/e", state="new", profile_id=1)
+    (tmp_path / "1_empty-eval_cover.md").write_text("---\ncompany: X\n---\n\n   \n", encoding="utf-8")
 
     called = {"llm": False}
 
@@ -512,7 +512,7 @@ def test_evaluate_resume_md_returns_score_and_issues(db_session, tmp_path, monke
     job = Job.from_scraped_for(_make_scraped(job_key="ev_1"), profile_id=1)
     db_session.add(job)
     db_session.commit()
-    (tmp_path / "ev_1_resume.md").write_text(
+    (tmp_path / "1_ev_1_resume.md").write_text(
         "---\nname: X\n---\n\n## Profile\nReal body here.", encoding="utf-8"
     )
     # Patch the module-level call_llm in core.job (used by _evaluate_body).
@@ -932,7 +932,7 @@ def test_generate_resume_md_writes_document_and_markdown(db_session, tmp_path, m
     assert row is not None
     assert is_tree_v1(row.structured_json)
 
-    md = (tmp_path / "k1_resume.md").read_text(encoding="utf-8")
+    md = (tmp_path / "1_k1_resume.md").read_text(encoding="utf-8")
     assert not md.startswith("---")
 
 
@@ -961,7 +961,7 @@ def test_generate_cover_md_writes_document(db_session, tmp_path, monkeypatch):
     doc = json.loads(row.structured_json)
     assert doc["body"] == "Dear team, I am great."
     assert doc["signoff"]["name"] == "Jane Doe"
-    md = (tmp_path / "k2_cover.md").read_text(encoding="utf-8")
+    md = (tmp_path / "1_k2_cover.md").read_text(encoding="utf-8")
     assert md.startswith("---")
     assert "Dear team" in md
 
@@ -1002,14 +1002,14 @@ def test_write_cover_markdown_roundtrips_assembler(tmp_path, monkeypatch):
     import core.job as jobmod
     from core.schemas import CoverDocument, ResumeHeader, SignOff
     monkeypatch.setattr(jobmod, "_OUTPUTS_DIR", tmp_path)
-    job = jobmod.Job(job_key="k1", source="x", title="t", company="c", url="u", state="new")
+    job = jobmod.Job(job_key="k1", source="x", title="t", company="c", url="u", state="new", profile_id=1)
     doc = CoverDocument(
         header=ResumeHeader(name="Ada Lovelace", email="ada@example.com"),
         body="Dear Hiring Team, I am thrilled to apply.",
         signoff=SignOff(name="Ada Lovelace"),
     )
     job.write_cover_markdown(doc)
-    text = (tmp_path / "k1_cover.md").read_text(encoding="utf-8")
+    text = (tmp_path / "1_k1_cover.md").read_text(encoding="utf-8")
     assert text.startswith("---\n")   # front matter present
     assert "Dear Hiring Team" in text
 
@@ -1018,13 +1018,13 @@ def test_write_resume_markdown_roundtrips_assembler(tmp_path, monkeypatch):
     import core.job as jobmod
     from core.schemas import ResumeDocument, ResumeExperience
     monkeypatch.setattr(jobmod, "_OUTPUTS_DIR", tmp_path)
-    job = jobmod.Job(job_key="k1", source="x", title="t", company="c", url="u", state="new")
+    job = jobmod.Job(job_key="k1", source="x", title="t", company="c", url="u", state="new", profile_id=1)
     doc = ResumeDocument(
         profile_summary="hi",
         experience=[ResumeExperience(company="Acme", title="Eng", start="2020", end="2024", description="- did things")],
     )
     job.write_resume_markdown(doc)
-    text = (tmp_path / "k1_resume.md").read_text(encoding="utf-8")
+    text = (tmp_path / "1_k1_resume.md").read_text(encoding="utf-8")
     assert text.startswith("---\n")          # front matter present
     assert "## Experience" in text
     assert "- did things" in text

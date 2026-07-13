@@ -40,7 +40,7 @@ def test_run_ats_check_passes_on_clean_pdf(db_session, tmp_path, monkeypatch):
         section_order=["experience"],
     )
     Document.upsert(db_session, "job1", "resume", doc.model_dump_json(), profile_id=1)
-    (tmp_path / "job1_resume.pdf").write_bytes(b"%PDF-1.4 fake")
+    (tmp_path / "1_job1_resume.pdf").write_bytes(b"%PDF-1.4 fake")
 
     clean_text = "Jane Doe\njane@x.com • 555-1212 • NYC\nEXPERIENCE\n"
     from core.schemas import PdfText
@@ -66,10 +66,11 @@ def test_run_ats_check_passes_on_clean_pdf(db_session, tmp_path, monkeypatch):
 
 def test_run_ats_check_missing_document_raises(db_session, tmp_path, monkeypatch):
     monkeypatch.setattr(jobmod, "_OUTPUTS_DIR", tmp_path, raising=True)
-    (tmp_path / "job2_resume.pdf").write_bytes(b"%PDF-1.4 fake")  # PDF exists, but no Document row
+    (tmp_path / "1_job2_resume.pdf").write_bytes(b"%PDF-1.4 fake")  # PDF exists, but no Document row
 
     job = Job.__new__(Job)
     job.job_key = "job2"
+    job.profile_id = 1
     job.ext_required_skills = ""
     job.ext_preferred_skills = ""
 

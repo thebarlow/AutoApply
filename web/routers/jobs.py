@@ -422,7 +422,7 @@ def serve_resume(job_key: str, db: Session = Depends(get_db), profile_id: int = 
         user = User.load(db, profile_id=profile_id)
         current = resolve_theme(user.resume_theme).id
         stamped = job.resume_rendered_theme or "classic"
-        md_path = _OUTPUTS_DIR / f"{job_key}_resume.md"
+        md_path = _OUTPUTS_DIR / f"{profile_id}_{job_key}_resume.md"
         if current != stamped and md_path.exists():
             job.generate_resume_pdf(_RESUME_TEMPLATE, db)
     except Exception:
@@ -452,7 +452,7 @@ def serve_resume_markdown(job_key: str, db: Session = Depends(get_db), profile_i
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    path = _GENERATOR_OUTPUTS / f"{job_key}_resume.md"
+    path = _GENERATOR_OUTPUTS / f"{profile_id}_{job_key}_resume.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Resume markdown not found")
     return path.read_text(encoding="utf-8")
@@ -463,7 +463,7 @@ def serve_cover_markdown(job_key: str, db: Session = Depends(get_db), profile_id
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    path = _GENERATOR_OUTPUTS / f"{job_key}_cover.md"
+    path = _GENERATOR_OUTPUTS / f"{profile_id}_{job_key}_cover.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Cover letter markdown not found")
     return path.read_text(encoding="utf-8")
@@ -482,7 +482,7 @@ def serve_doc_turn_markdown(
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    path = _GENERATOR_OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
+    path = _GENERATOR_OUTPUTS / f"{profile_id}_{job_key}_{doc_type}_turn_{n}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Turn {n} snapshot not found")
     raw = path.read_text(encoding="utf-8")
@@ -514,7 +514,7 @@ def _ensure_document_row(db: Session, job_key: str, doc_type: str, profile_id: i
     """
     if Document.fetch(db, job_key, doc_type, profile_id=profile_id) is not None:
         return True
-    md_path = _OUTPUTS_DIR / f"{job_key}_{doc_type}.md"
+    md_path = _OUTPUTS_DIR / f"{profile_id}_{job_key}_{doc_type}.md"
     if not md_path.exists():
         return False
     md = md_path.read_text(encoding="utf-8")
@@ -545,7 +545,7 @@ def get_document(
         # than persisting. Persisting would let a best-effort (lossy) parse shadow
         # the authoritative .md and freeze it against later parser improvements; a
         # real row is created only when the user edits (PUT) or regenerates.
-        md_path = _OUTPUTS_DIR / f"{job_key}_{doc_type}.md"
+        md_path = _OUTPUTS_DIR / f"{profile_id}_{job_key}_{doc_type}.md"
         if md_path.exists():
             md = md_path.read_text(encoding="utf-8")
             doc = (
@@ -781,7 +781,7 @@ def mark_job_action_seen(
     _emit(job)
     # Delete per-turn refinement snapshots for the dismissed action
     if action in ("resume", "cover"):
-        for snap in _GENERATOR_OUTPUTS.glob(f"{job_key}_{action}_turn_*.json"):
+        for snap in _GENERATOR_OUTPUTS.glob(f"{profile_id}_{job_key}_{action}_turn_*.json"):
             try:
                 snap.unlink()
             except OSError:

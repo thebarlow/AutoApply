@@ -36,7 +36,7 @@ def test_generate_passes_theme_css_and_stamps(monkeypatch, tmp_path):
     captured = {}
 
     monkeypatch.setattr(job_mod, "_OUTPUTS_DIR", tmp_path)
-    (tmp_path / "k1_resume.md").write_text("# X\n\nbody", encoding="utf-8")
+    (tmp_path / "1_k1_resume.md").write_text("# X\n\nbody", encoding="utf-8")
     monkeypatch.setattr(Job, "_resolve_resume_max_pages", lambda self, db: None)
     monkeypatch.setattr(Job, "_render_meta", lambda self, kind, db: {})
     monkeypatch.setattr(Job, "_resolve_resume_theme", lambda self, db: MODERN)

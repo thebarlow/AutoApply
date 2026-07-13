@@ -130,7 +130,7 @@ def test_feedback_backfills_row_from_markdown(client, db_session, tmp_path, monk
     monkeypatch.setattr(jobs_mod, "_OUTPUTS_DIR", tmp_path, raising=False)
     calls = []
     monkeypatch.setattr(jobs_mod, "_spawn", lambda *a: calls.append(a))
-    (tmp_path / "k1_resume.md").write_text(
+    (tmp_path / "1_k1_resume.md").write_text(
         "---\nname: Jane Doe\n---\n## Profile\n\nEngineer who ships.\n", encoding="utf-8",
     )
     _job(db_session)

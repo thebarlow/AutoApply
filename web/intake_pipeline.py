@@ -156,7 +156,7 @@ def _restore_best_sections(db, job_key: str, profile_id: int,
     if not eval_log:
         return
     best = max(eval_log, key=lambda e: e["score"])
-    snap = _OUTPUTS_DIR / f"{job_key}_resume_turn_{best['turn']}.json"
+    snap = _OUTPUTS_DIR / f"{profile_id}_{job_key}_resume_turn_{best['turn']}.json"
     if not snap.exists():
         return
     structured_json = snap.read_text(encoding="utf-8")
@@ -229,7 +229,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
         def _snapshot(n: int) -> None:
             r = Document.fetch(db, job_key, "resume", profile_id)
             if r is not None:
-                (_OUTPUTS_DIR / f"{job_key}_resume_turn_{n}.json").write_text(
+                (_OUTPUTS_DIR / f"{profile_id}_{job_key}_resume_turn_{n}.json").write_text(
                     r.structured_json, encoding="utf-8")
 
         eval_log: list[dict] = []
@@ -338,7 +338,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
 
     def _save_turn_snapshot(n: int) -> None:
         """Snapshot the stored structured document for this turn as JSON."""
-        dest = _OUTPUTS / f"{job_key}_{doc_type}_turn_{n}.json"
+        dest = _OUTPUTS / f"{profile_id}_{job_key}_{doc_type}_turn_{n}.json"
         sdb = SessionLocal()
         try:
             row = Document.fetch(sdb, job_key, doc_type, profile_id)
@@ -357,7 +357,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
             return
         best = max(eval_log, key=lambda e: e["score"])
         best_n = best["turn"]
-        snap = _OUTPUTS / f"{job_key}_{doc_type}_turn_{best_n}.json"
+        snap = _OUTPUTS / f"{profile_id}_{job_key}_{doc_type}_turn_{best_n}.json"
         if not snap.exists():
             return
         structured_json = snap.read_text(encoding="utf-8")

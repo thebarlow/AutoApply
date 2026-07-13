@@ -23,9 +23,9 @@ def _tree() -> RootNode:
 
 
 def test_write_resume_markdown_tree_has_no_frontmatter(tmp_path, monkeypatch):
-    job = Job(job_key="jk1", title="t", company="c")
+    job = Job(job_key="jk1", title="t", company="c", profile_id=1)
     job.write_resume_markdown(_tree())
-    md = (_OUTPUTS_DIR / "jk1_resume.md").read_text(encoding="utf-8")
+    md = (_OUTPUTS_DIR / "1_jk1_resume.md").read_text(encoding="utf-8")
     assert not md.startswith("---")        # no YAML frontmatter
     assert "# Jane Doe" in md
     assert "## Patents" in md              # custom section reaches the .md

@@ -126,7 +126,7 @@ def test_serve_doc_turn_markdown_route(client, db_session, tmp_path, monkeypatch
     doc = ResumeDocument(experience=[
         ResumeExperience(company="Acme", title="Staff Engineer", description="- Built widgets")
     ])
-    (tmp_path / "rt1_resume_turn_0.json").write_text(doc.model_dump_json(), encoding="utf-8")
+    (tmp_path / "1_rt1_resume_turn_0.json").write_text(doc.model_dump_json(), encoding="utf-8")
 
     r = client.get("/api/jobs/rt1/resume/turn/0/markdown")
     assert r.status_code == 200
@@ -157,7 +157,7 @@ def test_serve_doc_turn_tree_v1_route(client, db_session, tmp_path, monkeypatch)
     user = User.load(db_session)
 
     tree = build_resume_document_tree(user.profile_tree_root(), {})
-    (tmp_path / "tv1_resume_turn_0.json").write_text(
+    (tmp_path / "1_tv1_resume_turn_0.json").write_text(
         serialize_document_tree(tree), encoding="utf-8"
     )
 
