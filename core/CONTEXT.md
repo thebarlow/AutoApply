@@ -47,7 +47,6 @@ appear on generated documents until sub-project #4. **#4 updates:** `SectionNode
 
 **Sub-project #3 (per-section generation engine) is DONE:** ships `core/section_generator.py` — a schema-driven, per-section LLM generation engine. One call per section; locked list entries are kept as fixed context (never authored); sections with no `llm_output`-role fields are skipped (no LLM call); per-section failures fall back gracefully without crashing the whole document. Field roles (`llm_output` / `llm_input` / `regen_lock`) are used to decide which fields the model should fill vs. receive as context vs. carry through unchanged. `generate_resume_by_section(root, job_ctx, client, model, resolve=None)` skips locked sections entirely (no call), injects section/entry `prompt` into each built prompt, and applies `resolve` (e.g. token expansion) to the final prompt before the LLM call. `web/routers/dev.py` composes the resolver as `resolve_profile_tokens` + `_apply_template({"job": job})`.
   - **`profile_tree.resolve_profile_tokens(root, text)`** — resolves node-id tokens `{profile:<nodeId>}` (rename-safe): a field id → its value; a section/group id → "<name>: <value>" lines for all its fields; unknown ids left as-is. Helpers: `_node_by_id` (tree search), `_collect_fields` (field traversal, does not descend into list item templates).
-- Also ships `core/tree_render.py` — a **throwaway** renderer used only by the dev comparison harness (`web/routers/dev.py`); it overlays authored values, omits `context_only`-role fields, skips hidden nodes, and handles custom sections. Real schema-driven rendering of custom sections on generated documents is sub-project #4.
 
 **Sub-project 2C (graphical builder) is DONE:** ships drag-drop reorder of sections and list items (via `dnd-kit`) on top of the 2B editor, plus a recommended-section gallery (`SectionGallery.jsx` + `sectionCatalog.js`, 7 templates + Blank) replacing the old "+ Add section" button. `↑`/`↓` buttons are retained as the a11y fallback. No document rendering of custom sections — that is sub-project #4.
 
@@ -236,9 +235,11 @@ floor)`, the single chokepoint that wraps each billable `Job` method call from
 - **Gate** — if the account is metered (`Account` exists and `credit_rate >
   0`) and `credit_balance < floor`, raises `InsufficientCredits` before the
   body runs.
-- **Record** — opens a `ContextVar` accumulator; every `call_llm` call inside
-  the `with` block appends its cost via `record_call(cost, model,
-  prompt_tokens, completion_tokens)`.
+- **Record** — opens a `ContextVar` accumulator; every LLM call inside the
+  `with` block appends its cost via `record_call(cost, model, prompt_tokens,
+  completion_tokens)`. `call_llm` does this through `core.llm.record_usage`;
+  direct `client.chat.completions.create` sites (extraction, skill-match) must
+  call `record_usage(response, model)` themselves so their cost is billed too.
 - **Settle** — in a `finally` (never masks the body's exception), sums the
   recorded costs and inserts **one** debit `CreditLedger` row via
   `debit_for_action`. If settling itself fails, it's logged and rolled back
@@ -249,14 +250,12 @@ floor)`, the single chokepoint that wraps each billable `Job` method call from
 `web/routers/jobs.py` and `web/intake_pipeline.py` wrap score, generate
 (resume/cover), eval, and refine in `meter_action`.
 
-**Known limitation:** `_call_llm_for_extraction` (used by
-`Job.extract_description` / `_do_extract_description`) does not go through
-`call_llm`, so it never calls `record_call`. The extract action's floor gate
-still works (gating happens before the body runs), but its debit always sums
-to 0 — extraction is effectively free in v1. Similarly, the `match_profile_skills`
-LLM call within extraction only logs cost via `session_cost.add_cost` and never
-reaches `record_call`, so when extraction metering is fixed the skill-match
-sub-call must be included.
+**Extraction metering (audit I1, fixed 2026-07-13):** `_call_llm_for_extraction`
+and `Job.match_profile_skills` do a direct `client.chat.completions.create`
+(they don't go through `call_llm`) and previously never recorded cost, so the
+extract action always settled a 0 debit. Both now call `core.llm.record_usage`
+after their create call, so extraction (including its skill-match sub-call) is
+billed like every other metered action.
 
 ## Payments (`core/payments.py`, `core/stripe_client.py`)
 

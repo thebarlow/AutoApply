@@ -331,6 +331,64 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   Produce a written findings doc (`docs/` audit note) with severity-ranked items, then convert the
   actionable ones into their own TODO entries. Consider running it through the `security-review` /
   `code-review` skills per-area rather than one giant pass.
+  **DONE 2026-07-13** — findings written to `docs/audit-2026-07-13.md` (S1–S5 security, R1–R4 dead
+  code, I1–I4 improvements). Actionable items broken out as the TODO entries directly below.
+
+- [x] **[audit P1] Scope-or-delete the global-config prompt surface (S1/R1).** **DONE 2026-07-13** —
+  deleted the dead `/api/config/prompts/*` CRUD endpoints + helpers (`_get_prompts`/`_set_prompts`/
+  `_sync_active_prompt`, `PromptBody`/`ActivePromptBody`) from `web/routers/config.py` and their tests.
+  They stored prompt content/`latex_templates` in the global `Config` table (cross-tenant write) and had
+  no runtime consumer — live generation reads per-tenant prompts from the `prompts` table. `named_providers`
+  read helpers kept (local-mode setup-status probe only). Docs synced (`web/CONTEXT.md`).
+
+- [x] **[audit P1] Meter `draft_section_prompt` (S2).** **DONE 2026-07-13** — wrapped the LLM call in
+  `meter_action(db, profile_id, action="draft")`; `InsufficientCredits` re-raised to the global 402
+  handler. Added regression test `test_draft_gated_on_insufficient_credits`.
+
+- [ ] **[audit P1, gated] Server-derive `is_onboarding` in `parse_apply` (S3).** `config.py:979` trusts
+  the client `is_onboarding` and the onboarding branch replaces `profile_tree` wholesale. Safe only while
+  intake fires on empty profiles. Re-derive server-side (as `parse_propose` does) BEFORE any
+  existing-profile re-parse UI ships, else a stray `true` wipes a populated tree. Add regression test.
+
+- [x] **[audit P2] Standardize admin auth on `require_real_admin` (S4).** **DONE 2026-07-13** — deleted
+  `require_admin` (resolved admin via `current_profile_id`, i.e. the impersonated tenant). Moved
+  `require_real_admin` down into `credits.py` (base module, avoids the import cycle; `admin.py` re-exports
+  it) and hardened it to read the session off `request.scope` so it no longer hard-requires
+  SessionMiddleware. All six admin endpoints (`admin_grant`, `admin_set_tier`, `system_balance`,
+  `invite_user`, `list_invites`, dev `resume_compare`) now use it. Regression tests added
+  (`test_require_real_admin_*` in `test_impersonation_seam.py`); credits/invite/set-tier tests updated to
+  gate via `require_real_admin`. Docs synced (`web/CONTEXT.md`). Full web suite 390 green.
+
+- [x] **[audit P2] Dead-code sweep (R2/R3/R4).** **DONE 2026-07-13** — R2: deleted the orphaned
+  throwaway `core/tree_render.py` + `tests/core/test_tree_render.py` (the dev compare harness now uses
+  `core/tree_assembler`; only the test imported the module); `core/CONTEXT.md` reference removed. R3/R4
+  were NOT dead — see the follow-up entry below.
+
+- [x] **[audit P3] Guard `create_profile` to local-only (R3).** **DONE 2026-07-13** — decision confirmed:
+  1 account = 1 profile. Corrected finding: the UI already enforces this (the "+ Create your profile"
+  button in `UserHome.jsx` renders only when the user has zero profiles — bootstrap, not a switcher).
+  The remnant was the backend `POST /api/config/profiles`, needed for the local/dev/tray bootstrap but an
+  unscoped orphan-row creator in production (prod profiles come from `web/auth/identity._provision_profile`
+  at login). Now returns 404 when `APP_ENV=production`; local bootstrap unchanged. Regression test added
+  (`test_post_profile_blocked_in_production`). R4 needs no action — `_get_providers`/`_env_key_name` are
+  still used by the local-mode setup-status probe and already commented.
+
+- [x] **[audit P2] `print` → `logger.exception` in `routers/scraper.py` (I3).** **DONE 2026-07-13** —
+  both broadcast-failure paths now use module `logger.exception` instead of bare `print(..., flush=True)`.
+
+- [x] **[audit P3] Purge stale global prompt rows (S1 follow-up).** **DONE 2026-07-13** — Alembic migration
+  `aa09rmprompts01` deletes the 10 legacy global-config keys (`{type}_prompts`, `active_{type}_prompt_id`,
+  `{type}_prompt_template`, `latex_templates`) left by the removed picker. Runs on Railway startup
+  (alembic-on-startup) and locally; per-tenant `profile_config` template copies untouched; downgrade is a
+  no-op. Verified against an in-memory DB (stale keys gone, unrelated globals + per-tenant rows preserved).
+
+- [x] **[audit P3] Meter the real extraction cost (I1).** **DONE 2026-07-13** — root cause: extraction
+  (`_call_llm_for_extraction`) and `Job.match_profile_skills` do a direct `client.chat.completions.create`
+  that never called `metering.record_call`, so the gated `extract` action always settled a 0 debit
+  ("extraction is free"). Added a shared `core.llm.record_usage(response, model)` helper (session cost +
+  meter), refactored `call_llm` onto it, and called it from both direct-call sites. Extraction + its
+  skill-match sub-call are now billed. Regression tests in `test_metering.py`; docs synced
+  (`core/CONTEXT.md`, `web/CONTEXT.md`). Full core+web suite 840 green.
 
 - [ ] **Nicer process/skill formatting** — Format process descriptions with more tables, fewer
   bullet points, less prose. Condense phrasing:

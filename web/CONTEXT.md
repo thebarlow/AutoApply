@@ -26,7 +26,7 @@ web/
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
     ├── setup_status.py      # GET /api/setup-status (onboarding completeness: llm_configured | resume_parsed | onboarding_tour)
     ├── onboarding.py        # PATCH /api/onboarding/tour (persist guided-tour progress; validated state machine)
-    ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, POST /api/admin/credits/tier, GET /api/admin/system-balance; require_admin dependency
+    ├── credits.py           # GET /api/credits, POST /api/admin/credits/grant, POST /api/admin/credits/tier, GET /api/admin/system-balance; require_real_admin dependency (session-based admin gate, shared by admin.py/dev.py)
     ├── admin.py             # Admin-only endpoints: invites + user management + impersonation (see Routing Rules and Auth below)
     ├── payments.py          # GET /api/payments/packs, POST /checkout, GET /verify, POST /webhook (Stripe), GET /history
     ├── stats.py             # GET /api/stats (pipeline activity by time window) + GET /api/skill-frequency; exposes invalidate_skill_cache()
@@ -79,8 +79,8 @@ web/
 - **Structured document editing (Phase 3b)** — `GET /api/jobs/{job_key}/{doc_type}/document` returns the stored structured JSON; `PUT` validates the body against a Pydantic `ResumeDocument`/`CoverDocument`, upserts the `Document` row, re-assembles the `.md`, and re-renders the PDF. Errors: `400` invalid `doc_type` or validation failure, `404` missing job or document, `500` render failure after the document was persisted. The old raw-Markdown editor bridge (`PUT .../markdown` and helpers `_put_document_markdown_sync` / `_read_body_text`) was retired.
 - **Parse-on-read backfill (not persisted).** When `GET .../document` finds no `documents` row, it reconstructs the document from the on-disk `.md` (`core/document_parser`) and returns it **without persisting** — the `.md` stays authoritative and parser improvements always apply. A row is created only by a write: `PUT .../document` (edit) or a feedback refine. `POST .../feedback` must mutate+re-persist a structured doc, so it calls `_ensure_document_row` to backfill **and persist** a row from the `.md` first; it `404`s only when there's neither a row nor a `.md`.
 - **Per-turn refinement snapshots** are written as structured JSON `{job_key}_{doc_type}_turn_{n}.json` in `generator/outputs/`. `GET /api/jobs/{job_key}/{doc_type}/turn/{n}/markdown` assembles Markdown on the fly from that JSON (`422` on schema mismatch).
-- **Credits & Metering (sub-project 2 — DONE)** — `routers/credits.py`: `GET /api/credits` returns the caller's `{balance, rate, recent[]}` (last 20 ledger rows; `{balance:0, rate:0.0, recent:[]}` if no `Account` row). `require_admin` (a FastAPI dependency) resolves the account for `current_profile_id` and 403s unless `is_admin`; gates `POST /api/admin/credits/grant` (target by `profile_id` or `email`, `reason="admin_grant"` — the same `grant_credits` call a future Stripe webhook will reuse) and `GET /api/admin/system-balance` (reads the platform OpenRouter key's remaining balance via `LLM_API_KEY`, 502 on upstream failure, 503 if unset). `core.credits.InsufficientCredits` is registered in `web/main.py` as an exception handler returning **HTTP 402** `{error:"insufficient_credits", balance, floor}` — raised by `meter_action` (see `core/CONTEXT.md` → "Credits & Metering") when an account's balance is below `CREDIT_FLOOR`.
-  - **Metered endpoints**: `POST /{job_key}/score`, `POST /{job_key}/generate/resume`, `POST /{job_key}/generate/cover` (`routers/jobs.py`); the intake-pipeline score/eval/refine steps (`intake_pipeline.py`); and `_do_extract_description` (extraction — gated but its debit is always 0, see `core/CONTEXT.md` limitation). All wrap the LLM call in `meter_action(db, profile_id, action=..., job_key=...)`.
+- **Credits & Metering (sub-project 2 — DONE)** — `routers/credits.py`: `GET /api/credits` returns the caller's `{balance, rate, recent[]}` (last 20 ledger rows; `{balance:0, rate:0.0, recent:[]}` if no `Account` row). `require_real_admin` (a FastAPI dependency, defined in `routers/credits.py`; audit S4 — every admin endpoint across `credits.py`/`admin.py`/`dev.py` now uses it) resolves the **real** logged-in account from the session's `account_id` (not `current_profile_id`, which would resolve the *impersonated* tenant mid-impersonation) and 403s unless `is_admin`; outside production it falls back to the dev-tenant account. It gates `POST /api/admin/credits/grant` (target by `profile_id` or `email`, `reason="admin_grant"` — the same `grant_credits` call a future Stripe webhook will reuse) and `GET /api/admin/system-balance` (reads the platform OpenRouter key's remaining balance via `LLM_API_KEY`, 502 on upstream failure, 503 if unset). `core.credits.InsufficientCredits` is registered in `web/main.py` as an exception handler returning **HTTP 402** `{error:"insufficient_credits", balance, floor}` — raised by `meter_action` (see `core/CONTEXT.md` → "Credits & Metering") when an account's balance is below `CREDIT_FLOOR`.
+  - **Metered endpoints**: `POST /{job_key}/score`, `POST /{job_key}/generate/resume`, `POST /{job_key}/generate/cover` (`routers/jobs.py`); the intake-pipeline score/eval/refine steps (`intake_pipeline.py`); `POST /api/config/section-prompt/draft` (`action="draft"`, no `job_key` — audit S2); and `_do_extract_description` / `rematch_skills` (extraction + skill-match — now billed via `core.llm.record_usage`; audit I1). All wrap the LLM call in `meter_action(db, profile_id, action=..., job_key=...)`.
   - `credits.py` exposes an `openrouter_remaining()` helper (returns remaining USD or `None`); `GET /api/admin/system-balance` uses it and returns just `{remaining}`. The same helper drives `GET /api/admin/grant-budget`.
   - Frontend: `CreditBalance.jsx` (navbar + User tab) shows balance/rate; a global 402 interceptor shows an "out of credits" toast and the navbar refetches. Admin-only system-balance panel reads `/api/admin/system-balance`. Known caveat: the balance does **not** auto-refresh after a successful metered action (those are SSE-driven, not request/response) — it can lag until the next load or a 402.
 - **Payments (sub-project 3 — DONE)** — `routers/payments.py`: `GET /packs` lists the packs visible to
@@ -237,14 +237,15 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   (`source_remotive`/`source_remoteok`, `keywords_whitelist/blacklist`,
   `max_jobs_per_source`, `job_searches`, `last_job_search`). Global key classes (deliberately not tenant-scoped):
   `dev_tenant_id` (must stay global — `web/tenancy.py:get_dev_tenant_id` resolves the tenant
-  before any tenant is known), migration gates, `named_providers`/`llm_*`, `latex_templates`,
-  and the legacy prompt-picker keys. See
+  before any tenant is known), migration gates, and `named_providers`/`llm_*`. See
   `docs/superpowers/specs/2026-07-08-config-table-tenancy-design.md` and
   `docs/superpowers/plans/2026-07-08-config-table-tenancy.md`.
-- **Prompt-template store divergence (latent trap, not a live bug).** The legacy
-  prompt-picker's `_sync_active_prompt` writes `{type_}_prompt_template` keys to the
-  GLOBAL `config` table (`_set_global`), while `put_templates` (`/api/config/templates`)
-  writes same-named `resume_prompt_template`/`cover_prompt_template` keys to the
-  per-tenant `profile_config` table. These are two disconnected stores under the same
-  key names; no runtime consumer currently reads the legacy picker's global copy
-  (the picker is dead), but don't assume the two are in sync if the picker is revived.
+- **Legacy global prompt-picker REMOVED (audit S1, 2026-07-13).** The old
+  `/api/config/prompts/*` CRUD endpoints stored prompt content/templates
+  (`{type}_prompts`, `active_{type}_prompt_id`, `{type}_prompt_template`,
+  `latex_templates`) in the GLOBAL `config` table with no tenant scoping — any
+  tenant's write leaked to every tenant. They were dead (no runtime consumer; live
+  generation reads per-tenant prompts from the `prompts` table via
+  `User.resolve_prompt()`) and are deleted along with their helpers. Per-tenant
+  prompt management lives in `web/routers/prompts.py` (`/api/prompts/*`). Any stale
+  global rows in an existing DB are now inert.
