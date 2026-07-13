@@ -243,7 +243,7 @@ def score_job_endpoint(
         raise HTTPException(status_code=400, detail=str(exc))
 
     config = _load_score_config(db, profile_id)
-    llm_status.start(job_key, "score")
+    llm_status.start(profile_id, job_key, "score")
     try:
         with meter_action(db, profile_id, action="score", job_key=job.job_key):
             job.score(user, config, client, model, db, prompt_content)
@@ -263,7 +263,7 @@ def score_job_endpoint(
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key, "score")
+        llm_status.finish(profile_id, job_key, "score")
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -310,7 +310,7 @@ def generate_resume_endpoint(
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    llm_status.start(job_key, "resume")
+    llm_status.start(profile_id, job_key, "resume")
     try:
         _do_generate_resume(job, db, profile_id)
         _add_pending_review(job, "resume")
@@ -329,7 +329,7 @@ def generate_resume_endpoint(
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key, "resume")
+        llm_status.finish(profile_id, job_key, "resume")
     db.refresh(job)
     _emit(job)
     # Always run the résumé post-process in the background: refinement (if
@@ -349,7 +349,7 @@ def generate_cover_endpoint(
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    llm_status.start(job_key, "cover")
+    llm_status.start(profile_id, job_key, "cover")
     try:
         _do_generate_cover(job, db, profile_id)
         _add_pending_review(job, "cover")
@@ -368,7 +368,7 @@ def generate_cover_endpoint(
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key, "cover")
+        llm_status.finish(profile_id, job_key, "cover")
     db.refresh(job)
     _emit(job)
     # Spawn background refinement loop if enabled
@@ -684,7 +684,7 @@ def extract_description(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    llm_status.start(job_key, "description")
+    llm_status.start(profile_id, job_key, "description")
     try:
         _do_extract_description(job, db, profile_id)
     except (HTTPException, InsufficientCredits):
@@ -699,7 +699,7 @@ def extract_description(
         _emit(job)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key, "description")
+        llm_status.finish(profile_id, job_key, "description")
     db.refresh(job)
     _emit(job)
     return job.serialize()
@@ -725,7 +725,7 @@ def rematch_skills(
     row = db.query(PromptDefault).filter_by(type_key="skill_match").first()
     if row is None:
         raise HTTPException(status_code=400, detail="skill_match prompt not configured")
-    llm_status.start(job_key, "rematch")
+    llm_status.start(profile_id, job_key, "rematch")
     try:
         with meter_action(db, profile_id, action="extract", job_key=job.job_key):
             job.match_profile_skills(user, client, model, db, row.content)
@@ -736,7 +736,7 @@ def rematch_skills(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        llm_status.finish(job_key, "rematch")
+        llm_status.finish(profile_id, job_key, "rematch")
     db.refresh(job)
     _emit(job)
     return job.serialize()

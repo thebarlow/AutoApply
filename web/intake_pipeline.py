@@ -111,7 +111,7 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
             return
 
         # Step 1: description extraction
-        llm_status.start(job_key, "description")
+        llm_status.start(profile_id, job_key, "description")
         extraction_ok = False
         try:
             _do_extract_description(job, db, profile_id)
@@ -123,7 +123,7 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
             job.last_result_error = str(exc)
             db.commit()
         finally:
-            llm_status.finish(job_key, "description")
+            llm_status.finish(profile_id, job_key, "description")
         db.refresh(job)
         _emit(job)
 
@@ -131,7 +131,7 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
             return
 
         # Step 2: scoring
-        llm_status.start(job_key, "score")
+        llm_status.start(profile_id, job_key, "score")
         try:
             _do_score(job, db, profile_id)
         except Exception as exc:
@@ -141,7 +141,7 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
             job.last_result_error = str(exc)
             db.commit()
         finally:
-            llm_status.finish(job_key, "score")
+            llm_status.finish(profile_id, job_key, "score")
         db.refresh(job)
         _emit(job)
     finally:
@@ -235,7 +235,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
         eval_log: list[dict] = []
         _snapshot(0)
         for turn in range(1, max_turns + 1):
-            llm_status.start(job_key, "resume_eval")
+            llm_status.start(profile_id, job_key, "resume_eval")
             try:
                 with meter_action(db, profile_id, action="eval", job_key=job_key):
                     scores = job.evaluate_resume_sections(
@@ -251,7 +251,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                 _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
                 return
             finally:
-                llm_status.finish(job_key, "resume_eval")
+                llm_status.finish(profile_id, job_key, "resume_eval")
 
             if not scores:
                 return
@@ -274,7 +274,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                 _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
                 return
 
-            llm_status.start(job_key, "resume_refine")
+            llm_status.start(profile_id, job_key, "resume_refine")
             try:
                 critiques = {n: scores[n]["issues"] for n in failing}
                 with meter_action(db, profile_id, action="refine", job_key=job_key):
@@ -301,7 +301,7 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
                 _restore_best_sections(db, job_key, profile_id, eval_log, template_path)
                 return
             finally:
-                llm_status.finish(job_key, "resume_refine")
+                llm_status.finish(profile_id, job_key, "resume_refine")
     finally:
         db.close()
 
@@ -433,7 +433,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
 
         for turn in range(1, max_turns + 1):
             # Step A: Evaluate
-            llm_status.start(job_key, f"{doc_type}_eval")
+            llm_status.start(profile_id, job_key, f"{doc_type}_eval")
             try:
                 print(f"[refinement:{doc_type}] {job_key}: turn {turn} evaluating", flush=True)
                 evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
@@ -471,7 +471,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
                 _restore_best(eval_log)
                 return
             finally:
-                llm_status.finish(job_key, f"{doc_type}_eval")
+                llm_status.finish(profile_id, job_key, f"{doc_type}_eval")
 
             if result["score"] >= pass_score:
                 return
@@ -481,7 +481,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
                 return
 
             # Step B: Rewrite
-            llm_status.start(job_key, f"{doc_type}_refine")
+            llm_status.start(profile_id, job_key, f"{doc_type}_refine")
             try:
                 print(f"[refinement:{doc_type}] {job_key}: turn {turn} rewriting", flush=True)
                 refine_fn = getattr(job, f"refine_{doc_type}_md")
@@ -505,7 +505,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
                 _restore_best(eval_log)
                 return
             finally:
-                llm_status.finish(job_key, f"{doc_type}_refine")
+                llm_status.finish(profile_id, job_key, f"{doc_type}_refine")
     finally:
         db.close()
 
@@ -518,7 +518,7 @@ def run_ats_gate(job_key: str, profile_id: int) -> None:
     emits a UI update. Failures (missing artifacts, no profile) are logged and
     swallowed so they never break the request that spawned this thread.
     """
-    llm_status.start(job_key, "ats")
+    llm_status.start(profile_id, job_key, "ats")
     db = SessionLocal()
     try:
         job = Job.get(job_key, db, profile_id)
@@ -553,7 +553,7 @@ def run_ats_gate(job_key: str, profile_id: int) -> None:
         logger.exception("%s: ATS gate run failed", job_key)
     finally:
         db.close()
-        llm_status.finish(job_key, "ats")
+        llm_status.finish(profile_id, job_key, "ats")
 
 
 def run_resume_refinement(job_key: str, profile_id: int) -> None:
@@ -628,7 +628,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
             def resolve(text: str) -> str:
                 return _apply_template(resolve_profile_tokens(root, text), {"job": job, "user": user})
 
-            llm_status.start(job_key, "resume_refine")
+            llm_status.start(profile_id, job_key, "resume_refine")
             try:
                 with meter_action(db, profile_id, action="refine", job_key=job_key):
                     new_vals = generate_resume_by_section(
@@ -653,10 +653,10 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
                 logger.exception("%s: resume feedback refine failed", job_key)
                 return
             finally:
-                llm_status.finish(job_key, "resume_refine")
+                llm_status.finish(profile_id, job_key, "resume_refine")
 
         # Eval-for-score (informational; non-fatal; no restore-best).
-        llm_status.start(job_key, "resume_eval")
+        llm_status.start(profile_id, job_key, "resume_eval")
         try:
             eval_prompt = user.resolve_prompt("resume_eval_sectioned")
             eval_client, eval_model = get_client_for_profile(
@@ -681,7 +681,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
             db.rollback()
             logger.exception("%s: post-feedback resume eval failed (non-fatal)", job_key)
         finally:
-            llm_status.finish(job_key, "resume_eval")
+            llm_status.finish(profile_id, job_key, "resume_eval")
     finally:
         db.close()
 
@@ -756,7 +756,7 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
             return
 
         # Step A: refine with user-authored issues
-        llm_status.start(job_key, f"{doc_type}_refine")
+        llm_status.start(profile_id, job_key, f"{doc_type}_refine")
         try:
             refine_fn = getattr(job, f"refine_{doc_type}_md")
             with meter_action(db, profile_id, action="refine", job_key=job.job_key):
@@ -777,10 +777,10 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
             logger.exception("%s: %s feedback refine failed", job_key, doc_type)
             return
         finally:
-            llm_status.finish(job_key, f"{doc_type}_refine")
+            llm_status.finish(profile_id, job_key, f"{doc_type}_refine")
 
         # Step B: eval once for an informational score (non-fatal; no restore-best)
-        llm_status.start(job_key, f"{doc_type}_eval")
+        llm_status.start(profile_id, job_key, f"{doc_type}_eval")
         try:
             eval_prompt = user.resolve_prompt(eval_key)
             eval_model = getattr(user, f"prompt_{eval_key}_model", "") or ""
@@ -810,7 +810,7 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
             db.rollback()
             logger.exception("%s: %s post-feedback eval failed (non-fatal)", job_key, doc_type)
         finally:
-            llm_status.finish(job_key, f"{doc_type}_eval")
+            llm_status.finish(profile_id, job_key, f"{doc_type}_eval")
     finally:
         db.close()
 

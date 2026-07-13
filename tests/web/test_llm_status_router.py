@@ -44,7 +44,7 @@ def test_llm_status_in_flight_includes_display_info(client, db_session):
     db_session.add(job)
     db_session.commit()
 
-    llm_status.start("abc123", "score")
+    llm_status.start(1, "abc123", "score")
     try:
         resp = client.get("/api/llm-status")
         data = resp.json()
@@ -55,7 +55,7 @@ def test_llm_status_in_flight_includes_display_info(client, db_session):
         assert entry["company"] == "Acme Corp"
         assert "score" in entry["actions"]
     finally:
-        llm_status.finish("abc123", "score")
+        llm_status.finish(1, "abc123", "score")
 
 
 def test_llm_status_does_not_leak_other_tenants_jobs(client, db_session):
@@ -67,8 +67,8 @@ def test_llm_status_does_not_leak_other_tenants_jobs(client, db_session):
     db_session.add_all([job1, job2])
     db_session.commit()
 
-    llm_status.start("job-t1", "score")
-    llm_status.start("job-t2", "score")
+    llm_status.start(1, "job-t1", "score")
+    llm_status.start(2, "job-t2", "score")
     app.dependency_overrides[current_profile_id] = lambda: 1
     try:
         resp = client.get("/api/llm-status")
@@ -79,12 +79,11 @@ def test_llm_status_does_not_leak_other_tenants_jobs(client, db_session):
         assert entries["job-t1"]["title"] == "Tenant1 Title"
         assert entries["job-t1"]["company"] == "Tenant1 Co"
 
-        # Tenant 2's job is still in "processing"/"in_flight" by job_key,
-        # but its title/company must NOT be leaked to tenant 1.
-        assert "job-t2" in entries
-        assert entries["job-t2"]["title"] == "job-t2"
-        assert entries["job-t2"]["company"] == ""
+        # Tenant 2's in-flight op is keyed by (profile_id, job_key), so it must
+        # not appear at all in tenant 1's snapshot — not even as a bare job_key.
+        assert "job-t2" not in entries
+        assert data["processing"] == ["job-t1"]
     finally:
         app.dependency_overrides.pop(current_profile_id, None)
-        llm_status.finish("job-t1", "score")
-        llm_status.finish("job-t2", "score")
+        llm_status.finish(1, "job-t1", "score")
+        llm_status.finish(2, "job-t2", "score")

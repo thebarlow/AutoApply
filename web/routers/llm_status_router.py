@@ -16,8 +16,8 @@ def get_llm_status(
     db: Session = Depends(get_db),
     profile_id: int = Depends(current_profile_id),
 ) -> dict:
-    job_keys = llm_status.snapshot()
-    actions = llm_status.action_snapshot()
+    job_keys = llm_status.snapshot(profile_id)
+    actions = llm_status.action_snapshot(profile_id)
 
     jobs = (
         scoped(db, Job, profile_id).filter(Job.job_key.in_(job_keys)).all()

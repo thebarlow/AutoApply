@@ -951,7 +951,7 @@ class Job(Base):
             from web.sse import send as _sse_send
 
             thread_db = SessionLocal()
-            llm_status.start(job_key)
+            llm_status.start(profile_id, job_key)
             try:
                 print(f"[intake] {job_key}: extraction started", flush=True)
                 thread_job = thread_db.query(Job).filter_by(job_key=job_key, profile_id=self.profile_id).first()
@@ -972,7 +972,7 @@ class Job(Base):
                     _sse_send("job", thread_job.serialize(), profile_id=profile_id)
                     logger.exception("%s: extraction failed", job_key)
             finally:
-                llm_status.finish(job_key)
+                llm_status.finish(profile_id, job_key)
                 thread_db.close()
 
         t = threading.Thread(target=_run, daemon=True)
