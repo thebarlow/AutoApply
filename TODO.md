@@ -398,8 +398,28 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   existing `auto-apply:credits-stale` event on that message, which `CreditBalance` already listens for.
   Covers both synchronous actions (generate/extract/draft) and the background pipeline (score/eval/refine).
   Regression tests in `test_metering.py`. Remaining I2 items: refund clawback on chargeback (own feature).
-  NOTE (out of I2 scope): the `/api/events` SSE stream is a global broadcast — job payloads reach every
-  connected client regardless of tenant. Worth a dedicated look as a possible cross-tenant leak.
+
+- [x] **[audit follow-up, security] Tenant-scope the SSE stream (cross-tenant leak).** **DONE 2026-07-13** —
+  `/api/events` was a global broadcast: every `job` event fanned a full, tenant-private payload
+  (title/company/description/scores/salary/paths) to *all* connected clients, and since `job_key` is
+  unique only per profile it could overwrite one tenant's job row with another's in the recipient's UI.
+  Fix: `sse.subscribe`/`send` now carry a `profile_id`; `/api/events` subscribes with the caller's tenant;
+  `job`/`credits`/`prompt_reset` events are scoped, genuinely-global events (LLM status) still broadcast.
+  Separately re-keyed the `llm_status` in-flight registry by `(profile_id, job_key)` (it collided the same
+  way) and scoped its `/api/llm-status` seed + `llm_status`/`llm_action` events. Tests:
+  `test_sse_scoping.py`, updated `test_llm_status_router.py`. Full web+core suite 846 green.
+
+- [ ] **[audit follow-up, security] Namespace output artifacts by profile (file-path collision).** Output
+  files are built as `generator/outputs/{job_key}_{name}` with no tenant dimension. Two tenants sharing a
+  `job_key` (unique only per profile) write to the **same** PDF/MD file: whoever generates last wins and
+  the other tenant's `serve_resume` (which passes the `Job.get` scope check but reads the shared file)
+  returns the wrong tenant's document — a cross-tenant document leak. Fix: namespace by profile
+  (`outputs/{profile_id}/{job_key}_...` or a `{profile_id}_` filename prefix) via a centralized path
+  helper. Scope is larger than it looks: ~25 build sites (`core/job.py`, `web/intake_pipeline.py` turn
+  snapshots, `web/routers/jobs.py` serve/backfill/glob) + ~15 test files that pre-write/assert on the
+  filenames. Backward-compat: stored `resume_path`/`cover_path` are absolute, so already-rendered docs keep
+  serving; old-scheme files become orphans (harmless, derived artifacts — `documents` table is source of
+  truth) and re-render into the new path. No prod-data migration strictly required.
 
 - [ ] **Nicer process/skill formatting** — Format process descriptions with more tables, fewer
   bullet points, less prose. Condense phrasing:
