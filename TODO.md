@@ -390,6 +390,17 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   skill-match sub-call are now billed. Regression tests in `test_metering.py`; docs synced
   (`core/CONTEXT.md`, `web/CONTEXT.md`). Full core+web suite 840 green.
 
+- [x] **[audit P3] Auto-refresh navbar balance after a spend (I2, part 1).** **DONE 2026-07-13** — the
+  navbar balance was SSE-blind to its own debits (lagged until the next reload/402). `meter_action` now
+  broadcasts a content-free `credits` SSE event when a debit settles (best-effort; wrapped so a broadcast
+  failure never affects billing, and the payload carries no balance since the SSE stream is a global
+  broadcast — each client refetches its own authenticated `/api/credits`). `App.jsx` dispatches the
+  existing `auto-apply:credits-stale` event on that message, which `CreditBalance` already listens for.
+  Covers both synchronous actions (generate/extract/draft) and the background pipeline (score/eval/refine).
+  Regression tests in `test_metering.py`. Remaining I2 items: refund clawback on chargeback (own feature).
+  NOTE (out of I2 scope): the `/api/events` SSE stream is a global broadcast — job payloads reach every
+  connected client regardless of tenant. Worth a dedicated look as a possible cross-tenant leak.
+
 - [ ] **Nicer process/skill formatting** — Format process descriptions with more tables, fewer
   bullet points, less prose. Condense phrasing:
   "Strong proficiency in Python" → "Python",
@@ -439,9 +450,9 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   1.5 (default), standard 10.0 — set manually, no admin UI yet. `GET /api/credits` +
   `POST /api/admin/credits/grant` + `GET /api/admin/system-balance` (`web/routers/credits.py`);
   `CreditBalance.jsx` navbar/User-tab widget + global 402 "out of credits" toast. Known limitations:
-  extraction's debit always settles to 0 (its LLM call bypasses `call_llm`, effectively free in v1);
-  the navbar balance doesn't auto-refresh after a successful action (SSE-driven, lags until next
-  load/402). See `ARCHITECTURE.md` → "Credits & Metering", `core/CONTEXT.md`, `web/CONTEXT.md`.
+  extraction's debit always settled to 0 (fixed — audit I1); the navbar balance didn't auto-refresh
+  after a successful action (fixed — audit I2, `meter_action` now broadcasts a `credits` SSE nudge).
+  See `ARCHITECTURE.md` → "Credits & Metering", `core/CONTEXT.md`, `web/CONTEXT.md`.
   **Unblocks (3) Payments.**
 
 - [x] **Document modal polish + backfill correctness** — Parser now handles legacy LLM résumé

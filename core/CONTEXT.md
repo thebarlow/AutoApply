@@ -243,7 +243,10 @@ floor)`, the single chokepoint that wraps each billable `Job` method call from
 - **Settle** — in a `finally` (never masks the body's exception), sums the
   recorded costs and inserts **one** debit `CreditLedger` row via
   `debit_for_action`. If settling itself fails, it's logged and rolled back
-  rather than raised — `reconcile_balance` is the manual repair path.
+  rather than raised — `reconcile_balance` is the manual repair path. On a
+  successful debit it broadcasts a content-free `credits` SSE event
+  (`_notify_credits_changed`, best-effort) so the dashboard navbar refetches its
+  balance instead of lagging until the next load/402.
 - Unmetered accounts (no `Account` row, or `credit_rate == 0` — the developer
   tier) run the body ungated and record nothing.
 
