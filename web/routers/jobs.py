@@ -49,12 +49,14 @@ _COVER_TEMPLATE = _GENERATOR_DIR / "cover_template.html"
 
 
 def _call_llm_for_extraction(client, model: str, prompt: str, label: str = "extract") -> str:
-    from core.llm import llm_label
+    from core.llm import llm_label, record_usage
     with llm_label(label):
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
         )
+    # Count this call toward session cost + the active extract meter (audit I1).
+    record_usage(response, model)
     content = response.choices[0].message.content or ""
     content = re.sub(r"^```(?:json)?\s*", "", content.strip(), flags=re.IGNORECASE)
     content = re.sub(r"\s*```$", "", content.strip())

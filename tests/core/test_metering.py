@@ -67,6 +67,42 @@ def test_record_call_outside_meter_is_noop():
     metering.record_call(0.01, "m", 1, 1)  # must not raise
 
 
+def test_record_usage_feeds_meter_and_debits():
+    """Audit I1: extraction/skill-match do a direct create() and record their
+    cost via core.llm.record_usage. Inside a meter that must produce a real
+    debit (previously extraction recorded nothing → always a 0 debit)."""
+    from core.llm import record_usage
+
+    class _Usage:
+        cost = 0.0046
+        prompt_tokens = 100
+        completion_tokens = 50
+
+    class _Resp:
+        usage = _Usage()
+
+    db = _db_with_account(rate=1.5, balance=100)
+    with metering.meter_action(db, 1, action="extract", job_key="j1", floor=10):
+        record_usage(_Resp(), "modelA")
+    rows = db.query(CreditLedger).filter_by(reason="debit").all()
+    assert len(rows) == 1
+    assert rows[0].delta == -7          # 0.0046*1.5*1000 = 6.9 -> 7
+    assert rows[0].action == "extract"
+
+
+def test_record_usage_without_usage_is_noop():
+    """A response with no usage attribute records nothing (no crash, no debit)."""
+    from core.llm import record_usage
+
+    class _Resp:
+        usage = None
+
+    db = _db_with_account(rate=1.5, balance=100)
+    with metering.meter_action(db, 1, action="extract", job_key="j1", floor=10):
+        record_usage(_Resp(), "modelA")
+    assert db.query(CreditLedger).filter_by(reason="debit").count() == 0
+
+
 def test_settle_failure_does_not_mask_body_error(monkeypatch):
     db = _db_with_account(rate=1.5, balance=100)
     import core.metering as m

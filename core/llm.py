@@ -97,6 +97,32 @@ def _install_request_labeling(client: Any) -> Any:
     return client
 
 
+def record_usage(response: Any, model: str) -> None:
+    """Record an LLM response's usage into session cost and the active meter.
+
+    Call this once after any direct ``client.chat.completions.create`` that runs
+    outside ``call_llm`` so its cost still counts toward the session total and the
+    per-action credit debit. Both sinks are no-ops outside their contexts (no
+    session accumulator / no active ``meter_action``), so this is safe anywhere.
+
+    Args:
+        response: The OpenAI-compatible completion response.
+        model: The model id used for the call (recorded on the meter row).
+    """
+    from core import session_cost, metering
+
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    cost = float(getattr(usage, "cost", None) or 0.0)
+    session_cost.add_cost(cost)
+    metering.record_call(
+        cost, model,
+        int(getattr(usage, "prompt_tokens", 0) or 0),
+        int(getattr(usage, "completion_tokens", 0) or 0),
+    )
+
+
 def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> str:
     """Send a single-turn prompt to the LLM and return the response text.
 
@@ -112,23 +138,12 @@ def call_llm(prompt: str, client: Any, model: str, max_tokens: int = 8192) -> st
     Raises:
         RuntimeError: If the LLM returns an empty response.
     """
-    from core import session_cost
-
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
-    usage = getattr(response, "usage", None)
-    if usage is not None:
-        cost = float(getattr(usage, "cost", None) or 0.0)
-        session_cost.add_cost(cost)
-        from core import metering
-        metering.record_call(
-            cost, model,
-            int(getattr(usage, "prompt_tokens", 0) or 0),
-            int(getattr(usage, "completion_tokens", 0) or 0),
-        )
+    record_usage(response, model)
     choice = response.choices[0]
     content = choice.message.content
     if not content:

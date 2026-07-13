@@ -918,10 +918,10 @@ class Job(Base):
                 max_tokens=1024,
                 messages=[{"role": "user", "content": rendered}],
             )
-        usage = getattr(response, "usage", None)
-        if usage is not None:
-            from core import session_cost
-            session_cost.add_cost(float(getattr(usage, "cost", None) or 0.0))
+        # Count this call toward session cost + any active meter (audit I1): when
+        # run inside the extract/rematch meter, its cost is billed too.
+        from core.llm import record_usage
+        record_usage(response, model)
         raw = response.choices[0].message.content or "{}"
         parsed = parse_llm_json(raw, SkillMatchResponse)
         # Keep only echoes that correspond to a real chip (case-insensitive).
