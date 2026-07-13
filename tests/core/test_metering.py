@@ -103,6 +103,42 @@ def test_record_usage_without_usage_is_noop():
     assert db.query(CreditLedger).filter_by(reason="debit").count() == 0
 
 
+def test_successful_debit_broadcasts_credits_nudge(monkeypatch):
+    """Audit I2: a settled debit nudges clients to refetch their balance."""
+    import web.sse as sse
+    sent = []
+    monkeypatch.setattr(sse, "send", lambda t, d: sent.append((t, d)))
+    db = _db_with_account(rate=1.5, balance=100)
+    with metering.meter_action(db, 1, action="generate", job_key="j1", floor=10):
+        metering.record_call(0.0046, "modelA", 100, 50)
+    assert ("credits", {}) in sent
+
+
+def test_no_debit_does_not_broadcast(monkeypatch):
+    """No spend (rate 0) → no credits nudge."""
+    import web.sse as sse
+    sent = []
+    monkeypatch.setattr(sse, "send", lambda t, d: sent.append((t, d)))
+    db = _db_with_account(rate=0.0, balance=0)
+    with metering.meter_action(db, 1, action="generate", job_key="j1", floor=10):
+        metering.record_call(0.05, "modelA", 100, 50)
+    assert sent == []
+
+
+def test_notify_failure_never_breaks_action(monkeypatch):
+    """A broadcast error must not surface from a billable action."""
+    import web.sse as sse
+
+    def _boom(*a, **k):
+        raise RuntimeError("sse down")
+
+    monkeypatch.setattr(sse, "send", _boom)
+    db = _db_with_account(rate=1.5, balance=100)
+    with metering.meter_action(db, 1, action="generate", job_key="j1", floor=10):
+        metering.record_call(0.0046, "modelA", 100, 50)
+    assert db.query(CreditLedger).filter_by(reason="debit").count() == 1
+
+
 def test_settle_failure_does_not_mask_body_error(monkeypatch):
     db = _db_with_account(rate=1.5, balance=100)
     import core.metering as m

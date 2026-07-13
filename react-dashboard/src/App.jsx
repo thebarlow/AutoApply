@@ -122,6 +122,10 @@ export default function App() {
             else next.delete(payload.data.job_key)
             return next
           })
+        } else if (payload.type === 'credits') {
+          // A billable action settled a debit; refetch our own balance so the
+          // navbar isn't stale until the next reload/402.
+          window.dispatchEvent(new Event('auto-apply:credits-stale'))
         } else if (payload.type === 'prompt_reset') {
           pushToast(payload.data?.message || 'A prompt was reset to its default.')
           refetchPromptStatus()
