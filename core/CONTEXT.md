@@ -177,7 +177,7 @@ After the LLM call:
 1. Parses the response into `ResumeGeneration`.
 2. Calls `build_resume_document` / `build_cover_document` to produce the typed artifact.
 3. Upserts the artifact into the `documents` table (`Document.upsert`) — this is the **source of truth**.
-4. Assembles canonical Markdown via the document assembler and writes `generator/outputs/{job_key}_resume.md` / `{job_key}_cover.md` (YAML front matter sourced from the snapshot header).
+4. Assembles canonical Markdown via the document assembler and writes `generator/outputs/{profile_id}_{job_key}_resume.md` / `{profile_id}_{job_key}_cover.md` (YAML front matter sourced from the snapshot header). **All output artifacts are prefixed with `profile_id`** — `job_key` is unique only per profile, so an unprefixed name let two tenants collide on the same file (cross-tenant document leak). Any new output path (PDF, DOCX, turn snapshot) must keep the `{profile_id}_{job_key}_...` prefix.
 
 ### `_render_meta` snapshot behavior
 

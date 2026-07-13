@@ -409,17 +409,16 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   way) and scoped its `/api/llm-status` seed + `llm_status`/`llm_action` events. Tests:
   `test_sse_scoping.py`, updated `test_llm_status_router.py`. Full web+core suite 846 green.
 
-- [ ] **[audit follow-up, security] Namespace output artifacts by profile (file-path collision).** Output
-  files are built as `generator/outputs/{job_key}_{name}` with no tenant dimension. Two tenants sharing a
-  `job_key` (unique only per profile) write to the **same** PDF/MD file: whoever generates last wins and
-  the other tenant's `serve_resume` (which passes the `Job.get` scope check but reads the shared file)
-  returns the wrong tenant's document — a cross-tenant document leak. Fix: namespace by profile
-  (`outputs/{profile_id}/{job_key}_...` or a `{profile_id}_` filename prefix) via a centralized path
-  helper. Scope is larger than it looks: ~25 build sites (`core/job.py`, `web/intake_pipeline.py` turn
-  snapshots, `web/routers/jobs.py` serve/backfill/glob) + ~15 test files that pre-write/assert on the
-  filenames. Backward-compat: stored `resume_path`/`cover_path` are absolute, so already-rendered docs keep
-  serving; old-scheme files become orphans (harmless, derived artifacts — `documents` table is source of
-  truth) and re-render into the new path. No prod-data migration strictly required.
+- [x] **[audit follow-up, security] Namespace output artifacts by profile (file-path collision).**
+  **DONE 2026-07-13** — output files were `generator/outputs/{job_key}_{name}` with no tenant dimension;
+  two tenants sharing a `job_key` (unique only per profile) wrote the **same** PDF/MD, so the loser's
+  `serve_resume` (passes the `Job.get` scope check but reads the shared file) returned the wrong tenant's
+  document. Every built path is now `{profile_id}_{job_key}_{name}` across `core/job.py`,
+  `web/intake_pipeline.py` turn snapshots, and `web/routers/jobs.py` serve/backfill/glob (~24 sites) +
+  ~14 test files updated. Backward-compat: stored `resume_path`/`cover_path` are absolute so
+  already-rendered docs keep serving; old-scheme files orphan harmlessly (`documents` is source of truth)
+  and re-render into the new path — no prod migration needed. Full suite green (989; one pre-existing
+  `test_logging_config`→`caplog` ordering flake in `tests/scraper`, unrelated).
 
 - [ ] **Nicer process/skill formatting** — Format process descriptions with more tables, fewer
   bullet points, less prose. Condense phrasing:
