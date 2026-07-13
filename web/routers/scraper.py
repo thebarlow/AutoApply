@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import logging
 import threading
 from typing import Any
 
@@ -19,6 +20,8 @@ from web.tenancy import current_profile_id
 from web.auth.ext_token import bearer_or_session_profile
 
 router = APIRouter(prefix="/api/scraper")
+
+logger = logging.getLogger(__name__)
 
 MAX_SCRAPE_BATCH = 25
 
@@ -74,8 +77,8 @@ def stage_job(
         job.intake()
         try:
             _sse_send("job", job.serialize())
-        except Exception as exc:
-            print(f"[stage_job] broadcast failed for {job.job_key}: {exc}", flush=True)
+        except Exception:
+            logger.exception("[stage_job] broadcast failed for %s", job.job_key)
         threading.Thread(target=run_pipeline, args=(job.job_key, profile_id), daemon=True).start()
     return {"status": status, "job_key": body.job_key}
 
@@ -126,9 +129,8 @@ def scrape_selected(
         job.intake()
         try:
             _sse_send("job", job.serialize())
-        except Exception as exc:
-            print(f"[scrape_selected] broadcast failed for {job.job_key}: {exc}",
-                  flush=True)
+        except Exception:
+            logger.exception("[scrape_selected] broadcast failed for %s", job.job_key)
         threading.Thread(
             target=run_pipeline, args=(job.job_key, profile_id), daemon=True
         ).start()
