@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.database import Config, FieldHelp, PromptDefault, ProfileConfig
 from db.seed import PROFILE_CONFIG_DEFAULTS
+from core.credits import InsufficientCredits
 from core.job import _llm_json_with_retry
 from core.llm import get_client_for_profile
+from core.metering import meter_action
 from core.user import User, PromptNotConfiguredError
 from core.profile_tree import (
     FieldNode,
@@ -101,167 +103,11 @@ def _set_global(db: Session, key: str, value: str) -> None:
     db.commit()
 
 
-# ---- Prompt Templates ----
-
-class PromptBody(BaseModel):
-    name: str
-    content: str
-    provider_name: str = ""
-    model_id: str = ""
-    template_name: str = ""
-
-
-class ActivePromptBody(BaseModel):
-    active_id: str
-
-
-def _get_prompts(db: Session, type_: str) -> list[dict]:
-    return json.loads(_get_global(db, f"{type_}_prompts", "[]"))
-
-
-def _set_prompts(db: Session, type_: str, prompts: list[dict]) -> None:
-    _set_global(db, f"{type_}_prompts", json.dumps(prompts))
-
-
-def _sync_active_prompt(db: Session, type_: str, active_id: str, prompts: list[dict]) -> None:
-    """Keep the legacy template key in sync so the generator always reads current content."""
-    legacy_key = f"{type_}_prompt_template"
-    match = next((p for p in prompts if p["id"] == active_id), None)
-    _set_global(db, legacy_key, match["content"] if match else "")
-
-
-@router.get("/api/config/prompts")
-def get_all_prompts(db: Session = Depends(get_db)) -> dict[str, Any]:
-    all_prompts = []
-    for type_ in ("resume", "cover", "description"):
-        for p in _get_prompts(db, type_):
-            all_prompts.append({
-                "id": p["id"],
-                "name": p["name"],
-                "type": type_,
-                "provider_name": p.get("provider_name", ""),
-                "model_id": p.get("model_id", ""),
-                "template_name": p.get("template_name", ""),
-            })
-    return {"prompts": all_prompts}
-
-
-@router.get("/api/config/prompts/active-status")
-def get_active_prompt_status(db: Session = Depends(get_db)) -> dict:
-    """Return whether each prompt type has a usable active configuration."""
-    def _has_latex_template(type_: str) -> bool:
-        active_id = _get_global(db, f"active_{type_}_prompt_id")
-        if not active_id:
-            return False
-        prompts = _get_prompts(db, type_)
-        prompt = next((p for p in prompts if p["id"] == active_id), None)
-        if not prompt:
-            return False
-        template_name = prompt.get("template_name", "")
-        if not template_name:
-            return False
-        templates = json.loads(_get_global(db, "latex_templates", "[]"))
-        match = next((t for t in templates if t["name"] == template_name), None)
-        if not match:
-            return False
-        return Path(match["path"]).exists()
-
-    active_desc_id = _get_global(db, "active_description_prompt_id")
-    desc_prompts = _get_prompts(db, "description")
-    has_description = bool(active_desc_id and any(p["id"] == active_desc_id for p in desc_prompts))
-
-    return {
-        "resume_has_template": _has_latex_template("resume"),
-        "cover_has_template": _has_latex_template("cover"),
-        "description_has_prompt": has_description,
-    }
-
-
-@router.get("/api/config/prompts/{type_}")
-def get_prompts(type_: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover", "description"):
-        raise HTTPException(status_code=400, detail="type must be resume or cover")
-    prompts = _get_prompts(db, type_)
-    active_id = _get_global(db, f"active_{type_}_prompt_id")
-    return {"prompts": [{"id": p["id"], "name": p["name"]} for p in prompts], "active_id": active_id}
-
-
-@router.post("/api/config/prompts/{type_}")
-def create_prompt(type_: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover", "description"):
-        raise HTTPException(status_code=400, detail="type must be resume or cover")
-    prompts = _get_prompts(db, type_)
-    new_id = uuid.uuid4().hex
-    prompts.append({
-        "id": new_id,
-        "name": body.name,
-        "content": body.content,
-        "provider_name": body.provider_name,
-        "model_id": body.model_id,
-        "template_name": body.template_name,
-    })
-    _set_prompts(db, type_, prompts)
-    return {"id": new_id, "name": body.name}
-
-
-# IMPORTANT: /active must be registered before /{prompt_id} to avoid the literal
-# string "active" matching the {prompt_id} path parameter.
-@router.put("/api/config/prompts/{type_}/active")
-def set_active_prompt(type_: str, body: ActivePromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover", "description"):
-        raise HTTPException(status_code=400, detail="type must be resume or cover")
-    prompts = _get_prompts(db, type_)
-    if not any(p["id"] == body.active_id for p in prompts):
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    _set_global(db, f"active_{type_}_prompt_id", body.active_id)
-    _sync_active_prompt(db, type_, body.active_id, prompts)
-    return {"active_id": body.active_id}
-
-
-@router.get("/api/config/prompts/{type_}/{prompt_id}")
-def get_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover", "description"):
-        raise HTTPException(status_code=400, detail="type must be resume or cover")
-    prompts = _get_prompts(db, type_)
-    match = next((p for p in prompts if p["id"] == prompt_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    return match
-
-
-@router.put("/api/config/prompts/{type_}/{prompt_id}")
-def update_prompt(type_: str, prompt_id: str, body: PromptBody, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if type_ not in ("resume", "cover", "description"):
-        raise HTTPException(status_code=400, detail="type must be resume or cover")
-    prompts = _get_prompts(db, type_)
-    match = next((p for p in prompts if p["id"] == prompt_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    match["name"] = body.name
-    match["content"] = body.content
-    match["provider_name"] = body.provider_name
-    match["model_id"] = body.model_id
-    match["template_name"] = body.template_name
-    _set_prompts(db, type_, prompts)
-    active_id = _get_global(db, f"active_{type_}_prompt_id")
-    if active_id == prompt_id:
-        _sync_active_prompt(db, type_, prompt_id, prompts)
-    return {"id": prompt_id, "name": body.name}
-
-
-@router.delete("/api/config/prompts/{type_}/{prompt_id}", status_code=204)
-def delete_prompt(type_: str, prompt_id: str, db: Session = Depends(get_db)) -> None:
-    if type_ not in ("resume", "cover", "description"):
-        raise HTTPException(status_code=400, detail="type must be resume or cover")
-    prompts = _get_prompts(db, type_)
-    remaining = [p for p in prompts if p["id"] != prompt_id]
-    if len(remaining) == len(prompts):
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    _set_prompts(db, type_, remaining)
-    active_id = _get_global(db, f"active_{type_}_prompt_id")
-    if active_id == prompt_id:
-        _set_global(db, f"active_{type_}_prompt_id", "")
-        _sync_active_prompt(db, type_, "", remaining)
+# NOTE: The old /api/config/prompts/* CRUD endpoints were removed (audit S1).
+# They stored prompt content/templates in the GLOBAL Config table with no tenant
+# scoping, so any tenant's write leaked to every tenant. Live generation reads
+# per-tenant prompts from the `prompts` table via User.resolve_prompt(); nothing
+# read these global keys. Per-tenant prompt management lives in web/routers/prompts.py.
 
 
 # ---- Templates ----
@@ -447,6 +293,14 @@ def get_profiles(
 
 @router.post("/api/config/profiles")
 def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict[str, Any]:
+    # Local-bootstrap only (audit R3). In production every account gets exactly
+    # one profile, provisioned by the auth layer at first login
+    # (web/auth/identity._provision_profile) — 1 account = 1 profile. This
+    # endpoint is how a fresh local/dev/tray DB (no auth) creates its first
+    # profile row; it is unscoped and would otherwise let a hosted user mint
+    # dangling, unlinked User rows, so it is disabled in production.
+    if os.getenv("APP_ENV") == "production":
+        raise HTTPException(status_code=404, detail="Not found")
     row = User(name=body.name, data=json.dumps(_EMPTY_PROFILE_DATA))
     db.add(row)
     db.commit()
@@ -1333,6 +1187,8 @@ def draft_section_prompt(
     Raises:
         HTTPException 500: ``section_prompt_assist`` seed row is missing.
         HTTPException 502: LLM call failed.
+        InsufficientCredits: The tenant's balance is below the credit floor
+            (surfaced as HTTP 402 by the global handler).
     """
     user = User.load(db, profile_id=profile_id)
     template_row = db.query(PromptDefault).filter_by(type_key="section_prompt_assist").first()
@@ -1350,14 +1206,19 @@ def draft_section_prompt(
 
     client, model = get_client_for_profile(user, user.prompt_resume_model)
     try:
-        out = _llm_json_with_retry(
-            prompt,
-            client,
-            model,
-            SectionPromptDraft,
-            max_tokens=512,
-            empty_msg="Prompt draft returned empty content.",
-        )
+        # Metered like every other tenant-facing LLM entry point (audit S2): the
+        # balance is gated before the call and the actual cost debited on exit.
+        with meter_action(db, profile_id, action="draft"):
+            out = _llm_json_with_retry(
+                prompt,
+                client,
+                model,
+                SectionPromptDraft,
+                max_tokens=512,
+                empty_msg="Prompt draft returned empty content.",
+            )
+    except InsufficientCredits:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=str(exc))
 

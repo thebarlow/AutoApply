@@ -59,6 +59,22 @@ def test_post_profile_creates_row(client, db_session):
     assert db_session.query(UserProfileModel).count() == 1
 
 
+def test_post_profile_blocked_in_production(db_session, monkeypatch):
+    """Audit R3: create_profile is local-bootstrap only. In production profiles
+    are provisioned by the auth layer (1 account = 1 profile), so a logged-in
+    user (who passes the auth gate) is still blocked here and no row is created.
+    Called directly to exercise the guard past the HTTP gate."""
+    from fastapi import HTTPException
+    from web.routers import config as config_router
+
+    monkeypatch.setenv("APP_ENV", "production")
+    body = config_router.ProfileNameBody(name="Sneaky Second")
+    with pytest.raises(HTTPException) as exc:
+        config_router.create_profile(body, db=db_session)
+    assert exc.value.status_code == 404
+    assert db_session.query(UserProfileModel).count() == 0
+
+
 def test_get_profile_by_id(client, db_session):
     db_session.add(UserProfileModel(name="Data Engineer", data=EMPTY_DATA))
     db_session.commit()
