@@ -26,17 +26,18 @@ logger = logging.getLogger(__name__)
 _meter: ContextVar[list | None] = ContextVar("_meter", default=None)
 
 
-def _notify_credits_changed() -> None:
-    """Nudge every connected SSE client to refetch its own balance.
+def _notify_credits_changed(profile_id: int) -> None:
+    """Nudge the tenant's SSE clients to refetch their own balance.
 
     Best-effort: a broadcast failure must never affect billing. The payload
-    carries no balance — the SSE stream is a global broadcast, so each client
-    refetches its own authenticated ``/api/credits`` instead of trusting a
-    pushed figure. Fixes the stale navbar balance after a spend.
+    carries no balance — each client refetches its own authenticated
+    ``/api/credits`` instead of trusting a pushed figure. Scoped to the tenant
+    that spent so the event never reaches other tenants' streams. Fixes the
+    stale navbar balance after a spend.
     """
     try:
         from web.sse import send
-        send("credits", {})
+        send("credits", {}, profile_id=profile_id)
     except Exception:
         logger.exception("credits-changed SSE notify failed")
 
@@ -97,4 +98,4 @@ def meter_action(db: Session, profile_id: int, *, action: str,
                 logger.exception("credit settle failed for action=%s job=%s", action, job_key)
                 db.rollback()
             else:
-                _notify_credits_changed()
+                _notify_credits_changed(profile_id)

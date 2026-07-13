@@ -33,7 +33,7 @@ def _gate_report_for(job: Job, db: Session) -> AtsReport:
 
 
 def _emit(job: Job) -> None:
-    _sse_send("job", job.serialize())
+    _sse_send("job", job.serialize(), profile_id=job.profile_id)
 
 
 @router.websocket("/ws/tray")

@@ -8,17 +8,20 @@ from __future__ import annotations
 import asyncio
 import queue as _queue
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from web.sse import subscribe, unsubscribe
+from web.tenancy import current_profile_id
 
 router = APIRouter(prefix="/api")
 
 
 @router.get("/events")
-async def sse_events() -> StreamingResponse:
-    q = subscribe()
+async def sse_events(profile_id: int = Depends(current_profile_id)) -> StreamingResponse:
+    # Scope the stream to the caller's tenant so job events (which carry full,
+    # tenant-private payloads) never fan out to other tenants' clients.
+    q = subscribe(profile_id)
 
     async def generate():
         try:

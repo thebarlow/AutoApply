@@ -944,6 +944,7 @@ class Job(Base):
         from db.database import SessionLocal
 
         job_key = self.job_key
+        profile_id = self.profile_id
 
         def _run() -> None:
             from web import llm_status
@@ -962,13 +963,13 @@ class Job(Base):
                     thread_job.unread_indicator = "ok"
                     thread_job.last_result_error = None
                     thread_db.commit()
-                    _sse_send("job", thread_job.serialize())
+                    _sse_send("job", thread_job.serialize(), profile_id=profile_id)
                     print(f"[intake] {job_key}: extraction complete", flush=True)
                 except Exception as exc:
                     thread_job.unread_indicator = "error"
                     thread_job.last_result_error = str(exc)
                     thread_db.commit()
-                    _sse_send("job", thread_job.serialize())
+                    _sse_send("job", thread_job.serialize(), profile_id=profile_id)
                     logger.exception("%s: extraction failed", job_key)
             finally:
                 llm_status.finish(job_key)

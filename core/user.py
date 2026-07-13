@@ -563,6 +563,7 @@ class User(Base):
                     "reason": reason,
                     "message": f"{label} prompt was reset to default because {reason}.",
                 },
+                profile_id=self.id,
             )
         except Exception:
             pass

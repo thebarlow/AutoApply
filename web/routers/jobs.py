@@ -92,8 +92,8 @@ def _remove_pending_review(job: Job, action: str) -> bool:
 
 
 def _emit(job: Job) -> None:
-    """Serialize job and push to all SSE clients."""
-    _sse_send("job", job.serialize())
+    """Serialize job and push to the owning tenant's SSE clients."""
+    _sse_send("job", job.serialize(), profile_id=job.profile_id)
 
 
 def _maybe_start_refinement(job_key: str, doc_type: str, db: Session, profile_id: int) -> None:

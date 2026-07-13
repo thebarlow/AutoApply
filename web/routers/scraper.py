@@ -76,7 +76,7 @@ def stage_job(
     for job in inserted_jobs:
         job.intake()
         try:
-            _sse_send("job", job.serialize())
+            _sse_send("job", job.serialize(), profile_id=profile_id)
         except Exception:
             logger.exception("[stage_job] broadcast failed for %s", job.job_key)
         threading.Thread(target=run_pipeline, args=(job.job_key, profile_id), daemon=True).start()
@@ -128,7 +128,7 @@ def scrape_selected(
     for job in inserted:
         job.intake()
         try:
-            _sse_send("job", job.serialize())
+            _sse_send("job", job.serialize(), profile_id=profile_id)
         except Exception:
             logger.exception("[scrape_selected] broadcast failed for %s", job.job_key)
         threading.Thread(

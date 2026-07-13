@@ -414,7 +414,7 @@ def _make_user_with_scoring(db_session, scoring_content, monkeypatch):
     from db.seed import PROMPT_TYPE_KEYS
 
     sent = []
-    monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
+    monkeypatch.setattr("web.sse.send", lambda t, d, **k: sent.append((t, d)))
     u = User(name="Matt", data=json.dumps(SAMPLE_DATA))
     db_session.add(u)
     db_session.commit()
@@ -458,7 +458,7 @@ def test_resolve_prompt_resets_when_missing(db_session, monkeypatch):
     from db.seed import PROMPT_TYPE_KEYS
 
     sent = []
-    monkeypatch.setattr("web.sse.send", lambda t, d: sent.append((t, d)))
+    monkeypatch.setattr("web.sse.send", lambda t, d, **k: sent.append((t, d)))
     u = User(name="Matt", data=json.dumps(SAMPLE_DATA))
     db_session.add(u)
     db_session.commit()

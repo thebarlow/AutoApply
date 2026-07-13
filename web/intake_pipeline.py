@@ -70,7 +70,7 @@ def build_feedback_issues(notes: list[dict]) -> list[dict]:
 
 def _emit(job: Job) -> None:
     try:
-        _sse_send("job", job.serialize())
+        _sse_send("job", job.serialize(), profile_id=job.profile_id)
     except Exception as exc:
         logger.warning("SSE emit failed for %s: %s", job.job_key, exc)
 
