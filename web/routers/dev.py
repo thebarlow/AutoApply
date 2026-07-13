@@ -24,7 +24,7 @@ from core.document_tree import build_resume_document_tree
 from core.tree_assembler import assemble_resume_tree_markdown
 from core.user import User
 from db.database import get_db
-from web.routers.credits import require_admin
+from web.routers.credits import require_real_admin
 from web.tenancy import current_profile_id
 
 router = APIRouter()
@@ -176,7 +176,7 @@ def resume_compare(
     job_key: str,
     db: Session = Depends(get_db),
     profile_id: int = Depends(current_profile_id),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_real_admin),
 ):
     """Generate the résumé both ways for ``job_key`` and return both + eval scores."""
     job = Job.get(job_key, db, profile_id)

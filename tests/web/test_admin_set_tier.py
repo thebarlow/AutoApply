@@ -51,7 +51,12 @@ def test_admin_set_tier_rejects_unknown_tier(client):
 
 def test_non_admin_forbidden(client):
     c, _db = client
-    c.app.dependency_overrides[current_profile_id] = lambda: 2  # non-admin
+    # Admin is gated by require_real_admin (the real session account), not
+    # current_profile_id; simulate a non-admin caller by overriding it to 403.
+    from fastapi import HTTPException
+    def _deny():
+        raise HTTPException(status_code=403, detail="admin only")
+    c.app.dependency_overrides[credits_router.require_real_admin] = _deny
     r = c.post("/api/admin/credits/tier",
                json={"email": "user@x.com", "tier": "beta"})
     assert r.status_code == 403

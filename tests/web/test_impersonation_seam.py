@@ -50,3 +50,25 @@ def test_malformed_flag_ignored(db, monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     _seed(db, account_id=1, profile_id=1, is_admin=True)
     assert current_profile_id(_req({"account_id": 1, "impersonate_profile_id": "abc"}), db) == 1
+
+
+# --- require_real_admin (audit S4): admin endpoints resolve the REAL account ---
+
+def test_require_real_admin_authorizes_via_session_not_impersonation(db):
+    """While impersonating a non-admin, the real admin still authorizes: the
+    guard reads session account_id, not current_profile_id (which would resolve
+    the impersonated non-admin tenant)."""
+    from web.routers.credits import require_real_admin
+    _seed(db, account_id=1, profile_id=1, is_admin=True)
+    _seed(db, account_id=2, profile_id=7, is_admin=False)
+    acct = require_real_admin(_req({"account_id": 1, "impersonate_profile_id": 7}), db)
+    assert acct.id == 1
+
+
+def test_require_real_admin_rejects_non_admin_session(db):
+    from fastapi import HTTPException
+    from web.routers.credits import require_real_admin
+    _seed(db, account_id=2, profile_id=5, is_admin=False)
+    with pytest.raises(HTTPException) as exc:
+        require_real_admin(_req({"account_id": 2}), db)
+    assert exc.value.status_code == 403

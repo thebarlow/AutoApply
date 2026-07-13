@@ -20,10 +20,26 @@ router = APIRouter(prefix="/api", tags=["credits"])
 logger = logging.getLogger(__name__)
 
 
-def require_admin(request: Request, db: Session = Depends(get_db),
-                  profile_id: int = Depends(current_profile_id)) -> Account:
-    """Resolve the active account and ensure it is an admin."""
-    acct = db.query(Account).filter_by(profile_id=profile_id).first()
+def require_real_admin(request: Request, db: Session = Depends(get_db)) -> Account:
+    """Resolve the REAL logged-in account from the session and require admin.
+
+    Authorizes the actual admin, never an impersonated tenant: it reads the
+    session's ``account_id`` directly instead of going through
+    ``current_profile_id`` (which resolves the *impersonated* profile while an
+    admin is impersonating). So admin endpoints stay admin-gated even
+    mid-impersonation. Outside production there is no session login; fall back to
+    the dev tenant's account so local/dev and tests behave.
+
+    Reads the session off ``request.scope`` (not ``request.session``) so it does
+    not hard-require SessionMiddleware to be mounted — a missing session is
+    treated as "not logged in" and routed to the dev fallback rather than 500ing.
+    """
+    from web.tenancy import get_dev_tenant_id
+    session = request.scope.get("session") or {}
+    account_id = session.get("account_id")
+    acct = db.query(Account).filter_by(id=account_id).first() if account_id else None
+    if acct is None:
+        acct = db.query(Account).filter_by(profile_id=get_dev_tenant_id(db)).first()
     if acct is None or not acct.is_admin:
         raise HTTPException(status_code=403, detail="admin only")
     return acct
@@ -56,7 +72,7 @@ class GrantRequest(BaseModel):
 
 @router.post("/admin/credits/grant")
 def admin_grant(body: GrantRequest, db: Session = Depends(get_db),
-                admin: Account = Depends(require_admin)):
+                admin: Account = Depends(require_real_admin)):
     target_pid = body.profile_id
     if target_pid is None and body.email:
         tgt = (db.query(Account)
@@ -83,7 +99,7 @@ class SetTierRequest(BaseModel):
 
 @router.post("/admin/credits/tier")
 def admin_set_tier(body: SetTierRequest, db: Session = Depends(get_db),
-                   admin: Account = Depends(require_admin)):
+                   admin: Account = Depends(require_real_admin)):
     """Set a profile's pricing tier (admin only)."""
     if body.tier not in payments.tier_margins():
         raise HTTPException(status_code=400, detail="unknown tier")
@@ -118,7 +134,7 @@ def openrouter_remaining() -> float | None:
 
 
 @router.get("/admin/system-balance")
-def system_balance(admin: Account = Depends(require_admin)):
+def system_balance(admin: Account = Depends(require_real_admin)):
     """Remaining balance on the platform OpenRouter key (money in the system)."""
     if not os.getenv("LLM_API_KEY", ""):
         raise HTTPException(status_code=503, detail="no platform key")

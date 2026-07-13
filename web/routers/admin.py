@@ -14,7 +14,7 @@ from core.credits import grant_credits
 from core.email import send_invite
 from core.payments import tier_margins
 from db.database import Account, AllowedEmail, Purchase, get_db
-from web.routers.credits import openrouter_remaining, require_admin
+from web.routers.credits import openrouter_remaining, require_real_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -35,7 +35,7 @@ class InviteRequest(BaseModel):
 
 @router.post("/invite")
 def invite_user(body: InviteRequest, db: Session = Depends(get_db),
-                admin: Account = Depends(require_admin)):
+                admin: Account = Depends(require_real_admin)):
     """Allowlist an email (with an intended user type) and send an invite.
 
     Idempotent: a repeat email is not re-inserted, but its tier/is_admin are
@@ -72,29 +72,10 @@ def invite_user(body: InviteRequest, db: Session = Depends(get_db),
 
 @router.get("/invites")
 def list_invites(db: Session = Depends(get_db),
-                 admin: Account = Depends(require_admin)):
+                 admin: Account = Depends(require_real_admin)):
     rows = db.query(AllowedEmail).order_by(AllowedEmail.id.desc()).all()
     return [{"email": r.email, "created_at": r.created_at,
              "tier": r.tier, "is_admin": r.is_admin} for r in rows]
-
-
-def require_real_admin(request: Request, db: Session = Depends(get_db)) -> Account:
-    """Resolve the REAL logged-in account from the session and require admin.
-
-    Unlike require_admin (which depends on current_profile_id and would resolve
-    the *impersonated* tenant), this always authorizes the actual admin, so admin
-    endpoints keep working -- and stay admin-gated -- while impersonating.
-    Outside production there is no session login; fall back to the dev tenant's
-    account so local/dev and tests behave.
-    """
-    account_id = request.session.get("account_id")
-    acct = db.query(Account).filter_by(id=account_id).first() if account_id else None
-    if acct is None:
-        from web.tenancy import get_dev_tenant_id
-        acct = db.query(Account).filter_by(profile_id=get_dev_tenant_id(db)).first()
-    if acct is None or not acct.is_admin:
-        raise HTTPException(status_code=403, detail="admin only")
-    return acct
 
 
 @router.get("/users")
