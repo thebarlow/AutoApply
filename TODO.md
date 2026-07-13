@@ -228,11 +228,14 @@ mark items `[x]`, move them to **Done**, or revise scope notes inline.
   stage-job AND manual upload (`UploadModal` → `uploadJob` → same endpoint). `run_pipeline`
   (`web/intake_pipeline.py`) runs description extraction → scoring automatically; no manual score action.
 
-- [ ] **Remove "For Developers" from help docs.** Hosted users interact via the website,
-  not a repo checkout; drop `Obsidian/Auto Apply/Docs/For Developers.md`.
+- [x] **Remove "For Developers" from help docs — DONE** (2026-07-13). File already absent from
+  `Obsidian/Auto Apply/Docs/`; no code references remained.
 
-- [ ] **Flesh out "Making a Good Master Resume" help doc.** Add concrete tips for writing a
-  strong master résumé (`Obsidian/Auto Apply/Docs/Making a Good Master Resume.md`).
+- [x] **Flesh out "Making a Good Master Resume" help doc — DONE** (2026-07-13). Replaced the
+  "Coming Soon" stub with concrete guidance: be specific/quantify, name technologies explicitly,
+  cover what-you-did/responsibilities/tech/outcome per item, include a superset of experience,
+  honesty rules, and using score breakdowns to find profile gaps
+  (`Obsidian/Auto Apply/Docs/Making a Good Master Resume.md`).
 
 ### Hosting / SaaS conversion
 
