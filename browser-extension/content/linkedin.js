@@ -102,6 +102,12 @@ if (_IS_SEARCH || _IS_SAVED) {
     getDescription: _getDescriptionText,
 
     clickCard(card) {
+      // If this card is already the selected one, the pane won't re-render a
+      // new container node — drop the identity check so readiness can pass.
+      const jobId = (card.getAttribute("componentkey") ?? "")
+        .match(/job-card-component-ref-(\d+)/)?.[1];
+      const selected = new URLSearchParams(location.search).get("currentJobId");
+      if (jobId && jobId === selected) _lastSeenContainer = null;
       card.click();
     },
 
