@@ -76,8 +76,13 @@ def _emit(job: Job) -> None:
         logger.warning("SSE emit failed for %s: %s", job.job_key, exc)
 
 
-def _do_score(job: Job, db, profile_id: int) -> None:
-    """Run scoring and persist results."""
+def _do_score(job: Job, db, profile_id: int, *, metered: bool = True) -> None:
+    """Run scoring and persist results.
+
+    ``metered=False`` when the caller (intake pipeline) already opened the
+    'intake' bundle meter — nested meters would double-charge.
+    """
+    from contextlib import nullcontext
     user = User.load(db, profile_id)
     try:
         prompt_content = user.resolve_prompt("scoring")
@@ -89,7 +94,9 @@ def _do_score(job: Job, db, profile_id: int) -> None:
         raise
 
     config = _load_score_config(db, profile_id)
-    with meter_action(db, profile_id, action="score", job_key=job.job_key):
+    meter = (meter_action(db, profile_id, action="score", job_key=job.job_key)
+             if metered else nullcontext())
+    with meter:
         job.score(user, config, client, model, db, prompt_content)
     job.unread_indicator = "ok"
     job.last_result_error = None
@@ -111,38 +118,37 @@ def run_pipeline(job_key: str, profile_id: int) -> None:
             _emit(job)
             return
 
-        # Step 1: description extraction
-        llm_status.start(profile_id, job_key, "description")
-        extraction_ok = False
+        # Steps 1+2 (extract + score) are billed as one 'intake' bundle. A
+        # failure anywhere in the bundle refunds the whole price and marks the
+        # job errored; the exception aborts before scoring, preserving the old
+        # "extraction failed → skip scoring" behavior.
         try:
-            _do_extract_description(job, db, profile_id)
-            extraction_ok = True
+            with meter_action(db, profile_id, action="intake", job_key=job_key):
+                # Step 1: description extraction
+                llm_status.start(profile_id, job_key, "description")
+                try:
+                    _do_extract_description(job, db, profile_id, metered=False)
+                finally:
+                    llm_status.finish(profile_id, job_key, "description")
+                db.refresh(job)
+                _emit(job)
+                # Step 2: scoring
+                llm_status.start(profile_id, job_key, "score")
+                try:
+                    _do_score(job, db, profile_id, metered=False)
+                finally:
+                    llm_status.finish(profile_id, job_key, "score")
+        except InsufficientCredits:
+            job = Job.get(job_key, db, profile_id)
+            job.unread_indicator = "error"
+            job.last_result_error = "Out of credits — intake needs 2 credits."
+            db.commit()
         except Exception as exc:
             db.rollback()
             job = Job.get(job_key, db, profile_id)
             job.unread_indicator = "error"
             job.last_result_error = str(exc)
             db.commit()
-        finally:
-            llm_status.finish(profile_id, job_key, "description")
-        db.refresh(job)
-        _emit(job)
-
-        if not extraction_ok:
-            return
-
-        # Step 2: scoring
-        llm_status.start(profile_id, job_key, "score")
-        try:
-            _do_score(job, db, profile_id)
-        except Exception as exc:
-            db.rollback()
-            job = Job.get(job_key, db, profile_id)
-            job.unread_indicator = "error"
-            job.last_result_error = str(exc)
-            db.commit()
-        finally:
-            llm_status.finish(profile_id, job_key, "score")
         db.refresh(job)
         _emit(job)
     finally:
@@ -238,9 +244,9 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
         for turn in range(1, max_turns + 1):
             llm_status.start(profile_id, job_key, "resume_eval")
             try:
-                with meter_action(db, profile_id, action="eval", job_key=job_key):
-                    scores = job.evaluate_resume_sections(
-                        eval_prompt, user, eval_client, eval_model, db)
+                # Refinement turns are bundled into the generation price — unmetered.
+                scores = job.evaluate_resume_sections(
+                    eval_prompt, user, eval_client, eval_model, db)
             except Exception as exc:
                 db.rollback()
                 job = Job.get(job_key, db, profile_id)
@@ -278,10 +284,9 @@ def _run_resume_section_refinement(job_key: str, profile_id: int) -> None:
             llm_status.start(profile_id, job_key, "resume_refine")
             try:
                 critiques = {n: scores[n]["issues"] for n in failing}
-                with meter_action(db, profile_id, action="refine", job_key=job_key):
-                    new_vals = generate_resume_by_section(
-                        root, job_ctx, gen_client, gen_model, resolve=resolve,
-                        only_sections=failing, critiques=critiques)
+                new_vals = generate_resume_by_section(
+                    root, job_ctx, gen_client, gen_model, resolve=resolve,
+                    only_sections=failing, critiques=critiques)
                 authored.update(new_vals)
                 doc_tree = build_resume_document_tree(root, authored)
                 Document.upsert(db, job_key, "resume",
@@ -438,8 +443,8 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
             try:
                 print(f"[refinement:{doc_type}] {job_key}: turn {turn} evaluating", flush=True)
                 evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
-                with meter_action(db, profile_id, action="eval", job_key=job.job_key):
-                    result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
+                # Refinement turns are bundled into the generation price — unmetered.
+                result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
                 passed = result["score"] >= pass_score
                 eval_log.append({
                     "turn": turn,
@@ -486,11 +491,10 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
             try:
                 print(f"[refinement:{doc_type}] {job_key}: turn {turn} rewriting", flush=True)
                 refine_fn = getattr(job, f"refine_{doc_type}_md")
-                with meter_action(db, profile_id, action="refine", job_key=job.job_key):
-                    refine_fn(
-                        user, refine_prompt, refine_client, resolved_refine_model,
-                        db, result["issues"], template_path,
-                    )
+                refine_fn(
+                    user, refine_prompt, refine_client, resolved_refine_model,
+                    db, result["issues"], template_path,
+                )
                 db.commit()
                 db.refresh(job)
                 _emit(job)
@@ -511,7 +515,7 @@ def _run_doc_refinement(job_key: str, doc_type: str, profile_id: int) -> None:
         db.close()
 
 
-def run_ats_gate(job_key: str, profile_id: int) -> None:
+def run_ats_gate(job_key: str, profile_id: int, metered: bool = False) -> None:
     """Run the ATS gate over the current résumé render and persist the report.
 
     Background entry point. Resolves the active profile's client/model, runs both
@@ -535,11 +539,13 @@ def run_ats_gate(job_key: str, profile_id: int) -> None:
         except RuntimeError as exc:
             print(f"[ats] {job_key}: LLM client error — {exc}", flush=True)
             return
+        from contextlib import nullcontext
+        # Metered only when spawned by the document-PUT edit path; the ATS pass
+        # after generation/refinement is bundled into the generation price.
+        meter = (meter_action(db, profile_id, action="ats", job_key=job_key)
+                 if metered else nullcontext())
         try:
-            # Metered: the gate's LLM round-trip is user-triggerable at will
-            # (every résumé document save re-spawns it), so it must be billed
-            # and blocked at zero balance like any other LLM action.
-            with meter_action(db, profile_id, action="ats", job_key=job_key):
+            with meter:
                 report = job.run_ats_check(db, user, client, model)
         except InsufficientCredits as exc:
             print(f"[ats] {job_key}: skipped — {exc}", flush=True)
@@ -638,10 +644,9 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
 
             llm_status.start(profile_id, job_key, "resume_refine")
             try:
-                with meter_action(db, profile_id, action="refine", job_key=job_key):
-                    new_vals = generate_resume_by_section(
-                        root, job_ctx, gen_client, gen_model, resolve=resolve,
-                        only_sections=set(by_section), critiques=by_section)
+                new_vals = generate_resume_by_section(
+                    root, job_ctx, gen_client, gen_model, resolve=resolve,
+                    only_sections=set(by_section), critiques=by_section)
                 authored.update(new_vals)
                 doc_tree = build_resume_document_tree(root, authored)
                 Document.upsert(db, job_key, "resume",
@@ -669,8 +674,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
             eval_prompt = user.resolve_prompt("resume_eval_sectioned")
             eval_client, eval_model = get_client_for_profile(
                 user, getattr(user, "prompt_resume_eval_sectioned_model", "") or "")
-            with meter_action(db, profile_id, action="eval", job_key=job_key):
-                scores = job.evaluate_resume_sections(eval_prompt, user, eval_client, eval_model, db)
+            scores = job.evaluate_resume_sections(eval_prompt, user, eval_client, eval_model, db)
             if scores:
                 min_score = min(s["score"] for s in scores.values())
                 pass_score = float(getattr(user, "resume_refine_pass_score", 0.80))
@@ -732,7 +736,21 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
         finally:
             _probe.close()
         if _is_tree:
-            _run_resume_feedback_refine(job_key, "resume", notes, profile_id)
+            # One 'regenerate' charge wraps the whole selective-regen + eval + ATS
+            # sequence (the delegate no longer opens its own per-step meters).
+            mdb = SessionLocal()
+            try:
+                with meter_action(mdb, profile_id, action="regenerate", job_key=job_key):
+                    _run_resume_feedback_refine(job_key, "resume", notes, profile_id)
+            except InsufficientCredits:
+                job = Job.get(job_key, mdb, profile_id)
+                if job is not None:
+                    job.unread_indicator = "error"
+                    job.last_result_error = "Out of credits — refine needs 2 credits."
+                    mdb.commit()
+                    _emit(job)
+            finally:
+                mdb.close()
             return
 
     _GEN_DIR = Path(__file__).parent.parent / "generator"
@@ -763,62 +781,76 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
             print(f"[feedback:{doc_type}] {job_key}: LLM client error — {exc}", flush=True)
             return
 
-        # Step A: refine with user-authored issues
-        llm_status.start(profile_id, job_key, f"{doc_type}_refine")
+        # One 'regenerate' charge wraps the refine + informational eval. A refine
+        # failure re-raises out of the meter so the debit is refunded; the eval
+        # step is non-fatal and stays inside the (already-succeeded) refine charge.
         try:
-            refine_fn = getattr(job, f"refine_{doc_type}_md")
-            with meter_action(db, profile_id, action="refine", job_key=job.job_key):
-                refine_fn(
-                    user, refine_prompt, refine_client, resolved_refine_model,
-                    db, issues, template_path,
-                )
-            db.commit()
-            db.refresh(job)
-            _emit(job)
-        except Exception as exc:
-            db.rollback()
+            with meter_action(db, profile_id, action="regenerate", job_key=job_key):
+                # Step A: refine with user-authored issues
+                llm_status.start(profile_id, job_key, f"{doc_type}_refine")
+                try:
+                    refine_fn = getattr(job, f"refine_{doc_type}_md")
+                    refine_fn(
+                        user, refine_prompt, refine_client, resolved_refine_model,
+                        db, issues, template_path,
+                    )
+                    db.commit()
+                    db.refresh(job)
+                    _emit(job)
+                except Exception as exc:
+                    db.rollback()
+                    job = Job.get(job_key, db, profile_id)
+                    job.last_result_error = f"{doc_type.capitalize()} feedback refine failed: {exc}"
+                    job.unread_indicator = "error"
+                    db.commit()
+                    _emit(job)
+                    logger.exception("%s: %s feedback refine failed", job_key, doc_type)
+                    raise  # propagate so the meter refunds the regenerate debit
+                finally:
+                    llm_status.finish(profile_id, job_key, f"{doc_type}_refine")
+
+                # Step B: eval once for an informational score (non-fatal; no restore-best)
+                llm_status.start(profile_id, job_key, f"{doc_type}_eval")
+                try:
+                    eval_prompt = user.resolve_prompt(eval_key)
+                    eval_model = getattr(user, f"prompt_{eval_key}_model", "") or ""
+                    eval_client, resolved_eval_model = get_client_for_profile(user, eval_model)
+                    evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
+                    result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
+
+                    pass_score = float(getattr(user, f"{doc_type}_refine_pass_score", 0.80))
+                    log_field = f"{doc_type}_eval_log"
+                    eval_log = _json.loads(getattr(job, log_field) or "[]")
+                    turn = len(eval_log) + 1
+                    eval_log.append({
+                        "turn": turn,
+                        "score": result["score"],
+                        "issues": result["issues"],
+                        "passed": result["score"] >= pass_score,
+                        "source": "user_feedback",
+                    })
+                    setattr(job, f"{doc_type}_eval_score", result["score"])
+                    setattr(job, f"{doc_type}_eval_turns", turn)
+                    setattr(job, log_field, _json.dumps(eval_log))
+                    db.commit()
+                    db.refresh(job)
+                    _emit(job)
+                except Exception as exc:
+                    db.rollback()
+                    logger.exception("%s: %s post-feedback eval failed (non-fatal)", job_key, doc_type)
+                finally:
+                    llm_status.finish(profile_id, job_key, f"{doc_type}_eval")
+        except InsufficientCredits:
             job = Job.get(job_key, db, profile_id)
-            job.last_result_error = f"{doc_type.capitalize()} feedback refine failed: {exc}"
-            job.unread_indicator = "error"
-            db.commit()
-            _emit(job)
-            logger.exception("%s: %s feedback refine failed", job_key, doc_type)
+            if job is not None:
+                job.unread_indicator = "error"
+                job.last_result_error = "Out of credits — refine needs 2 credits."
+                db.commit()
+                _emit(job)
             return
-        finally:
-            llm_status.finish(profile_id, job_key, f"{doc_type}_refine")
-
-        # Step B: eval once for an informational score (non-fatal; no restore-best)
-        llm_status.start(profile_id, job_key, f"{doc_type}_eval")
-        try:
-            eval_prompt = user.resolve_prompt(eval_key)
-            eval_model = getattr(user, f"prompt_{eval_key}_model", "") or ""
-            eval_client, resolved_eval_model = get_client_for_profile(user, eval_model)
-            evaluate_fn = getattr(job, f"evaluate_{doc_type}_md")
-            with meter_action(db, profile_id, action="eval", job_key=job.job_key):
-                result = evaluate_fn(eval_prompt, user, eval_client, resolved_eval_model)
-
-            pass_score = float(getattr(user, f"{doc_type}_refine_pass_score", 0.80))
-            log_field = f"{doc_type}_eval_log"
-            eval_log = _json.loads(getattr(job, log_field) or "[]")
-            turn = len(eval_log) + 1
-            eval_log.append({
-                "turn": turn,
-                "score": result["score"],
-                "issues": result["issues"],
-                "passed": result["score"] >= pass_score,
-                "source": "user_feedback",
-            })
-            setattr(job, f"{doc_type}_eval_score", result["score"])
-            setattr(job, f"{doc_type}_eval_turns", turn)
-            setattr(job, log_field, _json.dumps(eval_log))
-            db.commit()
-            db.refresh(job)
-            _emit(job)
-        except Exception as exc:
-            db.rollback()
-            logger.exception("%s: %s post-feedback eval failed (non-fatal)", job_key, doc_type)
-        finally:
-            llm_status.finish(profile_id, job_key, f"{doc_type}_eval")
+        except Exception:
+            # Refine already marked the job errored before re-raising to refund.
+            return
     finally:
         db.close()
 

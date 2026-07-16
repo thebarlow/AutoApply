@@ -50,8 +50,8 @@ def test_run_pipeline_calls_extraction_then_scoring(monkeypatch):
 
     with patch("web.intake_pipeline.SessionLocal", return_value=mock_db), \
          patch("web.intake_pipeline.Job") as MockJob, \
-         patch("web.intake_pipeline._do_extract_description", side_effect=lambda j, db, p: calls.append("extract")), \
-         patch("web.intake_pipeline._do_score", side_effect=lambda j, db, p: calls.append("score")), \
+         patch("web.intake_pipeline._do_extract_description", side_effect=lambda j, db, p, **k: calls.append("extract")), \
+         patch("web.intake_pipeline._do_score", side_effect=lambda j, db, p, **k: calls.append("score")), \
          patch("web.intake_pipeline.llm_status"), \
          patch("web.intake_pipeline._emit"):
 

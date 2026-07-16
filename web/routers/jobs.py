@@ -280,7 +280,9 @@ def _do_generate_resume(job: Job, db: Session, profile_id: int) -> None:
         client, model = get_client_for_profile(user, user.prompt_resume_model)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    with meter_action(db, profile_id, action="generate", job_key=job.job_key):
+    from core.pricing import resolve_generate_action
+    action = resolve_generate_action(db, job, "resume")
+    with meter_action(db, profile_id, action=action, job_key=job.job_key):
         job.generate_resume_md(user, prompt_content, client, model, db)
     job.generate_resume_pdf(_RESUME_TEMPLATE, db)
 
@@ -296,7 +298,9 @@ def _do_generate_cover(job: Job, db: Session, profile_id: int) -> None:
         client, model = get_client_for_profile(user, user.prompt_cover_model)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    with meter_action(db, profile_id, action="generate", job_key=job.job_key):
+    from core.pricing import resolve_generate_action
+    action = resolve_generate_action(db, job, "cover")
+    with meter_action(db, profile_id, action=action, job_key=job.job_key):
         job.generate_cover_md(user, prompt_content, client, model, db)
     job.generate_cover_pdf(_COVER_TEMPLATE, db)
 
@@ -402,6 +406,14 @@ def submit_document_feedback(
     notes = [n.model_dump() for n in payload.notes if (n.note or "").strip()]
     if not notes:
         raise HTTPException(status_code=400, detail="No feedback provided")
+    # Fail-fast affordability pre-check: the real gate+debit happens in the
+    # background meter, but convert the common broke case into an immediate 402.
+    from core.credits import get_account_for_profile
+    from core.pricing import price_for
+    acct = get_account_for_profile(db, profile_id)
+    if (acct is not None and not acct.is_admin and (acct.credit_rate or 0.0) > 0
+            and (acct.credit_balance or 0) < price_for("regenerate")):
+        raise InsufficientCredits(acct.credit_balance or 0, price_for("regenerate"), "regenerate")
     from web.intake_pipeline import run_user_feedback_refine
     _spawn(run_user_feedback_refine, job_key, doc_type, notes, profile_id)
     return job.serialize()
@@ -589,7 +601,7 @@ def put_document(
         db.refresh(job)
         _emit(job)
         from web.intake_pipeline import run_ats_gate
-        _spawn(run_ats_gate, job_key, profile_id)
+        _spawn(run_ats_gate, job_key, profile_id, True)
         return _json.loads(serialized)
 
     try:
@@ -618,33 +630,12 @@ def put_document(
     # report; re-run the gate in the background so the stored report stays fresh.
     if doc_type == "resume":
         from web.intake_pipeline import run_ats_gate
-        _spawn(run_ats_gate, job_key, profile_id)
+        _spawn(run_ats_gate, job_key, profile_id, True)
     return doc.model_dump()
 
 
-def _do_extract_description(job: Job, db: Session, profile_id: int) -> None:
-    """Run description extraction LLM call and persist structured fields."""
-    user = User.load(db, profile_id=profile_id)
-    try:
-        prompt_content = user.resolve_prompt("extraction")
-    except PromptNotConfiguredError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    try:
-        client, model = get_client_for_profile(user, user.prompt_extraction_model)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    actual_prompt = job.build_description_prompt(prompt_content)
-    with meter_action(db, profile_id, action="extract", job_key=job.job_key):
-        try:
-            raw = _call_llm_for_extraction(client, model, actual_prompt, label=f"extract:{job.job_key}")
-        except Exception as exc:
-            raise RuntimeError(f"Description extraction failed: {exc}") from exc
-    try:
-        data = _json.loads(raw)
-    except (_json.JSONDecodeError, TypeError):
-        raise RuntimeError("Description extraction failed: LLM returned invalid JSON")
-
+def _apply_extraction_fields(job: Job, data: dict) -> None:
+    """Assign the parsed extraction JSON onto the job's ``ext_*`` fields."""
     job.ext_seniority = data.get("seniority", "")
     job.ext_role_type = data.get("role_type", "")
     job.ext_domain = data.get("domain", "")
@@ -660,20 +651,50 @@ def _do_extract_description(job: Job, db: Session, profile_id: int) -> None:
     salary_max = data.get("salary_max")
     job.ext_salary_min = float(salary_min) if salary_min is not None else None
     job.ext_salary_max = float(salary_max) if salary_max is not None else None
+
+
+def _do_extract_description(job: Job, db: Session, profile_id: int, *,
+                            metered: bool = True) -> None:
+    """Run description extraction + semantic skill match and persist fields.
+
+    ``metered=False`` when the caller (intake pipeline) already opened the
+    'intake' bundle meter — nested meters would double-charge.
+    """
+    from contextlib import nullcontext
+    user = User.load(db, profile_id=profile_id)
+    try:
+        prompt_content = user.resolve_prompt("extraction")
+    except PromptNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        client, model = get_client_for_profile(user, user.prompt_extraction_model)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    actual_prompt = job.build_description_prompt(prompt_content)
+    meter = (meter_action(db, profile_id, action="extract", job_key=job.job_key)
+             if metered else nullcontext())
+    with meter:
+        try:
+            raw = _call_llm_for_extraction(client, model, actual_prompt, label=f"extract:{job.job_key}")
+        except Exception as exc:
+            raise RuntimeError(f"Description extraction failed: {exc}") from exc
+        try:
+            data = _json.loads(raw)
+        except (_json.JSONDecodeError, TypeError):
+            raise RuntimeError("Description extraction failed: LLM returned invalid JSON")
+        _apply_extraction_fields(job, data)
+        # Semantic skill match — best-effort; failure must not lose the extraction.
+        try:
+            from db.database import PromptDefault
+            row = db.query(PromptDefault).filter_by(type_key="skill_match").first()
+            if row is not None:
+                job.match_profile_skills(user, client, model, db, row.content)
+        except Exception:
+            pass
     _add_pending_review(job, "description")
     job.unread_indicator = "ok"
     job.last_result_error = None
-    # Semantic skill match — best-effort; failure must not lose the extraction.
-    # Own meter (the extract meter above has already settled by this point);
-    # InsufficientCredits lands in the broad except and skips the match.
-    try:
-        from db.database import PromptDefault
-        row = db.query(PromptDefault).filter_by(type_key="skill_match").first()
-        if row is not None:
-            with meter_action(db, profile_id, action="extract", job_key=job.job_key):
-                job.match_profile_skills(user, client, model, db, row.content)
-    except Exception:
-        pass
     db.commit()
 
 
@@ -730,7 +751,7 @@ def rematch_skills(
         raise HTTPException(status_code=400, detail="skill_match prompt not configured")
     llm_status.start(profile_id, job_key, "rematch")
     try:
-        with meter_action(db, profile_id, action="extract", job_key=job.job_key):
+        with meter_action(db, profile_id, action="rematch", job_key=job.job_key):
             job.match_profile_skills(user, client, model, db, row.content)
         db.commit()
     except (HTTPException, InsufficientCredits):

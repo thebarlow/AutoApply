@@ -65,7 +65,7 @@ def test_run_ats_gate_skips_on_insufficient_credits():
          patch.object(pipeline, "get_client_for_profile", return_value=(object(), "m")), \
          patch.object(pipeline, "meter_action", broke_meter), \
          patch.object(pipeline, "_emit"):
-        pipeline.run_ats_gate("job1", 1)  # must not raise
+        pipeline.run_ats_gate("job1", 1, metered=True)  # must not raise
 
     job.run_ats_check.assert_not_called()
     job.store_ats_report.assert_not_called()
