@@ -53,3 +53,11 @@ def test_conversion_and_topup(tmp_path):
         assert bals == {1: 200, 2: 250, 3: 5}
         reasons = [r[0] for r in c.execute(text("SELECT reason FROM credit_ledger ORDER BY id")).fetchall()]
         assert "redenomination" in reasons and "redenomination_topup" in reasons
+        # Ledger deltas must account exactly for each balance change, so a
+        # pre-migration SUM(delta)==balance invariant survives the migration.
+        old = {1: 100, 2: 5000, 3: 100}
+        sums = dict(c.execute(text(
+            "SELECT profile_id, COALESCE(SUM(delta), 0) FROM credit_ledger GROUP BY profile_id"
+        )).fetchall())
+        for pid, final in bals.items():
+            assert sums.get(pid, 0) == final - old[pid]

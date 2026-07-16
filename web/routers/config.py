@@ -1178,7 +1178,7 @@ def draft_section_prompt(
     db: Session = Depends(get_db),
     profile_id: int = Depends(current_profile_id),
 ) -> dict:
-    """Dry (no-persist, no-metering) endpoint that drafts a section tailoring prompt.
+    """Dry (no-persist) endpoint that drafts a section tailoring prompt (metered: 1 unit).
 
     Args:
         body: Section name, purpose, and per-job tailoring notes from the caller.
@@ -1191,8 +1191,8 @@ def draft_section_prompt(
     Raises:
         HTTPException 500: ``section_prompt_assist`` seed row is missing.
         HTTPException 502: LLM call failed.
-        InsufficientCredits: The tenant's balance is below the credit floor
-            (surfaced as HTTP 402 by the global handler).
+        InsufficientCredits: The tenant's balance can't cover the action's
+            price (surfaced as HTTP 402 by the global handler).
     """
     user = User.load(db, profile_id=profile_id)
     template_row = db.query(PromptDefault).filter_by(type_key="section_prompt_assist").first()
