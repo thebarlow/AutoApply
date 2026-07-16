@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from core.credits import grant_credits
 from core.email import send_invite
+from core.pricing import unit_usd
 from core.payments import tier_multipliers
 from db.database import Account, AllowedEmail, Purchase, get_db
 from web.routers.credits import openrouter_remaining, require_real_admin
@@ -139,16 +140,13 @@ def impersonate_start(body: ImpersonateRequest, request: Request,
     return {"ok": True}
 
 
-CREDITS_PER_DOLLAR = 1000
-
-
 def _grant_budget(db: Session) -> dict:
     remaining = openrouter_remaining()
     allocated = int(db.query(func.coalesce(func.sum(Account.credit_balance), 0))
                     .filter(Account.is_admin.is_(False)).scalar() or 0)
     if remaining is None:
         return {"system_credits": None, "allocated": allocated, "available": None}
-    system_credits = round(remaining * CREDITS_PER_DOLLAR)
+    system_credits = round(remaining / unit_usd())
     return {"system_credits": system_credits, "allocated": allocated,
             "available": max(system_credits - allocated, 0)}
 

@@ -55,7 +55,7 @@ def test_grant_success_within_cap(client, monkeypatch):
     app, db = client
     _admin_ok(app, db)
     _seed_target(db, balance=100)
-    _set_remaining(monkeypatch, 20.0)  # 20000 system, allocated 100, available 19900
+    _set_remaining(monkeypatch, 20.0)  # 1000 system, allocated 100, available 900
     r = TestClient(app).post("/api/admin/users/3/grant", json={"amount": 500})
     assert r.status_code == 200
     assert r.json()["granted"] == 500
@@ -66,11 +66,11 @@ def test_grant_exceeds_cap_400(client, monkeypatch):
     app, db = client
     _admin_ok(app, db)
     _seed_target(db, balance=0)
-    _set_remaining(monkeypatch, 0.5)  # 500 system, allocated 0, available 500
+    _set_remaining(monkeypatch, 0.5)  # 25 system, allocated 0, available 25
     r = TestClient(app).post("/api/admin/users/3/grant", json={"amount": 501})
     assert r.status_code == 400
     assert r.json()["detail"]["error"] == "exceeds_grant_budget"
-    assert r.json()["detail"]["available"] == 500
+    assert r.json()["detail"]["available"] == 25
 
 
 def test_grant_unavailable_balance_409(client, monkeypatch):

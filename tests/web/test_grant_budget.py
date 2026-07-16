@@ -42,10 +42,10 @@ def _admin_ok(app, db):
 
 def _seed_users(db):
     db.add(Account(id=3, email="u3@x.com", is_admin=False, profile_id=3,
-                   created_at="t", credit_balance=1000, credit_rate=1.0,
+                   created_at="t", credit_balance=100, credit_rate=1.0,
                    tier="standard", banned=False))
     db.add(Account(id=4, email="u4@x.com", is_admin=False, profile_id=4,
-                   created_at="t", credit_balance=500, credit_rate=1.0,
+                   created_at="t", credit_balance=50, credit_rate=1.0,
                    tier="standard", banned=False))
     db.commit()
 
@@ -58,9 +58,10 @@ def test_budget_available(client, monkeypatch):
     r = TestClient(app).get("/api/admin/grant-budget")
     assert r.status_code == 200
     b = r.json()
-    assert b["system_credits"] == 20000
-    assert b["allocated"] == 1500
-    assert b["available"] == 18500
+    # unit_usd() == 0.02 -> system_credits = round(remaining / 0.02)
+    assert b["system_credits"] == 1000
+    assert b["allocated"] == 150
+    assert b["available"] == 850
 
 
 def test_budget_unavailable(client, monkeypatch):
@@ -72,4 +73,4 @@ def test_budget_unavailable(client, monkeypatch):
     b = r.json()
     assert b["system_credits"] is None
     assert b["available"] is None
-    assert b["allocated"] == 1500
+    assert b["allocated"] == 150

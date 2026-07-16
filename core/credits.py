@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 
 from db.database import Account, CreditLedger
 
+# OLD denomination (pre-redenomination): 1 credit = $0.001. Superseded by
+# core.pricing.unit_usd() (1 unit = $0.02). Kept only as documentation for
+# the redenomination migration; nothing outside this module uses it.
 CREDITS_PER_DOLLAR = 1000
 
 
