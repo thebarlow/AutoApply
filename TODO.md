@@ -345,10 +345,19 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   `meter_action(db, profile_id, action="draft")`; `InsufficientCredits` re-raised to the global 402
   handler. Added regression test `test_draft_gated_on_insufficient_credits`.
 
-- [ ] **[audit P1, gated] Server-derive `is_onboarding` in `parse_apply` (S3).** `config.py:979` trusts
-  the client `is_onboarding` and the onboarding branch replaces `profile_tree` wholesale. Safe only while
-  intake fires on empty profiles. Re-derive server-side (as `parse_propose` does) BEFORE any
-  existing-profile re-parse UI ships, else a stray `true` wipes a populated tree. Add regression test.
+- [x] **[audit P1, gated] Server-derive `is_onboarding` in `parse_apply` (S3).** **DONE 2026-07-15** —
+  `parse_apply` now ignores the client flag entirely: onboarding is derived server-side as "no stored
+  section holds data" (stricter than `parse_propose`'s builtin-only check — custom-section data also
+  blocks the wipe). Regression test `test_forged_onboarding_flag_cannot_wipe_populated_tree` asserts a
+  forged `is_onboarding=True` against a populated tree falls through to the per-section merge path.
+
+- [ ] **Fixed-unit credit pricing (monetization rework).** IN PROGRESS 2026-07-15 — replace post-paid
+  cost×rate metering with fixed pre-gated prices: intake bundle 2u, fresh doc generation 5u/doc,
+  regen/refine 2u, small actions (score/extract/parse/ats/rematch/draft) 1u. Upfront debit + refund
+  row on failure (no negative balances); fresh-vs-regen derived server-side from `documents`;
+  re-denominate balances/packs/signup grant (20u) via Alembic using calibrated `UNIT_USD` (first step:
+  query live ledger `raw_cost_usd` per action, price for ≥2× margin on generation). Design approved in
+  session; spec doc next (`docs/superpowers/specs/2026-07-15-fixed-unit-pricing-design.md`).
 
 - [x] **[audit P2] Standardize admin auth on `require_real_admin` (S4).** **DONE 2026-07-13** — deleted
   `require_admin` (resolved admin via `current_profile_id`, i.e. the impersonated tenant). Moved

@@ -377,6 +377,55 @@ def test_onboarding_customize_flips_llm_output(client, db_session, a_profile_wit
     )
 
 
+def test_forged_onboarding_flag_cannot_wipe_populated_tree(client, db_session, a_profile_with_skills):
+    """Audit S3: is_onboarding=True from the client is ignored when stored sections hold data.
+
+    The onboarding branch rebuilds the tree wholesale; a forged/stale True against
+    a populated profile must fall through to the per-section merge path instead.
+    """
+    proposal = {
+        "builtin": {
+            "first_name": "Mallory",
+            "skills": [],
+            "work_history": [],
+            "education": [],
+            "projects": [],
+        },
+        "extra_sections": [
+            {
+                "name": "Certifications",
+                "kind": "list",
+                "entries": [{"fields": [{"label": "Name", "value": "AWS"}]}],
+            },
+        ],
+        "is_onboarding": True,  # forged — stored Skills already holds ["Go"]
+        "sections": [
+            {
+                "name": "Certifications",
+                "kind": "list",
+                "origin": "novel",
+                "builtin_role": "",
+                "extra_index": 0,
+                "matches_existing": False,
+                "existing_has_data": False,
+                "default_action": "add",
+                "allowed_actions": ["add", "skip", "merge"],
+                "preview": {},
+                "action": "add",
+            },
+        ],
+    }
+    r = client.post(
+        f"/api/config/profiles/{a_profile_with_skills}/parse/apply", json=proposal
+    )
+    assert r.status_code == 200
+    # Existing data survived: the onboarding wipe did NOT run.
+    assert "Go" in _skills_values(db_session, a_profile_with_skills)
+    # And the per-section path still applied the requested add.
+    names = _profile_tree_section_names(db_session, a_profile_with_skills)
+    assert "Certifications" in names
+
+
 def test_apply_caps_returns_422(client, db_session, a_profile_with_resume):
     """A proposal that would push the tree past 500 nodes returns 422."""
     # Build extra_sections with enough list entries to blow the node cap.

@@ -827,12 +827,14 @@ def parse_apply(
         raise HTTPException(status_code=404, detail=str(exc))
 
     # Onboarding path: rebuild a fresh tree from only the selected sections.
-    # GUARD-RAIL: is_onboarding is taken from the client payload, and this branch
-    # REPLACES the stored profile_tree wholesale. That is safe today because intake
-    # only fires on empty profiles. Before any existing-profile re-parse UI ships,
-    # re-derive is_onboarding server-side from stored data (as `parse_propose` does)
-    # so a stray is_onboarding=True cannot wipe a populated tree.
-    if proposal.is_onboarding:
+    # This branch REPLACES the stored profile_tree wholesale, so onboarding is
+    # derived server-side from stored data only (audit S3): a profile counts as
+    # onboarding iff NO stored section holds data. The client's is_onboarding
+    # flag is ignored — a stray/forged True can never wipe a populated tree.
+    # (Stricter than parse_propose, which only inspects builtin roles present
+    # in the parse: custom-section data also blocks the wipe here.)
+    is_onboarding = not any(_section_has_data(s) for s in root.children)
+    if is_onboarding:
         from core.parsed_sections import build_onboarding_root
         new_root = build_onboarding_root(proposal)
         try:
