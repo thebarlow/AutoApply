@@ -101,7 +101,7 @@ class SetTierRequest(BaseModel):
 def admin_set_tier(body: SetTierRequest, db: Session = Depends(get_db),
                    admin: Account = Depends(require_real_admin)):
     """Set a profile's pricing tier (admin only)."""
-    if body.tier not in payments.tier_margins():
+    if body.tier not in payments.tier_multipliers():
         raise HTTPException(status_code=400, detail="unknown tier")
     target = None
     if body.profile_id is not None:

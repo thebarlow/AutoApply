@@ -30,8 +30,8 @@ def client(monkeypatch):
 
     monkeypatch.setenv("STRIPE_PRICE_IDS",
                        '{"1":"price_1","5":"price_5","10":"price_10","20":"price_20"}')
-    for k in ("CREDIT_TIER_MARGINS", "CREDIT_PRICE_TIERS", "CREDIT_TIER_VISIBILITY",
-              "STRIPE_FEE_PCT", "STRIPE_FEE_FIXED", "TAX_RATE"):
+    for k in ("CREDIT_TIER_MULTIPLIERS", "CREDIT_PRICE_TIERS", "CREDIT_TIER_VISIBILITY",
+              "STRIPE_FEE_PCT", "STRIPE_FEE_FIXED", "TAX_RATE", "CREDIT_UNIT_USD"):
         monkeypatch.delenv(k, raising=False)
     return TestClient(app), db, monkeypatch
 
@@ -43,7 +43,7 @@ def test_packs_returns_tier_filtered_computed_credits(client):
     packs = r.json()
     assert [p["amount_usd"] for p in packs] == [1, 5, 10, 20]
     by_amt = {p["amount_usd"]: p["credits"] for p in packs}
-    assert by_amt == {1: 25, 5: 250, 10: 525, 20: 1100}
+    assert by_amt == {1: 34, 5: 239, 10: 518, 20: 1099}
 
 
 def test_packs_beta_only_dollar_one(client):
@@ -53,7 +53,7 @@ def test_packs_beta_only_dollar_one(client):
     r = c.get("/api/payments/packs")
     packs = r.json()
     assert [p["amount_usd"] for p in packs] == [1]
-    assert packs[0]["credits"] == 450
+    assert packs[0]["credits"] == 336
 
 
 def test_checkout_unknown_price_400(client):
@@ -81,7 +81,7 @@ def test_checkout_computes_credits_from_tier(client, monkeypatch):
     assert r.json()["url"] == "https://s/cs_1"
     row = db.query(Purchase).filter_by(stripe_session_id="cs_1").one()
     assert row.status == "pending"
-    assert row.credits == 250          # standard $5
+    assert row.credits == 239          # standard $5
     assert row.amount_usd == 5.0
     assert row.tier == "standard"
     assert row.profile_id == 7
@@ -90,29 +90,29 @@ def test_checkout_computes_credits_from_tier(client, monkeypatch):
 def test_history_lists_profile_purchases(client):
     c, db, _mp = client
     db.add(Purchase(profile_id=7, stripe_session_id="cs_h", price_id="price_5",
-                    credits=250, amount_usd=5.0, status="completed", tier="standard",
+                    credits=239, amount_usd=5.0, status="completed", tier="standard",
                     created_at=dt.datetime.now(dt.timezone.utc).isoformat()))
     db.add(Purchase(profile_id=99, stripe_session_id="cs_other", price_id="price_5",
-                    credits=250, amount_usd=5.0, status="completed", tier="standard",
+                    credits=239, amount_usd=5.0, status="completed", tier="standard",
                     created_at=dt.datetime.now(dt.timezone.utc).isoformat()))
     db.commit()
     r = c.get("/api/payments/history")
     rows = r.json()
     assert [x["stripe_session_id"] for x in rows] == ["cs_h"]
-    assert rows[0]["credits"] == 250
+    assert rows[0]["credits"] == 239
 
 
 def test_packs_misconfigured_pricing_500(client, monkeypatch):
     c, _db, _mp = client
-    # Margin large enough that the profit guard reduces credits to <=0 -> ValueError.
-    monkeypatch.setenv("CREDIT_TIER_MARGINS", '{"standard": 1000}')
+    # Multiplier near zero drives units to <=0 -> ValueError.
+    monkeypatch.setenv("CREDIT_TIER_MULTIPLIERS", '{"standard": 0.00000001}')
     r = c.get("/api/payments/packs")
     assert r.status_code == 500
 
 
 def test_checkout_misconfigured_pricing_500(client, monkeypatch):
     c, _db, _mp = client
-    monkeypatch.setenv("CREDIT_TIER_MARGINS", '{"standard": 1000}')
+    monkeypatch.setenv("CREDIT_TIER_MULTIPLIERS", '{"standard": 0.00000001}')
     r = c.post("/api/payments/checkout", json={"price_id": "price_5"})
     assert r.status_code == 500
 
@@ -142,7 +142,7 @@ def test_checkout_recreates_stale_customer_and_retries(client, monkeypatch):
     assert calls["n"] == 2  # first call failed on stale customer, retried after refresh
     assert db.query(Account).filter_by(profile_id=7).one().stripe_customer_id == "cus_fresh"
     row = db.query(Purchase).filter_by(stripe_session_id="cs_retry").one()
-    assert row.credits == 250 and row.status == "pending"
+    assert row.credits == 239 and row.status == "pending"
 
 
 def test_checkout_non_customer_stripe_error_still_502(client, monkeypatch):

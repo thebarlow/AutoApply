@@ -1,20 +1,17 @@
 """Tier-aware credit-pack pricing.
 
-Margin lives on the *purchase* side: the same dollar amount buys different
-credit counts per user tier. Credits mirror raw API cost 1:1 on consumption
-(``credit_rate`` is 1.0 for metered users), so every feature costs the same
-credits for everyone. All functions here are pure config math — no Stripe calls.
+Packs are denominated in fixed-price units (``core.pricing.unit_usd()``):
+a pack's net proceeds convert to units at the unit price, then scale by a
+tier purchasing-power multiplier and any bulk discount. All functions here
+are pure config math — no Stripe calls.
 """
 
 from __future__ import annotations
 
 import json
-import math
 import os
 
-CREDITS_PER_DOLLAR = 1000
-
-_DEFAULT_MARGINS = {"beta": 1.5, "friends_family": 5.0, "standard": 20.0}
+_DEFAULT_MULTIPLIERS = {"standard": 1.0, "friends_family": 4.0, "beta": 10.0}
 _DEFAULT_PRICE_TIERS = {1: 0.0, 5: 0.05, 10: 0.10, 20: 0.15}
 _DEFAULT_VISIBILITY = {
     "beta": [1],
@@ -28,11 +25,11 @@ def _env_json(key: str) -> dict | None:
     return json.loads(raw) if raw else None
 
 
-def tier_margins() -> dict[str, float]:
-    """Tier name -> profit margin multiplier applied to net proceeds."""
-    cfg = _env_json("CREDIT_TIER_MARGINS")
+def tier_multipliers() -> dict[str, float]:
+    """Tier name -> pack purchasing-power multiplier."""
+    cfg = _env_json("CREDIT_TIER_MULTIPLIERS")
     if not cfg:
-        return dict(_DEFAULT_MARGINS)
+        return dict(_DEFAULT_MULTIPLIERS)
     return {str(k): float(v) for k, v in cfg.items()}
 
 
@@ -77,30 +74,24 @@ def _net(price_usd: float) -> float:
     return price_usd - (_fee_pct() * price_usd + _fee_fixed()) - _tax_rate() * price_usd
 
 
-def _round25(x: float) -> int:
-    """Round to the nearest 25 (ties round up)."""
-    return int(math.floor(x / 25.0 + 0.5)) * 25
-
-
 def compute_credits(price_usd: int, tier: str) -> int:
-    """Credits granted for a pack, computed from tier margin, bulk discount, fees.
+    """Units granted for a pack: net proceeds ÷ UNIT_USD × tier multiplier,
+    plus the bulk discount. Replaces the cost-margin model (meaningless at
+    near-zero LLM cost).
 
     Raises:
         ValueError: if the tier is unknown or the pack cannot be made profitable.
     """
-    margins = tier_margins()
-    if tier not in margins:
+    from core.pricing import unit_usd
+
+    mults = tier_multipliers()
+    if tier not in mults:
         raise ValueError(f"unknown tier: {tier}")
     discount = price_tiers().get(price_usd, 0.0)
-    net = _net(price_usd)
-    cost_basis = net / margins[tier]
-    credits = _round25(cost_basis * CREDITS_PER_DOLLAR * (1 + discount))
-    # Profit guard: never grant credits whose committed cost basis meets/exceeds net.
-    while credits > 0 and net <= credits / CREDITS_PER_DOLLAR:
-        credits -= 25
-    if credits <= 0:
+    units = round(_net(price_usd) / unit_usd() * mults[tier] * (1 + discount))
+    if units <= 0:
         raise ValueError(f"pack ${price_usd} for tier {tier} is not profitable")
-    return credits
+    return units
 
 
 def packs_for_tier(tier: str) -> list[dict]:

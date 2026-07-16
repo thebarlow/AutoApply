@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from core.credits import grant_credits
 from core.email import send_invite
-from core.payments import tier_margins
+from core.payments import tier_multipliers
 from db.database import Account, AllowedEmail, Purchase, get_db
 from web.routers.credits import openrouter_remaining, require_real_admin
 
@@ -45,7 +45,7 @@ def invite_user(body: InviteRequest, db: Session = Depends(get_db),
     email = body.email.strip().lower()
     if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="invalid email")
-    if body.tier not in tier_margins():
+    if body.tier not in tier_multipliers():
         raise HTTPException(status_code=400, detail="invalid tier")
     existing = db.query(AllowedEmail).filter_by(email=email).first()
     already = existing is not None
