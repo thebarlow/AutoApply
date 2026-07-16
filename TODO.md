@@ -352,12 +352,13 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   forged `is_onboarding=True` against a populated tree falls through to the per-section merge path.
 
 - [ ] **Fixed-unit credit pricing (monetization rework).** IN PROGRESS 2026-07-15 — replace post-paid
-  cost×rate metering with fixed pre-gated prices: intake bundle 2u, fresh doc generation 5u/doc,
-  regen/refine 2u, small actions (score/extract/parse/ats/rematch/draft) 1u. Upfront debit + refund
-  row on failure (no negative balances); fresh-vs-regen derived server-side from `documents`;
-  re-denominate balances/packs/signup grant (20u) via Alembic using calibrated `UNIT_USD` (first step:
-  query live ledger `raw_cost_usd` per action, price for ≥2× margin on generation). Design approved in
-  session; spec doc next (`docs/superpowers/specs/2026-07-15-fixed-unit-pricing-design.md`).
+  cost×rate metering with fixed pre-gated prices: intake bundle 2u, fresh doc generation 4u/doc
+  (standard job = 10u), regen/refine 2u, small actions (score/extract/parse/ats/rematch/draft) 1u.
+  Upfront debit + refund row on failure (no negative balances); fresh-vs-regen derived server-side
+  from `documents`; re-denominate balances/packs/signup grant (20u = 2 jobs) via Alembic using
+  calibrated `UNIT_USD` (first step: query live ledger `raw_cost_usd` per action, price for ≥2×
+  margin on generation). Spec written + approved:
+  `docs/superpowers/specs/2026-07-15-fixed-unit-pricing-design.md`. Next: implementation plan.
 
 - [x] **[audit P2] Standardize admin auth on `require_real_admin` (S4).** **DONE 2026-07-13** — deleted
   `require_admin` (resolved admin via `current_profile_id`, i.e. the impersonated tenant). Moved
