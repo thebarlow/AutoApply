@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import json as _json
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from core.job import Job
-from core.llm import get_client_for_profile
 from core.schemas import AtsReport
-from core.user import User
 from db.database import get_db
 from web.sse import send as _sse_send
 from web.tenancy import current_profile_id
@@ -18,20 +17,6 @@ router = APIRouter()
 _tray_ws: WebSocket | None = None
 
 
-def _gate_report_for(job: Job, db: Session) -> AtsReport:
-    """Resolve the active profile's user/client/model and run the ATS gate.
-
-    Raises:
-        FileNotFoundError: Propagated from ``run_ats_check`` when the résumé
-            PDF or stored Document record is absent (e.g. job was never
-            generated).
-        RuntimeError: Raised by ``User.load`` when no profile exists in the DB.
-    """
-    user = User.load(db)
-    client, model = get_client_for_profile(user)
-    return job.run_ats_check(db, user, client, model)
-
-
 def _emit(job: Job) -> None:
     _sse_send("job", job.serialize(), profile_id=job.profile_id)
 
@@ -39,6 +24,12 @@ def _emit(job: Job) -> None:
 @router.websocket("/ws/tray")
 async def tray_ws(websocket: WebSocket):
     global _tray_ws
+    # The tray socket is a single unauthenticated process-global slot for the
+    # local desktop app. On the hosted multi-tenant instance it would let any
+    # internet client receive other tenants' apply payloads — refuse outright.
+    if os.getenv("APP_ENV") == "production":
+        await websocket.close(code=4003)
+        return
     if _tray_ws is not None:
         await websocket.accept()
         await websocket.close(code=4009)

@@ -10,6 +10,7 @@ from web import llm_status
 from web.routers.jobs import _do_extract_description, _load_score_config
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
+from core.credits import InsufficientCredits
 from core.metering import meter_action
 from core.section_generator import generate_resume_by_section
 
@@ -535,7 +536,14 @@ def run_ats_gate(job_key: str, profile_id: int) -> None:
             print(f"[ats] {job_key}: LLM client error — {exc}", flush=True)
             return
         try:
-            report = job.run_ats_check(db, user, client, model)
+            # Metered: the gate's LLM round-trip is user-triggerable at will
+            # (every résumé document save re-spawns it), so it must be billed
+            # and blocked at zero balance like any other LLM action.
+            with meter_action(db, profile_id, action="ats", job_key=job_key):
+                report = job.run_ats_check(db, user, client, model)
+        except InsufficientCredits as exc:
+            print(f"[ats] {job_key}: skipped — {exc}", flush=True)
+            return
         except FileNotFoundError as exc:
             print(f"[ats] {job_key}: artifact missing — {exc}", flush=True)
             return

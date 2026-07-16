@@ -312,6 +312,8 @@ class User(Base):
                     {"role": "user", "content": md_text},
                 ],
             )
+        from core.llm import record_usage
+        record_usage(response, model)
         from core.schemas import ParseResponse, parse_llm_json
 
         raw = response.choices[0].message.content or ""

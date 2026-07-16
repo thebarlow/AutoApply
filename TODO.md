@@ -420,6 +420,20 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   and re-render into the new path — no prod migration needed. Full suite green (989; one pre-existing
   `test_logging_config`→`caplog` ordering flake in `tests/scraper`, unrelated).
 
+- [x] **[audit 2026-07-15, security] Metering + tenant-scoping sweep (6 fixes).** **DONE 2026-07-15** —
+  focused audit of profile scoping and LLM credit enforcement. Fixed: (1) `/ws/tray` websocket was
+  unauthenticated in prod (websocket scopes bypass `AuthGateMiddleware`) and a global singleton leaking
+  cross-tenant apply payloads — now refused with 4003 when `APP_ENV=production`; (2) ATS gate LLM call
+  unmetered and free-triggerable via every résumé document save — now `meter_action(action="ats")`,
+  skipped on insufficient credits; (3) résumé parse (`parse_propose` → `User.from_pdf/from_markdown`)
+  had no meter/gate/`record_usage` — now `action="resume_parse"` + usage recorded (first onboarding
+  parse is billable; signup grant covers it); (4) extraction's skill-match ran outside the settled
+  extract meter (unbilled, contradicting audit I1) — now its own meter block; (5) `/api/session-cost`
+  leaked platform-global spend — admin-only in prod, others get `{total: 0.0}` (heartbeat preserved);
+  (6) deleted dead unscoped/unmetered `tray._gate_report_for` + its test. `web/CONTEXT.md` updated.
+  Suite green (989; same pre-existing scraper caplog flake). Everything else checked clean: config/prompt
+  ownership guards, skills/stats/scraper tenant filters, admin gates, Stripe webhook/verify, SSE scoping.
+
 - [ ] **Nicer process/skill formatting** — Format process descriptions with more tables, fewer
   bullet points, less prose. Condense phrasing:
   "Strong proficiency in Python" → "Python",

@@ -682,12 +682,14 @@ def parse_propose(
     if not path.exists():
         raise HTTPException(status_code=404, detail="Resume file not found on disk")
     try:
-        if path.suffix.lower() == ".pdf":
-            raw_dict = User.from_pdf(path.read_bytes(), db, profile_id=profile_id)
-        else:
-            raw_dict = User.from_markdown(
-                path.read_text(encoding="utf-8", errors="replace"), db, profile_id=profile_id
-            )
+        # Metered: the parse is a large-prompt LLM call, re-runnable at will.
+        with meter_action(db, profile_id, action="resume_parse"):
+            if path.suffix.lower() == ".pdf":
+                raw_dict = User.from_pdf(path.read_bytes(), db, profile_id=profile_id)
+            else:
+                raw_dict = User.from_markdown(
+                    path.read_text(encoding="utf-8", errors="replace"), db, profile_id=profile_id
+                )
     except PromptNotConfiguredError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except (ValueError, RuntimeError) as exc:
