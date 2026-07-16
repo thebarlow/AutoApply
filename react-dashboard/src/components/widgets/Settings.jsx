@@ -11,6 +11,7 @@ import UserHome from './UserHome'
 import { WarningIcon } from '../shared/JobCard'
 import GatedButton from '../shared/GatedButton'
 import HelpIcon from '../shared/HelpIcon'
+import { priceLabel } from '../../prices'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -691,7 +692,9 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
         if (res.status === 402 && body?.error === 'insufficient_credits') {
           window.dispatchEvent(new CustomEvent('auto-apply:credits-error', { detail: body }))
           window.dispatchEvent(new Event('auto-apply:credits-stale'))
-          detail = "You're out of credits — purchase more to continue."
+          detail = body?.price != null
+            ? `Not enough credits — this costs ${body.price}, you have ${body.balance}.`
+            : "You're out of credits — purchase more to continue."
         }
         setActionError(detail)
       }
@@ -875,7 +878,7 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
               title={promptMissingTitle || undefined}
               className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {actionLoading ? '…' : !promptOk ? 'Prompt not set' : job.final_score != null ? 'Recalculate' : 'Calculate'}
+              {actionLoading ? '…' : !promptOk ? 'Prompt not set' : `${job.final_score != null ? 'Recalculate' : 'Calculate'} ${priceLabel('score')}`}
             </GatedButton>
           </div>
           {actionError && <p className="text-xs text-red-400 break-words">{actionError}</p>}
@@ -957,7 +960,13 @@ function PreviewTab({ job, promptStatus = {}, actionsInFlight = new Set(), onJob
                 title={promptMissingTitle || undefined}
                 className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {actionLoading ? '…' : !promptOk ? 'Prompt not set' : (contentTab === 'resume' ? hasResume : hasCover) ? 'Regenerate' : 'Generate'}
+                {actionLoading
+                  ? '…'
+                  : !promptOk
+                    ? 'Prompt not set'
+                    : (contentTab === 'resume' ? hasResume : hasCover)
+                      ? `Regenerate ${priceLabel('regenerate')}`
+                      : `Generate ${priceLabel('generate_fresh')}`}
               </GatedButton>
             </div>
           </div>
