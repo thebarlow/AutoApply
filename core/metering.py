@@ -1,13 +1,16 @@
 """Action-level LLM metering.
 
-A ``meter_action`` context manager gates on the tenant's credit balance, opens a
-per-action accumulator (a contextvar), runs the action — every ``call_llm``
-sub-call appends its real cost via ``record_call`` — then settles one debit
-ledger row from the summed cost. Outside an active meter, ``record_call`` is a
-no-op so local/dev/tray runs are unaffected.
+A ``meter_action`` context manager gates on the tenant's credit balance,
+debits the action's fixed price upfront (before the body runs), opens a
+per-action accumulator (a contextvar) so every ``call_llm`` sub-call can
+append its real cost via ``record_call``, then on success annotates the
+debit row with the observed cost for margin tracking. On failure the debit
+is refunded. Outside an active meter, ``record_call`` is a no-op so
+local/dev/tray runs are unaffected.
 """
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -16,10 +19,11 @@ from sqlalchemy.orm import Session
 
 from core.credits import (
     InsufficientCredits,
-    credit_floor,
-    debit_for_action,
+    debit_fixed,
     get_account_for_profile,
+    refund_debit,
 )
+from core.pricing import price_for
 
 logger = logging.getLogger(__name__)
 
@@ -57,45 +61,48 @@ def record_call(cost: float, model: str, prompt_tokens: int, completion_tokens: 
 
 @contextmanager
 def meter_action(db: Session, profile_id: int, *, action: str,
-                 job_key: str | None = None, floor: int | None = None):
-    """Gate, meter, and settle a single billable action.
+                 job_key: str | None = None, price: int | None = None):
+    """Prepaid gate + fixed debit for a single billable action.
 
-    - No Account row for this profile, or rate 0: run ungated, never debit.
-    - Otherwise: balance < floor -> InsufficientCredits before the body runs.
-    - On exit (success or error): debit the summed actual cost as one ledger row.
+    - No Account row, admin, or rate 0: run ungated, never debit (dev/tests).
+    - Otherwise: atomically debit the action's fixed price before the body runs
+      (InsufficientCredits if the balance can't cover it), refund on exception,
+      and annotate the debit row with the summed actual LLM cost on success.
     """
-    if floor is None:
-        floor = credit_floor()
     acct = get_account_for_profile(db, profile_id)
-    # Admins draw directly from the platform's system balance: never gated, never
-    # debited, regardless of any stored credit_rate.
     metered = acct is not None and not acct.is_admin and (acct.credit_rate or 0.0) > 0
-    if metered and (acct.credit_balance or 0) < floor:
-        raise InsufficientCredits(acct.credit_balance or 0, floor)
-
     if not metered:
         yield
         return
 
+    debit_row = debit_fixed(db, profile_id, action=action, job_key=job_key,
+                            price=price if price is not None else price_for(action))
+    _notify_credits_changed(profile_id)
     token = _meter.set([])
     try:
         yield
+    except BaseException:
+        try:
+            refund_debit(db, debit_row)
+        except Exception:
+            logger.exception("refund failed for action=%s job=%s", action, job_key)
+            db.rollback()
+        else:
+            _notify_credits_changed(profile_id)
+        raise
     finally:
         calls = _meter.get() or []
         _meter.reset(token)
-        total = sum(c["cost"] for c in calls)
-        if total > 0:
-            meta = {"calls": len(calls), "models": [c["model"] for c in calls],
-                    "prompt_tokens": sum(c["prompt_tokens"] for c in calls),
-                    "completion_tokens": sum(c["completion_tokens"] for c in calls)}
-            try:
-                debit_for_action(db, profile_id, action=action, job_key=job_key,
-                                 raw_cost_usd=total, meta=meta)
-            except Exception:
-                # Never let a settle failure mask the action's own outcome.
-                # Roll back the half-applied debit; balance can be repaired via
-                # reconcile_balance from the ledger later.
-                logger.exception("credit settle failed for action=%s job=%s", action, job_key)
-                db.rollback()
-            else:
-                _notify_credits_changed(profile_id)
+    # Success: annotate the debit with observed cost for margin tracking.
+    total = sum(c["cost"] for c in calls)
+    if calls:
+        try:
+            debit_row.raw_cost_usd = total
+            debit_row.meta = json.dumps({
+                "calls": len(calls), "models": [c["model"] for c in calls],
+                "prompt_tokens": sum(c["prompt_tokens"] for c in calls),
+                "completion_tokens": sum(c["completion_tokens"] for c in calls)})
+            db.commit()
+        except Exception:
+            logger.exception("cost annotation failed for action=%s job=%s", action, job_key)
+            db.rollback()
