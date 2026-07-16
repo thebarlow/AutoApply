@@ -125,3 +125,51 @@ def test_feedback_refine_regenerates_only_commented_section(tree_v1_job, db_sess
     assert captured["only"] == {"Summary"}
     assert "Summary" in captured["crit"]
     assert captured["crit"]["Summary"][0]["description"] == "Summary: punchier"
+
+
+# ---------------------------------------------------------------------------
+# Metering: a hard failure in the tree-v1 refine must refund the regenerate debit
+# ---------------------------------------------------------------------------
+
+def test_tree_v1_refine_hard_fail_refunds_and_marks_errored(
+        tree_v1_job, db_session, monkeypatch):
+    """A metered account: the 2u regenerate debit is refunded (balance restored)
+    and the job is marked errored when the selective-regen LLM step blows up."""
+    from db.database import Account, CreditLedger
+    from core.metering import meter_action as real_meter
+
+    # Restore the real meter (the fixture stubbed it to a no-op) so the ledger
+    # records the debit + refund.
+    monkeypatch.setattr(ip, "meter_action", real_meter)
+
+    db_session.add(Account(
+        id=1, email="acct@example.com", profile_id=1,
+        created_at="2026-01-01T00:00:00+00:00",
+        credit_balance=5, credit_rate=1.5,
+    ))
+    db_session.commit()
+
+    def boom(*a, **k):
+        raise RuntimeError("selective regen exploded")
+
+    notes = [{"node_id": "f1", "section": "Summary", "label": "Summary", "note": "punchier"}]
+    with patch("web.intake_pipeline.generate_resume_by_section", side_effect=boom), \
+         patch("web.intake_pipeline.run_ats_gate"):
+        # Must not crash the (background) worker despite the hard failure.
+        ip.run_user_feedback_refine("fb1", "resume", notes, profile_id=1)
+
+    # Ledger: exactly one debit (-2) and one matching refund (+2).
+    rows = db_session.query(CreditLedger).order_by(CreditLedger.id).all()
+    debits = [r for r in rows if r.reason == "debit"]
+    refunds = [r for r in rows if r.reason == "refund"]
+    assert len(debits) == 1 and debits[0].delta == -2 and debits[0].action == "regenerate"
+    assert len(refunds) == 1 and refunds[0].delta == 2 and refunds[0].action == "regenerate"
+
+    # Balance restored to the starting value.
+    bal = db_session.query(Account).filter_by(profile_id=1).first().credit_balance
+    assert bal == 5
+
+    # Job marked errored by the delegate before re-raising.
+    job = Job.get("fb1", db_session, 1)
+    assert job.unread_indicator == "error"
+    assert "feedback refine failed" in (job.last_result_error or "").lower()

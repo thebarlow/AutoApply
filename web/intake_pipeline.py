@@ -592,6 +592,11 @@ def run_cover_refinement(job_key: str, profile_id: int) -> None:
     _run_doc_refinement(job_key, "cover", profile_id)
 
 
+class _FeedbackRefundNoOp(Exception):
+    """Raised for a precondition no-op inside the delegate so the outer meter
+    refunds the debit; the caller swallows it without marking the job errored."""
+
+
 def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], profile_id: int) -> None:
     """Tree-v1 résumé user-feedback refine: regenerate only the commented,
     regenerable sections via 4B-2 selective regen, then eval-for-score + ATS.
@@ -613,11 +618,11 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
     try:
         job = Job.get(job_key, db, profile_id)
         if job is None:
-            return
+            raise _FeedbackRefundNoOp(f"{job_key}: job not found")
         user = User.load(db, profile_id)
         row = Document.fetch(db, job_key, "resume", profile_id)
         if row is None:
-            return
+            raise _FeedbackRefundNoOp(f"{job_key}: no resume document row")
 
         # Group notes by owning section, keep only regenerable ones.
         regenerable = set(job._regenerable_section_names(db))
@@ -632,7 +637,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
                 gen_prompt = user.resolve_prompt("resume")
             except PromptNotConfiguredError as exc:
                 print(f"[feedback:resume] {job_key}: prompt not configured — {exc}", flush=True)
-                return
+                raise _FeedbackRefundNoOp(str(exc)) from exc
             gen_client, gen_model = get_client_for_profile(
                 user, getattr(user, "prompt_resume_model", "") or "")
             root = user.profile_tree_root()
@@ -664,7 +669,7 @@ def _run_resume_feedback_refine(job_key: str, doc_type: str, notes: list[dict], 
                 db.commit()
                 _emit(job)
                 logger.exception("%s: resume feedback refine failed", job_key)
-                return
+                raise  # propagate so the outer regenerate meter refunds the debit
             finally:
                 llm_status.finish(profile_id, job_key, "resume_refine")
 
@@ -749,6 +754,12 @@ def run_user_feedback_refine(job_key: str, doc_type: str, notes: list[dict], pro
                     job.last_result_error = "Out of credits — refine needs 2 credits."
                     mdb.commit()
                     _emit(job)
+            except Exception:
+                # Delegate re-raised (after marking the job errored on a hard
+                # failure, or as a precondition no-op) so the meter refunds the
+                # regenerate debit. Swallow here so the background worker survives
+                # and the error state is not double-written.
+                pass
             finally:
                 mdb.close()
             return
