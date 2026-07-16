@@ -355,9 +355,11 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   cost×rate metering with fixed pre-gated prices: intake bundle 2u, fresh doc generation 4u/doc
   (standard job = 10u), regen/refine 2u, small actions (score/extract/parse/ats/rematch/draft) 1u.
   Upfront debit + refund row on failure (no negative balances); fresh-vs-regen derived server-side
-  from `documents`; re-denominate balances/packs/signup grant (20u = 2 jobs) via Alembic using
-  calibrated `UNIT_USD` (first step: query live ledger `raw_cost_usd` per action, price for ≥2×
-  margin on generation). Spec written + approved:
+  from `documents`. Economics decided 2026-07-16: `UNIT_USD=$0.02` (job = $0.20; $5 pack ≈ 22 jobs;
+  LLM cost per job ~$0.005–0.01 on deepseek-v4-flash, so margin 20–40×); per-tier signup grants
+  `CREDIT_SIGNUP_GRANTS` standard 20 / friends_family 50 / beta 200; packs = net÷UNIT_USD × tier
+  multiplier (×1/×4/×10). Alembic migration converts balances ÷20 + tops up never-purchased accounts
+  to their tier grant. Spec written + approved:
   `docs/superpowers/specs/2026-07-15-fixed-unit-pricing-design.md`. Next: implementation plan.
 
 - [x] **[audit P2] Standardize admin auth on `require_real_admin` (S4).** **DONE 2026-07-13** — deleted

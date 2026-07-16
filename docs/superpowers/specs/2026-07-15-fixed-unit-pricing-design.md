@@ -68,27 +68,39 @@ flat `CREDIT_FLOOR` concept is deleted — the price IS the gate.
 
 The balance-changed SSE nudge (`credits` event) now also fires on refunds.
 
+## Unit Economics (calibrated 2026-07-16)
+
+The live ledger had no metered debits yet, so costs were estimated analytically from
+the model's OpenRouter pricing (`deepseek/deepseek-v4-flash`: $0.09/M in, $0.18/M out)
+and the app's real prompt sizes: intake bundle ≈ $0.001, fresh résumé (gen + eval +
+≤3 refine turns + ATS) ≈ $0.0025 (worst ~$0.005), fresh cover ≈ $0.0015, small
+actions ≤ $0.001. **A full 10-unit job costs the platform ~$0.005–0.01.**
+
+- **`UNIT_USD` = $0.02** (env-overridable). A full job costs the user **$0.20**;
+  a $5 pack nets $4.55 after Stripe (2.9% + $0.30) → **~227 units ≈ 22 jobs**.
+  Margin over LLM cost ≈ 20–40×; the binding costs are Stripe fees and the free grants.
+- **Per-tier signup grants** (`CREDIT_SIGNUP_GRANTS` env JSON, replacing the flat
+  `CREDIT_SIGNUP_GRANT`): `standard: 20` (2 free jobs), `friends_family: 50`,
+  `beta: 200`. Grant cost to the platform is ~$0.001/unit — negligible.
+- **Packs** (`core/payments.py`): `units = net(pack_usd) / UNIT_USD × tier multiplier`,
+  with multipliers `standard ×1, friends_family ×4, beta ×10`
+  (`CREDIT_TIER_MARGINS` is repurposed/renamed to these multipliers). This replaces
+  the old cost-margin `compute_credits` math, which is meaningless at near-zero cost.
+  Bulk-discount `price_tiers()` and Stripe price-id plumbing are unchanged.
+
 ## Denomination Migration
 
-- `UNIT_USD` — the dollar value of one unit — is a global config value, **calibrated
-  before rollout** (see below).
-- One Alembic migration converts existing account balances by dollar value:
-  `new_balance = round(old_credits / 1000 / UNIT_USD)`; a `reason="redenomination"`
-  ledger row records the conversion per account so the ledger SUM stays consistent
-  with the cached balance (`reconcile_balance` keeps working).
-- Signup grant: **20 units** (2 standard jobs). `CREDIT_SIGNUP_GRANT` default changes.
-- Packs (`core/payments.py`): server-computed as
-  `units = pack_usd / UNIT_USD × tier multiplier`, replacing the current
-  1000-credits-per-dollar math. Tier margins keep working as pack-size multipliers.
+One Alembic migration, run once at deploy:
 
-## Calibration (first implementation step)
-
-Query the live ledger:
-`SELECT action, COUNT(*), AVG(raw_cost_usd), MAX(raw_cost_usd) FROM credit_ledger
-WHERE reason='debit' GROUP BY action`. Set `UNIT_USD` so the priciest action
-(fresh generation with refine turns, 4 units) retains **≥ 2× margin** at its
-*max* observed cost. Everything downstream reads `UNIT_USD`; the analysis lands in
-the plan doc so the number is reproducible.
+1. Convert existing balances by dollar value: `new = round(old / 1000 / 0.02)`
+   (i.e. ÷20), writing a `reason="redenomination"` ledger row per account for the
+   delta so ledger SUM stays consistent with the cached balance
+   (`reconcile_balance` keeps working).
+2. **Grant top-up:** any account that has never purchased and whose converted balance
+   is below its tier's new signup grant is topped up to the grant
+   (`reason="redenomination_topup"`). Current live state: both accounts hold 100 old
+   credits → 5 units; the beta account tops up to 200, the admin account is
+   unmetered anyway.
 
 ## Frontend
 
