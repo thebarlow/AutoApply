@@ -128,73 +128,104 @@ A four-phase initiative moved the pipeline from free-form text toward typed, DB-
 
 ## Credits & Metering
 
-A cost-backed credit system gates LLM-driven actions per tenant. The
-`credit_ledger` table (append-only: `profile_id, delta, reason, action,
-job_key, raw_cost_usd, meta, created_by, created_at`) is the **source of
-truth**; `account.credit_balance` is a cached running total kept in sync with
-each ledger insert, and `account.credit_rate` is a per-account tier
-multiplier. Conversion: `to_credits(raw_cost_usd, rate) = round(raw_cost_usd *
-rate * 1000)` (1000 credits = $1).
+Prepaid **fixed-unit** pricing (2026-07-16 rework; replaced the earlier
+cost×rate post-paid model below): every billable action has a fixed integer
+price in credits, debited **upfront** before the LLM call runs, and refunded
+on failure — balances can never go negative and prices no longer depend on
+the actual LLM cost incurred. The `credit_ledger` table (append-only:
+`profile_id, delta, reason, action, job_key, raw_cost_usd, meta, created_by,
+created_at`) is still the **source of truth**; `account.credit_balance` is a
+cached running total kept in sync with each ledger insert.
+
+**Price card** (`core/pricing.py` `price_for(action)`, each `PRICE_<ACTION>`
+env-overridable): `intake` 2u (score + extract + skill-match bundle),
+`generate_fresh` 4u (first generation of a doc_type for a job — a standard
+job with resume+cover = 10u total with intake), `regenerate` 2u (re-generation
+or feedback-refine of an existing doc), and 1u each for `score`, `extract`,
+`resume_parse`, `ats`, `rematch`, `draft`. `unit_usd()` (`CREDIT_UNIT_USD`,
+default $0.02) is the dollar value of one unit, used only by the pack
+calculator below — it does not affect debits. `resolve_generate_action(db,
+job, doc_type)` derives `generate_fresh` vs `regenerate` server-side from
+whether a `Document` row (or a stored output path) already exists for that
+job/doc_type — never trusted from the client.
 
 **Metering chokepoint.** `core/metering.py` `meter_action(db, profile_id, *,
-action, job_key, floor)` wraps a billable action (score/generate/eval/refine).
-On entry it gates: if `credit_balance < floor`, it raises
-`InsufficientCredits` before the action runs (`web/main.py` maps this to HTTP
-402 `{error:"insufficient_credits", balance, floor}`). It then opens a
-per-action accumulator; every `call_llm` invocation inside the action
-(`core/llm.py`) records its real `usage.cost` into that accumulator via
-`record_call`. On exit (success or error) it settles **one** debit ledger row
-from the summed cost. Accounts with no `Account` row (local/dev/tray/tests) or
-`credit_rate == 0` (the developer tier) run ungated and are never debited.
+action, job_key, price=None)` wraps a billable action. If the account is
+metered (an `Account` row exists, not admin, `credit_rate > 0`): it debits the
+action's fixed price via `core.credits.debit_fixed` — a single atomic
+conditional `UPDATE` that only succeeds if the balance covers the price,
+raising `InsufficientCredits(balance, price, action)` otherwise (`web/main.py`
+maps this to HTTP 402 `{error:"insufficient_credits", balance, price,
+action}`) — **before** the body runs. It then opens a per-action accumulator;
+every `call_llm`/`record_usage` call inside the body appends its real cost.
+On success it annotates the already-settled debit row with the summed raw
+cost + call metadata (models, token counts) for margin tracking — this never
+changes what was charged. On any exception it refunds the debit
+(`refund_debit`, a compensating `+price` ledger row) before re-raising.
+Unmetered accounts (no `Account` row, or `credit_rate == 0`, the developer
+tier) run the body ungated and are never debited. A content-free `credits` SSE
+event nudges the dashboard to refetch balance on both debit and refund.
 
-**Grants.** New accounts receive a signup grant (`CREDIT_SIGNUP_GRANT`,
-default 100 = $0.10) at provisioning (`web/auth/identity.py`
-`_provision_account`), reason `signup_grant`; admin accounts get
-`credit_rate = 0.0` (free/ungated dev tier), others get `CREDIT_DEFAULT_RATE`
-(default 1.5, friends-and-family). `POST /api/admin/credits/grant`
+**Metering topology:** the intake pipeline debits **one** `intake` (2u) around
+extract + score + skill-match; the generate endpoints resolve
+`generate_fresh` (4u) vs `regenerate` (2u) via `resolve_generate_action` and
+bundle the post-gen eval/refine turns under that same debit (ATS is free when
+it's part of a generate flow); standalone `score`/`extract`/`rematch`/
+`resume_parse`/`draft` endpoints are 1u each; the ATS gate is metered (1u)
+only when it's re-triggered by a manual document edit outside a generate
+flow; the feedback-refine endpoint is **one** `regenerate` (2u) meter with a
+fail-fast balance pre-check on its 202 (fire-and-forget) entry point. All
+failed/no-op action paths (including tree-v1 generation failures) are
+refunded.
+
+**Grants.** New accounts receive a signup grant sized by tier
+(`core.credits.signup_grant_for_tier(tier)`, env `CREDIT_SIGNUP_GRANTS` JSON
+map, defaults `standard` 20 / `friends_family` 50 / `beta` 200 units) at
+provisioning, reason `signup_grant`. `POST /api/admin/credits/grant`
 (`web/routers/credits.py`, admin-only) grants credits by profile_id or email
-with reason `admin_grant` — the same call a future Stripe webhook (sub-project
-3, Payments) will reuse for purchased credit packs.
+with reason `admin_grant` — the same call the Stripe webhook (Payments,
+below) reuses for purchased credit packs.
 
-**Tiers** (env-configured, set per account manually — no admin UI yet):
-developer `0` (free), friends-and-family `1.5` (default), standard customer
-`10.0`. `CREDIT_FLOOR` (default 10) is the balance floor checked by the gate.
+**Redenomination.** Alembic migration `aa10units01` is a one-shot conversion
+of all existing balances from the old cost-based credit denomination to the
+new unit denomination (÷20), inserting `redenomination` ledger rows for the
+adjustment; non-admin accounts that never made a purchase also receive a
+`redenomination_topup` grant up to their tier's signup amount. The downgrade
+is a no-op (the old denomination isn't reconstructable). This runs exactly
+once, automatically, via the existing `alembic upgrade head` on Railway
+startup.
 
-**Known limitation:** the extraction LLM call
-(`_call_llm_for_extraction`) doesn't route through `call_llm`, so its cost
-isn't recorded into the meter — the extract action's floor gate works, but its
-debit always settles to 0. Extraction is effectively free in v1.
+**Retired:** `credit_floor`/`debit_for_action`/`to_credits`/
+`signup_grant_amount` (post-paid cost×rate helpers) and `tier_margins`
+(purchase-side margin table) are deleted; `CREDIT_FLOOR`,
+`CREDIT_SIGNUP_GRANT`, `CREDIT_DEFAULT_RATE` (rate itself still exists on
+`Account` but is no longer read for debit sizing), and `CREDIT_TIER_MARGINS`
+no longer do anything and should be removed from deployed env if set.
 
 ## Payments
 
 Stripe Checkout sells credit packs via server-side redirect (no client-side
-Stripe.js). **Pricing is tiered**: margin lives on the *purchase* side, not on
-consumption — every feature costs the same credits for everyone
-(`account.credit_rate` is **1.0** for metered users, 0.0 for admins/unmetered),
-but the same dollar amount buys *different* credit counts per user tier.
+Stripe.js). Pack sizing is **unit-denominated**: `core/payments.py` computes
+`credits = net(price_usd) / unit_usd() × tier_multiplier × (1 + bulk_discount)`
+— net proceeds (price minus the Stripe fee model + tax buffer) converted to
+units at `unit_usd()` (`core/pricing.py`, default $0.02/unit), then scaled by
+the buyer's tier multiplier and the bulk discount for that price point.
 
-**Tiers** (`account.tier`, `purchase.tier`; enum-ish strings): `beta` (1.5×
-margin), `friends_family` (5×), `standard` (20×). Existing accounts were
-backfilled to `beta` by migration `aa02tiers01` (which also reset
-`credit_rate` 1.5→1.0); new signups are provisioned `standard`.
+**Tiers** (`account.tier`, `purchase.tier`): `standard` (1×), `friends_family`
+(4×), `beta` (10×) — `core/payments.py` `tier_multipliers()`, env
+`CREDIT_TIER_MULTIPLIERS` JSON override. The old purchase-side `tier_margins`
+table is retired.
 
 `core/payments.py` is a pure pricing **calculator** (no Stripe calls):
-`tier_margins()`, `price_tiers()` (bulk discount per dollar amount: $1→0,
+`tier_multipliers()`, `price_tiers()` (bulk discount per dollar amount: $1→0,
 $5→5%, $10→10%, $20→15%), `tier_visibility()` (beta sees only $1;
 friends_family/standard see $1/$5/$10/$20), `price_ids()` (dollar→Stripe price
 id from `STRIPE_PRICE_IDS`), `compute_credits(price_usd, tier)`, and helpers
-`packs_for_tier`/`resolve_price_id`. `compute_credits` takes net proceeds
-(price minus the fee model: `STRIPE_FEE_PCT` 0.029 + `STRIPE_FEE_FIXED` 0.30,
-plus a flat `TAX_RATE` buffer, default 0), divides by the tier margin to get a
-cost basis, applies the bulk discount, and rounds to the nearest 25 credits; a
-profit guard steps the grant down by 25 until it is strictly profitable, or
-raises `ValueError` if the pack/tier can't be made profitable. Stripe stores
-only the **4 dollar prices** ($1/$5/$10/$20 under one "Auto Apply Credits"
-product); credits are always computed server-side per tier (never trusted from
-the client). Worked defaults (TAX_RATE=0): beta $1=450; friends_family
-$1=125/$5=950/$10=2075/$20=4400; standard $1=25/$5=250/$10=525/$20=1100.
+`packs_for_tier`/`resolve_price_id`. Stripe stores only the **4 dollar
+prices** ($1/$5/$10/$20 under one "Auto Apply Credits" product); credits are
+always computed server-side per tier (never trusted from the client). The
+admin `grant-budget` stat is likewise converted to unit denomination.
 
-The old `load_packs`/`credits_for_price`/`STRIPE_PACKS` flat map is **retired**.
 `core/stripe_client.py` thinly wraps the `stripe` SDK (v15.2.1):
 `create_customer`, `create_checkout_session`, `retrieve_price`,
 `construct_event` — all reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`
@@ -226,13 +257,13 @@ cookie) — `web/auth/middleware.py` adds `/api/payments/webhook` to
 **New env vars:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
 `STRIPE_PRICE_IDS` (JSON map `dollar amount -> Stripe price id`; replaces the
 retired `STRIPE_PACKS`), `APP_BASE_URL` (base URL for Checkout success/cancel
-redirects). Optional pricing overrides: `CREDIT_TIER_MARGINS`,
-`CREDIT_PRICE_TIERS`, `CREDIT_TIER_VISIBILITY` (JSON), and `STRIPE_FEE_PCT`,
-`STRIPE_FEE_FIXED`, `TAX_RATE` (floats).
+redirects). Optional pricing overrides: `CREDIT_TIER_MULTIPLIERS`,
+`CREDIT_PRICE_TIERS`, `CREDIT_TIER_VISIBILITY` (JSON), `CREDIT_UNIT_USD`,
+and `STRIPE_FEE_PCT`, `STRIPE_FEE_FIXED`, `TAX_RATE` (floats).
 
 **Admin:** `POST /api/admin/credits/tier` (admin-only, `web/routers/credits.py`)
 sets a profile's tier (target by `profile_id` or `email`; validated against
-`payments.tier_margins()`).
+`payments.tier_multipliers()`).
 
 **Known limitation:** refunds are not handled — a Stripe refund does not
 claw back granted credits; reversal is admin-manual only.
@@ -322,8 +353,8 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
 4. **Onboarding UX rework** *(in progress)* — the API-key step is dropped: the
    welcome wizard is now a single "Upload Master Resume" modal triggered on first
    login (no parsed résumé), parsing against the auto-provisioned profile using
-   the platform key and the account's signup credit grant
-   (`CREDIT_SIGNUP_GRANT`). `setup-status.llm_configured` counts the platform
+   the platform key and the account's tiered signup credit grant
+   (`signup_grant_for_tier`, env `CREDIT_SIGNUP_GRANTS`). `setup-status.llm_configured` counts the platform
    `LLM_API_KEY` so credit-gated actions aren't blocked. After the wizard, a
    single **action-gated guided tour** (react-joyride; `react-dashboard/src/
    components/Onboarding/`, `TOUR_STEPS`) walks the user through the profile

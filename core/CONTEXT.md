@@ -21,8 +21,9 @@ core/
 ├── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
 ├── document_parser.py    # Inverse of document_assembler — reconstructs a structured document from rendered Markdown (canonical AND legacy LLM formats)
 ├── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
-├── credits.py           # Credit ledger: conversion formula, grant/debit/reconcile, env tier helpers
-├── metering.py          # meter_action context manager: per-action gate + debit settle around LLM calls
+├── pricing.py           # Fixed-unit price card: price_for()/unit_usd()/resolve_generate_action()
+├── credits.py           # Credit ledger: prepaid fixed debit, refund, grant/reconcile, tiered signup grants
+├── metering.py          # meter_action context manager: prepaid per-action debit + refund-on-failure around LLM calls
 ├── payments.py          # Tier-aware pricing calculator: compute_credits()/packs_for_tier()/resolve_price_id() (no Stripe SDK calls)
 └── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, retrieve_price, construct_event
 ```
@@ -123,9 +124,10 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | ATS parseability gate (mechanical hard-block + LLM advisory) | `ats_gate.py` → `run_gate()` / `Job.run_ats_check()` |
 | Mechanical ATS checks (contact, sections, skills, glyph-junk, text-layer) | `ats_gate.py` → `check_mechanical()` |
 | Semantic ATS roundtrip check (LLM re-parse of extracted text) | `ats_gate.py` → `check_roundtrip()` |
-| Credit conversion, grants, debits, reconciliation | `credits.py` → `to_credits()`, `grant_credits()`, `debit_for_action()`, `reconcile_balance()` |
-| Per-action credit gate + debit settle around LLM calls | `metering.py` → `meter_action()` |
-| Tier-aware credit pricing (margins, bulk discounts, fees, per-tier credits) | `payments.py` → `tier_margins()`, `price_tiers()`, `tier_visibility()`, `price_ids()`, `compute_credits()`, `packs_for_tier()`, `resolve_price_id()` |
+| Fixed-unit price card | `pricing.py` → `price_for()`, `unit_usd()`, `resolve_generate_action()` |
+| Credit ledger: grants, prepaid fixed debit, refund, reconciliation | `credits.py` → `grant_credits()`, `debit_fixed()`, `refund_debit()`, `reconcile_balance()`, `signup_grant_for_tier()` |
+| Per-action prepaid gate + debit settle around LLM calls | `metering.py` → `meter_action()` |
+| Tier-aware credit pack pricing (multipliers, bulk discounts, fees, per-tier credits) | `payments.py` → `tier_multipliers()`, `price_tiers()`, `tier_visibility()`, `price_ids()`, `compute_credits()`, `packs_for_tier()`, `resolve_price_id()` |
 | Stripe SDK calls (customer, Checkout session, price lookup, webhook signature verification) | `stripe_client.py` → `create_customer()`, `create_checkout_session()`, `retrieve_price()`, `construct_event()` |
 
 ## LLM Integration
@@ -215,65 +217,88 @@ Two-layer gate that validates the rendered résumé PDF before the application i
 
 The `ats_parse` prompt used by the semantic layer is a DB-seeded `PromptDefault` (type key `"ats_parse"`). It is **not** in `PROMPT_TYPE_KEYS` — it is seeded directly by `init_db` and is not exposed for per-profile override.
 
-## Credits & Metering (`core/credits.py`, `core/metering.py`)
+## Credits & Metering (`core/pricing.py`, `core/credits.py`, `core/metering.py`)
 
-`credits.py` holds the conversion formula and ledger operations:
-`to_credits(raw_cost_usd, rate) = round(raw_cost_usd * rate * 1000)` (1000
-credits = $1). `grant_credits`/`debit_for_action` insert a `CreditLedger` row
-and update the cached `Account.credit_balance` in the same transaction.
-`reconcile_balance` recomputes the cached balance from `SUM(credit_ledger.delta)`.
-Env helpers: `default_rate()` (`CREDIT_DEFAULT_RATE`, default 1.5),
-`signup_grant_amount()` (`CREDIT_SIGNUP_GRANT`, default 100), `credit_floor()`
-(`CREDIT_FLOOR`, default 10). **All of `grant_credits`/`debit_for_action`/
-`reconcile_balance` are no-ops (return `None`) when `get_account_for_profile`
-finds no `Account` row** — i.e. local/dev/tray/test runs that have no
-authenticated account are unaffected.
+Prepaid fixed-unit pricing (2026-07-16). `pricing.py` holds the price card:
+`price_for(action)` returns an integer unit price from `DEFAULT_PRICES`
+(`intake=2, generate_fresh=4, regenerate=2, score/extract/resume_parse/
+ats/rematch/draft=1`), each overridable via `PRICE_<ACTION>` env; `unit_usd()`
+(`CREDIT_UNIT_USD`, default $0.02) is the dollar value of one unit, used only
+by the pack calculator (`payments.py`), not by debit sizing;
+`resolve_generate_action(db, job, doc_type)` derives `generate_fresh` vs
+`regenerate` server-side from an existing `Document` row or stored output
+path.
+
+`credits.py` holds ledger operations: `debit_fixed(db, profile_id, *, action,
+job_key, price)` is a single atomic conditional `UPDATE …
+credit_balance - price WHERE credit_balance >= price`, raising
+`InsufficientCredits(balance, price, action)` if the row doesn't match — so
+balances can never go negative and there's no separate gate-then-debit race.
+`refund_debit(db, debit_row)` inserts a compensating `+price` ledger row.
+`grant_credits` inserts a `CreditLedger` row and updates the cached
+`Account.credit_balance` in the same transaction. `reconcile_balance`
+recomputes the cached balance from `SUM(credit_ledger.delta)`.
+`signup_grant_for_tier(tier)` (env `CREDIT_SIGNUP_GRANTS` JSON map, defaults
+`standard` 20 / `friends_family` 50 / `beta` 200 units) sizes the signup
+grant per tier. **`grant_credits`/`debit_fixed`/`reconcile_balance` are
+no-ops (return `None`) when `get_account_for_profile` finds no `Account`
+row** — i.e. local/dev/tray/test runs that have no authenticated account are
+unaffected. Deleted: `credit_floor`, `debit_for_action`, `to_credits`,
+`signup_grant_amount`.
 
 `metering.py` provides `meter_action(db, profile_id, *, action, job_key,
-floor)`, the single chokepoint that wraps each billable `Job` method call from
-`web/`:
-- **Gate** — if the account is metered (`Account` exists and `credit_rate >
-  0`) and `credit_balance < floor`, raises `InsufficientCredits` before the
-  body runs.
+price=None)`, the single chokepoint that wraps each billable `Job` method
+call from `web/`:
+- **Debit-first** — if the account is metered (`Account` exists, not admin,
+  `credit_rate > 0`), it debits `price_for(action)` (or the explicit `price`
+  override) via `debit_fixed` **before the body runs** — `InsufficientCredits`
+  propagates as an HTTP 402 without ever executing the LLM call.
 - **Record** — opens a `ContextVar` accumulator; every LLM call inside the
   `with` block appends its cost via `record_call(cost, model, prompt_tokens,
-  completion_tokens)`. `call_llm` does this through `core.llm.record_usage`;
-  direct `client.chat.completions.create` sites (extraction, skill-match) must
-  call `record_usage(response, model)` themselves so their cost is billed too.
-- **Settle** — in a `finally` (never masks the body's exception), sums the
-  recorded costs and inserts **one** debit `CreditLedger` row via
-  `debit_for_action`. If settling itself fails, it's logged and rolled back
-  rather than raised — `reconcile_balance` is the manual repair path. On a
-  successful debit it broadcasts a content-free `credits` SSE event
-  (`_notify_credits_changed`, best-effort) so the dashboard navbar refetches its
+  completion_tokens)` (for raw-cost annotation only, not for billing). `call_llm`
+  does this through `core.llm.record_usage`; direct
+  `client.chat.completions.create` sites (extraction, skill-match) call
+  `record_usage(response, model)` themselves.
+- **Settle** — on success, annotates the already-debited ledger row with the
+  summed raw cost + call metadata (models, token counts) for margin
+  tracking; this never changes the charge. On any exception in the body, it
+  refunds the debit (`refund_debit`) before re-raising — failed/no-op actions
+  are never billed.
+- A content-free `credits` SSE event (`_notify_credits_changed`, best-effort)
+  fires on both debit and refund so the dashboard navbar refetches its
   balance instead of lagging until the next load/402.
 - Unmetered accounts (no `Account` row, or `credit_rate == 0` — the developer
-  tier) run the body ungated and record nothing.
+  tier) run the body ungated and record/debit nothing.
 
-`web/routers/jobs.py` and `web/intake_pipeline.py` wrap score, generate
-(resume/cover), eval, and refine in `meter_action`.
-
-**Extraction metering (audit I1, fixed 2026-07-13):** `_call_llm_for_extraction`
-and `Job.match_profile_skills` do a direct `client.chat.completions.create`
-(they don't go through `call_llm`) and previously never recorded cost, so the
-extract action always settled a 0 debit. Both now call `core.llm.record_usage`
-after their create call, so extraction (including its skill-match sub-call) is
-billed like every other metered action.
+**Metering topology:** intake pipeline = **one** `intake` (2u) meter around
+extract + score + skill-match (`web/intake_pipeline.py`); generate endpoints
+(`web/routers/jobs.py`) resolve `generate_fresh` (4u) vs `regenerate` (2u) via
+`resolve_generate_action` and bundle post-gen eval/refine turns under that
+same debit (ATS free when part of a generate flow); standalone
+score/extract/rematch/resume_parse/draft endpoints are 1u each; the ATS gate
+is metered (1u) only when re-triggered by a manual document edit outside a
+generate flow; the feedback-refine 202 endpoint does a fail-fast pre-check
+then meters **one** `regenerate` (2u) for the background turn. Failed actions
+(including tree-v1 no-op/failure paths) are refunded via the `meter_action`
+exception path.
 
 ## Payments (`core/payments.py`, `core/stripe_client.py`)
 
 `payments.py` is a pure tier-aware pricing **calculator** (no Stripe SDK
-calls): margin lives on the *purchase* side, so the same dollar amount buys
-different credits per tier (`beta`/`friends_family`/`standard`). Public
-functions: `tier_margins()`, `price_tiers()` (bulk discount per dollar
-amount), `tier_visibility()`, `price_ids()` (dollar→Stripe price id),
-`compute_credits(price_usd, tier)` (net→cost basis→round-to-25, profit guard;
-raises `ValueError` if unprofitable/unknown tier), `packs_for_tier()`,
-`resolve_price_id()`. The old `load_packs`/`credits_for_price`/`STRIPE_PACKS`
-flat map is retired in favor of `STRIPE_PRICE_IDS` plus optional overrides
-`CREDIT_TIER_MARGINS`/`CREDIT_PRICE_TIERS`/`CREDIT_TIER_VISIBILITY` and the fee
-model `STRIPE_FEE_PCT`/`STRIPE_FEE_FIXED`/`TAX_RATE`. Note: `account.credit_rate`
-now defaults to **1.0** for metered users (was 1.5). `stripe_client.py` wraps the
+calls). Packs are now unit-denominated: `compute_credits(price_usd, tier) =
+net(price_usd) / unit_usd() × tier_multiplier × (1 + bulk_discount)` — net
+proceeds (price minus the Stripe fee model + tax buffer), converted to units
+at `pricing.unit_usd()`, scaled by the tier multiplier and the bulk discount
+for that price point. Public functions: `tier_multipliers()` (env
+`CREDIT_TIER_MULTIPLIERS`, defaults `standard`×1 / `friends_family`×4 /
+`beta`×10 — replaces the deleted `tier_margins`), `price_tiers()` (bulk
+discount per dollar amount), `tier_visibility()`, `price_ids()` (dollar→Stripe
+price id), `compute_credits()`, `packs_for_tier()`, `resolve_price_id()`. The
+old `load_packs`/`credits_for_price`/`STRIPE_PACKS` flat map is retired in
+favor of `STRIPE_PRICE_IDS` plus optional overrides
+`CREDIT_TIER_MULTIPLIERS`/`CREDIT_PRICE_TIERS`/`CREDIT_TIER_VISIBILITY` and the
+fee model `STRIPE_FEE_PCT`/`STRIPE_FEE_FIXED`/`TAX_RATE`. The admin
+grant-budget stat is likewise reported in unit denomination. `stripe_client.py` wraps the
 `stripe` SDK (v15.2.1) with `create_customer`, `create_checkout_session`,
 `retrieve_price`, and `construct_event` (webhook signature verification),
 reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` from env lazily. Consumed

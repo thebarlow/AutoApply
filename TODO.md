@@ -351,16 +351,13 @@ cycle. Foundation done; building up the stack: **Auth ✅ → Credits ✅ → Pa
   blocks the wipe). Regression test `test_forged_onboarding_flag_cannot_wipe_populated_tree` asserts a
   forged `is_onboarding=True` against a populated tree falls through to the per-section merge path.
 
-- [ ] **Fixed-unit credit pricing (monetization rework).** IN PROGRESS 2026-07-15 — replace post-paid
-  cost×rate metering with fixed pre-gated prices: intake bundle 2u, fresh doc generation 4u/doc
-  (standard job = 10u), regen/refine 2u, small actions (score/extract/parse/ats/rematch/draft) 1u.
-  Upfront debit + refund row on failure (no negative balances); fresh-vs-regen derived server-side
-  from `documents`. Economics decided 2026-07-16: `UNIT_USD=$0.02` (job = $0.20; $5 pack ≈ 22 jobs;
-  LLM cost per job ~$0.005–0.01 on deepseek-v4-flash, so margin 20–40×); per-tier signup grants
-  `CREDIT_SIGNUP_GRANTS` standard 20 / friends_family 50 / beta 200; packs = net÷UNIT_USD × tier
-  multiplier (×1/×4/×10). Alembic migration converts balances ÷20 + tops up never-purchased accounts
-  to their tier grant. Spec written + approved:
-  `docs/superpowers/specs/2026-07-15-fixed-unit-pricing-design.md`. Next: implementation plan.
+- [x] **Fixed-unit credit pricing (monetization rework).** **DONE 2026-07-16** — replaced post-paid
+  cost×rate metering with prepaid fixed prices (`core/pricing.py` price card: intake 2u, generate_fresh
+  4u, regenerate 2u, score/extract/parse/ats/rematch/draft 1u), atomic upfront `debit_fixed` +
+  refund-on-failure (`core/credits.py`, no negative balances), tiered signup grants and unit-denominated
+  packs (`core/payments.py`), and a one-shot Alembic redenomination (`aa10units01`, ÷20 + top-up).
+  Full suite green (1001 passed; pre-existing full-suite flake `test_run_scraper_continues_on_source_error`
+  unrelated). Spec: `docs/superpowers/specs/2026-07-15-fixed-unit-pricing-design.md`.
 
 - [x] **[audit P2] Standardize admin auth on `require_real_admin` (S4).** **DONE 2026-07-13** — deleted
   `require_admin` (resolved admin via `current_profile_id`, i.e. the impersonated tenant). Moved
