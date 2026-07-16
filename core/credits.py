@@ -1,9 +1,11 @@
-"""Cost-backed credit ledger: conversion, grants, debits, reconciliation.
+"""Prepaid fixed-price credit ledger: grants, atomic debits, refunds.
 
-The ``credit_ledger`` table is the source of truth; ``account.credit_balance``
-is a cached denormalization updated in the same transaction as each ledger row.
-Billing acts on the Account row matching a tenant's ``profile_id``; if there is
-no such row (local/dev/tests without auth), grants/debits are no-ops.
+Actions have fixed integer credit prices (see ``core/pricing.py``); this module
+no longer converts raw LLM cost to credits. The ``credit_ledger`` table is the
+source of truth; ``account.credit_balance`` is a cached denormalization updated
+in the same transaction as each ledger row. Billing acts on the Account row
+matching a tenant's ``profile_id``; if there is no such row (local/dev/tests
+without auth), grants/debits are no-ops.
 """
 from __future__ import annotations
 
@@ -20,29 +22,24 @@ CREDITS_PER_DOLLAR = 1000
 
 
 class InsufficientCredits(Exception):
-    """Raised by the action gate when balance is below the floor."""
+    """Raised by the prepaid gate when balance < the action's price."""
 
-    def __init__(self, balance: int, floor: int):
+    def __init__(self, balance: int, price: int, action: str = ""):
         self.balance = balance
-        self.floor = floor
-        super().__init__(f"insufficient credits: {balance} < {floor}")
+        self.price = price
+        self.action = action
+        super().__init__(f"insufficient credits: {balance} < {price} ({action})")
 
 
 def default_rate() -> float:
     return float(os.getenv("CREDIT_DEFAULT_RATE", "1.0"))
 
 
-def signup_grant_amount() -> int:
-    return int(os.getenv("CREDIT_SIGNUP_GRANT", "100"))
-
-
-def credit_floor() -> int:
-    return int(os.getenv("CREDIT_FLOOR", "10"))
-
-
-def to_credits(raw_cost_usd: float, rate: float) -> int:
-    """Marked-up dollar cost converted to whole credits."""
-    return round(raw_cost_usd * rate * CREDITS_PER_DOLLAR)
+def signup_grant_for_tier(tier: str) -> int:
+    defaults = {"standard": 20, "friends_family": 50, "beta": 200}
+    raw = os.getenv("CREDIT_SIGNUP_GRANTS", "").strip()
+    table = {**defaults, **json.loads(raw)} if raw else defaults
+    return int(table.get(tier, table["standard"]))
 
 
 def _now() -> str:
@@ -75,18 +72,41 @@ def grant_credits(db: Session, profile_id: int, amount: int, reason: str, *,
     return row
 
 
-def debit_for_action(db: Session, profile_id: int, *, action: str, job_key: str | None,
-                     raw_cost_usd: float, meta: dict) -> CreditLedger | None:
-    """Insert a negative ledger row for an action's actual cost; decrement balance."""
-    acct = get_account_for_profile(db, profile_id)
-    if acct is None:
-        return None
-    amount = to_credits(raw_cost_usd, acct.credit_rate or 0.0)
-    row = CreditLedger(profile_id=profile_id, delta=-amount, reason="debit",
-                       action=action, job_key=job_key, raw_cost_usd=raw_cost_usd,
-                       meta=json.dumps(meta), created_at=_now())
+def debit_fixed(db: Session, profile_id: int, *, action: str, job_key: str | None,
+                price: int) -> CreditLedger:
+    """Atomically gate and debit a fixed price.
+
+    One conditional UPDATE guards the gate: concurrent actions cannot overdraw
+    because only updates that still satisfy ``credit_balance >= price`` match.
+    """
+    matched = (
+        db.query(Account)
+        .filter(Account.profile_id == profile_id, Account.credit_balance >= price)
+        .update({Account.credit_balance: Account.credit_balance - price},
+                synchronize_session=False)
+    )
+    if matched != 1:
+        db.rollback()
+        acct = get_account_for_profile(db, profile_id)
+        raise InsufficientCredits(
+            (acct.credit_balance or 0) if acct else 0, price, action)
+    row = CreditLedger(profile_id=profile_id, delta=-price, reason="debit",
+                       action=action, job_key=job_key, created_at=_now())
     db.add(row)
-    acct.credit_balance = (acct.credit_balance or 0) - amount
+    db.commit()
+    return row
+
+
+def refund_debit(db: Session, debit_row: CreditLedger) -> CreditLedger:
+    """Offset a debit after the action failed; restores the balance."""
+    price = -debit_row.delta
+    row = CreditLedger(profile_id=debit_row.profile_id, delta=price,
+                       reason="refund", action=debit_row.action,
+                       job_key=debit_row.job_key, created_at=_now())
+    db.add(row)
+    acct = get_account_for_profile(db, debit_row.profile_id)
+    if acct is not None:
+        acct.credit_balance = (acct.credit_balance or 0) + price
     db.commit()
     return row
 
