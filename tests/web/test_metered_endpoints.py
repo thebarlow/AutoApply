@@ -84,7 +84,9 @@ def test_score_blocked_when_below_floor(client, db_session, monkeypatch):
     _stub_llm(monkeypatch)
     r = client.post("/api/jobs/j1/score")
     assert r.status_code == 402
-    assert r.json()["error"] == "insufficient_credits"
+    body = r.json()
+    assert body["error"] == "insufficient_credits"
+    assert "price" in body and "action" in body
 
 
 def test_generate_resume_blocked_when_below_floor(client, db_session, monkeypatch):
@@ -93,4 +95,6 @@ def test_generate_resume_blocked_when_below_floor(client, db_session, monkeypatc
     _stub_llm(monkeypatch)
     r = client.post("/api/jobs/j1/generate/resume")
     assert r.status_code == 402
-    assert r.json()["error"] == "insufficient_credits"
+    body = r.json()
+    assert body["error"] == "insufficient_credits"
+    assert "price" in body and "action" in body

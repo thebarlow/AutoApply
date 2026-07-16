@@ -198,7 +198,8 @@ async def _insufficient_credits_handler(request, exc: InsufficientCredits):
         content={
             "error": "insufficient_credits",
             "balance": exc.balance,
-            "floor": exc.floor,
+            "price": exc.price,
+            "action": exc.action,
         },
     )
 

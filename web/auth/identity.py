@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.credits import default_rate, grant_credits, signup_grant_amount
+from core.credits import default_rate, grant_credits, signup_grant_for_tier
 from core.user import User
 from db.database import Account, Identity
 
@@ -180,7 +180,7 @@ def _provision_account(db: Session, *, email: str, is_admin: bool, claims: Claim
         provider_subject=claims.subject, created_at=_now(),
     ))
     db.commit()
-    grant_credits(db, profile_id, signup_grant_amount(), reason="signup_grant")
+    grant_credits(db, profile_id, signup_grant_for_tier(tier), reason="signup_grant")
     return acct
 
 
