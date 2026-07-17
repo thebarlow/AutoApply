@@ -95,7 +95,10 @@ html, body {
 
 /* ── Body ── */
 .cover-body {
-  padding: 0.35in 1.05in 0.6in 1.05in;
+  /* Bottom padding reserves clearance for the fixed .bottom-bar (out of normal
+     flow: sits 0.525in from the page bottom, ~0.31in tall). Keep >= ~1in so the
+     sign-off never renders into or behind the bar. */
+  padding: 0.35in 1.05in 1.05in 1.05in;
 }
 
 .cover-date {

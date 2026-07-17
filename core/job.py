@@ -1251,7 +1251,10 @@ class Job(Base):
             raise FileNotFoundError(f"Cover markdown not found: {md_path}")
         pdf_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_cover.pdf"
         meta = self._render_meta("cover", db)
-        render_pdf(md_path, pdf_path, template_path, meta=meta)
+        # Cover letters are single-page by design (top/bottom black bars frame one
+        # page); cap at one page so an overlong body auto-shrinks instead of
+        # spilling the sign-off into/behind the fixed bottom bar.
+        render_pdf(md_path, pdf_path, template_path, max_pages=1, meta=meta)
         self.cover_path = str(pdf_path)
         self.cover_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
