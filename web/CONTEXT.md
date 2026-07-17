@@ -148,7 +148,7 @@ web/
 |---|---|---|
 | `GET` | `/api/jobs` | All jobs ordered by `final_score` desc |
 | `DELETE` | `/api/jobs/{job_key}` | Hard delete |
-| `PATCH` | `/api/jobs/{job_key}/state` | State transition |
+| `PATCH` | `/api/jobs/{job_key}/state` | State transition; stamps `applied_at` (UTC ISO) on the first transition into `APPLIED` — preserved on re-entry — so the User-tab stat counter (counts by `applied_at`, not state) sees dashboard-applied jobs. The tray app's `Job.mark_applied` stamps it too |
 | `POST` | `/api/jobs/{job_key}/score` | Score job via LLM |
 | `POST` | `/api/jobs/{job_key}/generate/resume` | Generate resume MD + PDF |
 | `POST` | `/api/jobs/{job_key}/generate/cover` | Generate cover letter MD + PDF |
