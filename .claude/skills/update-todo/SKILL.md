@@ -25,7 +25,14 @@ description: Use in the auto-apply project whenever you finish a task, change th
 - If the change touches something with no TODO.md entry and it's multi-session-relevant, add one. Trivial one-turn fixes with no backlog relevance don't need an entry.
 - If genuinely nothing in TODO.md is affected, say so explicitly ("no TODO.md change needed — this wasn't tracked") rather than silently skipping.
 
-## Rationalizations — none of these excuse skipping
+## Pruning Old Items
+
+TODO.md is a working backlog, not an archive — git history is the archive. Whenever you update the file (any of the three triggers), also scan for staleness and prune in the same edit:
+
+- **Done items**: keep only the most recent few (roughly the last ~2 weeks or ~10 entries) in the **Done** section as context for ongoing work. Delete older done entries outright — their commits and one-line results live in git history.
+- **Superseded / abandoned items**: if an open item was made irrelevant by a later decision or shipped feature, delete it (or fold a one-line "superseded by X" into the surviving item) rather than leaving it open.
+- **Long-dormant items**: an open item untouched for over a month either still matters (leave it, but re-check its notes are accurate) or it doesn't (delete it). Ask the user only if you genuinely can't tell.
+- Never prune in-progress items or their status notes.
 
 | Excuse | Reality |
 |--------|---------|
