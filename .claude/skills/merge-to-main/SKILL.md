@@ -11,8 +11,8 @@ A change is not done until the docs describe it. Before any merge to `main` comp
 
 **Before finalizing a merge to `main`, update the documentation as necessary:**
 
-1. **`CLAUDE.md`** (project root) — the routing table and rules. Update when the change adds/removes/moves a module, router, table, or subsystem, or changes how work is routed. Example: a new DB table must appear in the `db/` routing row.
-2. **`ARCHITECTURE.md`** (project root) — top-level structure. Update when the change adds/removes a major module or model, changes a data-flow, or is release-worthy (per global CLAUDE.md, ARCHITECTURE.md is updated as part of a release). Keep it top-level; don't inline incremental detail.
+1. **`.claude/CLAUDE.md`** — the routing table and rules. Update when the change adds/removes/moves a module, router, table, or subsystem, or changes how work is routed. Example: a new DB table must appear in the `db/` routing row.
+2. **`docs/ARCHITECTURE.md`** — top-level structure. Update when the change adds/removes a major module or model, changes a data-flow, or is release-worthy (per global CLAUDE.md, ARCHITECTURE.md is updated as part of a release). Keep it top-level; don't inline incremental detail.
 3. **Affected `CONTEXT.md` files** — every subdirectory the change touched that has (or should have) a `CONTEXT.md`. Update the per-file routing tables, endpoint lists, known-issues, and any prose the change invalidated. Create one if a touched directory lacks it.
 
 "As necessary" means: if the change touched a subsystem, the doc that describes that subsystem is in scope. A pure-internal refactor with no structural/interface change may need no doc edits — but you must consciously check, not skip.
@@ -24,7 +24,7 @@ A change is not done until the docs describe it. Before any merge to `main` comp
 - [ ] Add or retire a **module / major component**? → `ARCHITECTURE.md` + the relevant `CONTEXT.md` + `CLAUDE.md` routing table.
 - [ ] Change a **cross-cutting contract** (auth seam, tenancy, metering, document pipeline)? → the owning `CONTEXT.md` + `ARCHITECTURE.md`.
 - [ ] Remove **dead code / endpoints**? → delete their doc rows so the docs don't reference things that no longer exist.
-- [ ] Grep the docs for names the change removed (`grep -rn "<removed-name>" CLAUDE.md ARCHITECTURE.md **/CONTEXT.md`) — no stale references should remain.
+- [ ] Grep the docs for names the change removed (`grep -rn "<removed-name>" .claude/CLAUDE.md docs/ARCHITECTURE.md **/CONTEXT.md`) — no stale references should remain.
 - [ ] Mark the corresponding `TODO.md` item done if the change closes one.
 
 ## Integration

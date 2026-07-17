@@ -25,11 +25,11 @@ auto_apply/
 │   └── CONTEXT.md
 ├── profiles/                   # User profile JSON (seed source for the user_profile table)
 ├── Obsidian/                   # Project user docs / developer notes (served via docs_router)
-├── docs/                       # Specs, plans, and the superpowers workflow assets
+├── docs/                       # ARCHITECTURE.md (this file), user docs, specs/plans (superpowers)
 ├── tests/                      # pytest suite (core/, web/)
 ├── start.bat                   # Launch script: starts uvicorn server + tray app together
-├── CLAUDE.md                   # Project overview + routing rules
-└── ARCHITECTURE.md
+├── README.md                   # Human-facing setup + usage guide
+└── .claude/                    # CLAUDE.md (routing rules), TODO.md (backlog), skills, settings
 ```
 
 ## Pipeline Overview
@@ -334,7 +334,7 @@ attach a volume at `/data`.
 
 The app is being converted to a multi-user SaaS in four sequenced sub-projects,
 each with its own spec → plan → implementation cycle (designs under
-`docs/superpowers/`, status in `TODO.md`). The multi-tenancy foundation is
+`docs/superpowers/`, status in `.claude/TODO.md`). The multi-tenancy foundation is
 already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
 
 1. **Auth & Identity** *(implemented)* — Google/GitHub OAuth via Authlib +

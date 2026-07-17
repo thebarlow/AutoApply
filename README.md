@@ -106,6 +106,7 @@ Jobs are scraped from the LinkedIn job board via a custom browser extension.
 
 ## Further Help
 
+- Technical architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - In-app help docs: **[http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)** (server must be running).
 - FastAPI endpoints reference: **[http://127.0.0.1:8080/endpoints](http://127.0.0.1:8080/endpoints)**.
 

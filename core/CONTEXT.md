@@ -304,7 +304,7 @@ grant-budget stat is likewise reported in unit denomination. `stripe_client.py` 
 reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` from env lazily. Consumed
 by `web/routers/payments.py`, which records `Purchase` rows and grants
 credits via `grant_credits(reason="purchase")` on a verified
-`checkout.session.completed` webhook. See `ARCHITECTURE.md` → "Payments" and
+`checkout.session.completed` webhook. See `docs/ARCHITECTURE.md` → "Payments" and
 `web/CONTEXT.md` for the route surface and the `window.__creditRate`
 cross-widget read used by the navbar session-usage overlay.
 

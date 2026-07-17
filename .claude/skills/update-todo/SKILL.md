@@ -3,9 +3,9 @@ name: update-todo
 description: Use in the auto-apply project whenever you finish a task, change the direction or scope of the work you're doing, or stop/halt work before a task is complete — so TODO.md always reflects the real state of the backlog. Trigger on "done", "that works", "let's do X instead", "actually, drop that", handing off, or ending a session mid-task.
 ---
 
-# Keeping TODO.md Current
+# Keeping .claude/TODO.md Current
 
-`TODO.md` (project root) is the multi-session source of truth for what's planned, in progress, and done. It is only useful if it matches reality. Whenever the state of the work changes, update it in the same turn — before moving on, not "later."
+`.claude/TODO.md` is the multi-session source of truth for what's planned, in progress, and done. It is only useful if it matches reality. Whenever the state of the work changes, update it in the same turn — before moving on, not "later."
 
 ## When to Update (the three triggers)
 

@@ -82,7 +82,7 @@ Stack complete and live at `https://autoapply.matthewbarlow.me`:
 **Multi-tenancy ✅ → Hosting ✅ → (1) Auth ✅ → (2) Credits ✅ → (3) Payments ✅ → (4) Onboarding ✅**
 (guided tour, demo job, resume-upload first-run, all three job-ingestion paths). Monetization now
 runs on prepaid fixed-unit pricing (see Done). Specs/plans under `docs/superpowers/`;
-architecture in `ARCHITECTURE.md`; read `web/CONTEXT.md` → Auth / Credits before touching those.
+architecture in `docs/ARCHITECTURE.md`; read `web/CONTEXT.md` → Auth / Credits before touching those.
 
 Known accepted limitations (each would be its own feature if prioritized):
 - No automatic credit clawback on Stripe refunds/chargebacks (admin-manual).
