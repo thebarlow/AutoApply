@@ -34,6 +34,10 @@ db/*.db
 *.db-wal
 *.db-shm
 
+# Data backups (DB dumps, live-profile snapshots) — keep the folder, ignore contents
+backups/*
+!backups/.gitkeep
+
 # Claude local
 .claude/worktrees/
 .claude/settings.local.json

@@ -55,6 +55,8 @@ Multi-tenancy is **done** (`profile_id` everywhere via the `current_profile_id` 
 
 - Before working in any subdirectory, read its `CONTEXT.md` if one exists.
 - Known bugs, limitations, and future improvements belong in the relevant subdirectory's `CONTEXT.md`, not in code comments or this file. Create one if it doesn't exist.
+- **Data backups** (SQLite DB dumps, live-profile JSON snapshots, or any pre-write safety copy) go in `backups/` at the project root. The folder is tracked (via `.gitkeep`) but its contents are gitignored. Never scatter `*.bak*` files in the project root or subdirectories.
+- Update `docs/ARCHITECTURE.md` when shipping a release, not per commit — do it automatically as part of the release.
 
 ## Formatting Rules
 
