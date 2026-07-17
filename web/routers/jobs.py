@@ -143,6 +143,13 @@ def update_job_state(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Stamp applied_at on the first transition into APPLIED (the User-tab stat
+    # counter counts applied_at, not state, so this must be set here too — not
+    # only in Job.mark_applied). Preserve an existing timestamp on re-entry.
+    if body.state == JobState.APPLIED.value and not job.applied_at:
+        from datetime import datetime, timezone
+        job.applied_at = datetime.now(timezone.utc).isoformat()
+
     job.state = body.state
     db.commit()
     db.refresh(job)

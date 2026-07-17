@@ -138,6 +138,14 @@ def test_patch_state_to_applied(client, db_session):
     assert resp.json()["state"] == "applied"
 
 
+def test_patch_state_to_applied_stamps_applied_at(client, db_session):
+    """The stats counter counts applied_at, so the state PATCH must set it."""
+    _make_job(db_session, "job_ts")
+    resp = client.patch("/api/jobs/job_ts/state", json={"state": "applied"})
+    assert resp.status_code == 200
+    assert resp.json()["applied_at"]
+
+
 def test_patch_state_to_rejected(client, db_session):
     _make_job(db_session, "job_reject")
     resp = client.patch("/api/jobs/job_reject/state", json={"state": "rejected"})
