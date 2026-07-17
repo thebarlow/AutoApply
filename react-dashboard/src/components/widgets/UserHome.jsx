@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Sector, LabelList,
 } from 'recharts'
 import { getProfiles, getStats, getSkillFrequency, getJobsForSkill, getMe, getPurchaseHistory } from '../../api'
@@ -43,6 +43,58 @@ const CATEGORY_COLORS = {
   Other: OTHER_COLOR,
 }
 const ACTIVE_OUTLINE = '#e9d5ff'
+
+// Tier legend for the "By Skill" bar chart. Ordered High → Med → Low, with a
+// help icon explaining what each tier counts. Rendered as plain HTML because
+// recharts' <Legend> swatches render black in this build.
+const TIER_LEGEND = [
+  { key: 'high', label: 'High', desc: 'Listed as a required skill' },
+  { key: 'med', label: 'Med', desc: 'Listed as a preferred / nice-to-have skill' },
+  { key: 'low', label: 'Low', desc: 'Mentioned in the tech stack only' },
+]
+
+function SkillTierLegend() {
+  return (
+    <div className="flex items-center gap-3 mb-1 text-[11px] text-space-dim">
+      {TIER_LEGEND.map(({ key, label }) => (
+        <span key={key} className="flex items-center gap-1">
+          <span
+            className="inline-block w-2.5 h-2.5 rounded-sm"
+            style={{ backgroundColor: TIER_COLORS[key] }}
+          />
+          {label}
+        </span>
+      ))}
+      <span className="relative group flex items-center">
+        <svg
+          width="13" height="13" viewBox="0 0 16 16" fill="none"
+          stroke="currentColor" strokeWidth="1.5"
+          className="text-space-dim/70 cursor-help hover:text-purple-400 transition-colors"
+        >
+          <circle cx="8" cy="8" r="6.5" />
+          <path d="M6.2 6.1a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.6.5-.6.9v.3" strokeLinecap="round" />
+          <circle cx="8" cy="11.4" r="0.4" fill="currentColor" stroke="none" />
+        </svg>
+        <span
+          className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 hidden w-56 -translate-x-1/2
+            rounded border border-space-border bg-[#0f0f1a] px-2 py-1.5 text-left text-[10.5px]
+            leading-snug text-space-text shadow-lg group-hover:block"
+        >
+          How often each skill appears across your scored jobs, split by how the job asked for it:
+          {TIER_LEGEND.map(({ key, label, desc }) => (
+            <span key={key} className="mt-1 flex gap-1.5">
+              <span
+                className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-sm"
+                style={{ backgroundColor: TIER_COLORS[key] }}
+              />
+              <span><b>{label}</b> — {desc}</span>
+            </span>
+          ))}
+        </span>
+      </span>
+    </div>
+  )
+}
 
 // Renders the selected pie slice enlarged + outlined (the "raised / pulled-out" effect).
 function renderRaisedSlice(props) {
@@ -473,6 +525,8 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                   />
                 )
               ) : (
+                <>
+                <SkillTierLegend />
                 <ResponsiveContainer width="100%" height={Math.max(160, skillBars.length * 22)}>
                   <BarChart
                     layout="vertical"
@@ -495,14 +549,6 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                           </div>
                         ) : null
                       }
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: 11, color: '#8888aa' }}
-                      payload={[
-                        { value: 'High', type: 'square', id: 'high', color: TIER_COLORS.high },
-                        { value: 'Med', type: 'square', id: 'med', color: TIER_COLORS.med },
-                        { value: 'Low', type: 'square', id: 'low', color: TIER_COLORS.low },
-                      ]}
                     />
                     <Bar
                       dataKey="high" name="High" stackId="skill" cursor="pointer"
@@ -559,6 +605,7 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+                </>
               )
             )}
           </div>

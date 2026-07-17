@@ -16,6 +16,12 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Features
 
+- [ ] **Gate the per-prompt user model override to admins only.** The model-override control on
+  prompts should be admin-only for now — regular users shouldn't pick their own model until
+  tiered-model pricing is worked out (different models cost different credits). Revisit once
+  pricing per model tier is designed (see the "High-effort toggle" item — same underlying
+  cost-vs-quality knob).
+
 - [ ] **Guided section-prompt authoring for users (from the prompt-polish work).** Once we've
   settled how to best structure section/item prompts (baseline-facts + tailoring direction;
   honesty rules re: seniority/titles and proof-words; per-project technology surfacing), give
