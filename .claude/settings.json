@@ -8,12 +8,24 @@
     ]
   },
   "hooks": {
-    "Stop": [
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/commit_docsync.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "d=$(git status --porcelain 2>/dev/null); [ -z \"$d\" ] && exit 0; printf \"%s\" \"$d\" | grep -q \"TODO.md\" && exit 0; h=$( { printf \"%s\" \"$d\"; git diff HEAD 2>/dev/null; } | sha1sum | cut -c1-40 ); sf=\"$HOME/.claude/.todo-reminder-$(pwd | sha1sum | cut -c1-12)\"; [ -f \"$sf\" ] && [ \"$(cat \"$sf\" 2>/dev/null)\" = \"$h\" ] && exit 0; printf \"%s\" \"$h\" > \"$sf\"; printf '{\"systemMessage\":\"\\ud83d\\udcdd TODO.md may be stale: uncommitted changes present but TODO.md untouched. Update it if a task completed, scope/direction changed, or work halted \\u2014 and sync docs if merging to main.\",\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"update-todo reminder: the working tree has uncommitted changes but TODO.md was not modified. If you completed a task, changed direction/scope, or halted work before finishing, update TODO.md NOW (mark [x] + one-line result / revise scope + why / append a status note). If you are merging to main, ALSO run the merge-to-main doc-sync: update CLAUDE.md, ARCHITECTURE.md, and every affected CONTEXT.md so the docs reflect the change. If nothing here is tracked in TODO.md, no change is needed \\u2014 say so explicitly.\"}}'",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/cleanup_docsync.py\"",
             "timeout": 10
           }
         ]
