@@ -303,6 +303,7 @@ export default function App() {
                 onJobSelect={handleJobSelect}
                 skillFilter={skillFilter}
                 onClearSkillFilter={() => setSkillFilter(null)}
+                onUploaded={() => getJobs().then(setJobs).catch(console.error)}
               />
             </div>
             <div className="col-span-2 overflow-hidden h-full">

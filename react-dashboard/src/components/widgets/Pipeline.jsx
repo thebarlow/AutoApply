@@ -31,7 +31,7 @@ function InboxEmpty() {
     <div className="text-center py-12 text-space-dim">
       <p className="mb-2">No jobs to see here!</p>
       <a
-        href="/docs#installing-the-browser-extension"
+        href="/docs#adding-jobs"
         className="text-purple-400 hover:underline"
       >
         How to upload jobs →
@@ -140,8 +140,8 @@ function UploadModal({ onClose, onSubmit }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-md p-5 flex flex-col gap-3 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-[#0f0f1a] border border-space-border rounded-xl w-[90%] max-w-md p-5 flex flex-col gap-3 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm font-semibold text-space-text">Upload a job</p>
 
         <label className="text-xs text-space-dim">Title <span className="text-red-400">*</span></label>
@@ -211,7 +211,7 @@ function UploadModal({ onClose, onSubmit }) {
   )
 }
 
-export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect, skillFilter = null, onClearSkillFilter }) {
+export default function Pipeline({ jobs = [], processingKeys = new Set(), selectedJob, onJobSelect, skillFilter = null, onClearSkillFilter, onUploaded }) {
   const [activeTab, setActiveTab] = useState('Inbox')
   const [searchInbox, setSearchInbox] = useState('')
   const [searchArchives, setSearchArchives] = useState('')
@@ -384,7 +384,11 @@ export default function Pipeline({ jobs = [], processingKeys = new Set(), select
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onSubmit={async (fields) => uploadJob(fields)}
+          onSubmit={async (fields) => {
+            const result = await uploadJob(fields)
+            if (result?.status !== 'duplicate') onUploaded?.()
+            return result
+          }}
         />
       )}
     </motion.div>
