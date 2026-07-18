@@ -43,7 +43,7 @@ The `Document` snapshot also carries the contact/education data captured at gene
 
 The CSS file is resolved by stripping `_template` from the template stem (e.g. `resume_template.html` → `resume.css`).
 
-Resume rendering passes `max_pages=1`. If content overflows one page, `render_pdf` auto-shrinks the Playwright print scale in steps (down to a `_PDF_SCALE_FLOOR` of 0.8) until it fits, raising `RuntimeError` only if it still overflows at the floor. Note: Chromium ignores CSS `zoom` and visual `transform` in its print path — only `page.pdf(scale=)` actually reduces the page count. The CSS should still keep typical content near one page so the shrink factor stays mild (readable text).
+Both résumé and cover-letter rendering pass `max_pages=1` (`generate_resume_pdf` and `generate_cover_pdf` in `core/job.py`). If content overflows one page, `render_pdf` auto-shrinks the Playwright print scale in steps (down to a `_PDF_SCALE_FLOOR` of 0.8) until it fits, raising `RuntimeError` only if it still overflows at the floor. Note: Chromium ignores CSS `zoom` and visual `transform` in its print path — only `page.pdf(scale=)` actually reduces the page count. The CSS should still keep typical content near one page so the shrink factor stays mild (readable text). For covers, `cover.css` reserves `1.05in` of `.cover-body` bottom padding as clearance so the sign-off never spills into/behind the fixed `.bottom-bar`, and the `cover.md` prompt caps body length (~225–275 words, max 300) to keep content on one page.
 
 ### Education position: PDF vs. canonical Markdown
 
