@@ -14,7 +14,19 @@ git history is the archive (see `.claude/skills/update-todo/`).
   3. Ignore Cloudflare's "BIMI in use — fail" — BIMI is optional (needs `p=quarantine`+
      often a paid VMC cert); irrelevant to spam placement.
 
+- [ ] **Hosted-DB extraction prompt is stale.** The local fix updated the two local profiles'
+  `extraction` prompts to the new atomic-skill default (2026-07-18), but existing **hosted**
+  profiles still carry the old default in their `prompts` rows (seed file only reaches new
+  signups). Migrate unmodified-default extraction prompts on Postgres when convenient.
+
 ## Features
+
+- [ ] **Full automation of document submission**for personal tool use only. Fill in all the ATS 
+  tickers. For non easy apply jobs, so that we can avoid LinkedIn native bot detection.
+
+- [ ] **Add search function to skill list** When a user goes to add a skill in User Profile, the 
+  skill chips should automatically update (partial) matches so the user can see if they already 
+  that skill / a similar one. 
 
 - [ ] **Gate the per-prompt user model override to admins only.** The model-override control on
   prompts should be admin-only for now — regular users shouldn't pick their own model until
@@ -97,6 +109,16 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Job view chips false amber on owned skills.** **DONE 2026-07-18** — root cause was
+  extraction emitting verbose phrases ("Strong proficiency in Python") and comma-bearing
+  parentheticals into `ext_required_skills`, so the whole-phrase `skill_key` never matched a
+  profile skill and the chip showed a false résumé gap. Two-layer fix: (A) `owned_skills` now
+  recovers ownership when an owned skill key appears as a bounded word inside a multi-word phrase
+  (`web/routers/skills.py`, tests in `tests/web/test_skills_api.py`); (B) tightened the extraction
+  prompt (`prompts/defaults/extraction.md`) to require atomic skill tokens, no qualifiers,
+  no bundled/parenthetical/comma entries — also updated the local DB copies. Hosted-DB migration
+  tracked as an open Bug above.
 
 - [x] **Fixed-unit credit pricing (monetization rework).** **DONE + DEPLOYED 2026-07-16** —
   replaced post-paid cost×rate metering with prepaid fixed prices (`core/pricing.py` price card:

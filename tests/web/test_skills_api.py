@@ -131,6 +131,35 @@ def test_owned_skills_matches_case_and_alias(client, db_session):
     assert set(r.json()["owned"]) == {"python", "k8s"}
 
 
+def test_owned_recovers_skill_embedded_in_verbose_phrase(client, db_session):
+    # Extraction sometimes emits a phrase instead of an atomic token; an owned
+    # skill embedded as a bounded word inside it should still count as owned.
+    _seed_profile(db_session, ["Python", "FastAPI"])
+    r = client.post(
+        "/api/skills/owned",
+        json={"skills": [
+            "Strong proficiency in Python",
+            "REST API development using FastAPI",
+            "Kubernetes cluster administration",
+        ]},
+    )
+    assert set(r.json()["owned"]) == {
+        "Strong proficiency in Python",
+        "REST API development using FastAPI",
+    }
+
+
+def test_owned_phrase_recovery_requires_word_boundary(client, db_session):
+    # An owned key that only appears as a substring (not a bounded word) must
+    # not falsely match, and single-token non-matches stay unowned.
+    _seed_profile(db_session, ["Go", "R"])
+    r = client.post(
+        "/api/skills/owned",
+        json={"skills": ["Rigorous testing background", "Ruby"]},
+    )
+    assert r.json()["owned"] == []
+
+
 def test_owned_skills_empty_when_no_profile(client, db_session):
     r = client.post("/api/skills/owned", json={"skills": ["Python"]})
     assert r.json()["owned"] == []

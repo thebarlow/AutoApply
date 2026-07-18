@@ -23,8 +23,13 @@ Return this exact schema:
 "employment_type": "full-time | contract | not specified"
 }
 
-A "skill" is a concrete technology, tool, framework, language, methodology, or professional competency. For `required_skills` and `preferred_skills`, do NOT include:
+A "skill" is a concrete technology, tool, framework, language, methodology, or professional competency. For `required_skills`, `preferred_skills`, and `tech_stack`, do NOT include:
 - Credentials or degrees (e.g. "Bachelor's degree") — these are not skills.
 - Job or role titles (e.g. "Software Engineer or Programmer", "Coder").
 - Generic filler like "proficiency in one programming language" — instead list the specific language(s) the JD names, or omit if none are named.
-Keep each skill a short noun phrase, not a sentence.
+
+Each entry MUST be an **atomic skill token** — the bare name of the skill, nothing else:
+- Strip qualifier phrasing. "Strong proficiency in Python" → `"Python"`. "Experience with REST API development using FastAPI" → `"REST"`, `"FastAPI"`. "Understanding of NLP" → `"NLP"`.
+- Never bundle multiple skills into one entry. Split conjunctions and parentheticals into separate entries: "Python (Pandas, NumPy)" → `"Python"`, `"Pandas"`, `"NumPy"`. "TensorFlow or PyTorch" → `"TensorFlow"`, `"PyTorch"`.
+- Never put a comma inside an entry.
+- Prefer the shortest common name: "the Kubernetes container orchestration platform" → `"Kubernetes"`.

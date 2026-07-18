@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -144,6 +146,22 @@ def owned_skills(
     }
     literal = {s for s in body.skills if skill_key(s, aliases) in profile_keys}
 
+    # Phrase recovery: extraction sometimes emits verbose phrases
+    # ("Strong proficiency in Python", "REST API development using FastAPI")
+    # instead of atomic tokens, so the whole-phrase key never matches an owned
+    # skill and the chip shows a false résumé gap. Recover ownership when an
+    # owned skill key appears as a bounded word inside such a multi-word phrase.
+    embedded_keys = [k for k in profile_keys if len(k) >= 2]
+
+    def _phrase_owned(token: str) -> bool:
+        low = token.lower()
+        if " " not in low:  # atomic tokens are already covered by the literal path
+            return False
+        return any(
+            re.search(rf"(?<![a-z0-9]){re.escape(k)}(?![a-z0-9])", low)
+            for k in embedded_keys
+        )
+
     # Merge cached semantic matches from ext_skill_match when a job_key is given.
     # Chips the LLM already confirmed as matched count as owned even if they don't
     # hit the literal/alias path (e.g. "Bachelors degree" vs a non-literal alias).
@@ -165,7 +183,11 @@ def owned_skills(
             except (ValueError, TypeError, AttributeError):
                 cached = set()
 
-    owned = [s for s in body.skills if s in literal or s.lower() in cached]
+    owned = [
+        s
+        for s in body.skills
+        if s in literal or s.lower() in cached or _phrase_owned(s)
+    ]
     return {"owned": owned}
 
 
