@@ -75,8 +75,12 @@ def invite_user(body: InviteRequest, db: Session = Depends(get_db),
 def list_invites(db: Session = Depends(get_db),
                  admin: Account = Depends(require_real_admin)):
     rows = db.query(AllowedEmail).order_by(AllowedEmail.id.desc()).all()
+    # Once an invitee signs in, an Account is provisioned for their email; drop
+    # those from the "Invited" list so they only appear under Users.
+    registered = {e.lower() for (e,) in db.query(Account.email).all()}
     return [{"email": r.email, "created_at": r.created_at,
-             "tier": r.tier, "is_admin": r.is_admin} for r in rows]
+             "tier": r.tier, "is_admin": r.is_admin}
+            for r in rows if r.email.lower() not in registered]
 
 
 @router.get("/users")
