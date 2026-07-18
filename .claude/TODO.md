@@ -101,6 +101,12 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **User View name stale after résumé parse.** **DONE 2026-07-18** — `UserHome` fetched
+  profiles only on mount, so post-onboarding the "Welcome back {name}" header showed the pre-parse
+  name until a manual refresh. `Wizard` `onFinish` now dispatches `auto-apply:profile-updated`
+  (instead of reloading the page); `UserHome` listens and refetches profiles + its `usePrerequisites`
+  so the header updates in place. Test: `UserHome.refresh.test.jsx`.
+
 - [x] **Add search function to skill list.** **DONE 2026-07-18** — `TagListField`
   (`react-dashboard/src/components/widgets/profile-tree/fieldWidgets.jsx`) now live-matches the
   "Add…" draft against existing chips: partial matches highlight (ring), non-matches dim, and an
