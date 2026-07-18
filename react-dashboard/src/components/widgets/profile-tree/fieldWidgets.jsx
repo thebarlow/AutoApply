@@ -89,9 +89,15 @@ export function TagListField({ value, onChange, readOnly, valueOnly }) {
   const arr = Array.isArray(value) ? value : []
   const [draft, setDraft] = useState('')
   const [editIdx, setEditIdx] = useState(null)
+  // Live partial-match against the existing chips so the user can see whether
+  // they already have a skill (or a similar one) before adding a duplicate.
+  const q = draft.trim().toLowerCase()
+  const matches = (tag) => q !== '' && tag.toLowerCase().includes(q)
+  const isDuplicate = q !== '' && arr.some((t) => t.toLowerCase() === q)
   const add = () => {
     const t = draft.trim()
     if (!t) return
+    if (arr.some((x) => x.toLowerCase() === t.toLowerCase())) { setDraft(''); return }
     onChange([...arr, t])
     setDraft('')
   }
@@ -105,7 +111,13 @@ export function TagListField({ value, onChange, readOnly, valueOnly }) {
         {arr.map((tag, i) => (
           <span
             key={i}
-            className="inline-flex items-center gap-1 bg-purple-500/15 text-purple-200 text-xs rounded-full pl-2 pr-1 py-0.5"
+            className={`inline-flex items-center gap-1 bg-purple-500/15 text-purple-200 text-xs rounded-full pl-2 pr-1 py-0.5 transition-all ${
+              q !== ''
+                ? matches(tag)
+                  ? 'ring-1 ring-purple-400 bg-purple-500/30'
+                  : 'opacity-40'
+                : ''
+            }`}
           >
             {valueOnly || readOnly ? (
               <span className="px-0.5">{tag}</span>
@@ -127,12 +139,17 @@ export function TagListField({ value, onChange, readOnly, valueOnly }) {
         ))}
       </div>
       {!readOnly && !valueOnly && (
-        <input
-          type="text" className={inputClass} placeholder="Add…" value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-          onBlur={add}
-        />
+        <div className="flex flex-col gap-1">
+          <input
+            type="text" className={inputClass} placeholder="Add…" value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+            onBlur={add}
+          />
+          {isDuplicate && (
+            <span className="text-xs text-amber-400">Already in your list — highlighted above.</span>
+          )}
+        </div>
       )}
       {!valueOnly && editIdx !== null && arr[editIdx] !== undefined && (
         <TagChipModal

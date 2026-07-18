@@ -66,6 +66,22 @@ describe('FieldWidget', () => {
     expect(onChange).toHaveBeenLastCalledWith([])
   })
 
+  it('taglist: typing highlights partial matches and blocks exact duplicates', () => {
+    const onChange = vi.fn()
+    render(<FieldWidget field={field({ kind: 'taglist', value: ['Python', 'PySpark', 'SQL'] })} onChange={onChange} />)
+    const input = screen.getByPlaceholderText('Add…')
+    // partial match: "py" highlights Python + PySpark, not SQL
+    fireEvent.change(input, { target: { value: 'py' } })
+    expect(screen.getByText('Python').closest('span').className).toMatch(/ring-purple-400/)
+    expect(screen.getByText('PySpark').closest('span').className).toMatch(/ring-purple-400/)
+    expect(screen.getByText('SQL').closest('span').className).toMatch(/opacity-40/)
+    // exact (case-insensitive) duplicate: hint shown, Enter does not add
+    fireEvent.change(input, { target: { value: 'python' } })
+    expect(screen.getByText(/Already in your list/)).toBeInTheDocument()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('taglist: clicking a chip opens the edit modal; ✕ still deletes', async () => {
     const onChange = vi.fn()
     render(<FieldWidget field={field({ kind: 'taglist', value: ['Python'] })} onChange={onChange} />)
