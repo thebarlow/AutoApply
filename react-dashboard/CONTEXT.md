@@ -130,6 +130,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Rotating stat counter ("You've applied to {x} jobs"); clicking the highlighted phrase cycles Applied → Scraped → Resumes (`STAT_METRICS`), reading `stats.totals` from `/api/stats`
 - In-Demand Skills recharts pie/bar charts; time-window selector (Today / Week / All Time) drives the counter via `getStats(win)`
 - Embeds `ProfileCards` for quick profile switching
+- Fetches profiles once on mount; also refetches profiles + its own `usePrerequisites` on the `auto-apply:profile-updated` window event so the "Welcome back {name}" header reflects a just-parsed résumé without a page refresh
 
 ### parse/ParsePreview.jsx
 
@@ -143,8 +144,8 @@ Customization checklist rendered during intake (onboarding `StepResume` and the 
 ### Onboarding/Wizard.jsx
 - "Create your User Profile" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The platform owns the LLM key via env, so onboarding no longer collects an API key (`StepLLM.jsx` was removed).
 - Two tabs under the "Skip for now" line: **"Use existing Resume"** (default) renders `StepResume`; **"Manual Entry"** shows a blurb + a **"Try it out"** link. Each tab shows a one-sentence explainer.
-- **No Finish button.** The modal auto-closes on: a successful résumé parse (`StepResume` calls `onFinish` → page reload), "Skip for now" (`setWizardSkipped`), or "Try it out".
-- `StepResume` uploads + parses the résumé against the already-provisioned active profile (resolved from `getProfiles`' `active_id`, which the tenant seam returns), then `onFinish` (reload). It fetches the full profile via `getProfile` before attaching the upload (the `getProfiles` list omits `data`).
+- **No Finish button.** The modal auto-closes on: a successful résumé parse (`StepResume` calls `onFinish`), "Skip for now" (`setWizardSkipped`), or "Try it out". `onFinish` does **not** reload the page — it calls `prereqs.refresh()` and dispatches `auto-apply:profile-updated` (so `UserHome` refetches profiles + prereqs and the "Welcome back {name}" header updates in place without a manual refresh) plus `auto-apply:tour-launch-part1`.
+- `StepResume` uploads + parses the résumé against the already-provisioned active profile (resolved from `getProfiles`' `active_id`, which the tenant seam returns), then `onFinish`. It fetches the full profile via `getProfile` before attaching the upload (the `getProfiles` list omits `data`).
 - **Reopen-after-skip:** when skipped, `UserHome`'s header swaps to "Ready to set up" / **"your profile"** (clickable) while `isFirstRun`. Clicking dispatches the `auto-apply:open-wizard` window event; `App.jsx` listens and re-shows the wizard (`setWizardSkipped(false)`).
 - **Manual Entry → Try it out:** `App.jsx`'s `onManual` handler dismisses the wizard, sets the User tab active, and dispatches `auto-apply:edit-profile`; `Settings.jsx` listens, resolves the active profile, and opens `ProfileDetailView` (manual editor). Entering experience/education/skills/projects flips `setup-status` `resume_parsed` true, so the header returns to "Welcome back".
 - The Profile view's **Reset Profile** button (`ProfileDetail.jsx`) calls `POST /api/config/profiles/{id}/reset`, which empties `User.data` (keeping the row, jobs, and generated documents). This flips `setup-status` `resume_parsed` to false, so reloading re-shows this wizard. Confirmation requires typing `Reset my Profile`.

@@ -214,7 +214,7 @@ function SkillPie({ slices, labelKey, emphasisIndex, activeName, onSliceClick, o
 }
 
 export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, activeSkill }) {
-  const { isFirstRun } = usePrerequisites()
+  const { isFirstRun, refresh: refreshPrereqs } = usePrerequisites()
   const [activeProfile, setActiveProfile] = useState(null)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [win, setWin] = useState('all_time')
@@ -257,6 +257,16 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
   useEffect(() => {
     fetchProfiles()
   }, [])
+
+  // Résumé parse (onboarding) populates the profile's name after this component
+  // has already fetched a nameless profile. Refetch profiles + prerequisites when
+  // the wizard signals a profile change so "Welcome back {name}" updates without
+  // a page refresh.
+  useEffect(() => {
+    const onUpdated = () => { fetchProfiles(); refreshPrereqs() }
+    window.addEventListener('auto-apply:profile-updated', onUpdated)
+    return () => window.removeEventListener('auto-apply:profile-updated', onUpdated)
+  }, [refreshPrereqs])
 
   useEffect(() => {
     if (!activeProfile) return

@@ -248,6 +248,7 @@ export default function App() {
             <Wizard
               onFinish={() => {
                 prereqs.refresh()
+                window.dispatchEvent(new CustomEvent('auto-apply:profile-updated'))
                 window.dispatchEvent(new CustomEvent('auto-apply:tour-launch-part1'))
                 setWizardSkipped(true)
               }}
