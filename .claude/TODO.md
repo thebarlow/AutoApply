@@ -101,6 +101,23 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Tier-gate browser-extension docs.** **DONE 2026-07-18** — split the extension
+  install/usage guide out of Getting Started into its own `Browser Extension.md`
+  (frontmatter `tiers: friends_family, beta`), rewritten for extension v1.1.0 (OAuth popup
+  sign-in, Scrape-button flow/states, clear-history). `web/routers/docs_router.py` now honors
+  a `tiers:` frontmatter key: gated docs are filtered from `GET /api/docs` and 403 on direct
+  `GET /api/docs/{filename}` unless the caller's account tier matches (admins bypass). Getting
+  Started keeps the tier-agnostic manual-upload path.
+
+- [x] **Upload modal UX: backdrop-close + refresh.** **DONE 2026-07-18** — Pipeline's manual
+  `UploadModal` now closes on backdrop click; a successful (non-duplicate) upload fires an
+  `onUploaded` callback (Pipeline → App) that refetches jobs so the new card appears immediately
+  instead of waiting on SSE. Empty-Inbox help link repointed to `/docs#adding-jobs`.
+
+- [x] **Drop registered invitees from admin Invited list.** **DONE 2026-07-18** —
+  `admin.list_invites` (`GET /api/admin/invites`) now excludes any allowlisted email that already
+  has an `Account`, so a user leaves the Invited list once they sign in and appear under Users.
+
 - [x] **Manual upload 502 during deploy window.** **DONE 2026-07-18** — manual job uploads that
   landed mid-Railway-restart got a raw 502 (proxy had no healthy upstream). `_fetch`
   (`react-dashboard/src/api.js`) now supports opt-in `retries`/`retryDelay` and retries only

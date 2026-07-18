@@ -33,7 +33,7 @@ web/
     ├── skills.py            # /api/skills/aliases* (synonym groups) + /api/skills/profile (active-profile skill add/remove)
     ├── tray.py              # Tray app integration endpoints
     ├── events.py            # SSE endpoint (/api/events)
-    └── docs_router.py       # Serves Obsidian markdown docs as JSON
+    └── docs_router.py       # Serves Obsidian markdown docs as JSON; tier-gates docs via a 'tiers:' frontmatter key
 ```
 
 ## Routing Rules
@@ -124,6 +124,15 @@ web/
   state, does a manual token exchange (`_ext_fetch_claims`, no Authlib session), and
   branches to the ext path; otherwise the unchanged website Authlib flow runs.
 
+- **Docs tier-gating (`routers/docs_router.py`)** — `GET /api/docs` (list) and
+  `GET /api/docs/{filename}` (content) resolve the caller's `(tier, is_admin)` from the
+  `Account` row (via `get_db` + `current_profile_id` deps; defaults to `standard`/non-admin
+  when no account). A doc's optional `tiers:` frontmatter key (comma-separated) restricts
+  visibility: gated docs are filtered from the list and return **403** on direct fetch unless
+  the caller's tier is listed or they're an admin. Docs with no `tiers:` key are public.
+  `Browser Extension.md` is gated to `friends_family, beta`; frontmatter is stripped before
+  serving content.
+
 ## Known caveats (Phase 3b)
 
 - **`PUT .../document` is not transactional across DB and disk (by design).** `Document.upsert` commits the structured edit *before* the `.md`/PDF are re-rendered. If rendering then fails, the route returns `500` but the structured doc is **kept** — deliberately, so the user's edits are not lost and they can trim oversized content and re-save. The on-disk PDF may be stale until the next successful save (it self-heals on re-save). Do not "fix" this by restoring the previous JSON on failure — that would discard the user's edit.
@@ -177,7 +186,7 @@ web/
 | `POST` | `/api/admin/credits/tier` | Admin-only; set a profile's pricing tier (target by `profile_id` or `email`; validated against `payments.tier_multipliers()`) |
 | `GET` | `/api/admin/system-balance` | Admin-only; remaining balance on the platform OpenRouter key (`{remaining}` USD) |
 | `POST` | `/api/admin/invite` | Admin-only; normalizes email, idempotently inserts `allowed_email` row, sends invite email via `core.email.send_invite` |
-| `GET` | `/api/admin/invites` | Admin-only; list all invited emails |
+| `GET` | `/api/admin/invites` | Admin-only; list invited emails, **excluding any allowlisted email that already has an `Account`** (registered invitees drop off the Invited list and appear under Users) |
 | `GET` | `/api/admin/users` | Admin-only; list all users `[{profile_id, email, tier, credits, is_admin, banned}]` |
 | `GET` | `/api/admin/users/{profile_id}/purchases` | Admin-only; purchase history for a specific user; 404 if profile unknown |
 | `POST` | `/api/admin/users/{id}/access` | Admin-only (`require_real_admin`); `{banned: bool}` — bans or restores a user; banning also deletes the `allowed_email` row; 400 if target is admin, 404 if unknown |

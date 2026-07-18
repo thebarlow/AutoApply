@@ -96,6 +96,8 @@ Two-panel layout split 3:2 in a 5-column grid:
 - `TABS` maps tab label → job state filter
 - `JobList` sub-component renders scrollable `JobCard` list
 - Archive tab adds colored state badges (green/blue/red)
+- `UploadModal` (manual job upload) closes on backdrop click (inner card stops propagation). On a successful non-duplicate upload it calls the `onUploaded` prop, which `App.jsx` wires to refetch jobs so the new card appears immediately instead of waiting on SSE
+- Empty-Inbox help link points to `/docs#adding-jobs` (tier-agnostic)
 
 ### Settings.jsx
 - `settingsTab` prop controls User / Tasks / Preview top-level tabs
