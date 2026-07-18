@@ -1,6 +1,28 @@
 const BASE = ''
 
+// Transient gateway statuses worth retrying: the container is mid-restart
+// (e.g. a Railway deploy rollover), so the request never reached the app.
+const _RETRYABLE = new Set([502, 503, 504])
+
 async function _fetch(url, options) {
+  // Opt-in retry (`retries` in options) for idempotent calls that can hit a
+  // deploy-window 502. Retries only gateway errors, with linear backoff.
+  const { retries = 0, retryDelay = 800, ...fetchOptions } = options ?? {}
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await _fetchOnce(url, fetchOptions)
+    } catch (err) {
+      const status = err?.status
+      if (attempt < retries && _RETRYABLE.has(status)) {
+        await new Promise((r) => setTimeout(r, retryDelay * (attempt + 1)))
+        continue
+      }
+      throw err
+    }
+  }
+}
+
+async function _fetchOnce(url, options) {
   const res = await fetch(BASE + url, options)
   if (!res.ok) {
     // Out-of-credits: surface a non-silent, app-wide signal (App.jsx toasts it)
@@ -13,7 +35,9 @@ async function _fetch(url, options) {
         window.dispatchEvent(new Event('auto-apply:credits-stale'))
       }
     }
-    throw new Error(`${options?.method ?? 'GET'} ${url} → ${res.status}`)
+    const err = new Error(`${options?.method ?? 'GET'} ${url} → ${res.status}`)
+    err.status = res.status
+    throw err
   }
   if (res.status === 204) return null
   const ct = res.headers.get('content-type')
@@ -180,6 +204,8 @@ export const uploadJob = (fields) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    // Idempotent (deduped by URL server-side): retry deploy-window 502s.
+    retries: 3,
   })
 }
 
