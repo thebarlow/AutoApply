@@ -14,19 +14,10 @@ git history is the archive (see `.claude/skills/update-todo/`).
   3. Ignore Cloudflare's "BIMI in use — fail" — BIMI is optional (needs `p=quarantine`+
      often a paid VMC cert); irrelevant to spam placement.
 
-- [ ] **Hosted-DB extraction prompt is stale.** The local fix updated the two local profiles'
-  `extraction` prompts to the new atomic-skill default (2026-07-18), but existing **hosted**
-  profiles still carry the old default in their `prompts` rows (seed file only reaches new
-  signups). Migrate unmodified-default extraction prompts on Postgres when convenient.
-
 ## Features
 
 - [ ] **Full automation of document submission**for personal tool use only. Fill in all the ATS 
   tickers. For non easy apply jobs, so that we can avoid LinkedIn native bot detection.
-
-- [ ] **Add search function to skill list** When a user goes to add a skill in User Profile, the 
-  skill chips should automatically update (partial) matches so the user can see if they already 
-  that skill / a similar one. 
 
 - [ ] **Gate the per-prompt user model override to admins only.** The model-override control on
   prompts should be admin-only for now — regular users shouldn't pick their own model until
@@ -109,6 +100,18 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Add search function to skill list.** **DONE 2026-07-18** — `TagListField`
+  (`react-dashboard/src/components/widgets/profile-tree/fieldWidgets.jsx`) now live-matches the
+  "Add…" draft against existing chips: partial matches highlight (ring), non-matches dim, and an
+  exact case-insensitive duplicate shows an "Already in your list" hint and is blocked from being
+  re-added. Client-side (no network); generic across all taglists. Tests in `fieldWidgets.test.jsx`.
+
+- [x] **Hosted-DB extraction prompt stale.** **DONE 2026-07-18 (deploys on next release)** —
+  Alembic migration `aa11extract01` refreshes every `prompts`/`prompt_defaults` extraction row
+  whose content is byte-for-byte the old factory default to the new atomic-skill default
+  (rstrip-tolerant match; user-customised prompts left untouched; reversible). Runs automatically
+  via alembic-on-startup on the next Railway deploy.
 
 - [x] **Job view chips false amber on owned skills.** **DONE 2026-07-18** — root cause was
   extraction emitting verbose phrases ("Strong proficiency in Python") and comma-bearing

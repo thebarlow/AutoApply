@@ -136,7 +136,7 @@ tests). Auth logic + flow live in `web/` — see `web/CONTEXT.md` → "Access co
 ### Credits tables (Credits & Metering sub-project — DONE)
 
 Added by Alembic migration `85e2c6aab4f8_add_credits.py` (chained onto
-`5285bd395643`; **current head**):
+`5285bd395643`; head has since advanced — see `aa11extract01` below):
 - `account.credit_balance` (INTEGER, cached running total) and
   `account.credit_rate` (FLOAT, per-account tier multiplier — `0` = free/
   ungated dev tier).
@@ -150,3 +150,11 @@ Added by Alembic migration `85e2c6aab4f8_add_credits.py` (chained onto
 suspected — there's no scheduled job for this yet, it's a manual repair tool.
 See `core/CONTEXT.md` → "Credits & Metering" for the conversion formula and
 gating logic.
+
+### Data migration: extraction-prompt refresh (`aa11extract01`)
+
+`aa11extract01` (chained onto `aa10units01`; **current head**) is a **data-only**
+migration: it rewrites every `prompts`/`prompt_defaults` extraction row whose content
+is byte-for-byte the old factory default (rstrip-tolerant match) to the new
+atomic-skill default, closing the hosted-DB gap where commit `2ed4745`'s seed-file
+change only reached new signups. User-customised prompts are untouched; reversible.
