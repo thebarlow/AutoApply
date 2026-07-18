@@ -44,6 +44,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Top navbar (branding, credits, help button, Admin link for admins) | `src/components/Navbar.jsx` — shows an Admin link when `me.is_admin` |
 | Credit balance display (navbar + User tab panel) | `src/components/widgets/CreditBalance.jsx` — fetches `/api/credits`; refetches on `auto-apply:credits-stale` event; `variant` prop: `nav`/`panel`; for admins shows the platform system balance (click toggles $/credits) instead of personal credits |
 | Out-of-credits (HTTP 402) global signal | `src/api.js` — `_fetch` dispatches `auto-apply:credits-error` + `auto-apply:credits-stale`; toasted in `src/App.jsx` |
+| Gateway-error (502/503/504) retry for idempotent calls | `src/api.js` — `_fetch` accepts opt-in `retries`/`retryDelay` options and retries only gateway statuses with linear backoff (deploy-window rollovers); the actual fetch is `_fetchOnce`, and thrown errors carry `err.status`. `uploadJob` sets `retries:3` (server dedupes by URL) |
 | Grid layout or viewport sizing | `src/components/Dashboard.jsx` |
 | Job card appearance (title, company, status icon, doc badges) | `src/components/shared/JobCard.jsx` |
 | Pipeline tabs (Inbox / Processing / Outbound / Archives) | `src/components/widgets/Pipeline.jsx` |

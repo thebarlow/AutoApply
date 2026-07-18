@@ -101,6 +101,12 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Manual upload 502 during deploy window.** **DONE 2026-07-18** — manual job uploads that
+  landed mid-Railway-restart got a raw 502 (proxy had no healthy upstream). `_fetch`
+  (`react-dashboard/src/api.js`) now supports opt-in `retries`/`retryDelay` and retries only
+  gateway statuses (502/503/504) with linear backoff; thrown errors carry `err.status`. Enabled on
+  `uploadJob` (`retries:3`), which is idempotent server-side (deduped by URL).
+
 - [x] **User View name stale after résumé parse.** **DONE 2026-07-18** — `UserHome` fetched
   profiles only on mount, so post-onboarding the "Welcome back {name}" header showed the pre-parse
   name until a manual refresh. `Wizard` `onFinish` now dispatches `auto-apply:profile-updated`
