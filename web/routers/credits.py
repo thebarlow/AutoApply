@@ -1,4 +1,4 @@
-"""Credit balance, admin grants, and the dev system-balance view."""
+"""Credit balance, the real-admin dependency, and the system-balance view."""
 from __future__ import annotations
 
 import logging
@@ -6,13 +6,9 @@ import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db.database import Account, CreditLedger, get_db
-from core.credits import grant_credits
-from core import payments
 from web.tenancy import current_profile_id
 
 router = APIRouter(prefix="/api", tags=["credits"])
@@ -66,58 +62,11 @@ def get_credits(db: Session = Depends(get_db), profile_id: int = Depends(current
     }
 
 
-class GrantRequest(BaseModel):
-    profile_id: int | None = None
-    email: str | None = None
-    amount: int
-    note: str | None = None
-
-
-@router.post("/admin/credits/grant")
-def admin_grant(body: GrantRequest, db: Session = Depends(get_db),
-                admin: Account = Depends(require_real_admin)):
-    target_pid = body.profile_id
-    if target_pid is None and body.email:
-        tgt = (db.query(Account)
-               .filter(func.lower(Account.email) == body.email.strip().lower())
-               .first())
-        if tgt is None:
-            raise HTTPException(status_code=404, detail="account not found")
-        target_pid = tgt.profile_id
-    if target_pid is None:
-        raise HTTPException(status_code=400, detail="profile_id or email required")
-    row = grant_credits(db, target_pid, body.amount, reason="admin_grant",
-                        created_by=admin.id, note=body.note)
-    if row is None:
-        raise HTTPException(status_code=404, detail="target account not found")
-    bal = db.query(Account).filter_by(profile_id=target_pid).first().credit_balance
-    return {"granted": body.amount, "balance": bal}
-
-
-class SetTierRequest(BaseModel):
-    profile_id: int | None = None
-    email: str | None = None
-    tier: str
-
-
-@router.post("/admin/credits/tier")
-def admin_set_tier(body: SetTierRequest, db: Session = Depends(get_db),
-                   admin: Account = Depends(require_real_admin)):
-    """Set a profile's pricing tier (admin only)."""
-    if body.tier not in payments.tier_multipliers():
-        raise HTTPException(status_code=400, detail="unknown tier")
-    target = None
-    if body.profile_id is not None:
-        target = db.query(Account).filter_by(profile_id=body.profile_id).first()
-    elif body.email:
-        target = (db.query(Account)
-                  .filter(func.lower(Account.email) == body.email.strip().lower())
-                  .first())
-    if target is None:
-        raise HTTPException(status_code=404, detail="account not found")
-    target.tier = body.tier
-    db.commit()
-    return {"profile_id": target.profile_id, "tier": target.tier}
+# NOTE: The legacy POST /api/admin/credits/grant and /api/admin/credits/tier
+# routes were removed (dead-code audit). Admin grants go through
+# POST /api/admin/users/{profile_id}/grant (web/routers/admin.py), which is
+# budget-checked and what the AdminPage UI calls. Tier changes have no API
+# surface; set Account.tier directly if ever needed.
 
 
 def openrouter_remaining() -> float | None:

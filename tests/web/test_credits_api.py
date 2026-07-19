@@ -43,18 +43,3 @@ def test_get_credits_returns_balance(client):
     assert r.json()["rate"] == 1.5
 
 
-def test_admin_grant_requires_admin(client):
-    # active profile 1 is not admin
-    r = client.post("/api/admin/credits/grant", json={"profile_id": 1, "amount": 50})
-    assert r.status_code == 403
-
-
-def test_admin_grant_credits(client, db_session):
-    # Admin identity now comes from require_real_admin (the real logged-in
-    # account), not current_profile_id — override it with the admin account.
-    from web.routers.credits import require_real_admin
-    admin = db_session.query(Account).filter_by(profile_id=2).first()
-    app.dependency_overrides[require_real_admin] = lambda: admin
-    r = client.post("/api/admin/credits/grant", json={"profile_id": 1, "amount": 50, "note": "topup"})
-    assert r.status_code == 200
-    assert db_session.query(Account).filter_by(profile_id=1).first().credit_balance == 150
