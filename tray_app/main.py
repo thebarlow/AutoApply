@@ -68,6 +68,9 @@ def main():
     tray.show()
 
     ws.connection_state_changed.connect(tray.setToolTip)
+    # Signal the WS reconnect loop to exit on quit; the daemon thread would die
+    # with the process anyway, but this stops it re-dialing during teardown.
+    app.aboutToQuit.connect(ws.stop)
 
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     # Allow Python to process signals every 500ms while Qt event loop runs

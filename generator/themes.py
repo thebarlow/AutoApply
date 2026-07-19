@@ -35,11 +35,6 @@ DEFAULT_THEME_ID = "classic"
 _BY_ID = {t.id: t for t in THEMES}
 
 
-def get_theme(theme_id: str) -> Theme | None:
-    """Return the theme with ``theme_id``, or ``None`` if unknown."""
-    return _BY_ID.get(theme_id)
-
-
 def all_themes() -> list[Theme]:
     """Return the themes in display order."""
     return list(THEMES)

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import shutil
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -23,8 +22,6 @@ from core.llm import get_client_for_profile
 from core.metering import meter_action
 from core.user import User, PromptNotConfiguredError
 from core.profile_tree import (
-    FieldNode,
-    ListNode,
     RootNode,
     SectionNode,
     TreeValidationError,
@@ -72,34 +69,10 @@ def _get(db: Session, key: str, profile_id: int, default: str | None = None) -> 
     return PROFILE_CONFIG_DEFAULTS.get(key, "")
 
 
-def _set(db: Session, key: str, value: str, profile_id: int) -> None:
-    """Upsert a per-tenant setting into profile_config."""
-    row = (
-        db.query(ProfileConfig)
-        .filter_by(profile_id=profile_id, key=key)
-        .first()
-    )
-    if row:
-        row.value = value
-    else:
-        db.add(ProfileConfig(profile_id=profile_id, key=key, value=value))
-    db.commit()
-
-
 def _get_global(db: Session, key: str, default: str = "") -> str:
     """Read a global infra setting from the config table."""
     row = db.query(Config).filter_by(key=key).first()
     return row.value if row else default
-
-
-def _set_global(db: Session, key: str, value: str) -> None:
-    """Upsert a global infra setting into the config table."""
-    row = db.query(Config).filter_by(key=key).first()
-    if row:
-        row.value = value
-    else:
-        db.add(Config(key=key, value=value))
-    db.commit()
 
 
 # NOTE: The old /api/config/prompts/* CRUD endpoints were removed (audit S1).

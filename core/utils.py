@@ -183,35 +183,3 @@ def render_pdf(
                 scale = max(_PDF_SCALE_FLOOR, scale - _PDF_SCALE_STEP)
         finally:
             browser.close()
-
-
-def strip_header_block(md: str) -> str:
-    """Remove a name/contact header block from LLM-generated resume markdown.
-
-    Scans past any YAML front matter and any leading non-section lines,
-    returning content starting from the first '## ' section header.
-
-    Args:
-        md: Raw markdown string, possibly with a header block.
-
-    Returns:
-        Markdown string starting from the first section header.
-    """
-    if not md:
-        return md
-    lines = md.splitlines()
-    i = 0
-    if lines and lines[0].strip() == "---":
-        i = 1
-        while i < len(lines):
-            if lines[i].strip() == "---":
-                i += 1
-                break
-            i += 1
-    while i < len(lines):
-        if lines[i].strip().startswith("## "):
-            break
-        if i >= 10:
-            break
-        i += 1
-    return "\n".join(lines[i:])

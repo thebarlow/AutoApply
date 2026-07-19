@@ -63,18 +63,6 @@ def retrieve_checkout_session(session_id: str):
     return _client().v1.checkout.sessions.retrieve(session_id)
 
 
-def retrieve_price(price_id: str):
-    """Fetch a Stripe Price.
-
-    Args:
-        price_id: The Stripe Price ID to retrieve.
-
-    Returns:
-        The `stripe.Price` object (exposes `.unit_amount`, `.currency`).
-    """
-    return _client().v1.prices.retrieve(price_id)
-
-
 def construct_event(payload: bytes, sig_header: str):
     """Verify and parse a Stripe webhook event.
 

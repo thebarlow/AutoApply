@@ -64,9 +64,6 @@ _REGISTRY: dict[str, OutputFormat] = {
     f.id: f for f in (BULLETS, PARAGRAPH, SKILL_GROUPS)
 }
 
-DEFAULT_FORMAT_ID = "paragraph"
-
-
 def get_format(format_id: str) -> OutputFormat | None:
     """Return the registered format for ``format_id``, or None if unknown/empty."""
     return _REGISTRY.get(format_id or "")

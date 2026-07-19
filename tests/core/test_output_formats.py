@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.output_formats import (
-    OutputFormat, get_format, all_formats, DEFAULT_FORMAT_ID, BULLETS, PARAGRAPH,
+    OutputFormat, get_format, all_formats, BULLETS, PARAGRAPH,
     SKILL_GROUPS,
 )
 
@@ -35,5 +35,3 @@ def test_get_format_returns_none_for_unknown():
     assert get_format("") is None
 
 
-def test_default_format_id_is_registered():
-    assert get_format(DEFAULT_FORMAT_ID) is not None

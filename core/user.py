@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from pathlib import Path
-from typing import ClassVar, List, Optional
+from typing import ClassVar, Optional
 
 from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.orm import Session
@@ -15,7 +15,6 @@ from core.profile_tree import (
     RootNode,
     apply_flat_to_tree,
     legacy_to_tree,
-    merge_flat_into_stored,
     tree_to_legacy,
     validate_tree,
 )
@@ -264,33 +263,6 @@ class User(Base):
         if migrated:
             row.save(db)
         return row
-
-    @classmethod
-    def load_from_json(cls, path: str, db: Session) -> None:
-        """Upsert a user profile from a JSON file on disk.
-
-        Replaces db/seed_profile.py. Creates a new profile row if none exists,
-        otherwise updates the first row.
-
-        Args:
-            path: Filesystem path to a JSON file conforming to the profile schema.
-            db: SQLAlchemy session.
-        """
-        with open(path) as f:
-            data = json.load(f)
-        data = merge_flat_into_stored({}, data)
-        name = (
-            data.get("name", "")
-            or f"{data.get('first_name', '')} {data.get('last_name', '')}".strip()
-            or "Default"
-        )
-        row = db.query(cls).first()
-        if row:
-            row.name = name
-            row.data = json.dumps(data)
-        else:
-            db.add(cls(name=name, data=json.dumps(data)))
-        db.commit()
 
     @classmethod
     def from_markdown(

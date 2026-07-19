@@ -74,12 +74,6 @@ def finish(profile_id: int, job_key: str, action: str | None = None) -> None:
         _send_action(profile_id, job_key, action, False)
 
 
-def is_processing(profile_id: int, job_key: str) -> bool:
-    """Return True if any LLM op is in flight for the tenant's job_key."""
-    with _lock:
-        return _counts.get((profile_id, job_key), 0) > 0
-
-
 def snapshot(profile_id: int) -> list[str]:
     """Return the tenant's job_keys with any in-flight op."""
     with _lock:

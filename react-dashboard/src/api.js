@@ -91,16 +91,11 @@ export const putProfileTree = (id, tree) =>
     body: JSON.stringify({ tree }),
   })
 
-export const deleteProfile = (id) =>
-  _fetch(`/api/config/profiles/${id}`, { method: 'DELETE' })
-
 export const resetProfile = (id) =>
   _fetch(`/api/config/profiles/${id}/reset`, { method: 'POST' })
 
 export const getActivePromptStatus = () =>
   _fetch('/api/config/profiles/active/prompt-status')
-
-export const getDefaultPrompt = (typeKey) => _fetch(`/api/prompts/defaults/${typeKey}`)
 
 export const getPrompt = (profileId, typeKey) =>
   _fetch(`/api/prompts/${profileId}/${typeKey}`)
