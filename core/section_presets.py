@@ -29,8 +29,14 @@ SECTION_PROMPT_DEFAULTS = {
         "Each description is one sentence, at most 120 characters, no bullets."
     ),
     "skills": (
-        "Group into at most 6 categories (e.g. Languages, Frameworks, Tools). Include "
-        "only categories with 2+ relevant skills; list job-mentioned skills first."
+        "Group skills into at most 5 labeled categories relevant to THIS job (e.g. "
+        "Languages, Frameworks, Tools), most-relevant category first; within each, list "
+        "job-mentioned skills first. Include only categories with 2+ job-relevant skills — "
+        "omit ones the job does not call for (e.g. frontend for a backend role). Exclude "
+        "soft/interpersonal skills entirely (teamwork, communication, adaptability, "
+        "problem-solving); those belong in the summary and cover letter, not here. Keep "
+        "the whole section to roughly 5 lines. Use ONLY skills from the inventory; never "
+        "invent."
     ),
 }
 
