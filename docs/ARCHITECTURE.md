@@ -230,7 +230,7 @@ always computed server-side per tier (never trusted from the client). The
 admin `grant-budget` stat is likewise converted to unit denomination.
 
 `core/stripe_client.py` thinly wraps the `stripe` SDK (v15.2.1):
-`create_customer`, `create_checkout_session`, `retrieve_price`,
+`create_customer`, `create_checkout_session`,
 `construct_event` — all reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`
 from env lazily.
 

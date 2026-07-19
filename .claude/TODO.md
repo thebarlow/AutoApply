@@ -6,6 +6,13 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Bugs
 
+- [ ] **[audit 2026-07-19] Pre-existing order-dependent test failures (test pollution).** Both
+  pass in isolation but fail in full-suite runs; present on clean HEAD before the dead-code
+  cleanup:
+  1. `tests/scraper/test_runner.py::test_run_scraper_continues_on_source_error` — caplog misses
+     `scraper.runner` logs when the full suite runs.
+  2. `react-dashboard/src/api.profileTree.test.js` "getProfileTree GETs the tree route".
+
 - [ ] **Follow-ups for email deliverability (non-blocking).**
   1. **Verify auth in practice:** send a real invite to Gmail → "Show original" → confirm
      SPF/DKIM/DMARC all say PASS. Beats the Cloudflare dashboard widget (report-driven,
@@ -107,9 +114,34 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
-- [x] **[audit 2026-07-19, dead code] Remove dead legacy config API routes.** **DONE 2026-07-19**
-  (part of an in-progress dead-code cleanup; core/job.py legacy methods still to follow)
-  — deleted unconsumed endpoints from `web/routers/config.py`:
+- [x] **[audit 2026-07-19, dead code] Dead-code audit cleanup.** **COMPLETE 2026-07-19** —
+  commits `e93318c`, `fbd8a4b`, `4c99550`, `8fcbd9e`, `cc417a2`.
+  - `8fcbd9e`: removed superseded `core/job.py` legacy methods — `save_batch`
+    (`save_batch_returning` is the sole path), `get_or_raise`, `list_for_review`, `set_state`,
+    `generate_resume_docx`, `_build_frontmatter`, stray `warnings` import; deleted
+    `tests/core/test_resume_docx.py`, migrated batch-save tests. The md eval/refine methods
+    (`evaluate_resume_md`/`evaluate_cover_md`/`refine_cover_md`/`_refine_doc_md`) were KEPT —
+    dispatched dynamically via `getattr(job, f"evaluate_{doc_type}_md")` in
+    `web/intake_pipeline.py`.
+  - `cc417a2`: swept unused helpers — `User.load_from_json`, `core/utils.strip_header_block`,
+    `core/stripe_client.retrieve_price`, `core/session_cost.get_session_start`,
+    `web/llm_status.is_processing`, `generator/themes.get_theme`,
+    `core/output_formats.DEFAULT_FORMAT_ID`, and `web/routers/config.py`'s `_set`/`_set_global`
+    (orphaned by the route removal; `_get`/`_get_global`/`_get_providers`/`_read_env`/
+    `_env_key_name` kept — imported by `jobs.py`/`setup_status.py`). Removed unused
+    `deleteProfile`/`getDefaultPrompt` exports from `react-dashboard/src/api.js` (backend routes
+    kept). Wired `ws.stop` into `tray_app/main.py` aboutToQuit. Pruned matching tests; rewrote
+    `tests/web/test_profile_config_access.py` to seed rows directly.
+  - Deliberately KEPT (verified live or intentionally retained): `User.education_degrees`
+    (`{user.education_degrees}` in eval prompt templates), `GET /extension/download` (linked from
+    the served "Browser Extension" Obsidian doc), `core/credits.CREDITS_PER_DOLLAR`
+    (documentation) and `reconcile_balance` (billing-ops repair helper, no endpoint),
+    `document_builder.apply_resume_patch` (retained per 2026-06-22 plan pending separate
+    approval).
+  - Two pre-existing order-dependent test failures discovered (not caused by this cleanup) —
+    tracked under Bugs.
+
+  Earlier in the same audit — deleted unconsumed endpoints from `web/routers/config.py`:
   `GET/PUT /api/config/{templates,scoring,sources,search,job_searches}`, `GET /api/job-fields`,
   `GET /api/user-profile-fields`, `GET /api/config/profiles/{id}/file` — superseded by the
   profile-tree API (`/api/config/profiles/{id}/tree`) and the scraper router; scoring weights are

@@ -20,7 +20,7 @@ web/
 └── routers/
     ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
     ├── scraper.py           # POST /api/scraper/stage-job (browser ext); POST /api/scraper/search + GET /last-search + POST /scrape-selected (Find Jobs tab: preview/persist API-scraper candidates)
-    ├── config.py            # Profile CRUD/tree/parse/upload API; internal per-tenant config helpers (_get/_set → profile_config; _get_global/_set_global → config)
+    ├── config.py            # Profile CRUD/tree/parse/upload API; internal read-only config helpers (_get → profile_config; _get_global → config; setters removed in the 2026-07-19 dead-code sweep)
     ├── prompts.py           # GET/PUT per-profile prompt overrides
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
@@ -48,7 +48,7 @@ web/
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Credit balance / history, admin grants, system balance | `routers/credits.py` |
 | Stripe Checkout (packs/checkout/verify/webhook/history) | `routers/payments.py` |
-| Profile CRUD, tree, résumé parse, upload (config router) | `routers/config.py` — per-tenant keys read/written internally via `_get`/`_set` (`profile_config`); global infra keys via `_get_global`/`_set_global` (`config`). The legacy key-value HTTP routes were removed (audit, 2026-07-19 — see Known Issues) |
+| Profile CRUD, tree, résumé parse, upload (config router) | `routers/config.py` — per-tenant keys read internally via `_get` (`profile_config`); global infra keys via `_get_global` (`config`). The legacy key-value HTTP routes and the orphaned `_set`/`_set_global` helpers were removed (audit, 2026-07-19 — see Known Issues) |
 | Prompt template get/set per profile | `routers/prompts.py` |
 | Active LLM task status (for UI polling) | `routers/llm_status_router.py` |
 | Onboarding/setup state | `routers/setup_status.py` |
@@ -237,10 +237,10 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   `User.first()` / the raw URL id, which in production served profile 1 to everyone and let
   any tenant read/overwrite/delete another's profile, files, resume-parse, and prompts. When
   adding profile-scoped endpoints, depend on `current_profile_id` — never `dev_tenant_id`.
-- **Config is split global vs per-tenant (DONE).** `routers/config.py::_get`/`_set` are
+- **Config is split global vs per-tenant (DONE).** `routers/config.py::_get` is
   per-tenant, backed by the tenant-guarded `profile_config` table (composite PK
   `profile_id, key`, seeded from `PROFILE_CONFIG_DEFAULTS`, backfilled for every existing
-  profile by Alembic `aa08profcfg01`); `_get_global`/`_set_global` still hit the original
+  profile by Alembic `aa08profcfg01`); `_get_global` still hits the original
   global `config` table (PK = `key` only). Per-tenant key classes: scoring weights/thresholds
   (`w1`, `w2`, `auto_reject_threshold`, `auto_approve_threshold`, read in
   `web/routers/jobs.py:_load_score_config`), contact links, template paths, and scraper prefs

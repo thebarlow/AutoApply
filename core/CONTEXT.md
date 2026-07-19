@@ -25,7 +25,7 @@ core/
 ├── credits.py           # Credit ledger: prepaid fixed debit, refund, grant/reconcile, tiered signup grants
 ├── metering.py          # meter_action context manager: prepaid per-action debit + refund-on-failure around LLM calls
 ├── payments.py          # Tier-aware pricing calculator: compute_credits()/packs_for_tier()/resolve_price_id() (no Stripe SDK calls)
-└── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, retrieve_price, construct_event
+└── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, construct_event
 ```
 
 ## Profile Schema Engine
@@ -61,7 +61,7 @@ sub-project #4.
 **Sub-project 2A (write-path consolidation + tree API) is DONE:** `User._to_dict`
 now uses `apply_flat_to_tree` (in-place overlay) instead of the former
 `with_rebuilt_tree` (destructive rebuild). All write paths (`User.save`,
-`User.load_from_json`, `update_profile`, parse-merge endpoint) go through
+`update_profile`, parse-merge endpoint) go through
 `merge_flat_into_stored`, which picks the stored tree as base (preserving node
 `id`s, custom sections, `regen_lock`, `llm_instructions`, `llm_input`,
 `bullet_style`, manual ordering) and overlays flat edits in place. A regression
@@ -128,7 +128,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Credit ledger: grants, prepaid fixed debit, refund, reconciliation | `credits.py` → `grant_credits()`, `debit_fixed()`, `refund_debit()`, `reconcile_balance()`, `signup_grant_for_tier()` |
 | Per-action prepaid gate + debit settle around LLM calls | `metering.py` → `meter_action()` |
 | Tier-aware credit pack pricing (multipliers, bulk discounts, fees, per-tier credits) | `payments.py` → `tier_multipliers()`, `price_tiers()`, `tier_visibility()`, `price_ids()`, `compute_credits()`, `packs_for_tier()`, `resolve_price_id()` |
-| Stripe SDK calls (customer, Checkout session, price lookup, webhook signature verification) | `stripe_client.py` → `create_customer()`, `create_checkout_session()`, `retrieve_price()`, `construct_event()` |
+| Stripe SDK calls (customer, Checkout session, price lookup, webhook signature verification) | `stripe_client.py` → `create_customer()`, `create_checkout_session()`, `construct_event()` |
 
 ## LLM Integration
 
@@ -302,7 +302,7 @@ favor of `STRIPE_PRICE_IDS` plus optional overrides
 fee model `STRIPE_FEE_PCT`/`STRIPE_FEE_FIXED`/`TAX_RATE`. The admin
 grant-budget stat is likewise reported in unit denomination. `stripe_client.py` wraps the
 `stripe` SDK (v15.2.1) with `create_customer`, `create_checkout_session`,
-`retrieve_price`, and `construct_event` (webhook signature verification),
+and `construct_event` (webhook signature verification),
 reading `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` from env lazily. Consumed
 by `web/routers/payments.py`, which records `Purchase` rows and grants
 credits via `grant_credits(reason="purchase")` on a verified
