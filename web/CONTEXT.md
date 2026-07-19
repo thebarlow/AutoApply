@@ -19,7 +19,7 @@ web/
 │   └── middleware.py        # Pure-ASGI prod gate: 401s unauthenticated /api/* (SSE-safe)
 └── routers/
     ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
-    ├── scraper.py           # POST /api/scraper/stage-job (browser ext); POST /api/scraper/search + GET /last-search + POST /scrape-selected (Find Jobs tab: preview/persist API-scraper candidates)
+    ├── scraper.py           # POST /api/scraper/stage-job (browser ext; now also carries easy_apply/apply_url_raw and sets ats_type="easy_apply" for in-platform jobs); POST /api/scraper/search + GET /last-search + POST /scrape-selected (Find Jobs tab: preview/persist API-scraper candidates); PATCH /api/scraper/jobs/{job_key}/ats-resolution (extension-authed ATS classification backfill)
     ├── config.py            # Profile CRUD/tree/parse/upload API; internal read-only config helpers (_get → profile_config; _get_global → config; setters removed in the 2026-07-19 dead-code sweep)
     ├── prompts.py           # GET/PUT per-profile prompt overrides
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
@@ -171,6 +171,7 @@ web/
 | `POST` | `/api/scraper/search` | Body `{query, exclude:[], location:""}`; runs `search_sources` (Remotive + RemoteOK) with banned-word `exclude` + optional `location` filter, returns `{query, candidates:[{...ScrapedJob, candidate_id}]}`. Each candidate gets a stable `candidate_id` (sha1 of title/company/location); candidates already in this profile's inbox/archives (non-deleted) are **excluded** entirely. Persists `query`/`exclude`/`location` to `profile_config`; candidates are NOT persisted |
 | `GET` | `/api/scraper/last-search` | Returns `{query, exclude:[], location}` — the profile's remembered search + filters |
 | `POST` | `/api/scraper/scrape-selected` | Body `{jobs:[...]}`; batched intake of user-selected candidates — saves, runs `intake()` + `run_pipeline()` (threaded, SSE-updated); returns `{results:[{job_key, status: staged|duplicate}]}` |
+| `PATCH` | `/api/scraper/jobs/{job_key}/ats-resolution` | Browser-extension bearer-or-session authed (`bearer_or_session_profile`), tenant-scoped to `(profile_id, job_key)`; body carries the resolved external apply URL, classifies it via `core/ats.py::classify_ats` and persists `apply_url_resolved`/`ats_type`/`ats_domain`. Lives in `scraper.py` rather than the jobs router because only this router already wires bearer auth (see Self-Review deviation note in the ATS-detection plan) |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
 | `GET` | `/api/skill-frequency` | Combined required+preferred skill counts (`skills`) plus `tech_stack`, distinct jobs, across all extracted jobs; no window. Also returns `profile_skills` (active user's skills, normalized) so the UI can flag covered skills. The job aggregation is cached in-process keyed by extracted-job count with a 60s TTL — a re-extraction that doesn't change the count can be up to 60s stale; tests reset `stats._SKILL_CACHE` via an autouse fixture. |
 | `GET` | `/api/skill-frequency/jobs` | Job keys whose extraction data lists a given `skill` (normalized, any field) |

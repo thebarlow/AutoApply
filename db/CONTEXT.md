@@ -151,6 +151,20 @@ suspected — there's no scheduled job for this yet, it's a manual repair tool.
 See `core/CONTEXT.md` → "Credits & Metering" for the conversion formula and
 gating logic.
 
+### ATS detection columns (`aa12atsdetect01`)
+
+Added by Alembic migration `aa12atsdetect01` (chained onto `aa11extract01`; **current
+head**): five columns on `jobs` recording how a job is applied to —
+`easy_apply` (BOOLEAN), `apply_url_raw` (TEXT, as scraped/staged), `apply_url_resolved`
+(TEXT, after following redirects), `ats_type` (TEXT — `easy_apply` | `greenhouse` |
+`lever` | `ashby` | `workday` | `icims` | `taleo` | `smartrecruiters` | `jobvite` |
+`bamboohr` | `other` | null-if-unclassified), `ats_domain` (TEXT, the resolved host,
+populated mainly for `ats_type="other"`). `core/ats.py` classifies a URL into
+`(ats_type, host)`; `web/routers/scraper.py` sets `ats_type="easy_apply"` at
+`stage-job` time for in-platform jobs and exposes a separate tenant-scoped PATCH to
+backfill the columns once the browser extension resolves an external URL — see
+`web/CONTEXT.md` → API Surface.
+
 ### Data migration: extraction-prompt refresh (`aa11extract01`)
 
 `aa11extract01` (chained onto `aa10units01`; **current head**) is a **data-only**

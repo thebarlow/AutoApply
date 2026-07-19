@@ -44,6 +44,38 @@ Exposes a unified promise-based `xb` API over `chrome.*` (Chrome) or `browser.*`
 ### Dedup
 Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_DEDUP` message before the network call). Server-side: `save_jobs()` deduplicates by URL. The popup "Clear scrape history" button removes `stagedJobKeys`.
 
+### ATS detection (easy-apply flag + external URL resolution)
+- **`getApplyInfo()`** (`linkedin.js`/`indeed.js`) inspects the job card/detail pane for
+  an Easy Apply (LinkedIn) / Indeed Apply signal vs. an external "Apply on company site"
+  link, returning `{easy_apply, apply_url_raw}`. `getJobData()` includes this in the
+  scrape payload; `stage-job` persists it and the server sets `ats_type="easy_apply"`
+  server-side for in-platform jobs (see `web/CONTEXT.md`).
+- **`"tabs"` permission** was added to `manifest.json` so the background script can open
+  a non-focused background tab to follow an external apply link's redirect chain.
+- **Background ATS-resolution queue** (`service_worker.js`) — jobs staged with an
+  `apply_url_raw` but no `ats_type` are enqueued for resolution. For each job the worker
+  opens a background tab at `apply_url_raw`, watches `webNavigation`/tab-URL updates, and
+  settles on the final URL after a **4s quiet period** (no further navigation) or a **20s
+  hard cap**, whichever comes first; the tab is then closed. Concurrency is capped at
+  **≤2** in-flight resolutions. On settle, the worker PATCHes
+  `/api/scraper/jobs/{job_key}/ats-resolution` with the resolved URL so the server can
+  classify it via `core/ats.py`. Jobs are enqueued only after a successful stage (never on
+  a duplicate/failed stage).
+
+**Known limitations:**
+1. **No `href` → never enqueued.** If an external "Apply" control renders as a `<button>`
+   with no underlying `href` (JS-driven navigation), `getApplyInfo()` can't produce an
+   `apply_url_raw`, so that job is never queued for resolution and its chip stays
+   "Resolving…" indefinitely. No current workaround; would need per-site click-simulation.
+2. **MV3 service-worker idle termination can orphan a resolution.** Chrome may kill an
+   idle/backgrounded MV3 service worker at any point, including mid-resolution (within the
+   ≤20s window). If that happens the background tab is left open (never closed) and the
+   PATCH is never sent — there is no retry/resume on worker restart. Same class of
+   fragility as the selector breakage below; the "Browser-extension DOM recalibration
+   tool" TODO item (`.claude/TODO.md`) is the tracked mitigation direction for this and
+   the selector issues generally (a maintainer-run tool to re-derive selectors/behavior
+   after a site DOM change, rather than hand-patching each break).
+
 ## Loading the Extension
 
 ### Chrome
@@ -67,6 +99,8 @@ Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_
 
 ### Live smoke test — PENDING maintainer execution
 The full OAuth + scrape flow (sign-in on both Chrome and Firefox, LinkedIn and Indeed field verification, selector validity) **has not yet been verified by a human**. The items below reflect the pre-OAuth state of the selectors and are marked accordingly. Do not treat any selector as verified-working post-OAuth until the smoke test has been run and logged here.
+
+**Also PENDING:** the ATS-detection flow added in this feature (`getApplyInfo()` easy-apply/apply-URL extraction and the background ATS-resolution queue described above) has only been exercised via unit tests — it has **not** been smoke-tested live in Chrome/Firefox. Verify during the next smoke-test pass: easy-apply detection on a real LinkedIn Easy Apply card, external-apply URL capture on both sites, the background tab opening/closing correctly, and the PATCH landing with the right `ats_type`.
 
 Selectors to check during the smoke test:
 - `indeed.js` — `getJobData()` field extraction, `getDescription()`, and `detailReadySelector` (Indeed changes its DOM regularly).
