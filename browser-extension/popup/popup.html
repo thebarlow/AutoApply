@@ -23,6 +23,15 @@
   </div>
   <div id="signedIn" class="hidden">
     <p id="greeting"></p>
+    <div id="serverToggle" class="hidden" style="margin:6px 0; padding:6px 0; border-top:1px solid #eee;">
+      <p style="margin:0 0 4px; font-size:12px; color:#555;">Send jobs to:</p>
+      <label style="display:inline-flex; align-items:center; width:auto; margin-right:10px;">
+        <input type="radio" name="serverMode" value="live" style="width:auto; margin:0 4px 0 0;" /> Live
+      </label>
+      <label style="display:inline-flex; align-items:center; width:auto;">
+        <input type="radio" name="serverMode" value="local" style="width:auto; margin:0 4px 0 0;" /> Local (localhost:8080)
+      </label>
+    </div>
     <p>Ready to look at jobs?</p>
     <a class="joblink" href="https://www.linkedin.com/jobs/" target="_blank" rel="noopener">Browse LinkedIn jobs</a>
     <a class="joblink" href="https://www.indeed.com/jobs" target="_blank" rel="noopener">Browse Indeed jobs</a>

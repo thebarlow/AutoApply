@@ -1,6 +1,12 @@
 // browser-extension/popup/popup.js
 const SERVER = "https://autoapply.matthewbarlow.me";
 const TOKEN_KEY = "extToken";
+const MODE_KEY = "serverMode";
+
+async function getServerMode() {
+  const { [MODE_KEY]: mode } = await xb.storage.local.get(MODE_KEY);
+  return mode === "local" ? "local" : "live";
+}
 
 async function getToken() {
   const { [TOKEN_KEY]: t } = await xb.storage.local.get(TOKEN_KEY);
@@ -58,6 +64,7 @@ async function render() {
   if (!token) {
     inEl.classList.add("hidden");
     outEl.classList.remove("hidden");
+    document.getElementById("serverToggle").classList.add("hidden");
     return;
   }
   try {
@@ -67,17 +74,38 @@ async function render() {
         await xb.storage.local.remove(TOKEN_KEY);
         inEl.classList.add("hidden");
         outEl.classList.remove("hidden");
+        document.getElementById("serverToggle").classList.add("hidden");
       }
       return;
     }
-    const { email } = await res.json();
+    const { email, is_admin: isAdmin } = await res.json();
     document.getElementById("greeting").textContent = `Hi ${displayName(email)}!`;
     document.getElementById("email").textContent = email;
+    await renderServerToggle(!!isAdmin);
     inEl.classList.remove("hidden");
     outEl.classList.add("hidden");
   } catch (_) {
     // Network error or other transient failure; keep token and stay signed in
   }
+}
+
+// Admin-only routing toggle. Non-admins never see it; any stray "local" mode
+// left on a now-non-admin account is reset to "live".
+async function renderServerToggle(isAdmin) {
+  const wrap = document.getElementById("serverToggle");
+  if (!isAdmin) {
+    await xb.storage.local.set({ [MODE_KEY]: "live" });
+    wrap.classList.add("hidden");
+    return;
+  }
+  const mode = await getServerMode();
+  for (const input of wrap.querySelectorAll('input[name="serverMode"]')) {
+    input.checked = input.value === mode;
+    input.onchange = async () => {
+      if (input.checked) await xb.storage.local.set({ [MODE_KEY]: input.value });
+    };
+  }
+  wrap.classList.remove("hidden");
 }
 
 document.getElementById("loginGoogle").addEventListener("click", () => signIn("google"));

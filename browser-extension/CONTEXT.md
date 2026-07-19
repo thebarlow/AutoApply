@@ -95,12 +95,32 @@ Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_
 - **Store packaging (sub-project B, deferred)** — publishing to Chrome Web Store / Firefox Add-on store requires a stable pinned extension ID (assigned by the store). That ID determines the permanent `xb.identity.getRedirectURL()` value, which in turn must be added to `EXTENSION_REDIRECT_URLS` on the server. Do not package for stores until the redirect URL is captured from the pinned ID and allowlisted.
 - **Pin a Chrome `key` in `manifest.json` to stabilize the redirect URL.** Chrome has no `key`, so load-unpacked derives the extension ID (and thus `chrome.identity.getRedirectURL()` → `https://<id>.chromiumapp.org/`) from the install path. Reinstalling or loading from a different folder/machine changes the ID, so its redirect URL silently drops off the `EXTENSION_REDIRECT_URLS` allowlist and `/auth/ext/login/{provider}` starts 400-ing ("redirect_uri not allowed" → "Sign-in failed" with no Google page). Add a fixed `"key"` (the base64 public key) to `manifest.json` so the dev ID — and its redirect URL — stays constant. Firefox is already stable via `browser_specific_settings.gecko.id`.
 
+## Admin-only Live/Local Server Toggle
+
+The popup now includes an optional toggle (admin users only) that routes job submissions to either the live server (`https://autoapply.matthewbarlow.me`) or a local development instance (`http://localhost:8080`). Toggling does not affect OAuth sign-in (identity is always verified against the live server).
+
+**Storage key:** `serverMode` with values `"live"` (default) or `"local"`.
+
+**Implementation:**
+- **Popup:** `renderServerToggle()` reads the stored mode and wires the radio buttons. Non-admins never see the toggle; if a non-admin account has a stray `"local"` mode in storage, it is reset to `"live"` on render.
+- **Service worker:** `getServer()` (Task 1) resolves the base URL from `serverMode` and uses it for `POST /api/scraper/stage-job` and `PATCH /api/scraper/jobs/{job_key}/ats-resolution`.
+- **Local mode behavior:** When `serverMode="local"`, the service worker submits to `http://localhost:8080` without an `Authorization` header. This works because the local server (when run via `start.bat` without `APP_ENV=production`) does not gate `/api/*` endpoints on authentication.
+- **Cross-mode dedup:** Switching between modes does not clear the dedup history. The "Clear scrape history" button in the popup (existing UX) resets `stagedJobKeys` in storage; re-scraping the same job across modes will show "✗ Already staged" unless this button is clicked.
+
 ## Known Issues (open)
 
-### Live smoke test — PENDING maintainer execution
+### Live smoke test — PENDING maintainer execution (Task 2)
 The full OAuth + scrape flow (sign-in on both Chrome and Firefox, LinkedIn and Indeed field verification, selector validity) **has not yet been verified by a human**. The items below reflect the pre-OAuth state of the selectors and are marked accordingly. Do not treat any selector as verified-working post-OAuth until the smoke test has been run and logged here.
 
 **Also PENDING:** the ATS-detection flow added in this feature (`getApplyInfo()` easy-apply/apply-URL extraction and the background ATS-resolution queue described above) has only been exercised via unit tests — it has **not** been smoke-tested live in Chrome/Firefox. Verify during the next smoke-test pass: easy-apply detection on a real LinkedIn Easy Apply card, external-apply URL capture on both sites, the background tab opening/closing correctly, and the PATCH landing with the right `ats_type`.
+
+**PENDING (Task 2 Step 6):** The admin-only Live/Local server toggle (popup radio buttons, serverMode storage, routing in the service worker) has not been smoke-tested. Verify:
+  1. **Non-admin account:** open popup → no toggle shown; scrape a job → goes to Live (network panel shows live host + `Authorization` header); `serverMode` in storage is `"live"`.
+  2. **Admin account, Live (default):** toggle visible, "Live" selected; scrape → live host with bearer header; unchanged from today.
+  3. **Admin, switch to Local:** start local server (`start.bat`); flip to "Local"; scrape a job → service-worker network panel shows `POST http://localhost:8080/api/scraper/stage-job` with **no** `Authorization` header (HTTP 200); job appears in **local** DB.
+  4. **Admin, Local, external job:** confirm the ATS-resolution `PATCH` also hits `localhost:8080` with no auth header; card's chip flips from "Resolving…" to the ATS name.
+  5. **Flip back to Live:** scrape → requests carry bearer token and hit live app again.
+  6. **Mode-switch dedup:** re-scraping the same job across modes shows "✗ Already staged"; "Clear scrape history" resets it.
 
 Selectors to check during the smoke test:
 - `indeed.js` — `getJobData()` field extraction, `getDescription()`, and `detailReadySelector` (Indeed changes its DOM regularly).
