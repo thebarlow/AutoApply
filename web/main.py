@@ -108,9 +108,32 @@ def _daily_purge_loop(stop_event: threading.Event) -> None:
             print(f"[daily-purge] error: {exc}")
 
 
+def _warn_if_billing_disabled() -> None:
+    """Loudly flag a production start with a zero default credit rate.
+
+    meter_action bills nothing for accounts with credit_rate == 0, so a zero
+    CREDIT_DEFAULT_RATE (env typo, bad migration) silently gives every new
+    signup free LLM usage. Warn rather than crash: an admin may legitimately
+    run a free period, but it must never happen unnoticed.
+    """
+    if os.getenv("APP_ENV") != "production":
+        return
+    from core.credits import default_rate
+
+    if default_rate() <= 0:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "CREDIT_DEFAULT_RATE resolves to %s in production — new accounts "
+            "will NOT be billed for LLM actions", default_rate()
+        )
+        print("[startup] WARNING: billing disabled (CREDIT_DEFAULT_RATE <= 0)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[startup] Initialising database...")
+    _warn_if_billing_disabled()
     _timed("init_db", init_db)
     _timed("purge_deleted", _purge_deleted_jobs)
 
