@@ -114,6 +114,14 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Skill-chip parsing splits parenthesized lists.** **DONE 2026-07-19** — commit `70ff26f`.
+  Added paren-aware `split_skill_tokens` in `core/skill_analytics.py`: `Category (a, b)` now
+  emits clean chips `Category`, `a`, `b`; unbalanced parens fall back to plain comma split;
+  case-insensitive order-preserving dedupe. Wired into all skill readers (`job_has_skill`,
+  `aggregate_skill_frequency`, and `core/job.py` skill-match chips / ATS lists / extraction
+  prompt sections / `serialize`), so already-stored rows are repaired read-side — no migration.
+  Phrase fields (`_split_ext_phrases`) untouched. Tests in `tests/core/test_skill_analytics.py`.
+
 - [x] **[audit 2026-07-19, dead code] Dead-code audit cleanup.** **COMPLETE 2026-07-19** —
   commits `e93318c`, `fbd8a4b`, `4c99550`, `8fcbd9e`, `cc417a2`.
   - `8fcbd9e`: removed superseded `core/job.py` legacy methods — `save_batch`
