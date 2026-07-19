@@ -138,6 +138,17 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Focus Skills-section generation on relevant skills only.** **DONE 2026-07-19** — commit
+  `b76e817`. Rewrote `SECTION_PROMPT_DEFAULTS["skills"]` (`core/section_presets.py`): ≤5
+  job-relevant categories, most-relevant first, omit categories the job doesn't call for (e.g.
+  frontend for a backend role), **exclude soft/interpersonal skills entirely** (teamwork/
+  communication/adaptability/problem-solving — those belong in summary + cover), cap ~5 lines,
+  inventory-only. The `skill_relevance (Skills)` eval check in `prompts/defaults/resume_eval_sectioned.md`
+  now flags whole irrelevant categories, soft skills, and over-length (>~5 lines/5 categories);
+  the `hallucination` line clarified to never flag soft skills as hallucinations. Per-profile DB
+  data (local SQLite profile 9 + LIVE Railway Postgres profile 1 Skills-section + eval prompts)
+  updated out-of-band (not tracked in git).
+
 - [x] **Skill-chip parsing splits parenthesized lists.** **DONE 2026-07-19** — commit `70ff26f`.
   Added paren-aware `split_skill_tokens` in `core/skill_analytics.py`: `Category (a, b)` now
   emits clean chips `Category`, `a`, `b`; unbalanced parens fall back to plain comma split;
