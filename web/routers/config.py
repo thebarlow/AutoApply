@@ -10,12 +10,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.database import Config, FieldHelp, PromptDefault, ProfileConfig
+from db.database import Config, PromptDefault, ProfileConfig
 from db.seed import PROFILE_CONFIG_DEFAULTS
 from core.credits import InsufficientCredits
 from core.job import _llm_json_with_retry
@@ -33,7 +33,6 @@ from core.profile_tree import (
     validate_tree,
     validate_tree_limits,
 )
-from core.job import Job
 from core.utils import render_pdf
 from core.paths import PROFILES_DIR as _PROFILES_DIR
 from core.schemas import ExtraSection, ParseResponse, ParseProposal, ProposedSection
@@ -110,90 +109,11 @@ def _set_global(db: Session, key: str, value: str) -> None:
 # read these global keys. Per-tenant prompt management lives in web/routers/prompts.py.
 
 
-# ---- Templates ----
-
-class TemplatesBody(BaseModel):
-    resume_template_path: str = "generator/resume_template.html"
-    cover_template_path: str = "generator/cover_template.html"
-    resume_prompt_template: str = ""
-    cover_prompt_template: str = ""
-    github: str = ""
-    linkedin: str = ""
-    website: str = ""
-
-
-@router.get("/api/config/templates")
-def get_templates(
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    return {
-        "resume_template_path": _get(db, "resume_template_path", profile_id),
-        "cover_template_path": _get(db, "cover_template_path", profile_id),
-        "resume_prompt_template": _get(db, "resume_prompt_template", profile_id),
-        "cover_prompt_template": _get(db, "cover_prompt_template", profile_id),
-        "github": _get(db, "resume_github", profile_id),
-        "linkedin": _get(db, "resume_linkedin", profile_id),
-        "website": _get(db, "resume_website", profile_id),
-    }
-
-
-@router.put("/api/config/templates")
-def put_templates(
-    body: TemplatesBody,
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    _set(db, "resume_template_path", body.resume_template_path, profile_id)
-    _set(db, "cover_template_path", body.cover_template_path, profile_id)
-    _set(db, "resume_prompt_template", body.resume_prompt_template, profile_id)
-    _set(db, "cover_prompt_template", body.cover_prompt_template, profile_id)
-    _set(db, "resume_github", body.github, profile_id)
-    _set(db, "resume_linkedin", body.linkedin, profile_id)
-    _set(db, "resume_website", body.website, profile_id)
-    return get_templates(db, profile_id)
-
-
-# ---- Scoring ----
-
-class ScoringBody(BaseModel):
-    w1: float
-    w2: float
-    auto_reject_threshold: float
-    auto_approve_threshold: float
-
-
-@router.get("/api/config/scoring")
-def get_scoring(
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, float]:
-    return {
-        "w1": float(_get(db, "w1", profile_id)),
-        "w2": float(_get(db, "w2", profile_id)),
-        "auto_reject_threshold": float(_get(db, "auto_reject_threshold", profile_id)),
-        "auto_approve_threshold": float(_get(db, "auto_approve_threshold", profile_id)),
-    }
-
-
-@router.put("/api/config/scoring")
-def put_scoring(
-    body: ScoringBody,
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, float]:
-    if abs(body.w1 + body.w2 - 1.0) > 0.001:
-        raise HTTPException(status_code=422, detail="w1 + w2 must equal 1.0")
-    if body.auto_reject_threshold >= body.auto_approve_threshold:
-        raise HTTPException(
-            status_code=422,
-            detail="auto_reject_threshold must be less than auto_approve_threshold",
-        )
-    _set(db, "w1", str(body.w1), profile_id)
-    _set(db, "w2", str(body.w2), profile_id)
-    _set(db, "auto_reject_threshold", str(body.auto_reject_threshold), profile_id)
-    _set(db, "auto_approve_threshold", str(body.auto_approve_threshold), profile_id)
-    return body.model_dump()
+# NOTE: The legacy /api/config/templates, /api/config/scoring, /api/config/sources,
+# /api/config/search, /api/config/job_searches, /api/job-fields, and
+# /api/user-profile-fields endpoints were removed (dead-code audit): the dashboard
+# manages these settings through the profile tree and scraper routers now.
+# Scoring weights are still read internally from profile_config by core/job.py.
 
 
 # ---- .env helpers ----
@@ -540,47 +460,6 @@ def put_profile_tree(
     row.data = json.dumps(merged)
     db.commit()
     return {"tree": root.model_dump(mode="json")}
-
-
-@router.get("/api/config/profiles/{profile_id}/file")
-def serve_profile_file(
-    profile_id: int,
-    type: str = "pdf",
-    db: Session = Depends(get_db),
-    caller_id: int = Depends(current_profile_id),
-) -> FileResponse:
-    if profile_id != caller_id:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    row = db.query(User).filter_by(id=profile_id).first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    data = json.loads(row.data)
-    if type == "pdf":
-        file_path = data.get("resume_path", "")
-        media_type = "application/pdf"
-    elif type == "md":
-        file_path = data.get("md_path", "")
-        media_type = "text/plain"
-    elif type == "cover":
-        file_path = data.get("cover_letter_path", "")
-        media_type = "application/pdf"
-    else:
-        raise HTTPException(status_code=400, detail="type must be 'pdf', 'md', or 'cover'")
-    if not file_path:
-        raise HTTPException(status_code=404, detail="File path not set")
-    path = Path(file_path)
-    # Contain the served path to the profiles/ directory. Stored file pointers
-    # are otherwise client-settable (via PUT profile data), so an unguarded read
-    # here would serve any file on disk — e.g. the platform .env (audit).
-    try:
-        contained = path.resolve().is_relative_to(_PROFILES_DIR.resolve())
-    except (OSError, ValueError):
-        contained = False
-    if not contained:
-        raise HTTPException(status_code=404, detail="File not found")
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="File not found on disk")
-    return FileResponse(path, media_type=media_type)
 
 
 # ---------------------------------------------------------------------------
@@ -983,131 +862,6 @@ def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     dest = _PROFILES_DIR / f"{uuid.uuid4().hex}{suffix}"
     dest.write_bytes(contents)
     return {"path": str(dest.resolve()), "filename": filename}
-
-
-# ---- Sources ----
-
-class SourcesBody(BaseModel):
-    remotive: bool = False
-    remoteok: bool = False
-
-
-@router.get("/api/config/sources")
-def get_sources(
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    remotive = _get(db, "source_remotive", profile_id) == "true"
-    remoteok = _get(db, "source_remoteok", profile_id) == "true"
-    return {"remotive": remotive, "remoteok": remoteok}
-
-
-@router.put("/api/config/sources")
-def put_sources(
-    body: SourcesBody,
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    _set(db, "source_remotive", "true" if body.remotive else "false", profile_id)
-    _set(db, "source_remoteok", "true" if body.remoteok else "false", profile_id)
-    return {"remotive": body.remotive, "remoteok": body.remoteok}
-
-
-# ---- Search Config ----
-
-class SearchBody(BaseModel):
-    keywords_whitelist: list[str] = []
-    keywords_blacklist: list[str] = []
-    max_jobs_per_source: int = 50
-
-
-@router.get("/api/config/search")
-def get_search(
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    whitelist = json.loads(_get(db, "keywords_whitelist", profile_id))
-    blacklist = json.loads(_get(db, "keywords_blacklist", profile_id))
-    max_jobs = int(_get(db, "max_jobs_per_source", profile_id))
-    return {"keywords_whitelist": whitelist, "keywords_blacklist": blacklist, "max_jobs_per_source": max_jobs}
-
-
-@router.put("/api/config/search")
-def put_search(
-    body: SearchBody,
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    _set(db, "keywords_whitelist", json.dumps(body.keywords_whitelist), profile_id)
-    _set(db, "keywords_blacklist", json.dumps(body.keywords_blacklist), profile_id)
-    _set(db, "max_jobs_per_source", str(body.max_jobs_per_source), profile_id)
-    return body.model_dump()
-
-
-# ---- Job Searches ----
-
-class JobSearchItem(BaseModel):
-    id: str
-    title: str = ""
-    description: str
-
-
-class JobSearchesBody(BaseModel):
-    searches: list[JobSearchItem]
-
-
-@router.get("/api/config/job_searches")
-def get_job_searches(
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    raw = _get(db, "job_searches", profile_id)
-    return {"searches": json.loads(raw)}
-
-
-@router.put("/api/config/job_searches")
-def put_job_searches(
-    body: JobSearchesBody,
-    db: Session = Depends(get_db),
-    profile_id: int = Depends(current_profile_id),
-) -> dict[str, Any]:
-    _set(db, "job_searches", json.dumps([s.model_dump() for s in body.searches]), profile_id)
-    return body.model_dump()
-
-
-# ---- Job Fields ----
-
-@router.get("/api/job-fields")
-def get_job_fields(db: Session = Depends(get_db)) -> dict:
-    help_rows = db.query(FieldHelp).filter_by(table_name="jobs").all()
-    descriptions = {row.column_name: row.description for row in help_rows}
-    fields = [
-        {"name": f"job.{col.name}", "description": descriptions.get(col.name, "")}
-        for col in Job.__table__.columns
-    ]
-    return {"fields": fields}
-
-
-_USER_PROFILE_FIELDS = [
-    "name", "first_name", "last_name", "hero", "email", "phone", "linkedin",
-    "github", "location", "skills", "work_history", "education", "projects",
-    "target_salary_min", "target_salary_max", "target_roles",
-]
-
-
-@router.get("/api/user-profile-fields")
-def get_user_profile_fields(db: Session = Depends(get_db)) -> dict:
-    help_rows = db.query(FieldHelp).filter_by(table_name="user_profile").all()
-    descriptions = {row.column_name: row.description for row in help_rows}
-    fields = [
-        {"name": f"user_profile.{name}", "description": descriptions.get(name, "")}
-        for name in _USER_PROFILE_FIELDS
-    ]
-    fields.insert(0, {
-        "name": "user_profile.master_resume",
-        "description": "Full resume content loaded from md_path (or reconstructed from profile fields if md_path is not set)",
-    })
-    return {"fields": fields}
 
 
 # ---- Export Master Resume ----

@@ -124,110 +124,6 @@ def test_delete_profile(client, db_session):
     assert db_session.query(UserProfileModel).count() == 0
 
 
-def test_serve_profile_file_pdf_not_set(client, db_session):
-    from core.user import User as UserProfileModel
-    data = {"resume_path": "", "md_path": ""}
-    row = UserProfileModel(name="Test", data=json.dumps(data))
-    db_session.add(row)
-    db_session.commit()
-
-    resp = client.get(f"/api/config/profiles/{row.id}/file?type=pdf")
-    assert resp.status_code == 404
-
-
-def test_serve_profile_file_md_not_set(client, db_session):
-    from core.user import User as UserProfileModel
-    data = {"resume_path": "", "md_path": ""}
-    row = UserProfileModel(name="Test", data=json.dumps(data))
-    db_session.add(row)
-    db_session.commit()
-
-    resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
-    assert resp.status_code == 404
-
-
-def test_serve_profile_file_pdf_missing_on_disk(client, db_session):
-    from core.user import User as UserProfileModel
-    data = {"resume_path": "/nonexistent/resume.pdf", "md_path": ""}
-    row = UserProfileModel(name="Test", data=json.dumps(data))
-    db_session.add(row)
-    db_session.commit()
-
-    resp = client.get(f"/api/config/profiles/{row.id}/file?type=pdf")
-    assert resp.status_code == 404
-
-
-def test_serve_profile_file_md_missing_on_disk(client, db_session):
-    from core.user import User as UserProfileModel
-    data = {"resume_path": "", "md_path": "/nonexistent/resume.md"}
-    row = UserProfileModel(name="Test", data=json.dumps(data))
-    db_session.add(row)
-    db_session.commit()
-
-    resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
-    assert resp.status_code == 404
-
-
-def test_serve_profile_file_profile_not_found(client, db_session):
-    resp = client.get("/api/config/profiles/99999/file?type=pdf")
-    assert resp.status_code == 404
-
-
-def test_serve_profile_file_pdf_ok(client, db_session):
-    # Stored file pointers are contained to profiles/, so the served file must
-    # live there (a real upload always does); paths outside are refused (audit).
-    from core.user import User as UserProfileModel
-    from core.paths import PROFILES_DIR
-    PROFILES_DIR.mkdir(exist_ok=True)
-    pdf_file = PROFILES_DIR / "test_resume.pdf"
-    pdf_file.write_bytes(b"%PDF-1.4 fake")
-    try:
-        data = {"resume_path": str(pdf_file), "md_path": ""}
-        row = UserProfileModel(name="Test", data=json.dumps(data))
-        db_session.add(row)
-        db_session.commit()
-
-        resp = client.get(f"/api/config/profiles/{row.id}/file?type=pdf")
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "application/pdf"
-    finally:
-        pdf_file.unlink(missing_ok=True)
-
-
-def test_serve_profile_file_md_ok(client, db_session):
-    from core.user import User as UserProfileModel
-    from core.paths import PROFILES_DIR
-    PROFILES_DIR.mkdir(exist_ok=True)
-    md_file = PROFILES_DIR / "test_resume.md"
-    md_file.write_text("# Resume\nHello", encoding="utf-8")
-    try:
-        data = {"resume_path": "", "md_path": str(md_file)}
-        row = UserProfileModel(name="Test", data=json.dumps(data))
-        db_session.add(row)
-        db_session.commit()
-
-        resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
-        assert resp.status_code == 200
-        assert "text/plain" in resp.headers["content-type"]
-    finally:
-        md_file.unlink(missing_ok=True)
-
-
-def test_serve_profile_file_outside_profiles_dir_refused(client, db_session, tmp_path):
-    # A poisoned pointer to an arbitrary path (e.g. the platform .env) must not
-    # be served, even though the caller owns the profile row (audit).
-    from core.user import User as UserProfileModel
-    secret = tmp_path / "secret.md"
-    secret.write_text("SESSION_SECRET=leaked", encoding="utf-8")
-    data = {"resume_path": "", "md_path": str(secret)}
-    row = UserProfileModel(name="Test", data=json.dumps(data))
-    db_session.add(row)
-    db_session.commit()
-
-    resp = client.get(f"/api/config/profiles/{row.id}/file?type=md")
-    assert resp.status_code == 404
-
-
 def test_update_profile_rejects_foreign_file_pointer(client, db_session, tmp_path):
     # A tenant must not be able to store a file pointer outside profiles/ (which
     # would later be read back by the file-serve or résumé-parse sinks) — audit.
@@ -245,17 +141,6 @@ def test_update_profile_rejects_foreign_file_pointer(client, db_session, tmp_pat
     assert resp.status_code == 422
     db_session.refresh(row)
     assert "leaked" not in row.data
-
-
-def test_serve_profile_file_invalid_type(client, db_session):
-    from core.user import User as UserProfileModel
-    data = {"resume_path": "", "md_path": ""}
-    row = UserProfileModel(name="Test", data=json.dumps(data))
-    db_session.add(row)
-    db_session.commit()
-
-    resp = client.get(f"/api/config/profiles/{row.id}/file?type=xml")
-    assert resp.status_code == 400
 
 
 def test_get_profile_includes_llm_fields(client, db_session):
