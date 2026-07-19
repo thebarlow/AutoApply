@@ -38,6 +38,8 @@ class StageJobRequest(BaseModel):
     remote: bool = False
     posted_at: str = ""
     scraped_at: str = ""
+    easy_apply: bool | None = None
+    apply_url_raw: str = ""
 
 
 @router.post("/stage-job")
@@ -70,10 +72,15 @@ def stage_job(
         salary=body.salary,
         remote=body.remote,
         posted_at=body.posted_at,
+        easy_apply=body.easy_apply,
+        apply_url_raw=body.apply_url_raw,
     )
     inserted_jobs = Job.save_batch_returning([scraped], db, profile_id)
     status = "staged" if inserted_jobs else "duplicate"
     for job in inserted_jobs:
+        if job.easy_apply:
+            job.ats_type = "easy_apply"
+            db.commit()
         job.intake()
         try:
             _sse_send("job", job.serialize(), profile_id=profile_id)
