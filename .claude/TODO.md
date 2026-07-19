@@ -101,6 +101,17 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **[audit 2026-07-18, security] Pre-beta tenant-isolation + file-read holes.** **DONE 2026-07-18** —
+  closed two classes of pre-beta holes: (A) **arbitrary file read** — `serve_profile_file`
+  (`GET /api/config/profiles/{id}/file`) now contains the served path to `profiles/`
+  (`is_relative_to`, 404 otherwise), and `_reject_foreign_file_pointers` (called in
+  `update_profile` PUT) 422s any client-supplied `resume_path`/`md_path`/`cover_letter_path`
+  outside `profiles/` at the write boundary — blocking reads of the platform `.env` via the
+  file-serve and résumé-parse sinks; (B) **cross-tenant leak/corruption** — `POST /skills/owned`,
+  `POST /skills/profile`, `DELETE /skills/profile`, and `POST /api/profile/export-master` now
+  inject `current_profile_id` into `User.load` instead of defaulting to profile 1. Regression
+  tests added (`tests/web/test_profile_api.py`). Details in `web/CONTEXT.md` → Known Issues.
+
 - [x] **Tier-gate browser-extension docs.** **DONE 2026-07-18** — split the extension
   install/usage guide out of Getting Started into its own `Browser Extension.md`
   (frontmatter `tiers: friends_family, beta`), rewritten for extension v1.1.0 (OAuth popup

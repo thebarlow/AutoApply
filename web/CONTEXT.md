@@ -252,6 +252,22 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   before any tenant is known), migration gates, and `named_providers`/`llm_*`. See
   `docs/superpowers/specs/2026-07-08-config-table-tenancy-design.md` and
   `docs/superpowers/plans/2026-07-08-config-table-tenancy.md`.
+- **Profile file pointers are contained to `profiles/` (audit, 2026-07-18).** Stored file
+  pointers (`resume_path`/`md_path`/`cover_letter_path`) are client-settable via
+  `PUT /api/config/profiles/{id}` and are read back by the file-serve and résumé-parse sinks, so
+  an unguarded pointer let any tenant read arbitrary files on disk (e.g. the platform `.env`). Two
+  guards: (1) `_reject_foreign_file_pointers` (called in `update_profile`) **422s** any of those
+  keys resolving outside `_PROFILES_DIR` at the write boundary; (2) `serve_profile_file`
+  (`GET /api/config/profiles/{id}/file`) re-checks containment (`is_relative_to`) and **404s** a
+  pointer outside `profiles/` — defense in depth for any pre-existing poisoned row. When adding a
+  new stored file pointer or file-serving route, apply the same containment check.
+- **Skills + master-resume export were leaking to profile 1 (audit, 2026-07-18).**
+  `POST /api/skills/owned`, `POST /api/skills/profile`, `DELETE /api/skills/profile`, and
+  `POST /api/profile/export-master` called `User.load(db)` with no `profile_id`, which defaults to
+  profile 1 — so in production every caller read/mutated profile 1's skills and exported profile
+  1's résumé. They now inject `current_profile_id` and pass it to `User.load`. Same class as the
+  profile/prompt/setup seam item above: profile-scoped work must resolve the tenant via
+  `current_profile_id`, never the `User.load` default. Regression tests in `tests/web/test_profile_api.py`.
 - **Legacy global prompt-picker REMOVED (audit S1, 2026-07-13).** The old
   `/api/config/prompts/*` CRUD endpoints stored prompt content/templates
   (`{type}_prompts`, `active_{type}_prompt_id`, `{type}_prompt_template`,
