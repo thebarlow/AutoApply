@@ -68,20 +68,20 @@ class _FailingSource(JobSource):
 # --- save_jobs ---
 
 def test_save_jobs_inserts_new_jobs(db_session):
-    count = Job.save_batch([_scraped(1), _scraped(2)], db_session, profile_id=1)
+    count = len(Job.save_batch_returning([_scraped(1), _scraped(2)], db_session, profile_id=1))
     assert count == 2
     assert db_session.query(Job).count() == 2
 
 
 def test_save_jobs_deduplicates_by_url(db_session):
-    Job.save_batch([_scraped(1)], db_session, profile_id=1)
-    count = Job.save_batch([_scraped(1), _scraped(2)], db_session, profile_id=1)
+    Job.save_batch_returning([_scraped(1)], db_session, profile_id=1)
+    count = len(Job.save_batch_returning([_scraped(1), _scraped(2)], db_session, profile_id=1))
     assert count == 1
     assert db_session.query(Job).count() == 2
 
 
 def test_save_jobs_sets_scraped_state(db_session):
-    Job.save_batch([_scraped(1)], db_session, profile_id=1)
+    Job.save_batch_returning([_scraped(1)], db_session, profile_id=1)
     job = db_session.query(Job).first()
     assert job.state == JobState.NEW.value
 
@@ -93,7 +93,7 @@ def test_save_jobs_maps_all_fields(db_session):
         description="Python expert", location="Remote",
         salary="$120k", remote=True, posted_at="2026-01-01",
     )
-    Job.save_batch([scraped], db_session, profile_id=1)
+    Job.save_batch_returning([scraped], db_session, profile_id=1)
     job = db_session.query(Job).first()
     assert job.job_key == "remotive_42"
     assert job.source == "remotive"

@@ -47,7 +47,7 @@ def test_job_save_batch_inserts_new_jobs(db_session):
     from core.job import Job
     scraped = [_make_scraped(job_key="r_1", url="https://x.com/1"),
                _make_scraped(job_key="r_2", url="https://x.com/2")]
-    count = Job.save_batch(scraped, db_session, profile_id=1)
+    count = len(Job.save_batch_returning(scraped, db_session, profile_id=1))
     assert count == 2
     assert db_session.query(Job).count() == 2
 
@@ -55,8 +55,8 @@ def test_job_save_batch_inserts_new_jobs(db_session):
 def test_job_save_batch_skips_duplicates(db_session):
     from core.job import Job
     scraped = [_make_scraped(job_key="r_1", url="https://x.com/1")]
-    Job.save_batch(scraped, db_session, profile_id=1)
-    count = Job.save_batch(scraped, db_session, profile_id=1)
+    Job.save_batch_returning(scraped, db_session, profile_id=1)
+    count = len(Job.save_batch_returning(scraped, db_session, profile_id=1))
     assert count == 0
     assert db_session.query(Job).count() == 1
 
@@ -75,21 +75,6 @@ def test_job_get_returns_job(db_session):
 def test_job_get_returns_none_when_missing(db_session):
     from core.job import Job
     assert Job.get("missing", db_session, profile_id=1) is None
-
-
-def test_job_get_or_raise_raises_when_missing(db_session):
-    from core.job import Job
-    with pytest.raises(ValueError, match="not found"):
-        Job.get_or_raise("missing", db_session, profile_id=1)
-
-
-def test_job_set_state(db_session):
-    from core.job import Job, JobState
-    job = Job.from_scraped_for(_make_scraped(), profile_id=1)
-    db_session.add(job)
-    db_session.commit()
-    job.set_state(JobState.APPLIED, db_session)
-    assert db_session.query(Job).first().state == "applied"
 
 
 def test_job_mark_applied_sets_applied_at(db_session):
@@ -342,27 +327,6 @@ def test_serialize_extraction_populated_when_ext_fields_set(db_session):
     # verify strip logic removes surrounding whitespace
     assert ext["preferred_skills"] == ["Kubernetes", "Go"]
     assert ext["matched_skills"] == []
-
-
-def test_list_for_review_returns_only_new_and_pending_review(db_session):
-    from core.job import Job, JobState
-    profile_id = 1
-    new_job = Job.from_scraped_for(_make_scraped(job_key="r_new", url="https://x.com/new"), profile_id=1)
-    new_job.profile_id = profile_id
-    pending_job = Job.from_scraped_for(_make_scraped(job_key="r_pending", url="https://x.com/pending"), profile_id=1)
-    pending_job.state = JobState.PENDING_REVIEW.value
-    pending_job.profile_id = profile_id
-    ready_job = Job.from_scraped_for(_make_scraped(job_key="r_ready", url="https://x.com/ready"), profile_id=1)
-    ready_job.state = JobState.READY.value
-    ready_job.profile_id = profile_id
-    db_session.add_all([new_job, pending_job, ready_job])
-    db_session.commit()
-    results = Job.list_for_review(db_session, profile_id=profile_id)
-    keys = {j.job_key for j in results}
-    assert "r_new" in keys
-    assert "r_pending" in keys
-    assert "r_ready" not in keys
-    assert len(results) == 2
 
 
 def test_generate_resume_md_writes_file(db_session, tmp_path):

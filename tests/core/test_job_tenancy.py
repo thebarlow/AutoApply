@@ -33,14 +33,6 @@ def test_two_tenants_can_share_a_job_key():
     assert Job.get("k", db, profile_id=2).url == "http://x2"
 
 
-def test_list_for_review_scopes_to_tenant():
-    db = _session()
-    _add(db, "a", "http://a", 1)
-    _add(db, "b", "http://b", 2)
-    keys = {j.job_key for j in Job.list_for_review(db, profile_id=1)}
-    assert keys == {"a"}
-
-
 def test_from_scraped_stamps_profile_id():
     job = Job.from_scraped_for(_FakeScraped(), profile_id=3)
     assert job.profile_id == 3

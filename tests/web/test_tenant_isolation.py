@@ -22,6 +22,3 @@ def test_no_cross_read_and_no_unique_collision(tenant_db, seed_tenant):
     assert Job.get("shared", db, profile_id=b).profile_id == 2
     assert Document.fetch(db, "shared", "resume", profile_id=a).structured_json == '{"owner":"A"}'
     assert Document.fetch(db, "shared", "resume", profile_id=b).structured_json == '{"owner":"B"}'
-
-    # list_for_review never leaks across tenants.
-    assert {j.profile_id for j in Job.list_for_review(db, profile_id=a)} == {1}

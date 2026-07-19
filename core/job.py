@@ -354,27 +354,6 @@ class Job(Base):
         return job
 
     @classmethod
-    def save_batch(cls, scraped_jobs: list[Any], db: Session, profile_id: int) -> int:
-        """Persist a list of ScrapedJob objects, skipping URL duplicates.
-
-        Args:
-            scraped_jobs: List of ScrapedJob instances from a scraper source.
-            db: SQLAlchemy session.
-            profile_id: Owning tenant's profile id.
-
-        Returns:
-            Number of newly inserted jobs.
-        """
-        count = 0
-        for scraped in scraped_jobs:
-            if db.query(cls).filter_by(url=scraped.url, profile_id=profile_id).first():
-                continue
-            db.add(cls.from_scraped_for(scraped, profile_id))
-            count += 1
-        db.commit()
-        return count
-
-    @classmethod
     def save_batch_returning(cls, scraped_jobs: list[Any], db: Session, profile_id: int) -> list["Job"]:
         """Persist new (non-duplicate) jobs and return the inserted Job objects.
 
@@ -418,55 +397,6 @@ class Job(Base):
             Job instance, or None if not found.
         """
         return db.query(cls).filter_by(job_key=job_key, profile_id=profile_id).first()
-
-    @classmethod
-    def get_or_raise(cls, job_key: str, db: Session, profile_id: int) -> "Job":
-        """Fetch a single job by job_key, raising if not found.
-
-        Args:
-            job_key: Unique job identifier.
-            db: SQLAlchemy session.
-            profile_id: Owning tenant's profile id.
-
-        Returns:
-            Job instance.
-
-        Raises:
-            ValueError: If no job with that key exists.
-        """
-        job = cls.get(job_key, db, profile_id)
-        if job is None:
-            raise ValueError(f"Job '{job_key}' not found")
-        return job
-
-    @classmethod
-    def list_for_review(cls, db: Session, profile_id: int) -> list["Job"]:
-        """Return all jobs awaiting review (new or pending_review) ordered by final_score descending.
-
-        Args:
-            db: SQLAlchemy session.
-            profile_id: Owning tenant's profile id.
-
-        Returns:
-            List of Job instances in NEW or PENDING_REVIEW state.
-        """
-        return (
-            db.query(cls)
-            .filter(cls.state.in_([JobState.NEW.value, JobState.PENDING_REVIEW.value]))
-            .filter(cls.profile_id == profile_id)
-            .order_by(cls.final_score.desc())
-            .all()
-        )
-
-    def set_state(self, state: JobState, db: Session) -> None:
-        """Set the job's pipeline state and commit.
-
-        Args:
-            state: New JobState value.
-            db: SQLAlchemy session.
-        """
-        self.state = state.value
-        db.commit()
 
     def mark_applied(self, db: Session) -> None:
         """Mark this job as applied and record the timestamp.
@@ -529,8 +459,6 @@ class Job(Base):
         """
         if not self.has_description():
             raise RuntimeError("Cannot score: empty description (failed scrape).")
-        import warnings
-
         prompt = self.build_score_prompt(user, prompt_content)
         try:
             with llm_label(f"score:{self.job_key}"):
@@ -1259,37 +1187,6 @@ class Job(Base):
         self.cover_generated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
 
-    def generate_resume_docx(self, db: Session) -> None:
-        """Render a DOCX résumé from the existing markdown via pandoc.
-
-        DOCX is inherently single-column and highly ATS-parseable, so it is
-        emitted as an alternate artifact and is not run through the ATS gate.
-        Requires generator/outputs/{job_key}_resume.md to exist.
-
-        Args:
-            db: SQLAlchemy session.
-
-        Raises:
-            FileNotFoundError: If the résumé markdown file does not exist.
-            RuntimeError: If pandoc fails.
-        """
-        import subprocess
-
-        md_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.md"
-        if not md_path.exists():
-            raise FileNotFoundError(f"Resume markdown not found: {md_path}")
-        out_path = _OUTPUTS_DIR / f"{self.profile_id}_{self.job_key}_resume.docx"
-        # Resolve to repo root: core/job.py → core/ → repo root → generator/
-        reference = Path(__file__).parent.parent / "generator" / "reference.docx"
-        cmd = ["pandoc", str(md_path), "-o", str(out_path)]
-        if reference.exists():
-            cmd += ["--reference-doc", str(reference)]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"pandoc docx export failed: {result.stderr.strip()}")
-        self.resume_docx_path = str(out_path)
-        db.commit()
-
     # ── Private helpers ────────────────────────────────────────────────────────
 
     def _ext_to_markdown(self) -> str:
@@ -1433,15 +1330,6 @@ class Job(Base):
         import yaml
         return "---\n" + yaml.dump(
             self._meta_from_header(header, education),
-            allow_unicode=True,
-            default_flow_style=False,
-        ) + "---\n\n"
-
-    def _build_frontmatter(self, user: Any, db: Session) -> str:
-        """Serialize frontmatter data to a YAML front matter string."""
-        import yaml
-        return "---\n" + yaml.dump(
-            self._frontmatter_data(user, db),
             allow_unicode=True,
             default_flow_style=False,
         ) + "---\n\n"
