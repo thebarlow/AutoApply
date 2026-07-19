@@ -31,9 +31,25 @@ const tabsCreate = _p(_api.tabs.create, _api.tabs);
 const tabsRemove = _p(_api.tabs.remove, _api.tabs);
 const tabsGet = _p(_api.tabs.get, _api.tabs);
 
-const SERVER = "https://autoapply.matthewbarlow.me";
+const LIVE_URL = "https://autoapply.matthewbarlow.me";
+const LOCAL_URL = "http://localhost:8080";
+const MODE_KEY = "serverMode";
 const DEDUP_KEY = "stagedJobKeys";
 const TOKEN_KEY = "extToken";
+
+// Any value other than exactly "local" resolves to Live (fail-safe: never
+// accidentally target localhost from an unexpected stored value).
+function resolveServerUrl(mode) {
+  return mode === "local" ? LOCAL_URL : LIVE_URL;
+}
+
+// Read the stored routing mode. Only stage-job / ATS-resolution honor this;
+// identity (sign-in, /api/ext/me) is always Live.
+async function getServer() {
+  const { [MODE_KEY]: mode } = await storageGet(MODE_KEY);
+  const m = mode === "local" ? "local" : "live";
+  return { mode: m, url: resolveServerUrl(m) };
+}
 
 _api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender, sendResponse);
@@ -68,7 +84,7 @@ async function handleMessage(message, sender, sendResponse) {
 
 async function handleSignIn(provider) {
   const redirectUri = getRedirectURL();
-  const url = `${SERVER}/auth/ext/login/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`;
+  const url = `${LIVE_URL}/auth/ext/login/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`;
   const resultUrl = await launchWebAuthFlow({ url, interactive: true });
   const params = new URLSearchParams(new URL(resultUrl).hash.slice(1));
   if (params.get("error") === "no_account") return { ok: false, error: "no_account" };
@@ -81,15 +97,15 @@ async function handleSignIn(provider) {
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_ATTEMPTS = 2;
 
-// POST with an abortable timeout. The first request after the service worker
-// wakes from idle can be slow (worker spin-up + cold TLS), so the caller retries.
-async function postStageJob(token, payload) {
+async function postStageJob(baseUrl, token, payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   try {
-    return await fetch(`${SERVER}/api/scraper/stage-job`, {
+    return await fetch(`${baseUrl}/api/scraper/stage-job`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -103,14 +119,15 @@ async function handleScrape(payload) {
   const keySet = new Set(keys);
   if (keySet.has(payload.job_key)) return { ok: true, status: "duplicate" };
 
+  const { mode, url } = await getServer();
   const { [TOKEN_KEY]: token } = await storageGet(TOKEN_KEY);
-  if (!token) return { ok: false, error: "no_account" };
+  if (mode === "live" && !token) return { ok: false, error: "no_account" };
 
   let res;
   let lastErr;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      res = await postStageJob(token, payload);
+      res = await postStageJob(url, mode === "local" ? null : token, payload);
       break; // got an HTTP response (even an error status) — don't retry those
     } catch (err) {
       // Timeout (AbortError) or network failure — retry once, then give up.
@@ -127,7 +144,7 @@ async function handleScrape(payload) {
   await storageSet({ [DEDUP_KEY]: [...keySet] });
 
   if (data.status === "staged" && payload.easy_apply === false && payload.apply_url_raw) {
-    enqueueResolution(data.job_key, payload.apply_url_raw);
+    enqueueResolution(data.job_key, payload.apply_url_raw, url, mode);
   }
 
   return { ok: true, status: data.status };
@@ -144,8 +161,8 @@ const RES_MAX_CONCURRENT = 2;
 const RES_SETTLE_MS = 4000; // quiet period after last navigation
 const RES_TIMEOUT_MS = 20000; // hard cap per resolution
 
-function enqueueResolution(jobKey, applyUrl) {
-  _resQueue.push({ jobKey, applyUrl });
+function enqueueResolution(jobKey, applyUrl, baseUrl, mode) {
+  _resQueue.push({ jobKey, applyUrl, baseUrl, mode });
   _pumpResolution();
 }
 
@@ -160,13 +177,13 @@ function _pumpResolution() {
   }
 }
 
-async function _resolveOne({ jobKey, applyUrl }) {
+async function _resolveOne({ jobKey, applyUrl, baseUrl, mode }) {
   let tabId = null;
   try {
     const tab = await tabsCreate({ url: applyUrl, active: false });
     tabId = tab.id;
     const finalUrl = await _awaitSettled(tabId);
-    await _patchResolution(jobKey, finalUrl);
+    await _patchResolution(jobKey, finalUrl, baseUrl, mode);
   } catch (e) {
     console.warn("[ats] resolution failed for", jobKey, e);
   } finally {
@@ -208,12 +225,16 @@ function _awaitSettled(tabId) {
   });
 }
 
-async function _patchResolution(jobKey, finalUrl) {
-  const { [TOKEN_KEY]: token } = await storageGet(TOKEN_KEY);
-  if (!token) return;
-  await fetch(`${SERVER}/api/scraper/jobs/${encodeURIComponent(jobKey)}/ats-resolution`, {
+async function _patchResolution(jobKey, finalUrl, baseUrl, mode) {
+  const headers = { "Content-Type": "application/json" };
+  if (mode === "live") {
+    const { [TOKEN_KEY]: token } = await storageGet(TOKEN_KEY);
+    if (!token) return;
+    headers.Authorization = `Bearer ${token}`;
+  }
+  await fetch(`${baseUrl}/api/scraper/jobs/${encodeURIComponent(jobKey)}/ats-resolution`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers,
     body: JSON.stringify({ apply_url_resolved: finalUrl }),
   });
 }
