@@ -310,6 +310,32 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
     return {"id": row.id, "name": row.name, "data": _EMPTY_PROFILE_DATA}
 
 
+_FILE_POINTER_KEYS = ("resume_path", "md_path", "cover_letter_path")
+
+
+def _reject_foreign_file_pointers(data: dict) -> None:
+    """Reject client-supplied file pointers that escape the profiles/ directory.
+
+    ``resume_path``/``md_path``/``cover_letter_path`` are set legitimately only
+    to paths returned by ``/api/config/profile/upload`` (always under
+    ``profiles/``). A tenant could otherwise PUT an arbitrary absolute path and
+    have it read back via the file-serve or résumé-parse sinks — e.g. the
+    platform ``.env`` (audit). Anything outside ``profiles/`` is refused here so
+    a poisoned pointer never reaches storage.
+    """
+    root = _PROFILES_DIR.resolve()
+    for key in _FILE_POINTER_KEYS:
+        val = data.get(key)
+        if not val:
+            continue
+        try:
+            if Path(val).resolve().is_relative_to(root):
+                continue
+        except (OSError, ValueError):
+            pass
+        raise HTTPException(status_code=422, detail=f"Invalid {key}")
+
+
 _PROFILE_PROMPT_TYPES = ("scoring", "resume", "cover", "extraction", "resume_parse")
 
 
@@ -384,6 +410,7 @@ def update_profile(
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
     data = body.data
+    _reject_foreign_file_pointers(data)
     if not data.get("name"):
         first = data.get("first_name", "")
         last = data.get("last_name", "")
@@ -542,6 +569,15 @@ def serve_profile_file(
     if not file_path:
         raise HTTPException(status_code=404, detail="File path not set")
     path = Path(file_path)
+    # Contain the served path to the profiles/ directory. Stored file pointers
+    # are otherwise client-settable (via PUT profile data), so an unguarded read
+    # here would serve any file on disk — e.g. the platform .env (audit).
+    try:
+        contained = path.resolve().is_relative_to(_PROFILES_DIR.resolve())
+    except (OSError, ValueError):
+        contained = False
+    if not contained:
+        raise HTTPException(status_code=404, detail="File not found")
     if not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FileResponse(path, media_type=media_type)
@@ -1121,9 +1157,12 @@ def _build_master_resume_md(user: Any) -> str:
 
 
 @router.post("/api/profile/export-master")
-def export_master_resume(db: Session = Depends(get_db)) -> Response:
+def export_master_resume(
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> Response:
     try:
-        user = User.load(db)
+        user = User.load(db, profile_id=profile_id)
     except RuntimeError:
         raise HTTPException(status_code=404, detail="No profile found")
 

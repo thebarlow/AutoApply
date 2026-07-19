@@ -138,7 +138,7 @@ def owned_skills(
     """
     aliases = _load_aliases(db, profile_id)
     try:
-        user = User.load(db)
+        user = User.load(db, profile_id=profile_id)
     except Exception:
         return {"owned": []}
     profile_keys = {
@@ -192,11 +192,15 @@ def owned_skills(
 
 
 @router.post("/profile")
-def add_profile_skill(body: SkillBody, db: Session = Depends(get_db)) -> dict:
+def add_profile_skill(
+    body: SkillBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict:
     skill = body.skill.strip()
     if not skill:
         raise HTTPException(status_code=400, detail="skill is required")
-    user = User.load(db)
+    user = User.load(db, profile_id=profile_id)
     if not any(s.lower() == skill.lower() for s in user.skills):
         user.skills = [*user.skills, skill]
         user.save(db)
@@ -205,9 +209,13 @@ def add_profile_skill(body: SkillBody, db: Session = Depends(get_db)) -> dict:
 
 
 @router.delete("/profile")
-def remove_profile_skill(body: SkillBody, db: Session = Depends(get_db)) -> dict:
+def remove_profile_skill(
+    body: SkillBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+) -> dict:
     skill = body.skill.strip()
-    user = User.load(db)
+    user = User.load(db, profile_id=profile_id)
     user.skills = [s for s in user.skills if s.lower() != skill.lower()]
     user.save(db)
     invalidate_skill_cache()
