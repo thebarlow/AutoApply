@@ -23,7 +23,9 @@ git history is the archive (see `.claude/skills/update-todo/`).
   prompts should be admin-only for now — regular users shouldn't pick their own model until
   tiered-model pricing is worked out (different models cost different credits). Revisit once
   pricing per model tier is designed (see the "High-effort toggle" item — same underlying
-  cost-vs-quality knob).
+  cost-vs-quality knob). _Partially mitigated 2026-07-18:_ a server-side model allowlist
+  (`LLM_ALLOWED_MODELS`; prod default = `LLM_DEFAULT_MODEL` only) now bounds what users can
+  pick — see the audit entry in Done. The UI control + tier pricing question remains open.
 
 - [ ] **Guided section-prompt authoring for users (from the prompt-polish work).** Once we've
   settled how to best structure section/item prompts (baseline-facts + tailoring direction;
@@ -96,10 +98,31 @@ architecture in `docs/ARCHITECTURE.md`; read `web/CONTEXT.md` → Auth / Credits
 Known accepted limitations (each would be its own feature if prioritized):
 - No automatic credit clawback on Stripe refunds/chargebacks (admin-manual).
 - Free non-LLM endpoints are not rate-limited.
+- [audit 2026-07-18] Prompt content is fully user-authored and runs on the platform key at flat
+  unit prices (fixed-price LLM oracle); contained by the model allowlist, but consider alerting
+  when a debit's `raw_cost_usd` far exceeds its unit price.
+- [audit 2026-07-18] `require_real_admin` falls back to the dev-tenant account when the session
+  has no `account_id`, even under `APP_ENV=production` (shielded today by the outer auth gate —
+  thin defense-in-depth).
+- [audit 2026-07-18] `meter_action` bills nothing when `credit_rate` is 0; `CREDIT_DEFAULT_RATE=0`
+  (or a migration zeroing the column) would silently disable billing platform-wide.
 - Stripe dashboard product names/descriptions may still mention pre-redenomination credit
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **[audit 2026-07-18, security] Payment-bypass sweep (2 fixes).** **DONE 2026-07-18** —
+  full-codebase audit (secrets / tenant bleed / LLM billing bypass). Fixed the two exploitable
+  holes: (1) **unclamped refinement settings** — `resume/cover_refine_max_turns` and pass scores
+  from the user-writable profile blob fed the unmetered post-generation refine loop (unlimited
+  free LLM calls per flat-priced generation); now clamped on hydrate to 0–5 turns / [0,1] score
+  (`core/user.py`, `MAX_REFINE_TURNS`); (2) **free-text prompt-slot models** on the platform key —
+  now validated against `core.llm.allowed_models()` (`LLM_ALLOWED_MODELS` env; prod default =
+  `{LLM_DEFAULT_MODEL}`; local unrestricted) at `PUT /api/prompts` (422) and again at
+  `get_client_for_profile` (stale rows fall back to default). Tests:
+  `tests/core/test_refine_clamp.py`, `tests/core/test_model_allowlist.py`, prompts-router cases.
+  Secrets, tenant scoping, SSE, payments webhook, admin gates all checked clean; three accepted
+  residual risks logged under Known accepted limitations above.
 
 - [x] **[audit 2026-07-18, security] Pre-beta tenant-isolation + file-read holes.** **DONE 2026-07-18** —
   closed two classes of pre-beta holes: (A) **arbitrary file read** — `serve_profile_file`
