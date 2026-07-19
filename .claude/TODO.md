@@ -35,10 +35,13 @@ git history is the archive (see `.claude/skills/update-todo/`).
 - [ ] **Full automation of document submission** (personal tool use only). Fill in all the ATS
   fields for non-easy-apply jobs, avoiding LinkedIn native bot detection. **Decomposed into 5
   sequenced sub-projects** (each gets its own spec → plan → impl cycle; natural dependency order):
-  1. **ATS detection & apply-URL resolution** _(in progress — brainstorming 2026-07-19)_ — at
-     scrape time, flag easy-apply vs. not, resolve the final apply-redirect URL, identify the ATS
+  1. **ATS detection & apply-URL resolution** _(implementation in progress; design DONE 2026-07-19)_
+     — at scrape time, flag easy-apply vs. not, resolve the final apply-redirect URL, identify the ATS
      by domain (Greenhouse/Lever/Ashby/Workday/iCIMS/Taleo/…). Foundation for everything below;
-     independently useful as a per-job label. Low risk.
+     independently useful as a per-job label. Low risk. Spec/plan: `docs/superpowers/specs|plans/2026-07-19-ats-detection*`.
+     **Infra support (admin-only Live/Local server toggle):** Tasks 1–2 DONE 2026-07-19 — service
+     worker routing by serverMode, popup toggle UI, localStorage persistence; Task 2 Step 6 (manual
+     smoke test) PENDING maintainer execution (see `browser-extension/CONTEXT.md`).
   2. **Field-mapping engine** — map profile + generated docs to a given ATS's form fields.
   3. **Form-fill + submit automation** — drive the form per-ATS; start with the low-defense
      form-based ATSs (Greenhouse/Lever/Ashby, mostly no login), fall back to manual for the rest.
