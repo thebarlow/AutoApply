@@ -181,10 +181,13 @@ refunded.
 **Grants.** New accounts receive a signup grant sized by tier
 (`core.credits.signup_grant_for_tier(tier)`, env `CREDIT_SIGNUP_GRANTS` JSON
 map, defaults `standard` 20 / `friends_family` 50 / `beta` 200 units) at
-provisioning, reason `signup_grant`. `POST /api/admin/credits/grant`
-(`web/routers/credits.py`, admin-only) grants credits by profile_id or email
-with reason `admin_grant` — the same call the Stripe webhook (Payments,
-below) reuses for purchased credit packs.
+provisioning, reason `signup_grant`. Admin grants go through the
+budget-checked `POST /api/admin/users/{profile_id}/grant`
+(`web/routers/admin.py`, admin-only), which calls `grant_credits` with
+reason `admin_grant` — the same `grant_credits` the Stripe webhook
+(Payments, below) uses for purchased credit packs. (The legacy
+`POST /api/admin/credits/grant` and `/api/admin/credits/tier` routes were
+removed 2026-07-19.)
 
 **Redenomination.** Alembic migration `aa10units01` is a one-shot conversion
 of all existing balances from the old cost-based credit denomination to the
@@ -261,9 +264,9 @@ redirects). Optional pricing overrides: `CREDIT_TIER_MULTIPLIERS`,
 `CREDIT_PRICE_TIERS`, `CREDIT_TIER_VISIBILITY` (JSON), `CREDIT_UNIT_USD`,
 and `STRIPE_FEE_PCT`, `STRIPE_FEE_FIXED`, `TAX_RATE` (floats).
 
-**Admin:** `POST /api/admin/credits/tier` (admin-only, `web/routers/credits.py`)
-sets a profile's tier (target by `profile_id` or `email`; validated against
-`payments.tier_multipliers()`).
+**Admin:** tier changes have no API surface (the legacy
+`POST /api/admin/credits/tier` route was removed 2026-07-19); set
+`Account.tier` directly in the DB if needed.
 
 **Known limitation:** refunds are not handled — a Stripe refund does not
 claw back granted credits; reversal is admin-manual only.

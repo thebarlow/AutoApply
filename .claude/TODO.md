@@ -108,8 +108,8 @@ Known accepted limitations (each would be its own feature if prioritized):
 ## Done
 
 - [x] **[audit 2026-07-19, dead code] Remove dead legacy config API routes.** **DONE 2026-07-19**
-  (part of an in-progress dead-code cleanup; core/job.py legacy methods and admin credit-route
-  consolidation still to follow) — deleted unconsumed endpoints from `web/routers/config.py`:
+  (part of an in-progress dead-code cleanup; core/job.py legacy methods still to follow)
+  — deleted unconsumed endpoints from `web/routers/config.py`:
   `GET/PUT /api/config/{templates,scoring,sources,search,job_searches}`, `GET /api/job-fields`,
   `GET /api/user-profile-fields`, `GET /api/config/profiles/{id}/file` — superseded by the
   profile-tree API (`/api/config/profiles/{id}/tree`) and the scraper router; scoring weights are
@@ -117,6 +117,12 @@ Known accepted limitations (each would be its own feature if prioritized):
   (`tests/web/test_config_api.py`, `tests/web/test_config_tenant_isolation.py`,
   `serve_profile_file` cases in `test_profile_api.py` / `test_profile_tenant_scoping.py`).
   Commits `e93318c`, `fbd8a4b`; details in `web/CONTEXT.md` → Known Issues.
+  Continued (`4c99550`): removed legacy `POST /api/admin/credits/grant` and
+  `POST /api/admin/credits/tier` from `web/routers/credits.py` (no consumers; AdminPage uses the
+  budget-checked `POST /api/admin/users/{profile_id}/grant` in `web/routers/admin.py`). Tier
+  changes now have no API surface — set `Account.tier` directly if needed. Deleted
+  `tests/web/test_admin_set_tier.py` and pruned the two admin-grant tests from
+  `tests/web/test_credits_api.py`.
 
 - [x] **[audit 2026-07-18, security] Residual hardening (findings 2 & 3).** **DONE 2026-07-19** —
   `require_real_admin` no longer falls back to the dev-tenant account under `APP_ENV=production`
