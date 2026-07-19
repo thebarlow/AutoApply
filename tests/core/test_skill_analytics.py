@@ -6,7 +6,49 @@ from core.skill_analytics import (
     job_has_skill,
     tech_category,
     skill_key,
+    split_skill_tokens,
 )
+
+
+class TestSplitSkillTokens:
+    def test_plain_comma_list(self):
+        assert split_skill_tokens("Python, SQL, Docker") == ["Python", "SQL", "Docker"]
+
+    def test_parenthesized_list_not_split_mid_parens(self):
+        assert split_skill_tokens("Cloud (AWS, GCP), Python") == [
+            "Cloud", "AWS", "GCP", "Python"
+        ]
+
+    def test_category_and_examples_emitted_as_clean_chips(self):
+        assert split_skill_tokens("ML frameworks (PyTorch, TensorFlow)") == [
+            "ML frameworks", "PyTorch", "TensorFlow"
+        ]
+
+    def test_single_item_parens_kept_as_chips(self):
+        assert split_skill_tokens("IaC (Terraform)") == ["IaC", "Terraform"]
+
+    def test_empty_and_none(self):
+        assert split_skill_tokens("") == []
+        assert split_skill_tokens(None) == []
+
+    def test_unbalanced_parens_fall_back_to_plain_split(self):
+        assert split_skill_tokens("Python (3.11, SQL") == ["Python (3.11", "SQL"]
+
+    def test_dedupes_case_insensitively_preserving_order(self):
+        assert split_skill_tokens("Python, python, SQL") == ["Python", "SQL"]
+
+    def test_job_has_skill_matches_inside_parenthesized_list(self):
+        job = _FakeJob(required="Cloud platforms (AWS, GCP), Python")
+        assert job_has_skill(job, "AWS")
+        assert job_has_skill(job, "GCP")
+        assert job_has_skill(job, "Cloud platforms")
+        assert job_has_skill(job, "Python")
+
+    def test_aggregate_counts_parenthesized_examples_as_skills(self):
+        result = aggregate_skill_frequency([_FakeJob(required="ML (PyTorch, TensorFlow)")])
+        keys = {s["key"] for s in result["skills"]}
+        assert {"pytorch", "tensorflow", "ml"} <= keys
+        assert not any("(" in k for k in keys)
 
 
 class TestNormalizeSkill:

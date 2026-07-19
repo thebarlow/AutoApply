@@ -177,6 +177,51 @@ class CategoryRow(TypedDict):
     count: int
 
 
+def split_skill_tokens(raw: str | None) -> list[str]:
+    """Split a comma-joined skill field into clean chips, paren-aware.
+
+    ``Category (a, b)`` yields ``["Category", "a", "b"]`` instead of the
+    malformed ``["Category (a", "b)"]`` a naive comma split produces. Chips
+    are stripped and case-insensitively deduped preserving order. Unbalanced
+    parentheses fall back to a plain comma split.
+    """
+    text = raw or ""
+    if not text.strip():
+        return []
+
+    if text.count("(") != text.count(")"):
+        parts = text.split(",")
+    else:
+        parts, depth, buf = [], 0, []
+        for ch in text:
+            if ch == "," and depth == 0:
+                parts.append("".join(buf))
+                buf = []
+                continue
+            depth += 1 if ch == "(" else -1 if ch == ")" else 0
+            buf.append(ch)
+        parts.append("".join(buf))
+        # Expand "Name (a, b)" into the name plus each parenthesized item.
+        expanded: list[str] = []
+        for p in parts:
+            m = re.fullmatch(r"\s*(?P<name>[^()]*?)\s*\((?P<inner>[^()]+)\)\s*", p)
+            if m:
+                expanded.append(m.group("name"))
+                expanded.extend(m.group("inner").split(","))
+            else:
+                expanded.append(p)
+        parts = expanded
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in parts:
+        t = p.strip()
+        if t and t.lower() not in seen:
+            seen.add(t.lower())
+            out.append(t)
+    return out
+
+
 class SkillFrequencyResult(TypedDict):
     skills: list[SkillRow]
     categories: list[CategoryRow]
@@ -192,7 +237,7 @@ def job_has_skill(job: object, canonical_skill: str, aliases: dict[str, str] | N
         return False
     keys: set[str] = set()
     for attr in ("ext_required_skills", "ext_preferred_skills", "ext_tech_stack"):
-        for token in (getattr(job, attr, None) or "").split(","):
+        for token in split_skill_tokens(getattr(job, attr, None)):
             k = skill_key(token, effective_aliases)
             if k:
                 keys.add(k)
@@ -227,8 +272,7 @@ def aggregate_skill_frequency(
         most-frequent original casing across the whole corpus.
         """
         out: dict[str, str] = {}
-        for token in (raw or "").split(","):
-            t = token.strip()
+        for t in split_skill_tokens(raw):
             k = skill_key(t, effective_aliases)
             if k:
                 casing[k][t] += 1
@@ -260,7 +304,7 @@ def aggregate_skill_frequency(
             category_counts[category] += 1
 
     all_skill_keys = set(high) | set(med) | set(low)
-    skills = [
+    skills: list[SkillRow] = [
         {
             "key": k,
             "skill": display(k),
@@ -274,7 +318,7 @@ def aggregate_skill_frequency(
             key=lambda k: (-(high.get(k, 0) + med.get(k, 0) + low.get(k, 0)), display(k)),
         )
     ]
-    categories = [
+    categories: list[CategoryRow] = [
         {"category": c, "count": n}
         for c, n in sorted(category_counts.items(), key=lambda kv: (-kv[1], kv[0]))
     ]

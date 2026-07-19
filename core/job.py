@@ -30,6 +30,7 @@ from core.resume_document_io import is_tree_v1, deserialize_document_tree, seria
 from core.profile_tree import RootNode, resolve_profile_tokens
 from core.section_generator import generate_resume_by_section
 from core.document_tree import build_resume_document_tree
+from core.skill_analytics import split_skill_tokens
 from core.utils import render_pdf
 from core.paths import OUTPUTS_DIR as _OUTPUTS_DIR
 from generator.themes import resolve_theme, Theme
@@ -827,7 +828,7 @@ class Job(Base):
         """
         chips: list[str] = []
         for field in (self.ext_required_skills, self.ext_preferred_skills, self.ext_tech_stack):
-            chips += [s.strip() for s in (field or "").split(",") if s.strip()]
+            chips += split_skill_tokens(field)
         # De-dup preserving order.
         seen: set[str] = set()
         chips = [c for c in chips if not (c.lower() in seen or seen.add(c.lower()))]
@@ -1126,8 +1127,8 @@ class Job(Base):
         else:
             doc = ResumeDocument.model_validate_json(row.structured_json)
 
-        required = [s.strip() for s in (self.ext_required_skills or "").split(",") if s.strip()]
-        preferred = [s.strip() for s in (self.ext_preferred_skills or "").split(",") if s.strip()]
+        required = split_skill_tokens(self.ext_required_skills)
+        preferred = split_skill_tokens(self.ext_preferred_skills)
         user_skills = list(getattr(user, "skills", []) or [])
 
         prompt_row = db.query(PromptDefault).filter_by(type_key="ats_parse").first()
@@ -1229,7 +1230,7 @@ class Job(Base):
             if attr in phrase_fields:
                 items = _split_ext_phrases(raw)
             else:
-                items = [i.strip() for i in raw.split(",") if i.strip()]
+                items = split_skill_tokens(raw)
             if items:
                 sections.append(
                     f"## {heading}\n_{directive}_\n"
@@ -1387,9 +1388,9 @@ class Job(Base):
                 "domain": self.ext_domain,
                 "work_arrangement": self.ext_work_arrangement,
                 "employment_type": self.ext_employment_type,
-                "required_skills": [s.strip() for s in (self.ext_required_skills or "").split(",") if s.strip()],
-                "preferred_skills": [s.strip() for s in (self.ext_preferred_skills or "").split(",") if s.strip()],
-                "tech_stack": [s.strip() for s in (self.ext_tech_stack or "").split(",") if s.strip()],
+                "required_skills": split_skill_tokens(self.ext_required_skills),
+                "preferred_skills": split_skill_tokens(self.ext_preferred_skills),
+                "tech_stack": split_skill_tokens(self.ext_tech_stack),
                 "key_responsibilities": _split_ext_phrases(self.ext_key_responsibilities),
                 "company_signals": _split_ext_phrases(self.ext_company_signals),
                 "matched_skills": _skill_match_matched(self.ext_skill_match),
