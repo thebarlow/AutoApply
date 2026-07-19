@@ -252,6 +252,13 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   before any tenant is known), migration gates, and `named_providers`/`llm_*`. See
   `docs/superpowers/specs/2026-07-08-config-table-tenancy-design.md` and
   `docs/superpowers/plans/2026-07-08-config-table-tenancy.md`.
+- **Prompt-slot models are allowlisted server-side (audit, 2026-07-18).** `PUT
+  /api/prompts/{profile_id}/{type_key}` validates `model_override` against
+  `core.llm.allowed_models()` (`LLM_ALLOWED_MODELS` env; prod default with it unset =
+  `{LLM_DEFAULT_MODEL}` only) and **422s** ("Model not available") anything else — the model
+  picker was otherwise a free cost knob against fixed unit prices. `get_client_for_profile`
+  also drops disallowed overrides from stale `Prompt` rows. Tests:
+  `tests/core/test_model_allowlist.py`, `tests/web/test_prompts_router.py`.
 - **Profile file pointers are contained to `profiles/` (audit, 2026-07-18).** Stored file
   pointers (`resume_path`/`md_path`/`cover_letter_path`) are client-settable via
   `PUT /api/config/profiles/{id}` and are read back by the file-serve and résumé-parse sinks, so

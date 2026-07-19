@@ -141,6 +141,8 @@ See project memory note: the project uses the **OpenAI SDK** with multi-provider
 
 `call_llm` accumulates spend via `session_cost.add_cost(usage.cost)` on every response, and also calls `metering.record_call(usage.cost, model, prompt_tokens, completion_tokens)` — a no-op unless an action meter is open (see "Credits & Metering" below).
 
+**Model allowlist (audit, 2026-07-18):** `allowed_models()` / `model_allowed(model)` gate which models tenants may select. `LLM_ALLOWED_MODELS` env (comma-separated) defines the set; if unset and `APP_ENV=production`, it fails safe to `{LLM_DEFAULT_MODEL}`; if unset locally, unrestricted (`allowed_models()` returns `None`). Enforced at `PUT /api/prompts/{profile_id}/{type_key}` (422) and in `get_client_for_profile`, which silently drops a disallowed `model_override` from a stale `Prompt` row and falls back to the platform default.
+
 ## Skill Matching and Hallucination Detection
 
 - Skill matching between user skills and job requirements is **fully delegated to the LLM** — the full user skills list is injected into scoring/generation prompts via `{user.skills}` placeholders; no Python-side filtering occurs.
@@ -328,3 +330,4 @@ rule existed, run `python -m scripts.flag_failed_scrapes` (dry run) then
 - The résumé refine + structured-edit paths pass `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). (`web/routers/jobs.py` `put_document` also passes `max_pages=1`.)
 - `_refine_doc_md` uses `max_tokens=32768` to avoid truncation on rewrites.
 - Structured résumé generate/refine call the LLM through `_llm_json_with_retry` (module-level in `job.py`): it appends a strict-JSON instruction (`_JSON_RETRY_SUFFIX`) and retries once with a corrective nudge when `parse_llm_json` fails. This guards against small/fast models breaking a markdown value out of its JSON string.
+- Refinement settings are clamped server-side on `User._hydrate()` (audit, 2026-07-18): `resume_refine_max_turns` / `cover_refine_max_turns` → 0–`MAX_REFINE_TURNS` (5), pass scores → [0,1]. Refinement turns run unmetered inside the flat generation price, so client-supplied values must never expand them. Tests: `tests/core/test_refine_clamp.py`.
