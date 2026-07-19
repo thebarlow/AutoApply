@@ -20,7 +20,7 @@ web/
 └── routers/
     ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
     ├── scraper.py           # POST /api/scraper/stage-job (browser ext); POST /api/scraper/search + GET /last-search + POST /scrape-selected (Find Jobs tab: preview/persist API-scraper candidates)
-    ├── config.py            # GET/PUT config key-value (per-tenant → profile_config; global infra → config)
+    ├── config.py            # Profile CRUD/tree/parse/upload API; internal per-tenant config helpers (_get/_set → profile_config; _get_global/_set_global → config)
     ├── prompts.py           # GET/PUT per-profile prompt overrides
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)
     ├── session_cost_router.py # GET /api/session-cost (cumulative LLM token spend)
@@ -48,7 +48,7 @@ web/
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Credit balance / history, admin grants, system balance | `routers/credits.py` |
 | Stripe Checkout (packs/checkout/verify/webhook/history) | `routers/payments.py` |
-| App config key-value (scoring weights, templates, scraper prefs, legacy prompt-picker) | `routers/config.py` — per-tenant keys via `_get`/`_set` (`profile_config`); global infra keys via `_get_global`/`_set_global` (`config`) |
+| Profile CRUD, tree, résumé parse, upload (config router) | `routers/config.py` — per-tenant keys read/written internally via `_get`/`_set` (`profile_config`); global infra keys via `_get_global`/`_set_global` (`config`). The legacy key-value HTTP routes were removed (audit, 2026-07-19 — see Known Issues) |
 | Prompt template get/set per profile | `routers/prompts.py` |
 | Active LLM task status (for UI polling) | `routers/llm_status_router.py` |
 | Onboarding/setup state | `routers/setup_status.py` |
@@ -200,7 +200,6 @@ web/
 | `GET` | `/api/payments/verify` | Success-redirect fallback fulfillment; confirms `payment_status=="paid"` with Stripe, tenant-checks, then grants (idempotent with the webhook) |
 | `POST` | `/api/payments/webhook` | Stripe webhook (signature-verified, unauthenticated — see Auth gate exemption below); idempotent on `stripe_event_id`; grants credits via `grant_credits(reason="purchase")` |
 | `GET` | `/api/payments/history` | Caller's recent purchases |
-| `GET/PUT` | `/api/config/{key}` | Config key-value store |
 | `GET/PUT` | `/api/prompts/...` | Prompt templates per profile |
 | `POST` | `/api/llm/test` | Test LLM connectivity |
 | `GET` | `/api/llm/status` | Active LLM task status |
@@ -262,13 +261,22 @@ Admin-gated, dev-only endpoints not intended for production user flows.
   `tests/core/test_model_allowlist.py`, `tests/web/test_prompts_router.py`.
 - **Profile file pointers are contained to `profiles/` (audit, 2026-07-18).** Stored file
   pointers (`resume_path`/`md_path`/`cover_letter_path`) are client-settable via
-  `PUT /api/config/profiles/{id}` and are read back by the file-serve and résumé-parse sinks, so
-  an unguarded pointer let any tenant read arbitrary files on disk (e.g. the platform `.env`). Two
-  guards: (1) `_reject_foreign_file_pointers` (called in `update_profile`) **422s** any of those
-  keys resolving outside `_PROFILES_DIR` at the write boundary; (2) `serve_profile_file`
-  (`GET /api/config/profiles/{id}/file`) re-checks containment (`is_relative_to`) and **404s** a
-  pointer outside `profiles/` — defense in depth for any pre-existing poisoned row. When adding a
-  new stored file pointer or file-serving route, apply the same containment check.
+  `PUT /api/config/profiles/{id}` and are read back by the résumé-parse sink, so
+  an unguarded pointer let any tenant read arbitrary files on disk (e.g. the platform `.env`).
+  Guard: `_reject_foreign_file_pointers` (called in `update_profile`) **422s** any of those
+  keys resolving outside `_PROFILES_DIR` at the write boundary. (A second read-side containment
+  check lived in `serve_profile_file`, but that route was deleted in the 2026-07-19 dead-route
+  cleanup below.) When adding a new stored file pointer or file-serving route, apply the same
+  containment check.
+- **Dead legacy config routes REMOVED (audit, 2026-07-19).** `GET/PUT
+  /api/config/{templates,scoring,sources,search,job_searches}`, `GET /api/job-fields`,
+  `GET /api/user-profile-fields`, and `GET /api/config/profiles/{id}/file` had no frontend or
+  runtime consumer — superseded by the profile-tree API (`/api/config/profiles/{id}/tree`) and
+  the scraper router's search/last-search endpoints. Scoring weights are still read internally
+  from `profile_config` (`web/routers/jobs.py:_load_score_config` via `_get`/`_set`); only the
+  HTTP surface was removed. Orphaned tests deleted (`tests/web/test_config_api.py`,
+  `tests/web/test_config_tenant_isolation.py`, `serve_profile_file` cases in
+  `tests/web/test_profile_api.py` and `tests/web/test_profile_tenant_scoping.py`).
 - **Skills + master-resume export were leaking to profile 1 (audit, 2026-07-18).**
   `POST /api/skills/owned`, `POST /api/skills/profile`, `DELETE /api/skills/profile`, and
   `POST /api/profile/export-master` called `User.load(db)` with no `profile_id`, which defaults to
