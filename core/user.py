@@ -36,6 +36,30 @@ def _normalize_max_pages(value: object) -> int | None:
     return None
 
 
+# Hard ceiling on unmetered refinement turns per generation. Each turn is an
+# eval + rewrite LLM pair billed inside the flat generation price, so this cap
+# bounds the platform's cost exposure per billable action.
+MAX_REFINE_TURNS = 5
+
+
+def _clamp_refine_turns(value: object, default: int = 3) -> int:
+    """Coerce a stored refinement turn count to an int in [0, MAX_REFINE_TURNS]."""
+    try:
+        n = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(0, min(n, MAX_REFINE_TURNS))
+
+
+def _clamp_pass_score(value: object, default: float = 0.80) -> float:
+    """Coerce a stored refinement pass score to a float in [0.0, 1.0]."""
+    try:
+        s = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(0.0, min(s, 1.0))
+
+
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPTS_DEFAULTS_DIR = _PROMPTS_DIR / "defaults"
 
@@ -150,14 +174,16 @@ class User(Base):
 
         for type_key in PROMPT_TYPE_KEYS:
             setattr(self, f"prompt_{type_key}_model", "")
-        # Refinement config — resume
+        # Refinement config — resume. Turns/scores are clamped server-side:
+        # refinement runs unmetered (bundled into the generation price), so an
+        # unclamped user-supplied turn count would be free unlimited LLM calls.
         self.resume_refine_enabled = bool(raw.get("resume_refine_enabled", True))
-        self.resume_refine_max_turns = int(raw.get("resume_refine_max_turns", 3))
-        self.resume_refine_pass_score = float(raw.get("resume_refine_pass_score", 0.80))
+        self.resume_refine_max_turns = _clamp_refine_turns(raw.get("resume_refine_max_turns"))
+        self.resume_refine_pass_score = _clamp_pass_score(raw.get("resume_refine_pass_score"))
         # Refinement config — cover
         self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
-        self.cover_refine_max_turns = int(raw.get("cover_refine_max_turns", 3))
-        self.cover_refine_pass_score = float(raw.get("cover_refine_pass_score", 0.80))
+        self.cover_refine_max_turns = _clamp_refine_turns(raw.get("cover_refine_max_turns"))
+        self.cover_refine_pass_score = _clamp_pass_score(raw.get("cover_refine_pass_score"))
         # Résumé page limit
         self.resume_max_pages = _normalize_max_pages(raw.get("resume_max_pages"))
         # Résumé theme — see generator.themes.DEFAULT_THEME_ID
