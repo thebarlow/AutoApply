@@ -27,6 +27,9 @@ const storageGet = _p(_api.storage.local.get, _api.storage.local);
 const storageSet = _p(_api.storage.local.set, _api.storage.local);
 const launchWebAuthFlow = _p(_api.identity.launchWebAuthFlow, _api.identity);
 const getRedirectURL = (...a) => _api.identity.getRedirectURL(...a);
+const tabsCreate = _p(_api.tabs.create, _api.tabs);
+const tabsRemove = _p(_api.tabs.remove, _api.tabs);
+const tabsGet = _p(_api.tabs.get, _api.tabs);
 
 const SERVER = "https://autoapply.matthewbarlow.me";
 const DEDUP_KEY = "stagedJobKeys";
@@ -122,5 +125,95 @@ async function handleScrape(payload) {
   const data = await res.json();
   keySet.add(payload.job_key);
   await storageSet({ [DEDUP_KEY]: [...keySet] });
+
+  if (data.status === "staged" && payload.easy_apply === false && payload.apply_url_raw) {
+    enqueueResolution(data.job_key, payload.apply_url_raw);
+  }
+
   return { ok: true, status: data.status };
+}
+
+// --- ATS resolution queue -----------------------------------------------
+// External (non easy-apply) jobs only give us the raw apply URL at scrape
+// time; the real ATS often lives behind a redirect chain. Resolve it in a
+// background tab (bounded concurrency, so a batch scrape doesn't spawn a
+// pile of tabs) and PATCH the final URL back once navigation settles.
+const _resQueue = [];
+let _resActive = 0;
+const RES_MAX_CONCURRENT = 2;
+const RES_SETTLE_MS = 4000; // quiet period after last navigation
+const RES_TIMEOUT_MS = 20000; // hard cap per resolution
+
+function enqueueResolution(jobKey, applyUrl) {
+  _resQueue.push({ jobKey, applyUrl });
+  _pumpResolution();
+}
+
+function _pumpResolution() {
+  while (_resActive < RES_MAX_CONCURRENT && _resQueue.length) {
+    const task = _resQueue.shift();
+    _resActive++;
+    _resolveOne(task).finally(() => {
+      _resActive--;
+      _pumpResolution();
+    });
+  }
+}
+
+async function _resolveOne({ jobKey, applyUrl }) {
+  let tabId = null;
+  try {
+    const tab = await tabsCreate({ url: applyUrl, active: false });
+    tabId = tab.id;
+    const finalUrl = await _awaitSettled(tabId);
+    await _patchResolution(jobKey, finalUrl);
+  } catch (e) {
+    console.warn("[ats] resolution failed for", jobKey, e);
+  } finally {
+    if (tabId != null) {
+      try {
+        await tabsRemove(tabId);
+      } catch (_) {}
+    }
+  }
+}
+
+// Resolve to the tab's URL once navigation has been quiet for RES_SETTLE_MS,
+// or when RES_TIMEOUT_MS elapses — whichever comes first.
+function _awaitSettled(tabId) {
+  return new Promise((resolve) => {
+    let lastUrl = "";
+    let settleTimer = null;
+    const hardTimer = setTimeout(finish, RES_TIMEOUT_MS);
+
+    function onUpdated(id, info, tab) {
+      if (id !== tabId) return;
+      if (tab && tab.url) lastUrl = tab.url;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(finish, RES_SETTLE_MS);
+    }
+    async function finish() {
+      _api.tabs.onUpdated.removeListener(onUpdated);
+      clearTimeout(hardTimer);
+      if (settleTimer) clearTimeout(settleTimer);
+      if (!lastUrl) {
+        try {
+          const t = await tabsGet(tabId);
+          lastUrl = t.url || "";
+        } catch (_) {}
+      }
+      resolve(lastUrl);
+    }
+    _api.tabs.onUpdated.addListener(onUpdated);
+  });
+}
+
+async function _patchResolution(jobKey, finalUrl) {
+  const { [TOKEN_KEY]: token } = await storageGet(TOKEN_KEY);
+  if (!token) return;
+  await fetch(`${SERVER}/api/scraper/jobs/${encodeURIComponent(jobKey)}/ats-resolution`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ apply_url_resolved: finalUrl }),
+  });
 }
