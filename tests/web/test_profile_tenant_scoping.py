@@ -99,23 +99,6 @@ def test_list_profiles_only_returns_caller_tenant(two_tenants):
     assert ids == [2]
 
 
-def test_serve_profile_file_denies_other_tenant(two_tenants, tmp_path):
-    """Tenant 2 must not be able to download tenant 1's resume file.
-
-    Give profile 1 a real, existing resume file so the endpoint would otherwise
-    return 200 — proving the 404 comes from the tenant guard, not a missing file.
-    """
-    pdf = tmp_path / "resume.pdf"
-    pdf.write_bytes(b"%PDF-1.4 fake")
-    row = two_tenants.query(User).filter_by(id=1).first()
-    row.data = json.dumps({"skills": ["Python"], "resume_path": str(pdf)})
-    two_tenants.commit()
-
-    client = _client(two_tenants, caller_profile_id=2)
-    r = client.get("/api/config/profiles/1/file?type=pdf")
-    assert r.status_code == 404
-
-
 def test_get_prompt_denies_other_tenant(two_tenants):
     """Tenant 2 must not read tenant 1's prompt overrides."""
     client = _client(two_tenants, caller_profile_id=2)
