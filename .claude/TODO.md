@@ -23,8 +23,29 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Features
 
-- [ ] **Full automation of document submission**for personal tool use only. Fill in all the ATS 
-  tickers. For non easy apply jobs, so that we can avoid LinkedIn native bot detection.
+- [ ] **Browser-extension DOM recalibration tool.** Extension selectors break whenever
+  LinkedIn/Indeed reshuffle their (hashed) DOM. Add a "Recalibrate" affordance in the extension:
+  the user clicks it and the extension walks through each DOM element it needs to read (title,
+  company, location, description, apply button, …), prompting the user to click each element in
+  turn; the extension captures a stable selector/anchor from the clicked node and persists it as
+  an override. Also support a lighter path: when only a few reads are failing, let the user fix
+  those individual elements one at a time rather than re-walking everything. (Motivated by the
+  ATS-detection work — `getApplyInfo()` adds yet another fragile selector.)
+
+- [ ] **Full automation of document submission** (personal tool use only). Fill in all the ATS
+  fields for non-easy-apply jobs, avoiding LinkedIn native bot detection. **Decomposed into 5
+  sequenced sub-projects** (each gets its own spec → plan → impl cycle; natural dependency order):
+  1. **ATS detection & apply-URL resolution** _(in progress — brainstorming 2026-07-19)_ — at
+     scrape time, flag easy-apply vs. not, resolve the final apply-redirect URL, identify the ATS
+     by domain (Greenhouse/Lever/Ashby/Workday/iCIMS/Taleo/…). Foundation for everything below;
+     independently useful as a per-job label. Low risk.
+  2. **Field-mapping engine** — map profile + generated docs to a given ATS's form fields.
+  3. **Form-fill + submit automation** — drive the form per-ATS; start with the low-defense
+     form-based ATSs (Greenhouse/Lever/Ashby, mostly no login), fall back to manual for the rest.
+  4. **Credential vault** — store logins for account-based ATSs (Workday/iCIMS/Taleo).
+     Client-side-only in the extension, encrypted, never sent to the server (security liability).
+  5. **Submission confirmation** — detect success and auto-mark applied (see extension CONTEXT
+     "Auto-mark as applied on submission" future-work note).
 
 - [ ] **Gate the per-prompt user model override to admins only.** The model-override control on
   prompts should be admin-only for now — regular users shouldn't pick their own model until
