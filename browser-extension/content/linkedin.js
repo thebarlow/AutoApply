@@ -33,6 +33,19 @@ function _markStale() {
   _lastSeenContainer = _findDescriptionContainer();
 }
 
+// Returns {easy_apply, apply_url_raw} for the currently open job detail pane.
+function getApplyInfo() {
+  const buttons = Array.from(document.querySelectorAll('button, a'));
+  const easyBtn = buttons.find(b => /easy apply/i.test(b.textContent || ''));
+  if (easyBtn) return { easy_apply: true, apply_url_raw: '' };
+  const applyBtn = buttons.find(b => {
+    const t = (b.textContent || '').trim();
+    return /^apply\b/i.test(t) && !/easy apply/i.test(t);
+  });
+  const href = applyBtn && applyBtn.tagName === 'A' ? applyBtn.href : '';
+  return { easy_apply: applyBtn ? false : null, apply_url_raw: href || '' };
+}
+
 function _isDetailReady() {
   const c = _findDescriptionContainer();
   if (!c) return false;
@@ -62,6 +75,7 @@ if (_IS_VIEW) {
     },
 
     getDescription: _getDescriptionText,
+    getApplyInfo,
   });
 }
 
@@ -100,6 +114,7 @@ if (_IS_SEARCH || _IS_SAVED) {
     },
 
     getDescription: _getDescriptionText,
+    getApplyInfo,
 
     clickCard(card) {
       // If this card is already the selected one, the pane won't re-render a

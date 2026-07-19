@@ -58,6 +58,9 @@ async function _handleViewScrape(btn) {
     }
 
     const description = _viewSource.getDescription();
+    const applyInfo = (typeof _viewSource.getApplyInfo === 'function')
+      ? _viewSource.getApplyInfo()
+      : { easy_apply: null, apply_url_raw: '' };
     const payload = {
       ...jobData,
       description,
@@ -65,6 +68,8 @@ async function _handleViewScrape(btn) {
       salary: '',
       posted_at: '',
       scraped_at: new Date().toISOString(),
+      easy_apply: applyInfo.easy_apply,
+      apply_url_raw: applyInfo.apply_url_raw,
     };
 
     const result = await _msg({ type: 'SCRAPE_JOB', payload });
@@ -147,6 +152,9 @@ async function _handleScrape(card, btn) {
     }
 
     const description = _source.getDescription();
+    const applyInfo = (typeof _source.getApplyInfo === "function")
+      ? _source.getApplyInfo()
+      : { easy_apply: null, apply_url_raw: "" };
     const payload = {
       ...jobData,
       description,
@@ -154,6 +162,8 @@ async function _handleScrape(card, btn) {
       salary: "",
       posted_at: "",
       scraped_at: new Date().toISOString(),
+      easy_apply: applyInfo.easy_apply,
+      apply_url_raw: applyInfo.apply_url_raw,
     };
 
     const result = await _msg({ type: "SCRAPE_JOB", payload });
