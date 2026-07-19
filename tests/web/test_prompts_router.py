@@ -151,3 +151,33 @@ def test_get_default_prompt_returns_200_with_content(client):
     data = resp.json()
     assert "content" in data
     assert "default scoring" in data["content"]
+
+
+# ---- Model allowlist ----
+
+def test_put_prompt_rejects_disallowed_model(client, monkeypatch):
+    monkeypatch.setenv("LLM_ALLOWED_MODELS", "openai/gpt-4o-mini")
+    resp = client.put(
+        "/api/prompts/1/scoring",
+        json={"content": "overridden " * 10, "model": "openai/o1-pro"},
+    )
+    assert resp.status_code == 422
+
+
+def test_put_prompt_accepts_allowed_model(client, monkeypatch):
+    monkeypatch.setenv("LLM_ALLOWED_MODELS", "openai/gpt-4o-mini")
+    resp = client.put(
+        "/api/prompts/1/scoring",
+        json={"content": "overridden " * 10, "model": "openai/gpt-4o-mini"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["model"] == "openai/gpt-4o-mini"
+
+
+def test_put_prompt_empty_model_always_allowed(client, monkeypatch):
+    monkeypatch.setenv("LLM_ALLOWED_MODELS", "openai/gpt-4o-mini")
+    resp = client.put(
+        "/api/prompts/1/scoring",
+        json={"content": "overridden " * 10, "model": ""},
+    )
+    assert resp.status_code == 200

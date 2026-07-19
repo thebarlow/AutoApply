@@ -48,6 +48,31 @@ _PROVIDER_BASE_URLS: dict[str, str] = {
 }
 
 
+def allowed_models() -> set[str] | None:
+    """Models tenants may select for prompt slots; None means unrestricted.
+
+    ``LLM_ALLOWED_MODELS`` (comma-separated) is the explicit allowlist. When it
+    is unset, production fails safe to {LLM_DEFAULT_MODEL} — the platform pays
+    for every call with its own key, so an unrestricted free-text model field
+    would let a flat-priced action run on an arbitrarily expensive model.
+    Local/self-hosted (non-production) stays unrestricted.
+    """
+    raw = os.getenv("LLM_ALLOWED_MODELS", "").strip()
+    if raw:
+        return {m.strip() for m in raw.split(",") if m.strip()}
+    if os.getenv("APP_ENV") == "production":
+        default = (os.getenv("LLM_DEFAULT_MODEL")
+                   or _read_env_file().get("LLM_DEFAULT_MODEL", "")).strip()
+        return {default} if default else set()
+    return None
+
+
+def model_allowed(model: str) -> bool:
+    """True if ``model`` may be used for tenant-selected prompt slots."""
+    allowed = allowed_models()
+    return allowed is None or model in allowed
+
+
 def get_client_for_profile(user: Any = None, model_override: str = "") -> tuple:
     """Return (client, model) for the platform LLM provider, resolved from env.
 
@@ -68,6 +93,11 @@ def get_client_for_profile(user: Any = None, model_override: str = "") -> tuple:
     api_key = os.getenv("LLM_API_KEY") or _read_env_file().get("LLM_API_KEY", "")
     if not api_key:
         raise RuntimeError("No platform LLM key. Set LLM_API_KEY in .env.")
+    # Defense-in-depth: Prompt rows written before the allowlist existed (or via
+    # any path that skips PUT validation) must not reach the platform key with a
+    # disallowed model — fall back to the platform default instead of erroring.
+    if model_override and not model_allowed(model_override):
+        model_override = ""
     model = model_override or os.getenv("LLM_DEFAULT_MODEL") or _read_env_file().get("LLM_DEFAULT_MODEL", "")
     if not model:
         raise RuntimeError("No model resolved. Set LLM_DEFAULT_MODEL in .env or pass model_override.")
