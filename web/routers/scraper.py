@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.database import ProfileConfig
+from core.ats import classify_ats
 from core.job import Job, JobState
 from scraper.search import search_sources
 from web.sse import send as _sse_send
@@ -254,4 +255,50 @@ def last_search(
         "query": _get("last_job_search"),
         "exclude": [w for w in exclude.split(",") if w] if exclude else [],
         "location": _get("last_job_location"),
+    }
+
+
+class AtsResolutionRequest(BaseModel):
+    apply_url_resolved: str
+
+
+@router.patch("/jobs/{job_key}/ats-resolution")
+def resolve_ats(
+    job_key: str,
+    body: AtsResolutionRequest,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(bearer_or_session_profile),
+) -> dict[str, Any]:
+    """Classify a resolved apply URL and store the ATS result on the job.
+
+    Called by the browser extension after it follows an external job's apply
+    redirect to its final destination.
+
+    Args:
+        job_key: The job to update.
+        body: The resolved apply URL.
+        db: SQLAlchemy session.
+        profile_id: Owning tenant's profile id (bearer or session).
+
+    Returns:
+        Dict with the updated ats_type, ats_domain, and apply_url_resolved.
+    """
+    job = Job.get(job_key, db, profile_id=profile_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    ats_type, host = classify_ats(body.apply_url_resolved)
+    job.apply_url_resolved = body.apply_url_resolved
+    job.ats_type = ats_type
+    job.ats_domain = host
+    db.commit()
+    db.refresh(job)
+    try:
+        _sse_send("job", job.serialize(), profile_id=profile_id)
+    except Exception:
+        logger.exception("[resolve_ats] broadcast failed for %s", job_key)
+    return {
+        "job_key": job_key,
+        "ats_type": job.ats_type,
+        "ats_domain": job.ats_domain,
+        "apply_url_resolved": job.apply_url_resolved,
     }

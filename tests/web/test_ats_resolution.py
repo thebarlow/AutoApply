@@ -68,3 +68,32 @@ def test_stage_job_external_leaves_ats_type_null(client, db_session):
     assert job.easy_apply is False
     assert job.ats_type is None
     assert job.apply_url_raw == "https://apply/ex1"
+
+
+def _stage_external(client, job_key):
+    return client.post("/api/scraper/stage-job", json={
+        "source": "linkedin", "job_key": job_key, "title": "T",
+        "company": "C", "url": f"https://li/{job_key}", "description": "d",
+        "easy_apply": False, "apply_url_raw": "https://li/redir",
+    })
+
+
+def test_ats_resolution_classifies_and_persists(client, db_session):
+    _stage_external(client, "r1")
+    resp = client.patch("/api/scraper/jobs/r1/ats-resolution", json={
+        "apply_url_resolved": "https://boards.greenhouse.io/acme/jobs/9",
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ats_type"] == "greenhouse"
+    assert body["ats_domain"] == "boards.greenhouse.io"
+    job = Job.get("r1", db_session, profile_id=1)
+    assert job.ats_type == "greenhouse"
+    assert job.apply_url_resolved == "https://boards.greenhouse.io/acme/jobs/9"
+
+
+def test_ats_resolution_unknown_job_404(client):
+    resp = client.patch("/api/scraper/jobs/nope/ats-resolution", json={
+        "apply_url_resolved": "https://x/1",
+    })
+    assert resp.status_code == 404
