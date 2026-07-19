@@ -38,7 +38,10 @@ def require_real_admin(request: Request, db: Session = Depends(get_db)) -> Accou
     session = request.scope.get("session") or {}
     account_id = session.get("account_id")
     acct = db.query(Account).filter_by(id=account_id).first() if account_id else None
-    if acct is None:
+    # The dev-tenant fallback must never apply in production: the outer auth
+    # gate already 401s unauthenticated /api/*, but if it were bypassed (new
+    # exempt path, middleware reorder) this would otherwise grant admin.
+    if acct is None and os.getenv("APP_ENV") != "production":
         acct = db.query(Account).filter_by(profile_id=get_dev_tenant_id(db)).first()
     if acct is None or not acct.is_admin:
         raise HTTPException(status_code=403, detail="admin only")
