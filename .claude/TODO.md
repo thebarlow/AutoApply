@@ -99,17 +99,21 @@ Known accepted limitations (each would be its own feature if prioritized):
 - No automatic credit clawback on Stripe refunds/chargebacks (admin-manual).
 - Free non-LLM endpoints are not rate-limited.
 - [audit 2026-07-18] Prompt content is fully user-authored and runs on the platform key at flat
-  unit prices (fixed-price LLM oracle); contained by the model allowlist, but consider alerting
-  when a debit's `raw_cost_usd` far exceeds its unit price.
-- [audit 2026-07-18] `require_real_admin` falls back to the dev-tenant account when the session
-  has no `account_id`, even under `APP_ENV=production` (shielded today by the outer auth gate —
-  thin defense-in-depth).
-- [audit 2026-07-18] `meter_action` bills nothing when `credit_rate` is 0; `CREDIT_DEFAULT_RATE=0`
-  (or a migration zeroing the column) would silently disable billing platform-wide.
+  unit prices (fixed-price LLM oracle). Accepted 2026-07-19: fine as long as worst-case output
+  cost per call stays below the unit price (allowlisted cheap models keep this true — recheck
+  if the allowlist ever adds a pricier model or max_tokens grows).
 - Stripe dashboard product names/descriptions may still mention pre-redenomination credit
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **[audit 2026-07-18, security] Residual hardening (findings 2 & 3).** **DONE 2026-07-19** —
+  `require_real_admin` no longer falls back to the dev-tenant account under `APP_ENV=production`
+  (sessionless request → 403 even if the outer auth gate is ever bypassed;
+  `tests/web/test_admin_prod_fallback.py`), and `web/main.py` logs a startup warning when
+  production resolves `CREDIT_DEFAULT_RATE <= 0` (billing silently off;
+  `tests/web/test_billing_disabled_warning.py`). Finding 1 (user-authored prompts as a
+  fixed-price oracle) accepted — see Known accepted limitations.
 
 - [x] **[audit 2026-07-18, security] Payment-bypass sweep (2 fixes).** **DONE 2026-07-18** —
   full-codebase audit (secrets / tenant bleed / LLM billing bypass). Fixed the two exploitable
