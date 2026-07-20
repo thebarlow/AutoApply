@@ -21,6 +21,9 @@ core/
 ├── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
 ├── document_parser.py    # Inverse of document_assembler — reconstructs a structured document from rendered Markdown (canonical AND legacy LLM formats)
 ├── application_fields.py # Canonical application-form field taxonomy with deterministic/eligibility/EEO value resolvers (pure, no LLM, no network)
+├── application_classify.py # Label heuristics: is_eeo_label (demographic guard, runs first), match_eligibility, classify_custom (pure strings)
+├── ats_schemas.py       # Hand-authored STATIC_SCHEMAS (greenhouse/lever/ashby only) mapping native form field ids → canonical keys; schema_for()
+├── application_mapper.py # build_plan()/needs_essay_pass(): orchestrates taxonomy+classifier+schemas into an ApplicationPlan (pure; essay drafting injected)
 ├── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ├── pricing.py           # Fixed-unit price card: price_for()/unit_usd()/resolve_generate_action()
 ├── credits.py           # Credit ledger: prepaid fixed debit, refund, grant/reconcile, tiered signup grants
@@ -28,6 +31,24 @@ core/
 ├── payments.py          # Tier-aware pricing calculator: compute_credits()/packs_for_tier()/resolve_price_id() (no Stripe SDK calls)
 └── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, construct_event
 ```
+
+## Field-mapping engine (sub-project 2 of document-submission automation)
+
+Maps a profile + generated documents onto an ATS application form, producing a
+read-only `ApplicationPlan` (no form writing — that is a later sub-project).
+Pipeline: `application_fields.py` (canonical taxonomy + resolvers, `FieldKind` ∈
+deterministic/eligibility/eeo/essay/unknown) + `application_classify.py`
+(routing) + `ats_schemas.py` (static greenhouse/lever/ashby schemas) feed
+`application_mapper.build_plan()`. Objective/EEO answers resolve deterministically
+from `User.application_answers` (`{eligibility, eeo}`); free-text questions get one
+injected LLM draft via `draft_essays`. **EEO safety:** demographic fields are
+guarded out of the LLM path twice — `is_eeo_label` in `classify_custom`, and an
+explicit branch in `build_plan` before the essay bucket; `needs_essay_pass` also
+excludes them so metering never fires on a demographic-only form. The
+`map_fields` price (in `pricing.py`, default 2 units) is charged **only** when the
+essay pass actually runs. The plan is stored as JSON on `Job.application_plan`
+(migration `aa13applyplan01`) and surfaced via `serialize()`. LLM drafting lives
+in `job.draft_application_answers()` (grounded in `user.master_resume()`).
 
 ## Profile Schema Engine
 

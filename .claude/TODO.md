@@ -40,12 +40,23 @@ git history is the archive (see `.claude/skills/update-todo/`).
      by domain (Greenhouse/Lever/Ashby/Workday/iCIMS/Taleo/…). Foundation for everything below;
      independently useful as a per-job label. Core/DB/API/UI fully implemented: `core/ats.py` (classify_ats + unwrap_apply_url), Alembic migration `aa12atsdetect01` (five new nullable columns), PATCH `/api/scraper/jobs/{job_key}/ats-resolution` endpoint, AtsChip React component, admin-only extension Live/Local server toggle (browser-extension serverMode storage + /api/ext/me returns is_admin). Spec/plan: `docs/superpowers/specs|plans/2026-07-19-ats-detection*`.
      **Manual smoke test:** Task 2 Step 6 PENDING maintainer execution (see `browser-extension/CONTEXT.md`).
-  2. **Field-mapping engine** _(DONE 2026-07-20; merged commit b97b4d43)_ — canonical field
-     taxonomy with value resolvers for form fields. **Task 1 (canonical field taxonomy) complete:**
-     `core/application_fields.py` maps stable canonical keys (`first_name`, `email`, `work_authorized`,
-     `eeo_gender`, …) to `CanonicalField` schema (kind + resolver function); resolvers extract values
-     from user profile, generated documents, and stored application answers. Tested (4 passing tests).
-     Remaining tasks (mapper engine, profile section, job plan column, extension/modal UI) pending.
+  2. **Field-mapping engine** _(IMPLEMENTED 2026-07-20 on `feat/field-mapping-engine`; not yet merged to main)_ —
+     maps profile + generated documents onto an ATS form → read-only `ApplicationPlan` (no form
+     writing). All 12 plan tasks done: canonical taxonomy (`core/application_fields.py`), EEO
+     guard + classifier (`core/application_classify.py`), `User.application_answers` profile section
+     (eligibility + EEO, all optional), static schemas greenhouse/lever/ashby (`core/ats_schemas.py`),
+     Pydantic models (`EnumeratedField`/`PlannedField`/`ApplicationPlan`), the pure engine
+     (`core/application_mapper.py` — LLM-free, essay drafting injected), `Job.application_plan` column
+     + migration `aa13applyplan01`, POST/GET `/api/scraper/jobs/{job_key}/application-plan` +
+     `map_fields` metering (only when the essay pass runs) + `web/application_plan_service.py`, the
+     read-only `ApplicationPlanModal.jsx`, the `ApplicationAnswers.jsx` settings section, and
+     read-only browser-extension form enumeration + soft nudge. Backend 1074 pass / frontend 207 pass
+     (the 2 remaining failures are pre-existing, unrelated: scraper caplog order-flake + `api.profileTree`).
+     **Follow-ups before/after merge:**
+     - **PENDING manual smoke test** of the extension enumeration flow against real Greenhouse/Lever/Ashby
+       apply pages (selectors + job→page matching untested on live DOM) — see `browser-extension/CONTEXT.md`.
+     - **`ApplicationAnswers` mounted UNGATED** — spec wanted it friends_family/beta-gated, but no
+       client-side tier-gating mechanism exists in the dashboard; gate it when one is introduced.
      Spec: `docs/superpowers/specs/2026-07-20-field-mapping-engine-design.md`; plan: `docs/superpowers/plans/2026-07-20-field-mapping-engine.md`.
   3. **Form-fill + submit automation** — drive the form per-ATS; start with the low-defense
      form-based ATSs (Greenhouse/Lever/Ashby, mostly no login), fall back to manual for the rest.

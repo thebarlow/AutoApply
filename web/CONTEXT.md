@@ -134,6 +134,18 @@ web/
   `Browser Extension.md` is gated to `friends_family, beta`; frontmatter is stripped before
   serving content.
 
+## Field-mapping engine wiring (sub-project 2)
+
+The two `application-plan` routes (see API Surface) live in `scraper.py` for the
+same reason as `ats-resolution`: it is the only router already wiring
+`bearer_or_session_profile`, so the extension can call it with a bearer token.
+`web/application_plan_service.make_essay_drafter(user, job)` is the seam between
+the pure, LLM-free `core.application_mapper` engine and the LLM: it wraps
+`core.job.draft_application_answers` and swallows/loggs drafting failures so a
+plan still returns. The metering rule (`map_fields` charged only when
+`needs_essay_pass` is true) lives at the endpoint, not in the engine — the engine
+stays testable and deterministic. See `core/CONTEXT.md` → "Field-mapping engine".
+
 ## Known caveats (Phase 3b)
 
 - **`PUT .../document` is not transactional across DB and disk (by design).** `Document.upsert` commits the structured edit *before* the `.md`/PDF are re-rendered. If rendering then fails, the route returns `500` but the structured doc is **kept** — deliberately, so the user's edits are not lost and they can trim oversized content and re-save. The on-disk PDF may be stale until the next successful save (it self-heals on re-save). Do not "fix" this by restoring the previous JSON on failure — that would discard the user's edit.
@@ -172,6 +184,8 @@ web/
 | `GET` | `/api/scraper/last-search` | Returns `{query, exclude:[], location}` — the profile's remembered search + filters |
 | `POST` | `/api/scraper/scrape-selected` | Body `{jobs:[...]}`; batched intake of user-selected candidates — saves, runs `intake()` + `run_pipeline()` (threaded, SSE-updated); returns `{results:[{job_key, status: staged|duplicate}]}` |
 | `PATCH` | `/api/scraper/jobs/{job_key}/ats-resolution` | Browser-extension bearer-or-session authed (`bearer_or_session_profile`), tenant-scoped to `(profile_id, job_key)`; body carries the resolved external apply URL, classifies it via `core/ats.py::classify_ats` and persists `apply_url_resolved`/`ats_type`/`ats_domain`. Lives in `scraper.py` rather than the jobs router because only this router already wires bearer auth (see Self-Review deviation note in the ATS-detection plan) |
+| `POST` | `/api/scraper/jobs/{job_key}/application-plan` | Bearer-or-session authed, tenant-scoped; body `{enumerated_fields?: EnumeratedField[]}`. Runs `core.application_mapper.build_plan`, persists JSON to `Job.application_plan`, SSE-broadcasts the job, returns the `ApplicationPlan`. Metered `map_fields` **only** when `needs_essay_pass` is true (an LLM essay draft actually runs); a deterministic-only plan is free. Uses `web/application_plan_service.make_essay_drafter`. 404 on missing/cross-tenant job |
+| `GET` | `/api/scraper/jobs/{job_key}/application-plan` | Bearer-or-session authed, tenant-scoped; returns `{plan: <ApplicationPlan\|null>, application_answers_complete: bool}`. 404 on missing/cross-tenant job |
 | `GET` | `/api/stats` | Pipeline activity bars + by-state counts (window param) |
 | `GET` | `/api/skill-frequency` | Combined required+preferred skill counts (`skills`) plus `tech_stack`, distinct jobs, across all extracted jobs; no window. Also returns `profile_skills` (active user's skills, normalized) so the UI can flag covered skills. The job aggregation is cached in-process keyed by extracted-job count with a 60s TTL — a re-extraction that doesn't change the count can be up to 60s stale; tests reset `stats._SKILL_CACHE` via an autouse fixture. |
 | `GET` | `/api/skill-frequency/jobs` | Job keys whose extraction data lists a given `skill` (normalized, any field) |
