@@ -9,15 +9,22 @@ from core.application_fields import (
 
 def _ctx(**over):
     user = SimpleNamespace(
-        first_name="Ada", last_name="Lovelace", email="ada@example.com",
-        phone="555-0100", linkedin="https://linkedin.com/in/ada",
-        github="https://github.com/ada", website="", location="London",
+        first_name="Ada",
+        last_name="Lovelace",
+        email="ada@example.com",
+        phone="555-0100",
+        linkedin="https://linkedin.com/in/ada",
+        github="https://github.com/ada",
+        website="",
+        location="London",
         application_answers=over.pop("answers", {}),
     )
     user.full_name = lambda: "Ada Lovelace"
     return ResolveContext(
         user=user,
-        documents=over.pop("documents", {"resume_file": "/tmp/r.pdf", "cover_letter_text": "Dear"}),
+        documents=over.pop(
+            "documents", {"resume_file": "/tmp/r.pdf", "cover_letter_text": "Dear"}
+        ),
         job=SimpleNamespace(company="Acme"),
         answers=user.application_answers,
     )

@@ -5,6 +5,7 @@ Pure, no LLM, no network. Maps a stable canonical key (e.g. ``first_name``,
 profile, generated documents, and stored application answers. Consumed by
 ``core/application_mapper.py``.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -36,6 +37,7 @@ def _u(attr: str) -> Callable[[ResolveContext], str | None]:
     def r(ctx: ResolveContext) -> str | None:
         val = getattr(ctx.user, attr, "") or ""
         return val or None
+
     return r
 
 
@@ -47,6 +49,7 @@ def _full_name(ctx: ResolveContext) -> str | None:
 def _doc(key: str) -> Callable[[ResolveContext], str | None]:
     def r(ctx: ResolveContext) -> str | None:
         return ctx.documents.get(key) or None
+
     return r
 
 
@@ -54,10 +57,13 @@ def _answer(group: str, name: str) -> Callable[[ResolveContext], str | None]:
     def r(ctx: ResolveContext) -> str | None:
         val = (ctx.answers.get(group) or {}).get(name)
         return val or None
+
     return r
 
 
-def _field(key: str, kind: FieldKind, resolve: Callable[[ResolveContext], str | None]) -> CanonicalField:
+def _field(
+    key: str, kind: FieldKind, resolve: Callable[[ResolveContext], str | None]
+) -> CanonicalField:
     return CanonicalField(key=key, kind=kind, resolve=resolve)
 
 
@@ -75,11 +81,25 @@ CANONICAL_FIELDS: dict[str, CanonicalField] = {
         _field("location", "deterministic", _u("location")),
         _field("resume_file", "deterministic", _doc("resume_file")),
         _field("cover_letter_text", "deterministic", _doc("cover_letter_text")),
-        _field("work_authorized", "eligibility", _answer("eligibility", "work_authorized")),
-        _field("requires_sponsorship", "eligibility", _answer("eligibility", "requires_sponsorship")),
-        _field("willing_to_relocate", "eligibility", _answer("eligibility", "willing_to_relocate")),
+        _field(
+            "work_authorized", "eligibility", _answer("eligibility", "work_authorized")
+        ),
+        _field(
+            "requires_sponsorship",
+            "eligibility",
+            _answer("eligibility", "requires_sponsorship"),
+        ),
+        _field(
+            "willing_to_relocate",
+            "eligibility",
+            _answer("eligibility", "willing_to_relocate"),
+        ),
         _field("start_date", "eligibility", _answer("eligibility", "start_date")),
-        _field("years_experience", "eligibility", _answer("eligibility", "years_experience")),
+        _field(
+            "years_experience",
+            "eligibility",
+            _answer("eligibility", "years_experience"),
+        ),
         _field("eeo_gender", "eeo", _answer("eeo", "gender")),
         _field("eeo_race", "eeo", _answer("eeo", "race_ethnicity")),
         _field("eeo_veteran", "eeo", _answer("eeo", "veteran_status")),

@@ -40,7 +40,13 @@ git history is the archive (see `.claude/skills/update-todo/`).
      by domain (Greenhouse/Lever/Ashby/Workday/iCIMS/Taleo/…). Foundation for everything below;
      independently useful as a per-job label. Core/DB/API/UI fully implemented: `core/ats.py` (classify_ats + unwrap_apply_url), Alembic migration `aa12atsdetect01` (five new nullable columns), PATCH `/api/scraper/jobs/{job_key}/ats-resolution` endpoint, AtsChip React component, admin-only extension Live/Local server toggle (browser-extension serverMode storage + /api/ext/me returns is_admin). Spec/plan: `docs/superpowers/specs|plans/2026-07-19-ats-detection*`.
      **Manual smoke test:** Task 2 Step 6 PENDING maintainer execution (see `browser-extension/CONTEXT.md`).
-  2. **Field-mapping engine** — map profile + generated docs to a given ATS's form fields.
+  2. **Field-mapping engine** _(DONE 2026-07-20; merged commit b97b4d43)_ — canonical field
+     taxonomy with value resolvers for form fields. **Task 1 (canonical field taxonomy) complete:**
+     `core/application_fields.py` maps stable canonical keys (`first_name`, `email`, `work_authorized`,
+     `eeo_gender`, …) to `CanonicalField` schema (kind + resolver function); resolvers extract values
+     from user profile, generated documents, and stored application answers. Tested (4 passing tests).
+     Remaining tasks (mapper engine, profile section, job plan column, extension/modal UI) pending.
+     Spec: `docs/superpowers/specs/2026-07-20-field-mapping-engine-design.md`; plan: `docs/superpowers/plans/2026-07-20-field-mapping-engine.md`.
   3. **Form-fill + submit automation** — drive the form per-ATS; start with the low-defense
      form-based ATSs (Greenhouse/Lever/Ashby, mostly no login), fall back to manual for the rest.
   4. **Credential vault** — store logins for account-based ATSs (Workday/iCIMS/Taleo).
