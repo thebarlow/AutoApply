@@ -179,10 +179,14 @@ async function handleScrape(payload) {
 // Read-only: matches an ATS apply page to a staged job, then relays the
 // content script's field enumeration to the server. No form writing here.
 
-// Loose match: same hostname as either the raw or resolved apply URL. ATS
-// apply flows commonly add/rewrite path segments and query params after
-// landing, so hostname is the stable signal — exact path matching is not.
-function _urlMatches(currentUrl, storedUrl) {
+// Greenhouse and Lever are multi-tenant: many companies' postings share one
+// hostname (e.g. job-boards.greenhouse.io/<company>/..., jobs.lever.co/<company>/...),
+// so hostname alone can bind an enumerated form to the wrong staged job. We
+// therefore match hostname first, then disambiguate on the first path segment
+// (the company slug for these ATSs). ATS flows rewrite deeper path segments and
+// query params after landing, so we intentionally compare only the leading
+// segment, and refuse to guess when the result is ambiguous.
+function _hostMatches(currentUrl, storedUrl) {
   if (!storedUrl) return false;
   try {
     return new URL(currentUrl).hostname === new URL(storedUrl).hostname;
@@ -191,12 +195,38 @@ function _urlMatches(currentUrl, storedUrl) {
   }
 }
 
+function _firstSegment(u) {
+  try {
+    return new URL(u).pathname.split("/").filter(Boolean)[0] || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function _segMatches(currentUrl, storedUrl) {
+  if (!_hostMatches(currentUrl, storedUrl)) return false;
+  const cur = _firstSegment(currentUrl);
+  const stored = _firstSegment(storedUrl);
+  return !!cur && cur === stored;
+}
+
 async function handleFindStagedJob(url) {
   const { [STAGED_META_KEY]: meta = {} } = await storageGet(STAGED_META_KEY);
-  for (const [jobKey, info] of Object.entries(meta)) {
-    if (_urlMatches(url, info.apply_url_resolved) || _urlMatches(url, info.apply_url_raw)) {
-      return { job_key: jobKey };
-    }
+  const entries = Object.entries(meta);
+  const _matches = (info, pred) =>
+    pred(url, info.apply_url_resolved) || pred(url, info.apply_url_raw);
+
+  // Prefer a unique company-slug (first path segment) match — the reliable
+  // signal on shared ATS hostnames.
+  const segHits = entries.filter(([, info]) => _matches(info, _segMatches));
+  if (segHits.length === 1) return { job_key: segHits[0][0] };
+
+  // Fall back to hostname match only when it is unambiguous (a single staged
+  // job on this ATS vendor). More than one hostname match without a unique
+  // slug match is ambiguous — refuse to guess rather than POST the wrong job.
+  if (segHits.length === 0) {
+    const hostHits = entries.filter(([, info]) => _matches(info, _hostMatches));
+    if (hostHits.length === 1) return { job_key: hostHits[0][0] };
   }
   return { job_key: null };
 }
