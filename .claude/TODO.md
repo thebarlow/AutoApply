@@ -154,8 +154,9 @@ Known accepted limitations (each would be its own feature if prioritized):
   Docker, CI/CD, pytest) — provided it is in the inventory; dropped the "~5 lines" cap for a
   "roughly 4–5 categories, ~12–18 skills" target; eval no longer flags role-relevant tooling/
   staples as bloat. Local SQLite profile 9 Skills-section prompt updated out-of-band (backup in
-  `backups/`). **TODO:** LIVE Railway Postgres profile 1 still has the `b76e817` Skills + eval
-  prompts — sync when convenient (push-profile / direct update).
+  `backups/`). LIVE Railway Postgres profile 1 (Master / barlowmatt96) Skills-section + per-profile
+  `resume_eval_sectioned` prompts synced to the new wording out-of-band 2026-07-19 (safety copies in
+  `backups/live_profile1_*`).
 
 - [x] **Skill-chip parsing splits parenthesized lists.** **DONE 2026-07-19** — commit `70ff26f`.
   Added paren-aware `split_skill_tokens` in `core/skill_analytics.py`: `Category (a, b)` now
