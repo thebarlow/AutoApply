@@ -271,6 +271,7 @@ class Job(Base):
     apply_url_resolved = Column(String)   # final URL after following redirects
     ats_type = Column(String)             # classifier output; None=external-unresolved
     ats_domain = Column(String)           # resolved hostname (kept for `other`)
+    application_plan = Column(Text)        # JSON ApplicationPlan for this job's form; null=none computed
 
     # ── Scores ─────────────────────────────────────────────────────────────────
     desirability_score = Column(Float)
@@ -1359,6 +1360,10 @@ class Job(Base):
                 justification = json.loads(justification)
             except (json.JSONDecodeError, TypeError):
                 justification = {}
+        try:
+            application_plan = json.loads(self.application_plan) if self.application_plan else None
+        except (ValueError, TypeError):
+            application_plan = None
         return {
             "job_key": self.job_key,
             "title": self.title,
@@ -1389,6 +1394,7 @@ class Job(Base):
             "ats_score": self.ats_score,
             "ats_checked_at": self.ats_checked_at or "",
             "ats_stale": self.ats_is_stale(),
+            "application_plan": application_plan,
             "ats_issues": (
                 json.loads(self.ats_report_json).get("issues", [])
                 if self.ats_report_json else []
