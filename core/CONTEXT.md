@@ -85,6 +85,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Task | File |
 |---|---|
 | Scoring a job (LLM call, score field updates) | `job.py` → `Job.score()` |
+| Background resume/cover generation (daemon thread; own DB session, SSE emit, chains into refinement/ATS) | `intake_pipeline.run_resume_generation()` / `run_cover_generation()` (spawned by the 202 generate endpoints) |
 | Generating resume markdown | `job.py` → `Job.generate_resume_md()` |
 | Rendering resume PDF | `job.py` → `Job.generate_resume_pdf()` |
 | Generating cover letter markdown | `job.py` → `Job.generate_cover_md()` |
