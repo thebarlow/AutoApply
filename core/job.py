@@ -1491,7 +1491,7 @@ def draft_application_answers(
         f"Job title: {getattr(job, 'title', '') or ''}\n"
         f"Company: {getattr(job, 'company', '') or ''}\n"
         f"Job description: {(getattr(job, 'description', '') or '')[:2000]}\n\n"
-        f"Candidate profile:\n{getattr(user, 'profile_text', '') or getattr(user, 'resume_text', '') or ''}\n\n"
+        f"Candidate profile:\n{(user.master_resume() if hasattr(user, 'master_resume') else '')[:4000]}\n\n"
         "Questions (answer every one):\n"
         f"{questions_block}\n\n"
         "Return ONLY a strict JSON object mapping each field_id to its answer "
