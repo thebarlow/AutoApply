@@ -1,27 +1,21 @@
-from core.schemas import AtsIssue, AtsReport, PdfText, AtsParsedFields
+from core.application_fields import CANONICAL_FIELDS
+from core.ats_schemas import STATIC_SCHEMAS, schema_for
 
 
-def test_ats_issue_defaults_and_fields():
-    issue = AtsIssue(layer="mechanical", severity="critical", code="contact_missing", message="email missing")
-    assert issue.layer == "mechanical"
-    assert issue.severity == "critical"
-    assert issue.code == "contact_missing"
+def test_supported_ats_have_schemas():
+    assert set(STATIC_SCHEMAS) == {"greenhouse", "lever", "ashby"}
 
 
-def test_ats_report_passed_computed_from_issues():
-    crit = AtsIssue(layer="mechanical", severity="critical", code="x", message="m")
-    warn = AtsIssue(layer="semantic", severity="warning", code="y", message="m")
-    report = AtsReport.build(score=0.4, issues=[crit, warn], extracted_text="abc")
-    assert report.passed is False
-    report2 = AtsReport.build(score=0.9, issues=[warn], extracted_text="abc")
-    assert report2.passed is True
+def test_every_schema_field_maps_to_a_real_canonical_key():
+    for ats, fields in STATIC_SCHEMAS.items():
+        for f in fields:
+            assert f.canonical_key in CANONICAL_FIELDS, f"{ats}:{f.field_id}"
 
 
-def test_pdf_text_holds_text_and_lines():
-    pt = PdfText(text="a\nb", lines=["a", "b"])
-    assert pt.lines == ["a", "b"]
+def test_greenhouse_covers_core_contact_fields():
+    keys = {f.canonical_key for f in schema_for("greenhouse")}
+    assert {"first_name", "last_name", "email", "resume_file"} <= keys
 
 
-def test_ats_parsed_fields_defaults():
-    f = AtsParsedFields()
-    assert f.name == "" and f.skills == [] and f.sections == []
+def test_unknown_ats_returns_empty():
+    assert schema_for("workday") == []
