@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import Any, ClassVar, Optional
 
 from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.orm import Session
@@ -18,6 +18,25 @@ from core.profile_tree import (
     tree_to_legacy,
     validate_tree,
 )
+
+ELIGIBILITY_KEYS = [
+    "work_authorized",
+    "requires_sponsorship",
+    "willing_to_relocate",
+    "start_date",
+    "years_experience",
+]
+EEO_KEYS = ["gender", "race_ethnicity", "veteran_status", "disability_status"]
+
+
+def _normalize_answers(raw: Any) -> dict[str, dict[str, Any]]:
+    """Coerce a stored/partial answers blob to {'eligibility': {}, 'eeo': {}}."""
+    raw = raw if isinstance(raw, dict) else {}
+    return {
+        "eligibility": dict(raw.get("eligibility") or {}),
+        "eeo": dict(raw.get("eeo") or {}),
+    }
+
 
 def _normalize_max_pages(value: object) -> int | None:
     """Normalize a stored résumé page limit to ``int | None`` (None = unlimited).
@@ -177,19 +196,36 @@ class User(Base):
         # refinement runs unmetered (bundled into the generation price), so an
         # unclamped user-supplied turn count would be free unlimited LLM calls.
         self.resume_refine_enabled = bool(raw.get("resume_refine_enabled", True))
-        self.resume_refine_max_turns = _clamp_refine_turns(raw.get("resume_refine_max_turns"))
-        self.resume_refine_pass_score = _clamp_pass_score(raw.get("resume_refine_pass_score"))
+        self.resume_refine_max_turns = _clamp_refine_turns(
+            raw.get("resume_refine_max_turns")
+        )
+        self.resume_refine_pass_score = _clamp_pass_score(
+            raw.get("resume_refine_pass_score")
+        )
         # Refinement config — cover
         self.cover_refine_enabled = bool(raw.get("cover_refine_enabled", True))
-        self.cover_refine_max_turns = _clamp_refine_turns(raw.get("cover_refine_max_turns"))
-        self.cover_refine_pass_score = _clamp_pass_score(raw.get("cover_refine_pass_score"))
+        self.cover_refine_max_turns = _clamp_refine_turns(
+            raw.get("cover_refine_max_turns")
+        )
+        self.cover_refine_pass_score = _clamp_pass_score(
+            raw.get("cover_refine_pass_score")
+        )
         # Résumé page limit
         self.resume_max_pages = _normalize_max_pages(raw.get("resume_max_pages"))
         # Résumé theme — see generator.themes.DEFAULT_THEME_ID
         self.resume_theme: str = raw.get("resume_theme") or DEFAULT_THEME_ID
         # Onboarding tour progress — see web/routers/onboarding.py
         self.onboarding_tour: str = raw.get("onboarding_tour") or "unstarted"
+        # Application answers — eligibility + EEO questions
+        self.application_answers = _normalize_answers(raw.get("application_answers"))
         return migrated_tree
+
+    def to_dict(self) -> dict:
+        """Serialize profile attributes to a dict for JSON storage.
+
+        Public wrapper around _to_dict() for test and external access.
+        """
+        return self._to_dict()
 
     def _to_dict(self) -> dict:
         """Serialize profile attributes to a dict for JSON storage."""
@@ -222,6 +258,7 @@ class User(Base):
         d["resume_max_pages"] = self.resume_max_pages
         d["resume_theme"] = self.resume_theme
         d["onboarding_tour"] = self.onboarding_tour
+        d["application_answers"] = self.application_answers
         apply_flat_to_tree(self.profile_tree, d)
         d["profile_tree"] = self.profile_tree.model_dump(mode="json")
         return d
@@ -299,6 +336,7 @@ class User(Base):
         except RuntimeError:
             raise
         from core.llm import llm_label
+
         with llm_label("resume-parse"):
             response = client.chat.completions.create(
                 model=model,
@@ -311,6 +349,7 @@ class User(Base):
                 ],
             )
         from core.llm import record_usage
+
         record_usage(response, model)
         from core.schemas import ParseResponse, parse_llm_json
 
@@ -460,6 +499,18 @@ class User(Base):
             + (f" — {', '.join(e.technologies)}" if e.technologies else "")
             for i, e in enumerate(self.projects)
         )
+
+    def application_answers_complete(self) -> bool:
+        """True when eligibility is fully filled and every EEO item is chosen.
+
+        EEO 'Decline to self-identify' counts as a valid choice — the section is
+        legally voluntary, so a decline is completion, not a gap.
+        """
+        elig = self.application_answers.get("eligibility", {})
+        eeo = self.application_answers.get("eeo", {})
+        elig_ok = all((elig.get(k) or "").strip() for k in ELIGIBILITY_KEYS)
+        eeo_ok = all((eeo.get(k) or "").strip() for k in EEO_KEYS)
+        return elig_ok and eeo_ok
 
     def master_resume(self) -> str:
         """Return the master resume markdown for prompt injection.
