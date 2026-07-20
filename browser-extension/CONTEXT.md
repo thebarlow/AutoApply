@@ -141,8 +141,16 @@ Selectors to check during the smoke test:
 - `indeed.js` — `getJobData()` field extraction, `getDescription()`, and `detailReadySelector` (Indeed changes its DOM regularly).
 - `linkedin.js` — card selector (`[componentkey^="job-card-component-ref"]`), positional `<p>` extraction for company/location in `getJobData()`, `_findAboutHeader()` / `_ABOUT_RE` for description, and the saved-jobs card selector.
 
-### Application-plan enumeration — PENDING smoke test (Task 11)
-The read-only form enumeration + soft nudge added in this feature has **not** been exercised against a live ATS page. Verify:
+### Application-plan enumeration — smoke test PARTIALLY RUN (2026-07-20)
+**Live-DOM enumeration + routing validated** on real Greenhouse (Figma board) and Ashby (Ashby board) forms by injecting `enumerateForm()`/`labelFor()` and simulating the engine's routing. The **full pipeline** (staged-job match → POST → dashboard modal → nudge) is **still PENDING** — it needs the extension signed in + server + a staged job (see checklist below).
+
+**Findings (feed sub-project 3 — none are safety/read-only breaches; the EEO guard held live):**
+- **Greenhouse — clean.** Real `<form>`; contact field ids (`first_name`/`last_name`/`email`/`phone`/`resume`) match the static schema exactly and dedup correctly; 100% label coverage; all four EEO fields (`gender`/`hispanic_ethnicity`/`veteran_status`/`disability_status`) correctly guarded out of the LLM path.
+- **Ashby — functional but rough.** The application is **not wrapped in a `<form>`** (the `|| document.body` fallback is what makes enumeration work — do not remove it). ~49% of controls (checkboxes/radios) yield **no derivable label** (label falls back to the raw UUID field id); radio option-groups enumerate one entry *per option* sharing a field id, so `build_plan`'s field-id dedup collapses them to the first option's text (the real question is lost); real field ids (`_systemfield_name`) do **not** match the static `ashby` schema (`name`), so contact fields both duplicate and misroute.
+- **Essay bucket is a catch-all (both vendors).** Because the label heuristics only recognize EEO + a few eligibility patterns, unrecognized-but-deterministic fields (LinkedIn URL, Other Website, Country, City/Location, Preferred First Name) fall through to `ESSAY→LLM` — over-invoking the metered essay pass and mis-drafting fields that should be filled deterministically. Sub-project 3 should broaden label→canonical matching (esp. url/location/name synonyms) before relying on the plan for form-fill.
+
+**Full-pipeline steps still to verify manually:**
+The read-only form enumeration + soft nudge added in this feature has **not** been exercised end-to-end against a live ATS page with the extension+server. Verify:
 1. Stage an external (non easy-apply) job whose apply link resolves to a real Greenhouse, Lever, or Ashby posting; let the background ATS-resolution queue settle (chip flips from "Resolving…" to the ATS name).
 2. Navigate to the resolved apply URL in the same browser profile. Confirm the content script matches it to the staged job (`stagedJobMeta` in `xb.storage.local` has the job's hostname) — check the service-worker console for no `[job-scraper] form enumeration failed` warning.
 3. Confirm the `POST /api/scraper/jobs/{job_key}/application-plan` request lands (network panel: 200, `enumerated_fields` populated with the page's real inputs) and that the dashboard's `ApplicationPlanModal` shows the enumerated fields for that job.
