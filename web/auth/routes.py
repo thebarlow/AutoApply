@@ -356,10 +356,10 @@ def api_ext_me(
         db: Database session.
 
     Returns:
-        JSON {"email": ...}.
+        JSON {"email": ..., "is_admin": ...}.
     """
     acct = resolve_token(db, _bearer(request))
-    return {"email": acct.email}
+    return {"email": acct.email, "is_admin": acct.is_admin}
 
 
 @router.post("/auth/logout")
