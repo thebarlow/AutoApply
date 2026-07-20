@@ -19,7 +19,7 @@ web/
 │   └── middleware.py        # Pure-ASGI prod gate: 401s unauthenticated /api/* (SSE-safe)
 └── routers/
     ├── jobs.py              # Core job endpoints: CRUD, score, generate resume/cover, serve PDFs
-    ├── scraper.py           # POST /api/scraper/stage-job (browser ext; now also carries easy_apply/apply_url_raw and sets ats_type="easy_apply" for in-platform jobs); POST /api/scraper/search + GET /last-search + POST /scrape-selected (Find Jobs tab: preview/persist API-scraper candidates); PATCH /api/scraper/jobs/{job_key}/ats-resolution (extension-authed ATS classification backfill)
+    ├── scraper.py           # POST /api/scraper/stage-job (browser ext; carries easy_apply/apply_url_raw; sets ats_type="easy_apply" for in-platform jobs; detects & unwraps LinkedIn safety-redirect wrappers at intake time for known ATS types); POST /api/scraper/search + GET /last-search + POST /scrape-selected (Find Jobs tab: preview/persist API-scraper candidates); PATCH /api/scraper/jobs/{job_key}/ats-resolution (extension-authed ATS classification backfill; falls back to unwrapped apply_url_raw on interstitial stall)
     ├── config.py            # Profile CRUD/tree/parse/upload API; internal read-only config helpers (_get → profile_config; _get_global → config; setters removed in the 2026-07-19 dead-code sweep)
     ├── prompts.py           # GET/PUT per-profile prompt overrides
     ├── llm_status_router.py # GET /api/llm/status (active LLM job status)

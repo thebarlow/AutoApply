@@ -61,6 +61,12 @@ Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_
   `/api/scraper/jobs/{job_key}/ats-resolution` with the resolved URL so the server can
   classify it via `core/ats.py`. Jobs are enqueued only after a successful stage (never on
   a duplicate/failed stage).
+- **LinkedIn safety-redirect wrappers** (resolved) — LinkedIn wraps external apply links in a
+  `linkedin.com/safety/go/?url=<encoded>` interstitial that requires a human click and never
+  auto-forwards. Headless tab resolution would stall on it and misclassify the ATS. Now handled:
+  `stage_job` detects wrapped known-ATS links at intake time and classifies them immediately
+  (no tab needed); `resolve_ats` falls back to unwrapping the stored wrapper's target URL when
+  the resolved URL stalls. See `core/ats.py::unwrap_apply_url()`.
 
 **Known limitations:**
 1. **No `href` → never enqueued.** If an external "Apply" control renders as a `<button>`
