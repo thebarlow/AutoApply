@@ -9,6 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Boolean, Column, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Session
 
@@ -1438,3 +1439,74 @@ class Job(Base):
                 else []
             ),
         }
+
+
+class _EssayAnswers(BaseModel):
+    """Loose JSON-object model for the essay-drafting response.
+
+    Keys are arbitrary field_ids supplied in the prompt, so this model accepts
+    any string-keyed fields rather than declaring them up front.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+def draft_application_answers(
+    user: Any, job: "Job", pairs: list[tuple[str, str]]
+) -> dict[str, str]:
+    """Draft honest, profile-grounded answers to free-text application questions.
+
+    One LLM call: all questions are sent together and answered as a single
+    JSON object keyed by field_id. Answers are always treated as drafts that
+    need human review by the caller (``core.application_mapper``) — this
+    function only produces text, never marks anything as final.
+
+    Args:
+        user: A User instance with profile data.
+        job: The Job the application questions belong to.
+        pairs: ``[(field_id, question_label), ...]`` to answer.
+
+    Returns:
+        Dict mapping field_id to drafted answer text. Empty dict if ``pairs``
+        is empty.
+
+    Raises:
+        RuntimeError: If the LLM call fails or returns invalid JSON.
+    """
+    if not pairs:
+        return {}
+
+    from core.llm import get_client_for_profile
+
+    client, model = get_client_for_profile(user, getattr(user, "prompt_resume_model", "") or "")
+
+    questions_block = "\n".join(f"- {fid}: {label}" for fid, label in pairs)
+    prompt = (
+        "You are drafting answers to free-text questions on a job application, "
+        "grounded strictly in the candidate's real background below. Answer each "
+        "question in 2-4 sentences using only facts supported by the profile and "
+        "job context — never invent credentials, employers, dates, or skills the "
+        "candidate does not have. If the profile has no basis for an answer, "
+        "write a brief honest answer that does not fabricate specifics.\n\n"
+        f"Job title: {getattr(job, 'title', '') or ''}\n"
+        f"Company: {getattr(job, 'company', '') or ''}\n"
+        f"Job description: {(getattr(job, 'description', '') or '')[:2000]}\n\n"
+        f"Candidate profile:\n{getattr(user, 'profile_text', '') or getattr(user, 'resume_text', '') or ''}\n\n"
+        "Questions (answer every one):\n"
+        f"{questions_block}\n\n"
+        "Return ONLY a strict JSON object mapping each field_id to its answer "
+        "string, e.g. {\"field_1\": \"answer text\"}. No other keys, no markdown, "
+        "no commentary."
+    )
+
+    with llm_label(f"draft_application_answers:{getattr(job, 'job_key', '')}"):
+        parsed = _llm_json_with_retry(
+            prompt,
+            client,
+            model,
+            _EssayAnswers,
+            max_tokens=4096,
+            empty_msg="LLM returned empty content for application answer drafting",
+        )
+    data = parsed.model_dump()
+    return {fid: str(data[fid]) for fid, _label in pairs if fid in data and data[fid]}
