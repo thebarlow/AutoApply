@@ -111,6 +111,20 @@ PDF rendering: `core/utils.render_pdf` runs **pandoc → Jinja2 HTML template + 
 | `web/` | FastAPI app + REST API; resolves LLM client/prompt/template then delegates to `Job`; document GET/PUT API; evaluate→refine intake pipeline |
 | `tray_app/` | PyQt6 desktop process; receives job payloads over WebSocket; draggable résumé/cover handles; marks jobs applied |
 
+## ATS Detection
+
+At scrape/intake time, the extension and API classify each job by how it is applied to, using five new columns on `jobs` (`easy_apply`, `apply_url_raw`, `apply_url_resolved`, `ats_type`, `ats_domain`):
+
+**Intake (browser extension + `POST /api/scraper/stage-job`):** the extension's `getApplyInfo()` inspects the job card for an Easy Apply (LinkedIn) / Indeed Apply signal vs. an external "Apply on company site" link, returning `{easy_apply, apply_url_raw}`. The extension persists these to `stage-job`; the server sets `ats_type="easy_apply"` for in-platform jobs and stores `apply_url_raw` for external links.
+
+**External URL resolution (background extension task):** jobs staged with an `apply_url_raw` but no `ats_type` are enqueued in the service worker. For each job the worker opens a background tab at `apply_url_raw`, watches for navigation settling (4s quiet period or 20s hard cap), then PATCHes `/api/scraper/jobs/{job_key}/ats-resolution` with the final resolved URL so the server can classify it.
+
+**Classification (`core/ats.py`):** `classify_ats(resolved_url)` inspects the resolved URL's host against a domain map (Greenhouse/Lever/Ashby/Workday/iCIMS/Taleo/SmartRecruiters/Jobvite/BambooHR/other) and returns `(ats_type, host)`. The type is `"easy_apply"`, `"greenhouse"`, ..., `"other"` (unknown domain), or `None` (unclassified). `ats_domain` is populated mainly for `ats_type="other"` (unknown ATSs).
+
+**LinkedIn safety-redirect wrappers (`core/ats.py::unwrap_apply_url()`):** LinkedIn wraps external apply links in a `linkedin.com/safety/go/?url=<encoded>` interstitial that requires a human click and never auto-forwards. `unwrap_apply_url()` detects and unwraps wrapped URLs so they can be classified correctly even during headless tab resolution. Used at `stage-job` intake time for known-ATS detection (no tab resolution needed) and as a fallback in `resolve_ats` when the resolved URL stalls mid-interstitial.
+
+**Admin-only extension Live/Local server toggle:** the extension's popup displays a two-position slider (Live/Local) that is admin-only (gated by `GET /api/ext/me` returning `is_admin`). When toggled, the browser extension routes `stage-job` and ATS-resolution requests to a local dev server (tokenless), while OAuth identity stays pointed at Live. The toggle is persisted in `xb.storage.local` under the `serverMode` key and read by both background and content scripts.
+
 ## LLM & Document Hardening (Phases 1–3b)
 
 A four-phase initiative moved the pipeline from free-form text toward typed, DB-backed data.
