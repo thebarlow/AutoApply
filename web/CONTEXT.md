@@ -210,7 +210,7 @@ web/
 | `GET` | `/api/me` | Logged-in identity `{email,is_admin,profile_name,impersonating:{profile_id,email}|null}`; 401 if no session |
 | `GET` | `/auth/ext/login/{provider}` | Start extension OAuth; `redirect_uri` must match `EXTENSION_REDIRECT_URLS` (400 otherwise); ext-mode flag stashed in session |
 | `POST` | `/auth/ext/revoke` | Bearer-authed; revoke the presented extension token |
-| `GET` | `/api/ext/me` | Bearer-authed; `{email}` of the token's account; 401 if invalid |
+| `GET` | `/api/ext/me` | Bearer-authed; `{email, is_admin}` of the token's account; 401 if invalid |
 
 ## Dev Endpoints (`web/routers/dev.py`)
 
