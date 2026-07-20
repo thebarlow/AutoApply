@@ -29,14 +29,16 @@ SECTION_PROMPT_DEFAULTS = {
         "Each description is one sentence, at most 120 characters, no bullets."
     ),
     "skills": (
-        "Group skills into at most 5 labeled categories relevant to THIS job (e.g. "
-        "Languages, Frameworks, Tools), most-relevant category first; within each, list "
-        "job-mentioned skills first. Include only categories with 2+ job-relevant skills — "
-        "omit ones the job does not call for (e.g. frontend for a backend role). Exclude "
-        "soft/interpersonal skills entirely (teamwork, communication, adaptability, "
-        "problem-solving); those belong in the summary and cover letter, not here. Keep "
-        "the whole section to roughly 5 lines. Use ONLY skills from the inventory; never "
-        "invent."
+        "Group skills into 4-5 labeled categories (e.g. Languages, Frameworks, Tools, "
+        "ML/Data), most-relevant category first; within each, list job-mentioned skills "
+        "first. Include a skill when it is (a) named in the job, (b) commonly expected for "
+        "the target role/title, or (c) a core programming/tooling staple (e.g. Git, Docker, "
+        "CI/CD, pytest) — provided it is in the candidate's inventory. Omit skills and whole "
+        "categories that are off-target for this role (e.g. frontend for a backend role) and "
+        "unrelated credentials or contest awards. Exclude soft/interpersonal skills entirely "
+        "(teamwork, communication, adaptability, problem-solving); those belong in the summary "
+        "and cover letter. Aim for roughly 4-5 categories and about 12-18 skills total — "
+        "substantive but curated. Use ONLY skills from the inventory; never invent."
     ),
 }
 
