@@ -121,6 +121,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Render a structured document to canonical Markdown | `document_assembler.py` → `assemble_resume_markdown()`, `assemble_cover_markdown()` |
 | Reconstruct a structured document from rendered Markdown (inverse of the assembler) | `document_parser.py` → `reconstruct_resume_document_from_markdown()`, `reconstruct_cover_document_from_markdown()` |
 | Structured (JSON) LLM call with strict-JSON hardening + one retry | `job.py` → `_llm_json_with_retry()` |
+| Classifying a resolved apply URL to its ATS type; unwrapping LinkedIn safety-redirect wrappers | `ats.py` → `classify_ats()`, `unwrap_apply_url()` |
 | ATS parseability gate (mechanical hard-block + LLM advisory) | `ats_gate.py` → `run_gate()` / `Job.run_ats_check()` |
 | Mechanical ATS checks (contact, sections, skills, glyph-junk, text-layer) | `ats_gate.py` → `check_mechanical()` |
 | Semantic ATS roundtrip check (LLM re-parse of extracted text) | `ats_gate.py` → `check_roundtrip()` |

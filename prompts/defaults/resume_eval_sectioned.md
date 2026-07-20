@@ -37,7 +37,7 @@ Degrees: {user.education_degrees}
 - hallucination: a tool, activity, or credential attributed to this section/role that the
   candidate's real material does not support (e.g. ML model development for a role that
   did not involve it). A skill being in the inventory does NOT license attaching it to an
-  unrelated role. Highest priority. Never flag soft skills.
+  unrelated role. Highest priority. Never flag soft skills as hallucinations (see skill_relevance).
 - keyword_coverage: a skill the candidate ACTUALLY HAS and the job wants, relevant to this
   section but omitted. Only skills genuinely in the inventory. Synonyms count as covered.
 - signal_opportunity (Profile / Experience): a company signal/value that could be woven in
@@ -45,8 +45,10 @@ Degrees: {user.education_degrees}
   adds no bloat.
 - voice (Profile / Experience): reads like copy-pasted job-description phrases instead of a
   person describing real work; should use job keywords naturally, in the candidate's voice.
-- skill_relevance (Skills): skills irrelevant to this job (bloat) or a section that is too
-  long; suggest dropping or folding into a broader group.
+- skill_relevance (Skills): the section is bloated — flag (a) whole categories the job does not
+  call for (e.g. frontend for a backend role), (b) soft/interpersonal skills that belong in the
+  summary/cover, not a skills list (teamwork, communication, adaptability, problem-solving), or
+  (c) a section longer than ~5 lines / 5 categories. Suggest dropping or folding into a broader group.
 - overclaiming: phrasing implying a title, seniority, scope, or outcome not actually held
   — including "senior"/"lead" or an invented title (e.g. "Machine Learning Engineer") the
   work history does not show, or proof words ("proven", "expert", "track record") for a

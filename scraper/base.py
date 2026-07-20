@@ -33,6 +33,8 @@ class ScrapedJob:
     salary_max: Optional[int] = None
     remote: bool = False
     posted_at: str = ""
+    easy_apply: Optional[bool] = None
+    apply_url_raw: str = ""
 
 
 class JobSource(ABC):

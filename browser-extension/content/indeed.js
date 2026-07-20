@@ -54,6 +54,17 @@ function _isDetailReady() {
   return true;
 }
 
+function getApplyInfo() {
+  const buttons = Array.from(document.querySelectorAll('button, a'));
+  const companySite = buttons.find(b => /apply on company site/i.test(b.textContent || ''));
+  if (companySite) {
+    const href = companySite.tagName === 'A' ? companySite.href : '';
+    return { easy_apply: false, apply_url_raw: href || '' };
+  }
+  const applyNow = buttons.find(b => /apply now|apply\b/i.test(b.textContent || ''));
+  return { easy_apply: applyNow ? true : null, apply_url_raw: '' };
+}
+
 if (_IS_SEARCH || _IS_SAVED) {
   registerSource({
     cardSelector: _IS_SEARCH
@@ -90,6 +101,7 @@ if (_IS_SEARCH || _IS_SAVED) {
     getDescription() {
       return _extractDescription(_findDescriptionEl());
     },
+    getApplyInfo,
 
     clickCard(card) {
       if (_IS_SEARCH) {

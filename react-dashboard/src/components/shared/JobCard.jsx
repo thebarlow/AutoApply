@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { BORDER_CLASS } from '../findjobs/borderStatus'
+import AtsChip from './AtsChip'
 
 function ProcessingIcon() {
   const dots = Array.from({ length: 8 }, (_, i) => {
@@ -42,7 +43,7 @@ export function relativeAge(iso) {
   return `${Math.floor(days / 30)}mo ago`
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, postedAt, salaryMin, salaryMax, salaryRaw, location = null, flagged = false, borderStatus = null, leading = null, trailing = null }) {
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, postedAt, salaryMin, salaryMax, salaryRaw, location = null, flagged = false, borderStatus = null, leading = null, trailing = null, atsType = null, easyApply = null, atsDomain = null }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
 
@@ -103,6 +104,7 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
         <div className="flex items-center gap-1.5">
           {flagged && <FlagIconFilled />}
           <p className="text-sm font-medium text-space-text truncate">{title}</p>
+          <AtsChip atsType={atsType} easyApply={easyApply} atsDomain={atsDomain} />
         </div>
         <p className="text-xs text-space-dim">{company}</p>
         {location && (

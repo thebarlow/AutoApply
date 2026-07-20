@@ -265,6 +265,13 @@ class Job(Base):
     scraped_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     state = Column(String, nullable=False, default="new")
 
+    # ── Apply / ATS detection ───────────────────────────────────────────────────
+    easy_apply = Column(Boolean)          # True=in-platform, False=external, None=unknown
+    apply_url_raw = Column(String)        # apply link seen in the card DOM (pre-redirect)
+    apply_url_resolved = Column(String)   # final URL after following redirects
+    ats_type = Column(String)             # classifier output; None=external-unresolved
+    ats_domain = Column(String)           # resolved hostname (kept for `other`)
+
     # ── Scores ─────────────────────────────────────────────────────────────────
     desirability_score = Column(Float)
     fit_score = Column(Float)
@@ -336,6 +343,8 @@ class Job(Base):
             salary=scraped.salary,
             remote=scraped.remote,
             posted_at=scraped.posted_at,
+            easy_apply=getattr(scraped, "easy_apply", None),
+            apply_url_raw=getattr(scraped, "apply_url_raw", "") or "",
             state=JobState.NEW.value,
         )
 
@@ -1359,6 +1368,11 @@ class Job(Base):
             "url": self.url,
             "description": self.description,
             "remote": self.remote,
+            "easy_apply": self.easy_apply,
+            "apply_url_raw": self.apply_url_raw or "",
+            "apply_url_resolved": self.apply_url_resolved or "",
+            "ats_type": self.ats_type,
+            "ats_domain": self.ats_domain or "",
             "state": self.state,
             "desirability_score": self.desirability_score,
             "fit_score": self.fit_score,
