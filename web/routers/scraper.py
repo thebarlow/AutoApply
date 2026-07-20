@@ -21,7 +21,7 @@ from core.pricing import price_for
 from core.schemas import EnumeratedField
 from core.user import User
 from scraper.search import search_sources
-from web.application_plan_service import make_essay_drafter
+from web.application_plan_service import EssayDraftError, make_essay_drafter
 from web.sse import send as _sse_send
 from web.intake_pipeline import run_pipeline
 from web.tenancy import current_profile_id
@@ -374,10 +374,15 @@ def compute_application_plan(
     fields = body.enumerated_fields
 
     if needs_essay_pass(job, fields):
-        with meter_action(db, profile_id, action="map_fields", job_key=job_key,
-                          price=price_for("map_fields")):
-            plan = build_plan(job, user, documents, enumerated_fields=fields,
-                              draft_essays=make_essay_drafter(user, job))
+        try:
+            with meter_action(db, profile_id, action="map_fields", job_key=job_key,
+                              price=price_for("map_fields")):
+                plan = build_plan(job, user, documents, enumerated_fields=fields,
+                                  draft_essays=make_essay_drafter(user, job))
+        except EssayDraftError:
+            # LLM drafting failed; meter_action refunded the debit. Still return
+            # the deterministic plan (essay fields left undrafted), unmetered.
+            plan = build_plan(job, user, documents, enumerated_fields=fields)
     else:
         plan = build_plan(job, user, documents, enumerated_fields=fields)
 

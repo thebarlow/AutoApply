@@ -141,3 +141,41 @@ def test_no_metering_without_essay_pass(client, db_session):
     assert balance == 5
     debits = db_session.query(CreditLedger).filter(CreditLedger.reason == "debit").all()
     assert debits == []
+
+
+def test_essay_draft_failure_refunds_and_returns_deterministic_plan(
+    client, db_session, monkeypatch
+):
+    """If the LLM essay pass fails, the map_fields charge is refunded (net zero)
+    and a deterministic plan is still returned with the essay field undrafted."""
+    from db.database import Account
+    import core.job as core_job
+
+    def _boom(user, job, pairs):
+        raise RuntimeError("LLM unavailable")
+
+    monkeypatch.setattr(core_job, "draft_application_answers", _boom)
+
+    db_session.add(
+        Account(
+            id=1,
+            email="acct@example.com",
+            profile_id=1,
+            created_at="2026-01-01T00:00:00+00:00",
+            credit_balance=5,
+            credit_rate=1.5,
+        )
+    )
+    _seed_job(db_session, 1, "j5", "greenhouse")
+    db_session.commit()
+
+    resp = client.post(
+        "/api/scraper/jobs/j5/application-plan",
+        json={"enumerated_fields": [{"field_id": "q_why", "label": "Why do you want this job?"}]},
+    )
+    assert resp.status_code == 200
+    essay = next(f for f in resp.json()["fields"] if f["field_id"] == "q_why")
+    assert essay["status"] == "unknown" and essay["value"] is None
+    # Net-zero: debit was refunded, so the balance is unchanged.
+    balance = db_session.query(Account).filter_by(profile_id=1).first().credit_balance
+    assert balance == 5

@@ -49,8 +49,17 @@ def _plan_static_field(field, ctx: ResolveContext) -> PlannedField:
 
 
 def needs_essay_pass(job: Any, enumerated_fields: list[EnumeratedField] | None) -> bool:
-    """True if any enumerated custom field routes to the essay bucket."""
+    """True if any enumerated custom field routes to the essay bucket.
+
+    Mirrors ``build_plan``'s dedup: an enumerated field whose ``field_id`` is
+    already covered by the ATS static schema is skipped there and so must be
+    skipped here too — otherwise ``map_fields`` could be billed for an essay
+    pass that ``build_plan`` never actually runs.
+    """
+    schema_ids = {sf.field_id for sf in schema_for(getattr(job, "ats_type", None))}
     for f in enumerated_fields or []:
+        if f.field_id in schema_ids:
+            continue
         if _canonical_for_enumerated(f) is not None:
             continue
         if classify_custom(f.label) == "essay":

@@ -89,3 +89,14 @@ def test_needs_essay_pass_detection():
         is False
     )
     assert needs_essay_pass(_job("greenhouse"), None) is False
+
+
+def test_needs_essay_pass_skips_static_schema_field_ids():
+    # An enumerated field whose id collides with a greenhouse static-schema field
+    # is skipped by build_plan (seen_ids), so needs_essay_pass must not count it —
+    # otherwise map_fields would be billed for an essay pass that never runs.
+    collide = [EnumeratedField(field_id="cover_letter", label="Why do you want this job?")]
+    assert needs_essay_pass(_job("greenhouse"), collide) is False
+    # Same label on a non-colliding id still triggers the pass.
+    fresh = [EnumeratedField(field_id="q_custom", label="Why do you want this job?")]
+    assert needs_essay_pass(_job("greenhouse"), fresh) is True
