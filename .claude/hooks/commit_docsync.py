@@ -44,6 +44,23 @@ def _marker() -> pathlib.Path:
     return pathlib.Path(os.path.expanduser("~/.claude")) / f".commit-docsync-{key}"
 
 
+def _is_docs_only(head: str) -> bool:
+    """True when every file the commit touched is itself one of the docs the
+    sync subagent would update. Such a commit is the doc-sync — re-dispatching a
+    subagent for it just loops, so the hook stays quiet."""
+    files = _git("show", "--pretty=", "--name-only", head).splitlines()
+    files = [f.strip() for f in files if f.strip()]
+    if not files:
+        return False  # no diff resolved — don't suppress, let it fire
+    for f in files:
+        if f in (".claude/TODO.md", ".claude/CLAUDE.md", "docs/ARCHITECTURE.md"):
+            continue
+        if f.endswith("CONTEXT.md"):
+            continue
+        return False  # a non-doc file was touched → real change, fire
+    return True
+
+
 def main() -> int:
     # Drain stdin (payload unused) so the writer never sees a broken pipe.
     try:
@@ -75,6 +92,11 @@ def main() -> int:
     # (a normal commit or merge), not a reset/checkout to an unrelated ref.
     parents = _git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
     if prev not in parents:
+        return 0
+
+    # A commit that only edits the sync-target docs IS the doc-sync — skip it so
+    # TODO/CONTEXT tweaks don't trigger a self-referential subagent loop.
+    if _is_docs_only(head):
         return 0
 
     subject = _git("log", "-1", "--pretty=%s") or "(no subject)"
