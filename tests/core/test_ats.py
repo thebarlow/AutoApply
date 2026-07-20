@@ -1,5 +1,5 @@
 import pytest
-from core.ats import classify_ats
+from core.ats import classify_ats, unwrap_apply_url
 
 
 @pytest.mark.parametrize("url,expected_type,expected_host", [
@@ -22,3 +22,33 @@ from core.ats import classify_ats
 ])
 def test_classify_ats(url, expected_type, expected_host):
     assert classify_ats(url) == (expected_type, expected_host)
+
+
+@pytest.mark.parametrize("url,expected", [
+    # LinkedIn safety wrapper -> decoded target
+    (
+        "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fjobs.ashbyhq.com%2Fsolace%2Fabc&urlhash=x",
+        "https://jobs.ashbyhq.com/solace/abc",
+    ),
+    (
+        "https://linkedin.com/safety/go/?url=https%3A%2F%2Fboards.greenhouse.io%2Facme%2F9",
+        "https://boards.greenhouse.io/acme/9",
+    ),
+    # Not a wrapper: returned unchanged
+    ("https://jobs.ashbyhq.com/solace/abc", "https://jobs.ashbyhq.com/solace/abc"),
+    ("https://careers.acme.com/apply/1", "https://careers.acme.com/apply/1"),
+    # Wrapper host but no url param: unchanged (nothing to unwrap)
+    ("https://www.linkedin.com/safety/go/?_l=en_US", "https://www.linkedin.com/safety/go/?_l=en_US"),
+    # linkedin.com host but not a safety-go path: unchanged
+    ("https://www.linkedin.com/jobs/view/123?url=https%3A%2F%2Fx.com", "https://www.linkedin.com/jobs/view/123?url=https%3A%2F%2Fx.com"),
+    # Malformed / empty: unchanged
+    ("", ""),
+    ("not a url", "not a url"),
+])
+def test_unwrap_apply_url(url, expected):
+    assert unwrap_apply_url(url) == expected
+
+
+def test_unwrap_then_classify_linkedin_wrapped_ashby():
+    wrapped = "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fjobs.ashbyhq.com%2Fsolace%2Fabc"
+    assert classify_ats(unwrap_apply_url(wrapped)) == ("ashby", "jobs.ashbyhq.com")

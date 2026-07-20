@@ -97,3 +97,40 @@ def test_ats_resolution_unknown_job_404(client):
         "apply_url_resolved": "https://x/1",
     })
     assert resp.status_code == 404
+
+
+# The real target lives in the LinkedIn safety wrapper's url= param. A wrapped
+# known ATS is classified at stage time — no tab resolution needed.
+def test_stage_job_classifies_linkedin_wrapped_ats(client, db_session):
+    wrapped = "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fjobs.ashbyhq.com%2Fsolace%2Fabc&urlhash=x"
+    with patch("web.routers.scraper.run_pipeline"), patch("web.routers.scraper._sse_send"):
+        resp = client.post("/api/scraper/stage-job", json={
+            "source": "linkedin", "job_key": "w1", "title": "T",
+            "company": "C", "url": "https://li/w1", "description": "d",
+            "easy_apply": False, "apply_url_raw": wrapped,
+        })
+    assert resp.status_code == 200
+    job = Job.get("w1", db_session, profile_id=1)
+    assert job.ats_type == "ashby"
+    assert job.ats_domain == "jobs.ashbyhq.com"
+    assert job.apply_url_resolved == "https://jobs.ashbyhq.com/solace/abc"
+
+
+# If the extension stalls on the LinkedIn interstitial and PATCHes that URL,
+# resolve_ats falls back to the stored wrapper's true target.
+def test_ats_resolution_falls_back_to_wrapped_raw(client, db_session):
+    wrapped = "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fjobs.ashbyhq.com%2Facme%2Fxyz"
+    with patch("web.routers.scraper.run_pipeline"), patch("web.routers.scraper._sse_send"):
+        client.post("/api/scraper/stage-job", json={
+            "source": "linkedin", "job_key": "w2", "title": "T",
+            "company": "C", "url": "https://li/w2", "description": "d",
+            "easy_apply": False, "apply_url_raw": wrapped,
+        })
+        resp = client.patch("/api/scraper/jobs/w2/ats-resolution", json={
+            "apply_url_resolved": "https://www.linkedin.com/safety/go/?_l=en_US",
+        })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ats_type"] == "ashby"
+    assert body["ats_domain"] == "jobs.ashbyhq.com"
+    assert body["apply_url_resolved"] == "https://jobs.ashbyhq.com/acme/xyz"

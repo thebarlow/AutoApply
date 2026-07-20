@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.database import ProfileConfig
-from core.ats import classify_ats
+from core.ats import classify_ats, unwrap_apply_url
 from core.job import Job, JobState
 from scraper.search import search_sources
 from web.sse import send as _sse_send
@@ -82,6 +82,18 @@ def stage_job(
         if job.easy_apply:
             job.ats_type = "easy_apply"
             db.commit()
+        elif body.apply_url_raw:
+            # LinkedIn wraps external apply links in a click-through interstitial
+            # that headless tab resolution can't follow. The real target is in
+            # the wrapper's url= param, so classify it now when it names a known
+            # ATS — no redirect resolution needed.
+            target = unwrap_apply_url(body.apply_url_raw)
+            ats_type, host = classify_ats(target)
+            if ats_type != "other":
+                job.ats_type = ats_type
+                job.ats_domain = host
+                job.apply_url_resolved = target
+                db.commit()
         job.intake()
         try:
             _sse_send("job", job.serialize(), profile_id=profile_id)
@@ -286,8 +298,17 @@ def resolve_ats(
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    ats_type, host = classify_ats(body.apply_url_resolved)
-    job.apply_url_resolved = body.apply_url_resolved
+    resolved = body.apply_url_resolved
+    ats_type, host = classify_ats(unwrap_apply_url(resolved))
+    if ats_type == "other" and job.apply_url_raw:
+        # The extension may have stalled on an interstitial (e.g. LinkedIn's
+        # safety redirect) that never reached the real ATS. Fall back to the
+        # scrape-time apply URL, whose wrapper carries the true destination.
+        alt_target = unwrap_apply_url(job.apply_url_raw)
+        alt_type, alt_host = classify_ats(alt_target)
+        if alt_type != "other":
+            ats_type, host, resolved = alt_type, alt_host, alt_target
+    job.apply_url_resolved = resolved
     job.ats_type = ats_type
     job.ats_domain = host
     db.commit()

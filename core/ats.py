@@ -5,7 +5,7 @@ source of truth for the recognized-ATS set (see the ATS-detection spec).
 """
 from __future__ import annotations
 
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 # Ordered list of (host-suffix, ats_type). First matching suffix wins.
 # Suffixes match the END of the hostname, so "greenhouse.io" catches both
@@ -22,6 +22,34 @@ _ATS_SUFFIXES: list[tuple[str, str]] = [
     ("jobvite.com", "jobvite"),
     ("bamboohr.com", "bamboohr"),
 ]
+
+
+def unwrap_apply_url(url: str) -> str:
+    """Unwrap a LinkedIn interstitial apply URL to its real destination.
+
+    LinkedIn wraps external apply links in a ``/safety/go/?url=<encoded>``
+    redirect page that requires a human click and never auto-forwards, so a
+    headless tab resolution stalls on it and misreads the ATS as ``linkedin``.
+    The true destination is carried in the ``url`` query parameter. Non-wrapper
+    URLs (and anything malformed) are returned unchanged.
+
+    Args:
+        url: A raw apply URL, possibly a LinkedIn safety-redirect wrapper.
+
+    Returns:
+        The unwrapped target URL, or the input unchanged if it is not a
+        recognized wrapper.
+    """
+    try:
+        parts = urlparse(url)
+    except ValueError:
+        return url
+    host = (parts.hostname or "").lower()
+    if (host == "linkedin.com" or host.endswith(".linkedin.com")) and "/safety/go/" in parts.path:
+        target = parse_qs(parts.query).get("url", [""])[0]
+        if target:
+            return target
+    return url
 
 
 def classify_ats(url: str) -> tuple[str, str]:
