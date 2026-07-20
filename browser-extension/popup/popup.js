@@ -89,8 +89,17 @@ async function render() {
   }
 }
 
-// Admin-only routing toggle. Non-admins never see it; any stray "local" mode
-// left on a now-non-admin account is reset to "live".
+// Highlight the active side label of the Live/Local switch.
+function paintSwitch(mode) {
+  const live = document.getElementById("sideLive");
+  const local = document.getElementById("sideLocal");
+  live.className = "side" + (mode === "live" ? " active-live" : "");
+  local.className = "side" + (mode === "local" ? " active-local" : "");
+}
+
+// Admin-only routing toggle (two-position slider: unchecked=live, checked=local).
+// Non-admins never see it; any stray "local" mode left on a now-non-admin
+// account is reset to "live".
 async function renderServerToggle(isAdmin) {
   const wrap = document.getElementById("serverToggle");
   if (!isAdmin) {
@@ -99,12 +108,14 @@ async function renderServerToggle(isAdmin) {
     return;
   }
   const mode = await getServerMode();
-  for (const input of wrap.querySelectorAll('input[name="serverMode"]')) {
-    input.checked = input.value === mode;
-    input.onchange = async () => {
-      if (input.checked) await xb.storage.local.set({ [MODE_KEY]: input.value });
-    };
-  }
+  const sw = document.getElementById("serverModeSwitch");
+  sw.checked = mode === "local";
+  paintSwitch(mode);
+  sw.onchange = async () => {
+    const m = sw.checked ? "local" : "live";
+    await xb.storage.local.set({ [MODE_KEY]: m });
+    paintSwitch(m);
+  };
   wrap.classList.remove("hidden");
 }
 
