@@ -35,8 +35,12 @@ a local dev server — without touching identity/auth, which always stays Live.
 
 ## Key facts this design relies on
 
-- `GET /api/ext/me` **already returns `is_admin`** (`web/auth/routes.py:398`) and is live
-  on `main` today — so admin-gating needs no backend change and has no deploy bootstrap.
+- `GET /api/ext/me` (the **bearer-token** endpoint the extension calls) returns `is_admin`
+  as of the toggle work. **Correction:** the original design wrongly cited
+  `web/auth/routes.py:398` — that `is_admin` belongs to `/api/me`, the *session-cookie*
+  endpoint the extension cannot call. The token endpoint `/api/ext/me` returned only
+  `{email}`, so admin-gating required a one-line backend change (add `is_admin` to its
+  body) and a deploy to take effect (the popup reads `is_admin` from the live server).
 - The production auth gate only activates when `APP_ENV == "production"`
   (`web/auth/middleware.py:31`). A local server does **not** gate `/api/*`.
 - `bearer_or_session_profile` (`web/auth/ext_token.py:119`) falls back to

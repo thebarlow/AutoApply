@@ -122,6 +122,7 @@ def test_ext_me_requires_valid_token(client, db_session):
     raw = ext_token.mint_token(db_session, account_id=3)
     ok = client.get("/api/ext/me", headers={"Authorization": f"Bearer {raw}"})
     assert ok.status_code == 200 and ok.json()["email"] == "u@x.com"
+    assert ok.json()["is_admin"] is False  # extension admin-gate reads this field
     bad = client.get("/api/ext/me", headers={"Authorization": "Bearer nope"})
     assert bad.status_code == 401
 
