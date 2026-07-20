@@ -36,6 +36,10 @@ const LOCAL_URL = "http://localhost:8080";
 const MODE_KEY = "serverMode";
 const DEDUP_KEY = "stagedJobKeys";
 const TOKEN_KEY = "extToken";
+// Maps job_key -> {apply_url_raw, apply_url_resolved} for external (non easy-apply)
+// staged jobs, so a content script landing on an ATS apply page can find which
+// staged job it corresponds to (Task 11 form enumeration).
+const STAGED_META_KEY = "stagedJobMeta";
 
 // Any value other than exactly "local" resolves to Live (fail-safe: never
 // accidentally target localhost from an unexpected stored value).
@@ -65,6 +69,22 @@ async function handleMessage(message, sender, sendResponse) {
   if (message.type === "SCRAPE_JOB") {
     try {
       sendResponse(await handleScrape(message.payload));
+    } catch (err) {
+      sendResponse({ ok: false, error: err.message });
+    }
+    return;
+  }
+  if (message.type === "FIND_STAGED_JOB") {
+    try {
+      sendResponse(await handleFindStagedJob(message.url));
+    } catch (err) {
+      sendResponse({ job_key: null });
+    }
+    return;
+  }
+  if (message.type === "ENUMERATE_FORM") {
+    try {
+      sendResponse(await handleEnumerateForm(message.job_key, message.enumerated_fields));
     } catch (err) {
       sendResponse({ ok: false, error: err.message });
     }
@@ -145,9 +165,89 @@ async function handleScrape(payload) {
 
   if (data.status === "staged" && payload.easy_apply === false && payload.apply_url_raw) {
     enqueueResolution(data.job_key, payload.apply_url_raw, url, mode);
+    // Track the raw apply URL so a later ATS-page content script can match this
+    // job (see handleFindStagedJob). Resolved URL is filled in on PATCH settle.
+    const { [STAGED_META_KEY]: meta = {} } = await storageGet(STAGED_META_KEY);
+    meta[data.job_key] = { apply_url_raw: payload.apply_url_raw, apply_url_resolved: "" };
+    await storageSet({ [STAGED_META_KEY]: meta });
   }
 
   return { ok: true, status: data.status };
+}
+
+// --- Application-plan enumeration (Task 11) -----------------------------
+// Read-only: matches an ATS apply page to a staged job, then relays the
+// content script's field enumeration to the server. No form writing here.
+
+// Loose match: same hostname as either the raw or resolved apply URL. ATS
+// apply flows commonly add/rewrite path segments and query params after
+// landing, so hostname is the stable signal — exact path matching is not.
+function _urlMatches(currentUrl, storedUrl) {
+  if (!storedUrl) return false;
+  try {
+    return new URL(currentUrl).hostname === new URL(storedUrl).hostname;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function handleFindStagedJob(url) {
+  const { [STAGED_META_KEY]: meta = {} } = await storageGet(STAGED_META_KEY);
+  for (const [jobKey, info] of Object.entries(meta)) {
+    if (_urlMatches(url, info.apply_url_resolved) || _urlMatches(url, info.apply_url_raw)) {
+      return { job_key: jobKey };
+    }
+  }
+  return { job_key: null };
+}
+
+async function handleEnumerateForm(jobKey, enumeratedFields) {
+  const { mode, url } = await getServer();
+  const { [TOKEN_KEY]: token } = await storageGet(TOKEN_KEY);
+  if (mode === "live" && !token) return { ok: false, error: "no_account" };
+
+  const headers = { "Content-Type": "application/json" };
+  if (mode !== "local") headers.Authorization = `Bearer ${token}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${url}/api/scraper/jobs/${encodeURIComponent(jobKey)}/application-plan`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ enumerated_fields: enumeratedFields }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    return { ok: false, error: err.name === "AbortError" ? "timeout" : "network" };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (res.status === 401) return { ok: false, error: "no_account" };
+  if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+
+  // The POST response is the plan itself and doesn't carry completeness;
+  // fetch it via GET for the soft-nudge decision. Best-effort — the nudge is
+  // non-critical, so a failure here degrades to "no nudge" rather than an error.
+  let applicationAnswersComplete = null;
+  try {
+    const getHeaders = {};
+    if (mode !== "local") getHeaders.Authorization = `Bearer ${token}`;
+    const completeRes = await fetch(
+      `${url}/api/scraper/jobs/${encodeURIComponent(jobKey)}/application-plan`,
+      { headers: getHeaders }
+    );
+    if (completeRes.ok) {
+      const data = await completeRes.json();
+      applicationAnswersComplete = data.application_answers_complete;
+    }
+  } catch (_) {
+    // Swallow — soft nudge only.
+  }
+
+  return { ok: true, application_answers_complete: applicationAnswersComplete, server_url: url };
 }
 
 // --- ATS resolution queue -----------------------------------------------
@@ -237,4 +337,10 @@ async function _patchResolution(jobKey, finalUrl, baseUrl, mode) {
     headers,
     body: JSON.stringify({ apply_url_resolved: finalUrl }),
   });
+
+  const { [STAGED_META_KEY]: meta = {} } = await storageGet(STAGED_META_KEY);
+  if (meta[jobKey]) {
+    meta[jobKey].apply_url_resolved = finalUrl;
+    await storageSet({ [STAGED_META_KEY]: meta });
+  }
 }

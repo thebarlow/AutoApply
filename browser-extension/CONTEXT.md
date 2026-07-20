@@ -82,6 +82,15 @@ Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_
    the selector issues generally (a maintainer-run tool to re-derive selectors/behavior
    after a site DOM change, rather than hand-patching each break).
 
+### Application-plan enumeration (read-only, no form writing)
+On recognized ATS apply-page domains (`*.greenhouse.io`, `*.lever.co`, `*.ashbyhq.com` — added to `manifest.json` `host_permissions` and a dedicated `content_scripts` entry loading `injector.js` + `content/form_enumerate.js`), `injector.js` runs `_maybeEnumerateApplyForm()` on script load:
+1. Sends `FIND_STAGED_JOB {url}` to the service worker, which matches the current page's hostname against `stagedJobMeta` (a `job_key -> {apply_url_raw, apply_url_resolved}` map in `xb.storage.local`, populated when an external/non-easy-apply job is staged and updated when the ATS-resolution PATCH settles). Hostname-only match — ATS apply flows commonly rewrite paths/query params after landing, so exact-URL matching would miss real matches.
+2. If matched, waits (MutationObserver, 8s timeout) for a `<form>` to appear, then calls `enumerateForm()` (`content/form_enumerate.js`) — walks the form's `input`/`select`/`textarea` controls (skipping hidden/submit/button/search), returning `{field_id, label, input_type, options, required}` per field. **Read-only**: nothing is written to the form. Form-fill is a later sub-project.
+3. Sends `ENUMERATE_FORM {job_key, enumerated_fields}` to the service worker, which POSTs to `${server}/api/scraper/jobs/{job_key}/application-plan` (same bearer/`getServer()` fetch shape as `stage-job`), then does a best-effort follow-up `GET` on the same route for `application_answers_complete`.
+4. **Soft nudge:** if `application_answers_complete === false`, a non-blocking, dismissible banner (`#autoapply-answers-nudge`, fixed bottom-right) appears with a link to `${server}/#/settings`. No `alert()`/`confirm()` — those break the extension. All failures in the enumeration flow are caught and logged to console only; nothing blocks page interaction.
+
+**Selector-fragility caveat:** `enumerateForm()`'s label derivation (`<label for>` → wrapping `<label>` → `aria-label`/`placeholder`/`name`) and the "primary form" heuristic (`document.querySelector("form")`) are generic and untested against real Greenhouse/Lever/Ashby DOM. Multi-step forms, forms nested in iframes, or pages with multiple `<form>` elements (e.g. a search box alongside the application form) are known risk areas — same class of fragility as the LinkedIn/Indeed selector issues below.
+
 ## Loading the Extension
 
 ### Chrome
@@ -131,6 +140,14 @@ The full OAuth + scrape flow (sign-in on both Chrome and Firefox, LinkedIn and I
 Selectors to check during the smoke test:
 - `indeed.js` — `getJobData()` field extraction, `getDescription()`, and `detailReadySelector` (Indeed changes its DOM regularly).
 - `linkedin.js` — card selector (`[componentkey^="job-card-component-ref"]`), positional `<p>` extraction for company/location in `getJobData()`, `_findAboutHeader()` / `_ABOUT_RE` for description, and the saved-jobs card selector.
+
+### Application-plan enumeration — PENDING smoke test (Task 11)
+The read-only form enumeration + soft nudge added in this feature has **not** been exercised against a live ATS page. Verify:
+1. Stage an external (non easy-apply) job whose apply link resolves to a real Greenhouse, Lever, or Ashby posting; let the background ATS-resolution queue settle (chip flips from "Resolving…" to the ATS name).
+2. Navigate to the resolved apply URL in the same browser profile. Confirm the content script matches it to the staged job (`stagedJobMeta` in `xb.storage.local` has the job's hostname) — check the service-worker console for no `[job-scraper] form enumeration failed` warning.
+3. Confirm the `POST /api/scraper/jobs/{job_key}/application-plan` request lands (network panel: 200, `enumerated_fields` populated with the page's real inputs) and that the dashboard's `ApplicationPlanModal` shows the enumerated fields for that job.
+4. With an incomplete profile (`application_answers_complete` false), confirm the non-blocking `#autoapply-answers-nudge` banner appears bottom-right, links to `${server}/#/settings`, and is dismissible. With a complete profile, confirm no banner appears.
+5. Repeat across all three ATS domains (Greenhouse, Lever, Ashby) — selectors/label derivation are generic and unverified per-vendor (see caveat above).
 
 ### Resolved
 - **Chrome extension sign-in failed with no Google redirect (2026-07-09)** — `/auth/ext/login/google`

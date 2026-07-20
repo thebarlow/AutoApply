@@ -226,3 +226,94 @@ function _msg(message) {
   });
 }
 
+// --- Application-plan enumeration (read-only, no form writing) -------------
+// Runs on recognized ATS apply-page domains (see manifest.json content_scripts).
+// Matches the current page against a staged job's apply URL (tracked in
+// service_worker.js's stagedJobMeta), enumerates the visible form (via
+// form_enumerate.js, loaded alongside this script), and POSTs the enumeration
+// to the application-plan endpoint. Purely read-only — form-fill is a later
+// sub-project. Never blocks page interaction; all failures are swallowed.
+const _ATS_APPLY_HOSTS = /\.(greenhouse|lever|ashbyhq)\.(io|co|com)$/i;
+
+function _maybeEnumerateApplyForm() {
+  if (!_ATS_APPLY_HOSTS.test(location.hostname)) return;
+  if (typeof enumerateForm !== "function") return; // form_enumerate.js not loaded
+  _runFormEnumeration().catch((err) => {
+    console.warn("[job-scraper] form enumeration failed:", err);
+  });
+}
+
+async function _runFormEnumeration() {
+  const found = await _msg({ type: "FIND_STAGED_JOB", url: location.href });
+  const jobKey = found && found.job_key;
+  if (!jobKey) return; // page not matched to a staged job — nothing to do
+
+  const ready = await _waitForFormReady(8000);
+  if (!ready) return;
+
+  const enumerated_fields = enumerateForm();
+  if (!enumerated_fields.length) return;
+
+  const result = await _msg({ type: "ENUMERATE_FORM", job_key: jobKey, enumerated_fields });
+  if (result && result.ok && result.application_answers_complete === false) {
+    _showAnswersNudge(result.server_url);
+  }
+}
+
+function _waitForFormReady(timeoutMs) {
+  const check = () => !!document.querySelector("form");
+  return new Promise((resolve) => {
+    if (check()) {
+      resolve(true);
+      return;
+    }
+    const obs = new MutationObserver(() => {
+      if (check()) {
+        obs.disconnect();
+        clearTimeout(timer);
+        resolve(true);
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    const timer = setTimeout(() => {
+      obs.disconnect();
+      resolve(check());
+    }, timeoutMs);
+  });
+}
+
+// Non-blocking banner nudging the user to fill out application-answer
+// profile fields (eligibility/EEO) so more of the form can be mapped. No
+// alert()/confirm() — those break the extension. Dismissible, never re-shown
+// once closed for this page load.
+function _showAnswersNudge(serverUrl) {
+  if (document.getElementById("autoapply-answers-nudge")) return;
+
+  const bar = document.createElement("div");
+  bar.id = "autoapply-answers-nudge";
+  bar.style.cssText = [
+    "position:fixed", "bottom:20px", "right:20px", "z-index:2147483647",
+    "max-width:320px", "padding:10px 14px", "font-size:12px", "font-weight:500",
+    "font-family:sans-serif", "background:#1a1a2e", "color:#fff", "border-radius:6px",
+    "box-shadow:0 2px 10px rgba(0,0,0,0.4)", "line-height:1.4",
+  ].join(";");
+
+  const link = document.createElement("a");
+  link.href = `${serverUrl || "https://autoapply.matthewbarlow.me"}/#/settings`;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.style.cssText = "color:#7dd3fc;text-decoration:underline;";
+  link.textContent = "Complete your application answers to auto-fill more →";
+  bar.appendChild(link);
+
+  const close = document.createElement("span");
+  close.textContent = " ✕";
+  close.style.cssText = "margin-left:10px;cursor:pointer;opacity:0.7;";
+  close.addEventListener("click", () => bar.remove());
+  bar.appendChild(close);
+
+  document.body.appendChild(bar);
+}
+
+_maybeEnumerateApplyForm();
+
