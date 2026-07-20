@@ -312,78 +312,58 @@ def _do_generate_cover(job: Job, db: Session, profile_id: int) -> None:
     job.generate_cover_pdf(_COVER_TEMPLATE, db)
 
 
-@router.post("/{job_key}/generate/resume")
+def _precheck_generate_affordability(db: Session, job: Job, doc_type: str, profile_id: int) -> None:
+    """Fail-fast 402 if the tenant can't afford the resolved generate action.
+
+    The authoritative gate+debit runs later inside the background meter; this
+    only converts the common broke case into an immediate response, since the
+    async generate call otherwise couldn't surface InsufficientCredits to the UI.
+    """
+    from core.pricing import resolve_generate_action, price_for
+    from core.credits import get_account_for_profile
+    action = resolve_generate_action(db, job, doc_type)
+    acct = get_account_for_profile(db, profile_id)
+    if (acct is not None and not acct.is_admin and (acct.credit_rate or 0.0) > 0
+            and (acct.credit_balance or 0) < price_for(action)):
+        raise InsufficientCredits(acct.credit_balance or 0, price_for(action), action)
+
+
+@router.post("/{job_key}/generate/resume", status_code=202)
 def generate_resume_endpoint(
     job_key: str,
     db: Session = Depends(get_db),
     profile_id: int = Depends(current_profile_id),
 ):
+    """Kick off résumé generation in the background and return immediately.
+
+    The LLM+PDF render takes 30-40s; holding the request open that long trips
+    Railway's edge proxy (502s, both on this call and on dashboard polls queued
+    behind it). Results stream in over SSE as the background job completes.
+    Affordability is pre-checked so the broke case still gets an immediate 402.
+    """
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    llm_status.start(profile_id, job_key, "resume")
-    try:
-        _do_generate_resume(job, db, profile_id)
-        _add_pending_review(job, "resume")
-        job.unread_indicator = "ok"
-        job.last_result_error = None
-        db.commit()
-    except (HTTPException, InsufficientCredits):
-        raise
-    except Exception as exc:
-        db.rollback()
-        job = Job.get(job_key, db, profile_id=profile_id)
-        job.unread_indicator = "error"
-        job.last_result_error = str(exc)
-        db.commit()
-        db.refresh(job)
-        _emit(job)
-        raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        llm_status.finish(profile_id, job_key, "resume")
-    db.refresh(job)
-    _emit(job)
-    # Always run the résumé post-process in the background: refinement (if
-    # enabled) followed by the ATS gate. When refinement is off/0 turns the
-    # refine step is a no-op and the gate still runs right after generation.
-    from web.intake_pipeline import run_resume_refinement
-    _spawn(run_resume_refinement, job_key, profile_id)
+    _precheck_generate_affordability(db, job, "resume", profile_id)
+    from web.intake_pipeline import run_resume_generation
+    _spawn(run_resume_generation, job_key, profile_id)
     return job.serialize()
 
 
-@router.post("/{job_key}/generate/cover")
+@router.post("/{job_key}/generate/cover", status_code=202)
 def generate_cover_endpoint(
     job_key: str,
     db: Session = Depends(get_db),
     profile_id: int = Depends(current_profile_id),
 ):
+    """Kick off cover-letter generation in the background and return immediately.
+    See :func:`generate_resume_endpoint` for why generation runs off-request."""
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    llm_status.start(profile_id, job_key, "cover")
-    try:
-        _do_generate_cover(job, db, profile_id)
-        _add_pending_review(job, "cover")
-        job.unread_indicator = "ok"
-        job.last_result_error = None
-        db.commit()
-    except (HTTPException, InsufficientCredits):
-        raise
-    except Exception as exc:
-        db.rollback()
-        job = Job.get(job_key, db, profile_id=profile_id)
-        job.unread_indicator = "error"
-        job.last_result_error = str(exc)
-        db.commit()
-        db.refresh(job)
-        _emit(job)
-        raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        llm_status.finish(profile_id, job_key, "cover")
-    db.refresh(job)
-    _emit(job)
-    # Spawn background refinement loop if enabled
-    _maybe_start_refinement(job_key, "cover", db, profile_id)
+    _precheck_generate_affordability(db, job, "cover", profile_id)
+    from web.intake_pipeline import run_cover_generation
+    _spawn(run_cover_generation, job_key, profile_id)
     return job.serialize()
 
 

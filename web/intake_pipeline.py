@@ -7,7 +7,15 @@ from db.database import SessionLocal
 from core.job import Job
 from web.sse import send as _sse_send
 from web import llm_status
-from web.routers.jobs import _do_extract_description, _load_score_config
+from web.routers.jobs import (
+    _do_extract_description,
+    _load_score_config,
+    _do_generate_resume,
+    _do_generate_cover,
+    _add_pending_review,
+    _maybe_start_refinement,
+    _spawn,
+)
 from core.user import User, PromptNotConfiguredError
 from core.llm import get_client_for_profile
 from core.credits import InsufficientCredits
@@ -568,6 +576,96 @@ def run_ats_gate(job_key: str, profile_id: int, metered: bool = False) -> None:
     finally:
         db.close()
         llm_status.finish(profile_id, job_key, "ats")
+
+
+def run_resume_generation(job_key: str, profile_id: int, db=None) -> None:
+    """Generate a résumé (LLM + PDF) off the request thread, then kick off the
+    refinement/ATS post-process.
+
+    The old synchronous endpoint held the HTTP connection open for the whole
+    30-40s LLM+Chromium render, which tripped Railway's edge-proxy timeout and
+    surfaced as 502s (both on the generate call and on concurrent dashboard
+    polls queued behind it). This runs in a daemon thread instead; the UI tracks
+    progress over SSE (``llm_action`` + the job update) and any failure lands on
+    ``last_result_error`` / the error unread-indicator.
+
+    ``db`` is injected only by tests; production opens (and closes) its own
+    session since the request-scoped one is gone by the time this runs.
+    """
+    own = db is None
+    if own:
+        db = SessionLocal()
+    try:
+        job = Job.get(job_key, db, profile_id)
+        if job is None:
+            return
+        llm_status.start(profile_id, job_key, "resume")
+        try:
+            _do_generate_resume(job, db, profile_id)
+            _add_pending_review(job, "resume")
+            job.unread_indicator = "ok"
+            job.last_result_error = None
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            job = Job.get(job_key, db, profile_id)
+            if job is not None:
+                job.unread_indicator = "error"
+                job.last_result_error = str(exc)
+                db.commit()
+                db.refresh(job)
+                _emit(job)
+            logger.exception("%s: resume generation failed", job_key)
+            return
+        finally:
+            llm_status.finish(profile_id, job_key, "resume")
+        db.refresh(job)
+        _emit(job)
+        # Always run the résumé post-process: refinement (if enabled) then the
+        # ATS gate. Spawned via _spawn so tests can disable it centrally.
+        _spawn(run_resume_refinement, job_key, profile_id)
+    finally:
+        if own:
+            db.close()
+
+
+def run_cover_generation(job_key: str, profile_id: int, db=None) -> None:
+    """Generate a cover letter (LLM + PDF) off the request thread, then start
+    refinement if the profile has it enabled. See :func:`run_resume_generation`
+    for why generation runs in a background thread."""
+    own = db is None
+    if own:
+        db = SessionLocal()
+    try:
+        job = Job.get(job_key, db, profile_id)
+        if job is None:
+            return
+        llm_status.start(profile_id, job_key, "cover")
+        try:
+            _do_generate_cover(job, db, profile_id)
+            _add_pending_review(job, "cover")
+            job.unread_indicator = "ok"
+            job.last_result_error = None
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            job = Job.get(job_key, db, profile_id)
+            if job is not None:
+                job.unread_indicator = "error"
+                job.last_result_error = str(exc)
+                db.commit()
+                db.refresh(job)
+                _emit(job)
+            logger.exception("%s: cover generation failed", job_key)
+            return
+        finally:
+            llm_status.finish(profile_id, job_key, "cover")
+        db.refresh(job)
+        _emit(job)
+        _maybe_start_refinement(job_key, "cover", db, profile_id)
+    finally:
+        if own:
+            db.close()
 
 
 def run_resume_refinement(job_key: str, profile_id: int) -> None:

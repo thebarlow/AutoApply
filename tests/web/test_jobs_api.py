@@ -314,7 +314,7 @@ def test_serve_cover_file_missing_on_disk(client, db_session):
 
 
 def test_generate_resume_endpoint(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
+    import web.intake_pipeline as pipeline
 
     _make_job(db_session, "job_resume")
 
@@ -323,13 +323,17 @@ def test_generate_resume_endpoint(client, db_session, monkeypatch):
         job.state = "generated"
         db.commit()
 
-    monkeypatch.setattr(jobs_router, "_do_generate_resume", mock_do_generate_resume)
+    # run_resume_generation calls the name bound in its own module namespace.
+    monkeypatch.setattr(pipeline, "_do_generate_resume", mock_do_generate_resume)
 
+    # The endpoint returns 202 and spawns the work (spawn is neutralized in tests);
+    # drive the background fn directly against the test session.
     resp = client.post("/api/jobs/job_resume/generate/resume")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["resume_path"] == "/outputs/job_resume_resume.pdf"
-    assert data["state"] == "generated"
+    assert resp.status_code == 202
+    pipeline.run_resume_generation("job_resume", 1, db=db_session)
+    job = Job.get("job_resume", db_session, profile_id=1)
+    assert job.resume_path == "/outputs/job_resume_resume.pdf"
+    assert job.state == "generated"
 
 
 def test_generate_resume_endpoint_not_found(client):
@@ -338,7 +342,7 @@ def test_generate_resume_endpoint_not_found(client):
 
 
 def test_generate_cover_endpoint(client, db_session, monkeypatch):
-    import web.routers.jobs as jobs_router
+    import web.intake_pipeline as pipeline
 
     _make_job(db_session, "job_cover", resume_path="/outputs/job_cover_resume.pdf")
 
@@ -346,21 +350,22 @@ def test_generate_cover_endpoint(client, db_session, monkeypatch):
         job.cover_path = f"/outputs/{job.job_key}_cover.pdf"
         db.commit()
 
-    monkeypatch.setattr(jobs_router, "_do_generate_cover", mock_do_generate_cover)
+    monkeypatch.setattr(pipeline, "_do_generate_cover", mock_do_generate_cover)
 
     resp = client.post("/api/jobs/job_cover/generate/cover")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["cover_path"] == "/outputs/job_cover_cover.pdf"
+    assert resp.status_code == 202
+    pipeline.run_cover_generation("job_cover", 1, db=db_session)
+    job = Job.get("job_cover", db_session, profile_id=1)
+    assert job.cover_path == "/outputs/job_cover_cover.pdf"
 
 
 def test_generate_cover_endpoint_blocked_without_resume(client, db_session):
     _make_job(db_session, "job_nocover_block")
-    # No resume_path set — _generate_cover will be called and may raise or silently pass.
-    # The endpoint no longer blocks at the router level; the generator itself handles this.
-    # We just verify the job exists and doesn't 404.
+    # The endpoint no longer blocks at the router level (the generator handles a
+    # missing resume); it just spawns generation and returns 202. We verify the
+    # job exists and doesn't 404.
     resp = client.post("/api/jobs/job_nocover_block/generate/cover")
-    assert resp.status_code in (200, 400, 500)
+    assert resp.status_code == 202
 
 
 def test_generate_cover_endpoint_not_found(client):

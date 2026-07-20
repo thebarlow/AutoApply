@@ -119,8 +119,13 @@ def test_score_blocked_at_zero(client, db_session, monkeypatch):
 def test_generate_fresh_debits_four_units(client, db_session, monkeypatch):
     _seed(db_session, 5)
     _stub_llm(monkeypatch)
+    # The endpoint pre-checks affordability then returns 202; the gate+debit runs
+    # in the background generation fn, which we invoke directly against the test
+    # session (production opens its own).
     r = client.post("/api/jobs/j1/generate/resume")
-    assert r.status_code == 200
+    assert r.status_code == 202
+    from web.intake_pipeline import run_resume_generation
+    run_resume_generation("j1", 1, db=db_session)
     assert _balance(db_session) == 1
     debits = _debits(db_session)
     assert len(debits) == 1
