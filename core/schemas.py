@@ -439,9 +439,13 @@ class AtsReport(BaseModel):
     extracted_text: str = ""
 
     @classmethod
-    def build(cls, score: float, issues: list[AtsIssue], extracted_text: str) -> "AtsReport":
+    def build(
+        cls, score: float, issues: list[AtsIssue], extracted_text: str
+    ) -> "AtsReport":
         passed = not any(i.severity == "critical" for i in issues)
-        return cls(passed=passed, score=score, issues=issues, extracted_text=extracted_text)
+        return cls(
+            passed=passed, score=score, issues=issues, extracted_text=extracted_text
+        )
 
 
 class AtsParsedFields(BaseModel):
@@ -453,3 +457,33 @@ class AtsParsedFields(BaseModel):
     sections: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
     experience_dates: list[str] = Field(default_factory=list)
+
+
+class EnumeratedField(BaseModel):
+    """A form field the extension read off a live application page."""
+
+    field_id: str
+    label: str = ""
+    input_type: str = "text"
+    options: list[str] = []
+    required: bool = False
+
+
+class PlannedField(BaseModel):
+    """One resolved field in an application plan."""
+
+    field_id: str
+    label: str = ""
+    canonical_key: str | None = None
+    value: str | None = None
+    status: Literal["filled", "drafted", "blank", "unknown"]
+    source: str
+
+
+class ApplicationPlan(BaseModel):
+    """The computed field→value mapping for one job's application form."""
+
+    job_key: str
+    ats_type: str | None = None
+    fields: list[PlannedField] = []
+    generated_at: str
