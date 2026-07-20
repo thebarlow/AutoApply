@@ -30,7 +30,7 @@ Exposes a unified promise-based `xb` API over `chrome.*` (Chrome) or `browser.*`
 3. On success the server redirects back with `#token=<jwt>` in the fragment. The popup parses this and stores it under the `extToken` key in `xb.storage.local`.
 4. If the OAuth account has no AutoApply record, the server returns `#error=no_account`; the popup shows "No AutoApply account. Sign up at autoapply.matthewbarlow.me first."
 5. The popup also provides a "Sign out" button that POSTs to `/auth/ext/revoke` (bearer auth) then removes `extToken` from storage.
-6. On open, the popup calls `GET /api/ext/me` with the stored bearer token to verify session validity and display the signed-in email. A 401 response auto-clears the stored token.
+6. On open, the popup calls `GET /api/ext/me` with the stored bearer token to verify session validity, display the signed-in email, and check admin status (`is_admin`) to conditionally show the Live/Local server toggle. A 401 response auto-clears the stored token.
 
 ### Scrape flow
 1. `injector.js` injects a "Scrape" button on each job card via `MutationObserver` (card-list pages) or a fixed-position button (LinkedIn `/jobs/view/` single-job pages).
