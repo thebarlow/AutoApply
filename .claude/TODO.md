@@ -161,6 +161,12 @@ Known accepted limitations (each would be its own feature if prioritized):
   needed because the identity gate (`/api/me`) has no dev bypass, unlike the `current_profile_id`
   tenancy seam. Usage docs in `e2e/README.md`; caveats in `e2e/CONTEXT.md`. This is a smoke/ad-hoc
   drive harness, **not** a run-on-every-change regression suite.
+  **Check-pages harness enhancements (commit `e1e350e`):** `npm run deck` (`e2e/scripts/deck.mjs`)
+  builds a self-contained HTML slide deck from `screenshots/*.png` (filter arg shows one shot);
+  the landing spec now settles load/scroll animations (scroll + `document.getAnimations()` +
+  paint delay, dropped `networkidle` which never fires under Vite HMR) before its full-page shot;
+  and `dev-login` resolves the account by `E2E_LOGIN_EMAIL` (default owner) → admin → first, plus
+  provisions a throwaway account/profile on an empty DB to drive new-user onboarding.
 
 - [x] **Focus Skills-section generation on relevant skills only.** **DONE 2026-07-19** — commit
   `b76e817`. Rewrote `SECTION_PROMPT_DEFAULTS["skills"]` (`core/section_presets.py`): ≤5

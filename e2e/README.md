@@ -23,6 +23,7 @@ cd e2e
 npm test              # headless
 npm run test:headed   # watch it drive the browser
 npm run report        # open the last HTML report
+npm run deck          # build an HTML slide deck from screenshots/*.png, open it
 ```
 
 `playwright.config.ts` auto-boots the stack if it isn't already running
@@ -35,6 +36,18 @@ Screenshots land in `e2e/screenshots/` (gitignored). Specs assert at
 presence/visibility level against the real local dev DB and never click
 destructive controls (delete / mark-applied / generate) — so runs don't mutate
 data or burn LLM credits.
+
+`landing.spec.ts` captures a full-page shot; the landing hero/sections fade and
+slide in on load and scroll, so the spec scrolls the whole page, awaits
+`document.getAnimations()` to settle, and adds a short paint delay before the
+shot (rather than a blind sleep). It waits on visible content, not
+`networkidle` — Vite's HMR websocket never lets the network go idle in dev.
+
+## Presenting screenshots (`npm run deck`)
+
+`scripts/deck.mjs` builds a single self-contained HTML slide deck from every
+`screenshots/*.png` and opens it in one browser window (`npm run deck`). Pass a
+filter to show just one shot: `node scripts/deck.mjs landing`.
 
 | Spec | Covers |
 |---|---|
