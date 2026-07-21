@@ -35,6 +35,8 @@ Read the target directory's `CONTEXT.md` before making changes there.
 | Database models, session setup, migrations | `db/` | Has `CONTEXT.md`; SQLite via SQLAlchemy; `jobs`/`config`/`profile_config`/`prompts`/`prompt_defaults`/`documents`/`skill_aliases` tables; run `init_db.py` for idempotent migrations. `config` is **global** infra only (seam pointer, migration gates, platform LLM); per-tenant settings (scoring weights, contact links, template paths, scraper prefs) live in `profile_config` — see `web/CONTEXT.md` |
 | System tray app (PyQt6) — floating job-card panel, WS client, PDF drag handles | `tray_app/` | Has `CONTEXT.md`; entry point is `tray_app/main.py` |
 | Project user docs, developer notes, Excalidraw diagrams | `Obsidian/Auto Apply/` | Has `CONTEXT.md`; served via `web/routers/docs_router.py`; includes untracked `_templates/` |
+| Playwright E2E smoke + live-drive harness | `e2e/` | Has `README.md` (usage) + `CONTEXT.md` (caveats); auto-boots/reuses local stack; logs in via the dev-login endpoint below. Not a per-change regression suite |
+| Dev-only endpoints (resume-compare, `POST /api/dev/login` for local E2E) | `web/routers/dev.py` | Read `web/CONTEXT.md` → "Dev Endpoints"; dev-login is non-production only (404s in prod), sets the session the identity gate (`/api/me`) needs |
 | Backlog, planned work, multi-session task tracking | `.claude/TODO.md` | Update whenever scope changes or an item is completed |
 
 ## Running the App
