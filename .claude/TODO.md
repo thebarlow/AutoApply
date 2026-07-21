@@ -136,6 +136,15 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Playwright smoke + live-drive E2E harness.** **DONE 2026-07-21** — commit `e5239d1`.
+  New top-level `e2e/` Playwright project: config auto-boots/reuses the local stack (uvicorn `:8080`
+  + Vite `:5173`), non-destructive smoke specs (landing `/about`, dashboard nav, Find-Jobs search UI),
+  and a `global-setup` that logs in once and saves `storageState`. Added a **non-production-only**
+  `POST /api/dev/login` (`web/routers/dev.py`) that sets `session["account_id"]` for local E2E —
+  needed because the identity gate (`/api/me`) has no dev bypass, unlike the `current_profile_id`
+  tenancy seam. Usage docs in `e2e/README.md`; caveats in `e2e/CONTEXT.md`. This is a smoke/ad-hoc
+  drive harness, **not** a run-on-every-change regression suite.
+
 - [x] **Focus Skills-section generation on relevant skills only.** **DONE 2026-07-19** — commit
   `b76e817`. Rewrote `SECTION_PROMPT_DEFAULTS["skills"]` (`core/section_presets.py`): ≤5
   job-relevant categories, most-relevant first, omit categories the job doesn't call for (e.g.
