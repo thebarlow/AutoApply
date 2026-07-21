@@ -235,33 +235,71 @@ function _msg(message) {
 // sub-project. Never blocks page interaction; all failures are swallowed.
 const _ATS_APPLY_HOSTS = /\.(greenhouse|lever|ashbyhq)\.(io|co|com)$/i;
 
+// Prefix so users can filter the DevTools console for the whole enumeration
+// story on an apply page. Every silent-exit path below logs one line, turning
+// "nothing happened" into a diagnosable trace.
+const _AP_LOG = "[job-scraper][application-plan]";
+
 function _maybeEnumerateApplyForm() {
   if (!_ATS_APPLY_HOSTS.test(location.hostname)) return;
-  if (typeof enumerateForm !== "function") return; // form_enumerate.js not loaded
+  if (typeof enumerateForm !== "function") {
+    console.warn(`${_AP_LOG} form_enumerate.js not loaded — skipping`);
+    return;
+  }
   _runFormEnumeration().catch((err) => {
-    console.warn("[job-scraper] form enumeration failed:", err);
+    console.warn(`${_AP_LOG} enumeration failed:`, err);
   });
 }
 
 async function _runFormEnumeration() {
   const found = await _msg({ type: "FIND_STAGED_JOB", url: location.href });
   const jobKey = found && found.job_key;
-  if (!jobKey) return; // page not matched to a staged job — nothing to do
+  if (!jobKey) {
+    console.info(
+      `${_AP_LOG} this page did not match any staged job (check stagedJobMeta / that the job was staged via the extension as an external posting) — nothing to do`
+    );
+    return;
+  }
+  console.info(`${_AP_LOG} matched staged job ${jobKey}; waiting for form to render`);
 
   const ready = await _waitForFormReady(8000);
-  if (!ready) return;
+  if (!ready) {
+    console.warn(`${_AP_LOG} no form or input controls appeared within 8s — giving up`);
+    return;
+  }
 
   const enumerated_fields = enumerateForm();
-  if (!enumerated_fields.length) return;
+  if (!enumerated_fields.length) {
+    console.warn(`${_AP_LOG} form ready but zero enumerable fields found`);
+    return;
+  }
 
   const result = await _msg({ type: "ENUMERATE_FORM", job_key: jobKey, enumerated_fields });
-  if (result && result.ok && result.application_answers_complete === false) {
-    _showAnswersNudge(result.server_url);
+  if (result && result.ok) {
+    console.info(
+      `${_AP_LOG} posted ${enumerated_fields.length} fields for ${jobKey} to ${result.server_url} — reopen the "Plan" modal to view`
+    );
+    if (result.application_answers_complete === false) {
+      _showAnswersNudge(result.server_url);
+    }
+  } else {
+    console.warn(
+      `${_AP_LOG} server rejected the enumeration for ${jobKey}:`,
+      (result && result.error) || "unknown error",
+      "(if this is a 404, the extension's server mode likely points at a server that doesn't have this job)"
+    );
   }
 }
 
+// "Ready" means either a real <form> OR (for form-less SPA ATSs like Ashby)
+// the page has rendered actual input controls. enumerateForm() falls back to
+// document.body when there's no <form>, so gating strictly on <form> would
+// permanently block enumeration on Ashby — the exact ATS the fallback exists
+// for. We prefer a <form> when present but accept controls-in-body otherwise.
 function _waitForFormReady(timeoutMs) {
-  const check = () => !!document.querySelector("form");
+  const check = () =>
+    !!document.querySelector("form") ||
+    document.querySelectorAll("input, select, textarea").length > 0;
   return new Promise((resolve) => {
     if (check()) {
       resolve(true);
