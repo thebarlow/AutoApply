@@ -5,12 +5,15 @@ ATS) and returns both Markdowns + eval scores for side-by-side review.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+
+from db.database import Account
 
 from core.document_assembler import assemble_resume_markdown
 from core.utils import markdown_to_html
@@ -28,6 +31,29 @@ from web.routers.credits import require_real_admin
 from web.tenancy import current_profile_id
 
 router = APIRouter()
+
+
+@router.post("/api/dev/login")
+def dev_login(request: Request, db: Session = Depends(get_db)):
+    """Establish a session for local E2E without OAuth.
+
+    Refuses to run in production (where OAuth is mandatory). Logs in the sole
+    account, or the admin account if several exist, by setting the same
+    ``session["account_id"]`` a real OAuth callback would. Mirrors the tenancy
+    seam's "no login needed outside production" stance for the identity gate
+    (``/api/me``), which — unlike ``current_profile_id`` — has no dev bypass.
+    """
+    if os.getenv("APP_ENV") == "production":
+        raise HTTPException(status_code=404)
+    acct = (
+        db.query(Account).filter_by(is_admin=True).first()
+        or db.query(Account).order_by(Account.id).first()
+    )
+    if acct is None:
+        raise HTTPException(status_code=404, detail="no account to log in")
+    request.session["account_id"] = acct.id
+    return {"account_id": acct.id, "profile_id": acct.profile_id, "email": acct.email}
+
 
 _RESUME_CSS = Path(__file__).resolve().parents[2] / "generator" / "resume.css"
 

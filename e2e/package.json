@@ -1,0 +1,14 @@
+{
+  "name": "auto-apply-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright smoke + live-drive harness for the auto-apply dashboard",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
