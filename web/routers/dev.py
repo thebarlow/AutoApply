@@ -33,26 +33,67 @@ from web.tenancy import current_profile_id
 router = APIRouter()
 
 
+_DEFAULT_LOGIN_EMAIL = "barlowmatt96@gmail.com"
+
+
 @router.post("/api/dev/login")
 def dev_login(request: Request, db: Session = Depends(get_db)):
     """Establish a session for local E2E without OAuth.
 
-    Refuses to run in production (where OAuth is mandatory). Logs in the sole
-    account, or the admin account if several exist, by setting the same
+    Refuses to run in production (where OAuth is mandatory), by setting the same
     ``session["account_id"]`` a real OAuth callback would. Mirrors the tenancy
     seam's "no login needed outside production" stance for the identity gate
     (``/api/me``), which — unlike ``current_profile_id`` — has no dev bypass.
+
+    Account resolution, in order:
+
+    1. The account whose email matches ``E2E_LOGIN_EMAIL`` (default the owner's
+       personal address) — so a normal run against the real local DB logs in as
+       *you*, not some other seeded row.
+    2. Falls back to the admin account, then the lowest-id account, when that
+       email isn't present (e.g. the seeded worktree DB).
+    3. **Empty DB** (the ``new-user-test`` clean slate has no account at all):
+       provision a throwaway account on a fresh empty profile, so the onboarding
+       flow can be driven from its real authed-but-profile-less entry state.
     """
     if os.getenv("APP_ENV") == "production":
         raise HTTPException(status_code=404)
+
+    target = os.getenv("E2E_LOGIN_EMAIL", _DEFAULT_LOGIN_EMAIL).lower()
     acct = (
-        db.query(Account).filter_by(is_admin=True).first()
+        db.query(Account).filter(Account.email.ilike(target)).first()
+        or db.query(Account).filter_by(is_admin=True).first()
         or db.query(Account).order_by(Account.id).first()
     )
     if acct is None:
-        raise HTTPException(status_code=404, detail="no account to log in")
+        acct = _provision_throwaway_account(db, target)
+
     request.session["account_id"] = acct.id
     return {"account_id": acct.id, "profile_id": acct.profile_id, "email": acct.email}
+
+
+def _provision_throwaway_account(db: Session, email: str) -> Account:
+    """Create an account on a fresh empty profile for the clean new-user DB.
+
+    Reuses the OAuth path's ``_provision_profile`` (empty ``User`` + seeded
+    prompt/alias rows) so the resulting state matches a real first login: an
+    authed session whose profile has no data yet, which is exactly what triggers
+    the onboarding modal. No Identity row is needed — dev-login sets the session
+    by account id directly.
+    """
+    from datetime import datetime, timezone
+    from web.auth.identity import _provision_profile
+
+    profile_id = _provision_profile(db)
+    acct = Account(
+        email=email,
+        is_admin=False,
+        profile_id=profile_id,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    db.add(acct)
+    db.commit()
+    return acct
 
 
 _RESUME_CSS = Path(__file__).resolve().parents[2] / "generator" / "resume.css"
