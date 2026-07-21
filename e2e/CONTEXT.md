@@ -20,9 +20,12 @@ how-to).
   assumes a populated dev DB.
 - **Needs a logged-in session.** `global-setup.ts` calls `POST /api/dev/login`
   (see `web/routers/dev.py`) to mint a session and saves `storageState.json`;
-  specs reuse it. The endpoint is **non-production only** and picks the sole
-  account (or the admin account if several exist), so which profile the specs
-  see depends on the local DB's accounts.
+  specs reuse it. The endpoint is **non-production only** and resolves the login
+  account by `E2E_LOGIN_EMAIL` (default the owner's personal address) → admin →
+  lowest-id account, so a normal run against the real local DB logs in as the
+  owner. On an **empty DB** (the `new-user-test` clean slate) it provisions a
+  throwaway account on a fresh empty profile, driving the new-user onboarding
+  entry state instead of 404ing.
 - **Worktree / migration skew.** When run from a git worktree branched off an
   older migration head, the checked-out code may be incompatible with the real
   dev DB's schema (the DB is shared across worktrees). Boot may fail or
