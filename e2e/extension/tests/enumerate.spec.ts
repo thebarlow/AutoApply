@@ -40,3 +40,20 @@ test('passes native selects through as select with options', async ({ context })
   expect(fields[0].input_type).toBe('select');
   expect(fields[0].options).toEqual(['LinkedIn', 'Referral']);
 });
+
+test('drops the anonymous partner input a combobox pairs with', async ({ context }) => {
+  // Greenhouse renders a visible role=combobox input plus a second nameless/idless
+  // input in the same container. Only the combobox should be enumerated.
+  // The partner carries a stray whitespace aria-label so it defeats the plain
+  // `!id` guard (a truly bare <input> would already be dropped by that guard,
+  // which would make this test pass for the wrong reason).
+  const fields = await enumerate(context, `
+    <div>
+      <label for="country">Country*</label>
+      <input id="country" type="text" role="combobox" aria-autocomplete="list" />
+      <input type="text" aria-label=" " />
+    </div>
+  `);
+  expect(fields).toHaveLength(1);
+  expect(fields[0].field_id).toBe('country');
+});

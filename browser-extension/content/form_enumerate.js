@@ -11,8 +11,13 @@ function enumerateForm() {
     const domType = (el.type || el.tagName).toLowerCase();
     if (["hidden", "submit", "button", "search"].includes(domType)) continue;
 
+    if (_isComboPartner(el)) continue;
+
     const id = el.name || el.id || (el.getAttribute("aria-label") || "").slice(0, 60);
-    if (!id) continue;
+    if (!id) {
+      console.debug("[job-scraper][enumerate] skipped anonymous control", el.tagName, domType);
+      continue;
+    }
 
     const rawLabel = labelFor(el);
     out.push({
@@ -51,6 +56,16 @@ function _isRequired(el, rawLabel) {
 // marker drives `required` instead of polluting the question text.
 function _cleanLabel(raw) {
   return (raw || "").replace(/\s*\*\s*$/, "").replace(/\s+/g, " ").trim();
+}
+
+// A combobox renders a second input in its container with no real identity.
+// Skip it explicitly (rather than relying on the empty-id guard) so a genuinely
+// anonymous field elsewhere is still logged, not silently swallowed.
+function _isComboPartner(el) {
+  const idish = el.name || el.id || (el.getAttribute("aria-label") || "").trim();
+  if (idish) return false;
+  const container = el.closest("div, fieldset, label") || el.parentElement;
+  return !!(container && container.querySelector('[role="combobox"]'));
 }
 
 function labelFor(el) {
