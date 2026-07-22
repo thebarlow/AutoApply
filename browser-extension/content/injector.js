@@ -255,6 +255,9 @@ async function _runFormEnumeration() {
   if (!enumerated_fields.length) return;
 
   const result = await _msg({ type: "ENUMERATE_FORM", job_key: jobKey, enumerated_fields });
+  if (result && result.ok && Array.isArray(result.fields) && typeof fillForm === "function") {
+    fillForm(result.fields);
+  }
   if (result && result.ok && result.application_answers_complete === false) {
     _showAnswersNudge(result.server_url);
   }
@@ -315,5 +318,9 @@ function _showAnswersNudge(serverUrl) {
   document.body.appendChild(bar);
 }
 
-_maybeEnumerateApplyForm();
+// Deferred to a macrotask: content scripts listed in the same manifest entry
+// execute sequentially in this shared isolated world (injector.js first, then
+// form_enumerate.js, then form_fill.js), so calling this synchronously here
+// would run before those later scripts define enumerateForm()/fillForm().
+setTimeout(_maybeEnumerateApplyForm, 0);
 

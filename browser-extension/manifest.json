@@ -8,6 +8,7 @@
     "https://*.linkedin.com/*",
     "https://*.indeed.com/*",
     "https://autoapply.matthewbarlow.me/*",
+    "http://localhost:8080/*",
     "*://*.greenhouse.io/*",
     "*://*.lever.co/*",
     "*://*.ashbyhq.com/*"
@@ -30,7 +31,7 @@
     },
     {
       "matches": ["*://*.greenhouse.io/*", "*://*.lever.co/*", "*://*.ashbyhq.com/*"],
-      "js": ["content/injector.js", "content/form_enumerate.js"]
+      "js": ["content/injector.js", "content/form_enumerate.js", "content/form_fill.js"]
     }
   ],
   "icons": {

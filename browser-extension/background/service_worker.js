@@ -258,6 +258,16 @@ async function handleEnumerateForm(jobKey, enumeratedFields) {
   if (res.status === 401) return { ok: false, error: "no_account" };
   if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
 
+  // The POST response IS the ApplicationPlan; keep its resolved fields so the
+  // content script can write them into the form.
+  let planFields = [];
+  try {
+    const plan = await res.json();
+    planFields = Array.isArray(plan.fields) ? plan.fields : [];
+  } catch (_) {
+    planFields = [];
+  }
+
   // The POST response is the plan itself and doesn't carry completeness;
   // fetch it via GET for the soft-nudge decision. Best-effort — the nudge is
   // non-critical, so a failure here degrades to "no nudge" rather than an error.
@@ -277,7 +287,12 @@ async function handleEnumerateForm(jobKey, enumeratedFields) {
     // Swallow — soft nudge only.
   }
 
-  return { ok: true, application_answers_complete: applicationAnswersComplete, server_url: url };
+  return {
+    ok: true,
+    fields: planFields,
+    application_answers_complete: applicationAnswersComplete,
+    server_url: url,
+  };
 }
 
 // --- ATS resolution queue -----------------------------------------------
