@@ -153,6 +153,17 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Extension autofill hardening — per-field error isolation + checkbox match fix.** **DONE 2026-07-21**
+  — commit `7342b74`. `fillForm()` (`browser-extension/content/form_fill.js`) now wraps each field's
+  `_findControl`/`_writeValue` in try/catch so one control throwing (e.g. a file input rejecting a
+  programmatic `.value` write — greenhouse/lever/ashby static schemas all declare a required
+  resume/resume_file field) no longer aborts the loop and strands subsequent fields. Also tightened
+  `_writeValue`'s checkbox/radio branch: `value === "true"` previously matched *any* checkbox/radio
+  regardless of the control's own DOM value; now it only matches boolean-style controls whose own
+  value is `""`, `"on"`, or `"true"`, so it no longer overreaches into real radio-group options.
+  Verified via `e2e/extension/`'s `autofill.spec.ts` (greenhouse/lever/ashby fixtures) +
+  `extension-loads.spec.ts` — all 4 tests pass.
+
 - [x] **Extension ATS autofill harness — Task 5 (Lever/Ashby specs, docs, doc-sync).** **DONE 2026-07-21**
   — Parametrized `e2e/extension/tests/autofill.spec.ts` over all three fixtures (greenhouse, lever,
   ashby), each with its own `JOB_KEY`/apply URL/route glob/before-after screenshot pair; all three
