@@ -23,6 +23,17 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Features
 
+- [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
+  its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone
+  job-detail pages too (LinkedIn/Indeed single-job views), so a user can capture a job they've
+  navigated directly into without going back to search. Reuses the existing per-card scrape/stage
+  flow; needs the detail-page DOM selectors + injection point.
+
+- [ ] **Add Playwright testing suite.** Introduce end-to-end / browser-driven testing with
+  Playwright to cover the React dashboard flows (and potentially the extension apply-form
+  enumeration). Decide scope (E2E dashboard vs. component vs. ATS form-fill), CI wiring, and
+  where fixtures/test data live.
+
 - [ ] **Browser-extension DOM recalibration tool.** Extension selectors break whenever
   LinkedIn/Indeed reshuffle their (hashed) DOM. Add a "Recalibrate" affordance in the extension:
   the user clicks it and the extension walks through each DOM element it needs to read (title,
