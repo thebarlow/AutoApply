@@ -85,7 +85,24 @@ Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_
 ### Application-plan enumeration + autofill
 On recognized ATS apply-page domains (`*.greenhouse.io`, `*.lever.co`, `*.ashbyhq.com` — added to `manifest.json` `host_permissions` and a dedicated `content_scripts` entry loading `injector.js` + `content/form_enumerate.js` + `content/form_fill.js`), `injector.js` runs `_maybeEnumerateApplyForm()` (deferred via `setTimeout(..., 0)` — see Resolved below) on script load:
 1. Sends `FIND_STAGED_JOB {url}` to the service worker, which matches the current page against `stagedJobMeta` (a `job_key -> {apply_url_raw, apply_url_resolved}` map in `xb.storage.local`, populated when an external/non-easy-apply job is staged and updated when the ATS-resolution PATCH settles). Matching is **hostname + first path segment** (the company slug on Greenhouse/Lever, which are multi-tenant: many companies share one hostname). It prefers a *unique* company-slug match; failing that, it falls back to a hostname match **only when exactly one** staged job is on that ATS vendor. If two+ staged jobs share the hostname without a unique slug match, it returns `null` and enumerates nothing — refusing to guess, which would POST the enumerated form under the wrong `job_key`. Deeper path segments/query params are ignored because ATS apply flows rewrite them after landing.
-2. If matched, waits (MutationObserver, 8s timeout via `_waitForFormReady`) for the form UI to render, then calls `enumerateForm()` (`content/form_enumerate.js`) — walks the form's `input`/`select`/`textarea` controls (skipping hidden/submit/button/search), returning `{field_id, label, input_type, options, required}` per field. The ready gate accepts a page as ready when **either** a `<form>` element **or** any rendered `input`/`select`/`textarea` control is present — form-less SPA ATSs like Ashby have no `<form>`, so gating on `<form>` alone permanently blocked enumeration there (see Resolved below).
+2. If matched, waits (MutationObserver, 8s timeout via `_waitForFormReady`) for
+   the form UI to render, then calls `enumerateForm()` (`content/form_enumerate.js`),
+   which walks the form's `input`/`select`/`textarea` controls (skipping
+   hidden/submit/button/search) and returns `{field_id, label, input_type, options,
+   required}` per field. `input_type` is a **logical** type, not the raw DOM type:
+   `role="combobox"`/`aria-autocomplete` inputs report `combobox` (or `multiselect`);
+   native `<select>` reports `select`/`multiselect`; same-name radio/checkbox sets
+   collapse into one `radio_group`/`checkbox_group` field whose `label` is the
+   `<legend>`/group question and whose `options` are the member labels. `required`
+   is derived from `el.required` **or** `aria-required="true"` **or** a trailing `*`
+   in the label (modern Greenhouse/Ashby set none of these as the DOM `required`
+   attribute). Labels have the trailing `*` stripped. Combobox options render on
+   focus and are **not** harvested (read-only enumeration) — comboboxes ship
+   `options: []`. The anonymous partner input each combobox pairs with is skipped.
+   The ready gate accepts a page as ready when **either** a `<form>` element **or**
+   any rendered `input`/`select`/`textarea` control is present — form-less SPA ATSs
+   like Ashby have no `<form>`, so gating on `<form>` alone permanently blocked
+   enumeration there (see Resolved below).
 3. Sends `ENUMERATE_FORM {job_key, enumerated_fields}` to the service worker, which POSTs to `${server}/api/scraper/jobs/{job_key}/application-plan` (same bearer/`getServer()` fetch shape as `stage-job`), then does a best-effort follow-up `GET` on the same route for `application_answers_complete`. The POST response IS the `ApplicationPlan`; the service worker now reads its `fields` array (`handleEnumerateForm`) and returns it alongside `application_answers_complete`.
 4. **Autofill:** `injector.js` passes the returned `fields` to `fillForm(plannedFields)` (`content/form_fill.js`), which writes each field's resolved value into the matching control (`[name]` → `#id` → `[aria-label]` lookup) — only fields with status `filled`/`drafted` and a non-empty value. Text/textarea writes go through the native-element-prototype value setter (so React-controlled inputs pick up the change) then fire `input`/`change`; `<select>` matches by value or option text; checkbox/radio match by value.
 5. **Soft nudge:** if `application_answers_complete === false`, a non-blocking, dismissible banner (`#autoapply-answers-nudge`, fixed bottom-right) appears with a link to `${server}/#/settings`. No `alert()`/`confirm()` — those break the extension. All failures in the enumeration/fill flow are caught and logged to console only; nothing blocks page interaction.
@@ -100,7 +117,11 @@ On recognized ATS apply-page domains (`*.greenhouse.io`, `*.lever.co`, `*.ashbyh
 
 **Debugging "nothing happened":** `_runFormEnumeration` logs a `[job-scraper][application-plan]` line to the page console on every silent-exit path — no staged-job match, no form/controls appeared before timeout, zero enumerable fields, or server rejection (incl. a 404 hint) — plus a success line telling you to reopen the dashboard "Plan" modal. Open DevTools on the ATS apply page and filter the console for `[application-plan]` to see exactly where enumeration bailed.
 
-**Selector-fragility caveat:** `enumerateForm()`'s label derivation (`<label for>` → wrapping `<label>` → `aria-label`/`placeholder`/`name`) and the "primary form" heuristic (`document.querySelector("form") || document.body`) are generic and only partially tested against real Greenhouse/Lever/Ashby DOM. Multi-step forms, forms nested in iframes, or pages with multiple `<form>` elements (e.g. a search box alongside the application form) are known risk areas — same class of fragility as the LinkedIn/Indeed selector issues below.
+**Selector-fragility caveat:** `enumerateForm()`'s label derivation (`<label for>` → wrapping `<label>` → `aria-label`/`placeholder`/`name`) and the "primary form" heuristic (`document.querySelector("form") || document.body`) are generic and only partially tested against real Greenhouse/Lever/Ashby DOM. Multi-step forms, forms nested in iframes, or pages with multiple `<form>` elements (e.g. a search box alongside the application form) are known risk areas — same class of fragility as the LinkedIn/Indeed selector issues below. The logical-type/requiredness/grouping behavior is unit-tested against synthetic
+fixtures in `e2e/extension/tests/enumerate.spec.ts` (combobox typing, ARIA/`*`
+requiredness, radio-group collapse, partner-input skip); live-DOM label derivation
+for radio *group questions* remains heuristic (`<legend>` → labelled group → first
+member label) and is the known Ashby-class risk.
 
 ## Loading the Extension
 

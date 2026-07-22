@@ -64,6 +64,17 @@ git history is the archive (see `.claude/skills/update-todo/`).
      read-only browser-extension form enumeration + soft nudge. Backend 1074 pass / frontend 207 pass
      (the 2 remaining failures are pre-existing, unrelated: scraper caplog order-flake + `api.profileTree`).
      **Follow-ups before/after merge:**
+     - **Enumeration-correctness gaps IMPLEMENTED 2026-07-22** (`feat/extension-enumeration-correctness`;
+       plan `docs/superpowers/plans/2026-07-22-extension-form-enumeration-correctness.md`) — hardened
+       the EEO guard (regex + real-label regression fixtures) and rewrote `enumerateForm()`
+       (`browser-extension/content/form_enumerate.js`) to report logical field types
+       (`combobox`/`multiselect`/`select`/`radio_group`/`checkbox_group`/`checkbox`), ARIA-aware
+       `required`, de-noised labels, radio/checkbox grouping, and to skip anonymous combobox partner
+       inputs (comboboxes ship read-only `options: []`, no focus-harvesting). Unit-tested in
+       `e2e/extension/tests/enumerate.spec.ts`. See `browser-extension/CONTEXT.md` for the accurate
+       enumeration behavior. **Still open:** broadening label→canonical classification (essay-bucket
+       catch-all, sub-project 3 above) and the form-fill/submit-commit stage (sub-project 3 below) —
+       this task only hardened read-only enumeration.
      - **PENDING manual smoke test** of the extension enumeration flow against real Greenhouse/Lever/Ashby
        apply pages (selectors + job→page matching untested on live DOM) — see `browser-extension/CONTEXT.md`.
      - **`ApplicationAnswers` mounted UNGATED** — spec wanted it friends_family/beta-gated, but no
