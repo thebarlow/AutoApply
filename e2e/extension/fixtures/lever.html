@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lever fixture — Job Application</title>
+  <!--
+    Captured 2026-07-22 from a live Lever-hosted application form
+    (jobs.lever.co/palantir/.../apply). Scripts/styles stripped; real field
+    markup preserved. Lever quirk (opposite of Greenhouse): text controls carry
+    a `name` attribute and mostly NO `id`. It posts a single full-name field
+    (name="name") rather than first/last, plus name="email", name="phone",
+    name="location", and bracketed link fields like name="urls[LinkedIn]".
+    Labels below are added for offline readability (live Lever labels the
+    inputs via placeholder/data-qa, not <label for>).
+  -->
+</head>
+<body>
+  <main>
+    <h1>Palantir Technologies — Administrative Business Partner</h1>
+    <form action="#" method="post">
+      <div class="application-field"><label for="lv-name">Full name</label><input id="lv-name" type="text" data-qa="name-input" name="name" required=""></div>
+      <div class="application-field"><label for="lv-email">Email</label><input id="lv-email" name="email" data-qa="email-input" type="email" required=""></div>
+      <div class="application-field"><label for="lv-phone">Phone</label><input id="lv-phone" type="text" data-qa="phone-input" name="phone"></div>
+      <div class="application-field"><label for="location-input">Location</label><input class="location-input" data-qa="location-input" id="location-input" type="text" maxlength="100" name="location" required=""></div>
+      <div class="application-field"><label for="lv-linkedin">LinkedIn URL</label><input id="lv-linkedin" type="text" name="urls[LinkedIn]"></div>
+    </form>
+  </main>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Greenhouse fixture — Job Application</title>
+  <!--
+    Captured 2026-07-22 from a live Greenhouse-hosted application form
+    (job-boards.greenhouse.io/anthropic/jobs/5023394008). Scripts, styles, and
+    the intl-tel phone widget were stripped for offline determinism; the real
+    field markup is preserved. NOTE the Greenhouse quirk: text controls carry an
+    `id` (first_name/last_name/email/phone) and NO `name` attribute, so the
+    extension's _findControl must fall back from [name=...] to getElementById.
+  -->
+</head>
+<body>
+  <main>
+    <h1>Job Application for Anthropic Fellows Program</h1>
+    <form action="#" method="post">
+      <div class="text-input-wrapper"><div class="input-wrapper"><label id="first_name-label" for="first_name" class="label label">First Name<span aria-hidden="true">*</span></label><input id="first_name" class="input input__single-line" aria-label="First Name" aria-required="true" type="text" maxlength="255" autocomplete="given-name" value=""></div></div>
+      <div class="text-input-wrapper"><div class="input-wrapper"><label id="last_name-label" for="last_name" class="label label">Last Name<span aria-hidden="true">*</span></label><input id="last_name" class="input input__single-line" aria-label="Last Name" aria-required="true" type="text" maxlength="255" autocomplete="family-name" value=""></div></div>
+      <div class="text-input-wrapper"><div class="input-wrapper"><label id="email-label" for="email" class="label label">Email<span aria-hidden="true">*</span></label><input id="email" class="input input__single-line" aria-label="Email" aria-required="true" type="text" maxlength="255" autocomplete="email" value=""></div></div>
+      <div class="text-input-wrapper"><div class="input-wrapper"><label id="phone-label" for="phone" class="label label">Phone</label><input id="phone" class="input input__single-line" aria-label="Phone" type="tel" maxlength="255" autocomplete="tel" value=""></div></div>
+    </form>
+  </main>
+</body>
+</html>
