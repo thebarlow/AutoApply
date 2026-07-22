@@ -7,11 +7,28 @@ function enumerateForm() {
   const form = document.querySelector("form") || document.body;
   const controls = [...form.querySelectorAll("input, select, textarea")];
   const out = [];
+  const seenGroups = new Set();
   for (const el of controls) {
     const domType = (el.type || el.tagName).toLowerCase();
     if (["hidden", "submit", "button", "search"].includes(domType)) continue;
 
     if (_isComboPartner(el)) continue;
+
+    if (domType === "radio" || (domType === "checkbox" && el.name && _groupOf(form, el).length > 1)) {
+      const members = _groupOf(form, el);
+      const key = el.name || (el.closest("fieldset") && el.closest("fieldset").id) || "";
+      if (!key || seenGroups.has(key)) continue;
+      seenGroups.add(key);
+      const rawLabel = _groupLabel(el);
+      out.push({
+        field_id: el.name || key,
+        label: _cleanLabel(rawLabel),
+        input_type: domType === "radio" ? "radio_group" : "checkbox_group",
+        options: members.map((m) => _cleanLabel(labelFor(m))),
+        required: members.some((m) => _isRequired(m, _groupLabel(m))),
+      });
+      continue;
+    }
 
     const id = el.name || el.id || (el.getAttribute("aria-label") || "").slice(0, 60);
     if (!id) {
@@ -66,6 +83,23 @@ function _isComboPartner(el) {
   if (idish) return false;
   const container = el.closest("div, fieldset, label") || el.parentElement;
   return !!(container && container.querySelector('[role="combobox"]'));
+}
+
+// All same-name radio/checkbox controls within the form (a logical group).
+function _groupOf(form, el) {
+  if (!el.name) return [el];
+  return [...form.querySelectorAll(`input[name="${CSS.escape(el.name)}"]`)];
+}
+
+// The group's question: <legend>, then a labelled radiogroup/group container,
+// falling back to the first member's own label so the field is never dropped.
+function _groupLabel(el) {
+  const fs = el.closest("fieldset");
+  const legend = fs && fs.querySelector("legend");
+  if (legend) return legend.textContent.trim();
+  const grp = el.closest('[role="radiogroup"], [role="group"]');
+  if (grp && grp.getAttribute("aria-label")) return grp.getAttribute("aria-label");
+  return labelFor(el);
 }
 
 function labelFor(el) {

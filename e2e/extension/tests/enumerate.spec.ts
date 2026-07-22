@@ -57,3 +57,28 @@ test('drops the anonymous partner input a combobox pairs with', async ({ context
   expect(fields).toHaveLength(1);
   expect(fields[0].field_id).toBe('country');
 });
+
+test('collapses a radio group into one field with the legend as the question', async ({ context }) => {
+  const fields = await enumerate(context, `
+    <fieldset>
+      <legend>Are you authorized to work in the US?*</legend>
+      <label><input type="radio" name="work_auth" value="yes"> Yes</label>
+      <label><input type="radio" name="work_auth" value="no"> No</label>
+    </fieldset>
+  `);
+  expect(fields).toHaveLength(1);
+  expect(fields[0].field_id).toBe('work_auth');
+  expect(fields[0].input_type).toBe('radio_group');
+  expect(fields[0].label).toBe('Are you authorized to work in the US?');
+  expect(fields[0].required).toBe(true);
+  expect(fields[0].options).toEqual(['Yes', 'No']);
+});
+
+test('keeps a lone consent checkbox as a single checkbox field', async ({ context }) => {
+  const fields = await enumerate(context, `
+    <label><input type="checkbox" name="consent"> I consent to data processing</label>
+  `);
+  expect(fields).toHaveLength(1);
+  expect(fields[0].input_type).toBe('checkbox');
+  expect(fields[0].field_id).toBe('consent');
+});
