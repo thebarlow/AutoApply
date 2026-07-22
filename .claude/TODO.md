@@ -153,6 +153,16 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Extension ATS autofill harness — Task 3 (harness scaffold + smoke spec).** **DONE 2026-07-21**
+  — commit `95395e8`. New `e2e/extension/` Playwright project (separate from the dashboard harness
+  at `e2e/`): `playwright.config.ts` launches a **persistent Chromium context** with the unpacked
+  `browser-extension/` loaded (required for MV3 service-worker registration — headed only, no
+  headless support), `fixtures.ts` exports a `context`/`serviceWorker` fixture pair for reuse by
+  the upcoming autofill spec, and `tests/extension-loads.spec.ts` smoke-asserts the service worker
+  registers with a `chrome-extension://` URL. Reuses backend readiness (`GET /health`) and the
+  Task 1 dev endpoints. Run via `cd e2e/extension && npm test`. Task 2 (ATS fixture HTML under
+  `e2e/extension/fixtures/`) was already present. **Task 4 (autofill spec) not started.**
+
 - [x] **Extension ATS autofill harness — Task 1 (dev seed endpoint).** **DONE 2026-07-21**
   — commit `d57c70a`. Added non-production-only `POST /api/dev/seed-ats-job` (`web/routers/dev.py`,
   same `APP_ENV=production` 404 guard as `dev-login`): upserts a `Job` on the caller's profile from
