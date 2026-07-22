@@ -8,8 +8,13 @@ function fillForm(plannedFields) {
   for (const f of plannedFields) {
     if (!f || (f.status !== "filled" && f.status !== "drafted")) continue;
     if (f.value == null || f.value === "") continue;
-    const el = _findControl(f.field_id);
-    if (el && _writeValue(el, f.value)) filled++;
+    try {
+      const el = _findControl(f.field_id);
+      if (el && _writeValue(el, f.value)) filled++;
+    } catch (_) {
+      // One bad control (e.g. a file input throwing on programmatic .value
+      // assignment) shouldn't strand every remaining field.
+    }
   }
   return { filled };
 }
@@ -35,7 +40,12 @@ function _writeValue(el, value) {
     return true;
   }
   if (type === "checkbox" || type === "radio") {
-    if (el.value === value || value === "true") {
+    // "true" only means "check this box" for boolean-style controls (empty/
+    // "on"/"true" own-value); an arbitrary radio option must match by value.
+    if (
+      el.value === value ||
+      (value === "true" && ["", "on", "true"].includes(el.value))
+    ) {
       el.checked = true;
       _fire(el);
       return true;
