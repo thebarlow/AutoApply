@@ -153,6 +153,17 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Extension ATS autofill harness — Task 1 (dev seed endpoint).** **DONE 2026-07-21**
+  — commit `d57c70a`. Added non-production-only `POST /api/dev/seed-ats-job` (`web/routers/dev.py`,
+  same `APP_ENV=production` 404 guard as `dev-login`): upserts a `Job` on the caller's profile from
+  `{job_key, apply_url, ats_type}` with `state="scraped"` (literal string — `JobState` has no
+  matching enum member) + `apply_url_raw`/`apply_url_resolved`/`ats_type`, idempotent. Lets a
+  Playwright/extension harness stage a job, then drive an ATS apply page and request its
+  `application_plan`. Tests in `tests/web/test_dev_seed_ats.py`. Docs in `web/CONTEXT.md` → Dev
+  Endpoints and `.claude/CLAUDE.md` routing table. Part of the 5-task plan
+  `docs/superpowers/plans/2026-07-21-extension-autofill-harness.md` (fixtures, harness scaffold,
+  autofill writer + wiring, Lever/Ashby specs + docs still to come).
+
 - [x] **Playwright smoke + live-drive E2E harness.** **DONE 2026-07-21** — commit `e5239d1`.
   New top-level `e2e/` Playwright project: config auto-boots/reuses the local stack (uvicorn `:8080`
   + Vite `:5173`), non-destructive smoke specs (landing `/about`, dashboard nav, Find-Jobs search UI),
