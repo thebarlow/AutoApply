@@ -153,6 +153,27 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Extension ATS autofill harness — Task 4 (autofill writer + wiring + spec).** **DONE 2026-07-21**
+  — commit `a6a7d18`. New `browser-extension/content/form_fill.js`: content-script global
+  `fillForm(plannedFields) -> {filled: number}` writes an `ApplicationPlan`'s resolved values into
+  the live ATS form (native-setter + input/change events for React-controlled inputs; handles
+  text/textarea/select/checkbox/radio); only writes fields with status `filled`/`drafted` and a
+  non-empty value. Registered in `manifest.json`'s ATS `content_scripts` entry after
+  `form_enumerate.js`. `service_worker.js`'s `handleEnumerateForm` now reads the plan POST response
+  body and returns its `fields` array (previously discarded); `injector.js`'s
+  `_runFormEnumeration` calls `fillForm(result.fields)` on success. New
+  `e2e/extension/tests/autofill.spec.ts` drives a live Greenhouse fixture end-to-end and asserts
+  `#email` gets filled. Fixed two real (non-test-only) bugs found along the way: (1) `manifest.json`
+  `host_permissions` was missing `http://localhost:8080/*`, so the extension's "local mode"
+  server-routing toggle silently failed — Chrome blocks CORS-exempt fetches to hosts not listed
+  there, and the local FastAPI server sends no CORS headers; (2) `injector.js` called
+  `_maybeEnumerateApplyForm()` synchronously at script-load time, but content scripts in one
+  manifest entry share an isolated world and run in file order (injector.js →
+  form_enumerate.js → form_fill.js), so `enumerateForm`/`fillForm` weren't defined yet — form
+  enumeration (shipped in a prior task) had never actually run at runtime. Now deferred via
+  `setTimeout(_maybeEnumerateApplyForm, 0)`. **Task 5 (Lever/Ashby specs + docs) not started** —
+  see `.superpowers/sdd/progress.md` in the `extension-ats-e2e` worktree.
+
 - [x] **Extension ATS autofill harness — Task 3 (harness scaffold + smoke spec).** **DONE 2026-07-21**
   — commit `95395e8`. New `e2e/extension/` Playwright project (separate from the dashboard harness
   at `e2e/`): `playwright.config.ts` launches a **persistent Chromium context** with the unpacked
@@ -161,7 +182,7 @@ Known accepted limitations (each would be its own feature if prioritized):
   the upcoming autofill spec, and `tests/extension-loads.spec.ts` smoke-asserts the service worker
   registers with a `chrome-extension://` URL. Reuses backend readiness (`GET /health`) and the
   Task 1 dev endpoints. Run via `cd e2e/extension && npm test`. Task 2 (ATS fixture HTML under
-  `e2e/extension/fixtures/`) was already present. **Task 4 (autofill spec) not started.**
+  `e2e/extension/fixtures/`) was already present. Task 4 (autofill spec) completed above.
 
 - [x] **Extension ATS autofill harness — Task 1 (dev seed endpoint).** **DONE 2026-07-21**
   — commit `d57c70a`. Added non-production-only `POST /api/dev/seed-ats-job` (`web/routers/dev.py`,

@@ -82,12 +82,13 @@ Extension-side: `stagedJobKeys` array in `xb.storage.local` (checked via `CHECK_
    the selector issues generally (a maintainer-run tool to re-derive selectors/behavior
    after a site DOM change, rather than hand-patching each break).
 
-### Application-plan enumeration (read-only, no form writing)
-On recognized ATS apply-page domains (`*.greenhouse.io`, `*.lever.co`, `*.ashbyhq.com` — added to `manifest.json` `host_permissions` and a dedicated `content_scripts` entry loading `injector.js` + `content/form_enumerate.js`), `injector.js` runs `_maybeEnumerateApplyForm()` on script load:
+### Application-plan enumeration + autofill
+On recognized ATS apply-page domains (`*.greenhouse.io`, `*.lever.co`, `*.ashbyhq.com` — added to `manifest.json` `host_permissions` and a dedicated `content_scripts` entry loading `injector.js` + `content/form_enumerate.js` + `content/form_fill.js`), `injector.js` runs `_maybeEnumerateApplyForm()` (deferred via `setTimeout(..., 0)` — see Resolved below) on script load:
 1. Sends `FIND_STAGED_JOB {url}` to the service worker, which matches the current page against `stagedJobMeta` (a `job_key -> {apply_url_raw, apply_url_resolved}` map in `xb.storage.local`, populated when an external/non-easy-apply job is staged and updated when the ATS-resolution PATCH settles). Matching is **hostname + first path segment** (the company slug on Greenhouse/Lever, which are multi-tenant: many companies share one hostname). It prefers a *unique* company-slug match; failing that, it falls back to a hostname match **only when exactly one** staged job is on that ATS vendor. If two+ staged jobs share the hostname without a unique slug match, it returns `null` and enumerates nothing — refusing to guess, which would POST the enumerated form under the wrong `job_key`. Deeper path segments/query params are ignored because ATS apply flows rewrite them after landing.
-2. If matched, waits (MutationObserver, 8s timeout) for a `<form>` to appear, then calls `enumerateForm()` (`content/form_enumerate.js`) — walks the form's `input`/`select`/`textarea` controls (skipping hidden/submit/button/search), returning `{field_id, label, input_type, options, required}` per field. **Read-only**: nothing is written to the form. Form-fill is a later sub-project.
-3. Sends `ENUMERATE_FORM {job_key, enumerated_fields}` to the service worker, which POSTs to `${server}/api/scraper/jobs/{job_key}/application-plan` (same bearer/`getServer()` fetch shape as `stage-job`), then does a best-effort follow-up `GET` on the same route for `application_answers_complete`.
-4. **Soft nudge:** if `application_answers_complete === false`, a non-blocking, dismissible banner (`#autoapply-answers-nudge`, fixed bottom-right) appears with a link to `${server}/#/settings`. No `alert()`/`confirm()` — those break the extension. All failures in the enumeration flow are caught and logged to console only; nothing blocks page interaction.
+2. If matched, waits (MutationObserver, 8s timeout) for a `<form>` to appear, then calls `enumerateForm()` (`content/form_enumerate.js`) — walks the form's `input`/`select`/`textarea` controls (skipping hidden/submit/button/search), returning `{field_id, label, input_type, options, required}` per field.
+3. Sends `ENUMERATE_FORM {job_key, enumerated_fields}` to the service worker, which POSTs to `${server}/api/scraper/jobs/{job_key}/application-plan` (same bearer/`getServer()` fetch shape as `stage-job`), then does a best-effort follow-up `GET` on the same route for `application_answers_complete`. The POST response IS the `ApplicationPlan`; the service worker now reads its `fields` array (`handleEnumerateForm`) and returns it alongside `application_answers_complete`.
+4. **Autofill:** `injector.js` passes the returned `fields` to `fillForm(plannedFields)` (`content/form_fill.js`), which writes each field's resolved value into the matching control (`[name]` → `#id` → `[aria-label]` lookup) — only fields with status `filled`/`drafted` and a non-empty value. Text/textarea writes go through the native-element-prototype value setter (so React-controlled inputs pick up the change) then fire `input`/`change`; `<select>` matches by value or option text; checkbox/radio match by value.
+5. **Soft nudge:** if `application_answers_complete === false`, a non-blocking, dismissible banner (`#autoapply-answers-nudge`, fixed bottom-right) appears with a link to `${server}/#/settings`. No `alert()`/`confirm()` — those break the extension. All failures in the enumeration/fill flow are caught and logged to console only; nothing blocks page interaction.
 
 **Selector-fragility caveat:** `enumerateForm()`'s label derivation (`<label for>` → wrapping `<label>` → `aria-label`/`placeholder`/`name`) and the "primary form" heuristic (`document.querySelector("form")`) are generic and untested against real Greenhouse/Lever/Ashby DOM. Multi-step forms, forms nested in iframes, or pages with multiple `<form>` elements (e.g. a search box alongside the application form) are known risk areas — same class of fragility as the LinkedIn/Indeed selector issues below.
 
@@ -119,7 +120,7 @@ The popup now includes an optional toggle (admin users only) that routes job sub
 **Implementation:**
 - **Popup:** `renderServerToggle()` reads the stored mode and wires the radio buttons. Non-admins never see the toggle; if a non-admin account has a stray `"local"` mode in storage, it is reset to `"live"` on render.
 - **Service worker:** `getServer()` (Task 1) resolves the base URL from `serverMode` and uses it for `POST /api/scraper/stage-job` and `PATCH /api/scraper/jobs/{job_key}/ats-resolution`.
-- **Local mode behavior:** When `serverMode="local"`, the service worker submits to `http://localhost:8080` without an `Authorization` header. This works because the local server (when run via `start.bat` without `APP_ENV=production`) does not gate `/api/*` endpoints on authentication.
+- **Local mode behavior:** When `serverMode="local"`, the service worker submits to `http://localhost:8080` without an `Authorization` header. This works because the local server (when run via `start.bat` without `APP_ENV=production`) does not gate `/api/*` endpoints on authentication. Requires `http://localhost:8080/*` in `manifest.json` `host_permissions` (see Resolved below) — without it Chrome silently blocks the fetch since the local server sends no CORS headers.
 - **Cross-mode dedup:** Switching between modes does not clear the dedup history. The "Clear scrape history" button in the popup (existing UX) resets `stagedJobKeys` in storage; re-scraping the same job across modes will show "✗ Already staged" unless this button is clicked.
 
 ## Known Issues (open)
@@ -150,7 +151,7 @@ Selectors to check during the smoke test:
 - **Essay bucket is a catch-all (both vendors).** Because the label heuristics only recognize EEO + a few eligibility patterns, unrecognized-but-deterministic fields (LinkedIn URL, Other Website, Country, City/Location, Preferred First Name) fall through to `ESSAY→LLM` — over-invoking the metered essay pass and mis-drafting fields that should be filled deterministically. Sub-project 3 should broaden label→canonical matching (esp. url/location/name synonyms) before relying on the plan for form-fill.
 
 **Full-pipeline steps still to verify manually:**
-The read-only form enumeration + soft nudge added in this feature has **not** been exercised end-to-end against a live ATS page with the extension+server. Verify:
+The form enumeration + autofill + soft nudge added in this feature has **not** been exercised end-to-end against a live ATS page with the extension+server (only against the Playwright fixture harness in `e2e/extension/`). Verify:
 1. Stage an external (non easy-apply) job whose apply link resolves to a real Greenhouse, Lever, or Ashby posting; let the background ATS-resolution queue settle (chip flips from "Resolving…" to the ATS name).
 2. Navigate to the resolved apply URL in the same browser profile. Confirm the content script matches it to the staged job (`stagedJobMeta` in `xb.storage.local` has the job's hostname) — check the service-worker console for no `[job-scraper] form enumeration failed` warning.
 3. Confirm the `POST /api/scraper/jobs/{job_key}/application-plan` request lands (network panel: 200, `enumerated_fields` populated with the page's real inputs) and that the dashboard's `ApplicationPlanModal` shows the enumerated fields for that job.
@@ -158,6 +159,18 @@ The read-only form enumeration + soft nudge added in this feature has **not** be
 5. Repeat across all three ATS domains (Greenhouse, Lever, Ashby) — selectors/label derivation are generic and unverified per-vendor (see caveat above).
 
 ### Resolved
+- **Local-mode fetches to localhost were silently blocked (found while building autofill, 2026-07-21)** —
+  `manifest.json` `host_permissions` never listed `http://localhost:8080/*`, so Chrome dropped the
+  CORS exemption for background-worker fetches to it (the local FastAPI server sends no CORS
+  headers). The admin-only Live/Local toggle's "Local" mode was non-functional at the fetch layer.
+  Fixed by adding the host to `host_permissions`.
+- **Form enumeration never actually ran at runtime (found while building autofill, 2026-07-21)** —
+  the bottom-of-file call to `_maybeEnumerateApplyForm()` in `injector.js` ran synchronously at
+  script-load time, but the three ATS content scripts (`injector.js`, `form_enumerate.js`,
+  `form_fill.js`) share one isolated world and execute in manifest-array order, so
+  `enumerateForm`/`fillForm` weren't defined yet when the call fired — it threw and was swallowed.
+  This means the read-only enumeration feature shipped in a prior task had never functioned live.
+  Fixed by deferring the call via `setTimeout(_maybeEnumerateApplyForm, 0)`.
 - **Chrome extension sign-in failed with no Google redirect (2026-07-09)** — `/auth/ext/login/google`
   returned `400 redirect_uri not allowed` because the server's `EXTENSION_REDIRECT_URLS` only held the
   Firefox redirect; this Chrome install's `https://bblnkpilhkoaaadanhdmnamiolegodjl.chromiumapp.org/`
