@@ -45,9 +45,9 @@ STATIC_SCHEMAS: dict[str, list[SchemaField]] = {
         SchemaField("comments", "Additional information", "cover_letter_text"),
     ],
     "ashby": [
-        SchemaField("name", "Name", "full_name", True),
-        SchemaField("email", "Email", "email", True),
-        SchemaField("phone", "Phone", "phone"),
+        SchemaField("_systemfield_name", "Name", "full_name", True),
+        SchemaField("_systemfield_email", "Email", "email", True),
+        SchemaField("_systemfield_phone", "Phone", "phone"),
         SchemaField("resume", "Resume", "resume_file", True),
         SchemaField("linkedin", "LinkedIn", "linkedin_url"),
         SchemaField("github", "GitHub", "github_url"),

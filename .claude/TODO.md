@@ -153,6 +153,30 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Extension ATS autofill harness — Task 5 (Lever/Ashby specs, docs, doc-sync).** **DONE 2026-07-21**
+  — Parametrized `e2e/extension/tests/autofill.spec.ts` over all three fixtures (greenhouse, lever,
+  ashby), each with its own `JOB_KEY`/apply URL/route glob/before-after screenshot pair; all three
+  pass, asserting the per-ATS canonical email field fills (Ashby's React-controlled
+  `_systemfield_email` confirmed via the native-setter write path). Found and fixed a real bug along
+  the way: `core/ats_schemas.py`'s `ashby` static schema used generic field ids (`name`/`email`/
+  `phone`) that don't match the live DOM (`_systemfield_name`/`_systemfield_email`/
+  `_systemfield_phone`), so `form_fill.js`'s `[name=...]`/`getElementById` lookup could never find
+  the control — the static-schema fill silently failed even though the field existed. Fixed to use
+  the real DOM ids (matches the convention already followed by greenhouse/lever's schemas). New
+  `e2e/extension/CONTEXT.md` documents the harness (persistent-context extension load, storage-key
+  seeding, canonical-fields-only-fixtures ⇒ no-LLM invariant, how to add an ATS). Corrected a
+  misleading prior smoke-test note in `browser-extension/CONTEXT.md` — the 2026-07-20 "Live-DOM
+  enumeration validated" entry exercised `enumerateForm()` by direct injection, not through the real
+  content-script trigger path (broken until Task 4's `setTimeout` fix); reworded so the record isn't
+  taken as live-path validation. Added a `browser-extension/CONTEXT.md` subsection documenting
+  `form_fill.js` (status filter, control lookup order, native-setter write, EEO-never-inferred rule)
+  and a Future Work item flagging that the `http://localhost:8080/*` `host_permissions` entry ships
+  in the production manifest and must be reviewed/removed before store packaging. **Sub-project 3's
+  extension autofill-writer 5-task plan is now complete.** Remaining gaps (tracked, not blocking):
+  multi-step/wizard ATS forms are unsupported; essay/custom-field drafting is untested by this
+  harness (fixtures are canonical-only by design); live (non-fixture) end-to-end verification is
+  still open (see `browser-extension/CONTEXT.md` → "Full-pipeline steps still to verify manually").
+
 - [x] **Extension ATS autofill harness — Task 4 (autofill writer + wiring + spec).** **DONE 2026-07-21**
   — commit `a6a7d18`. New `browser-extension/content/form_fill.js`: content-script global
   `fillForm(plannedFields) -> {filled: number}` writes an `ApplicationPlan`'s resolved values into
