@@ -15,8 +15,9 @@ from typing import Literal
 # field mislabeled EEO) merely leaves that field blank for manual entry, whereas
 # a false negative could let the LLM fabricate a demographic answer.
 _EEO_RE = re.compile(
-    r"\b(race|ethnicit|gender|sex\b|male\b|female\b|veteran|disab|hispanic|latino|"
-    r"sexual orientation|national origin|protected class|self[- ]?identif)\w*",
+    r"\b(race|ethnicit|gender|transgender|sex\b|male\b|female\b|veteran|disab|"
+    r"hispanic|latino|sexual orientation|national origin|protected class|"
+    r"self[- ]?identif)\w*",
     re.IGNORECASE,
 )
 

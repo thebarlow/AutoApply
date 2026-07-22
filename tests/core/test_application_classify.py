@@ -48,6 +48,24 @@ def test_eligibility_matching():
     assert match_eligibility("Why this company?") is None
 
 
+# Real labels captured from live Greenhouse (Reddit board, 2026-07-22).
+# "transgender experience" is the known false-negative this task fixes.
+REAL_EEO_LABELS = [
+    "What gender identity do you most closely identify with?",
+    "Are you a person of transgender experience?",
+    "What sexual orientation do you most closely identify with?",
+    "Do you live with a disability (as outlined by the ADA)?",
+    "Are you a veteran/have you served in the military?",
+    "Please select up to 2 ethnicities that you most closely identify with.",
+]
+
+
+@pytest.mark.parametrize("label", REAL_EEO_LABELS)
+def test_eeo_guard_catches_real_greenhouse_labels(label):
+    assert is_eeo_label(label) is True
+    assert classify_custom(label) == "eeo"
+
+
 def test_classify_routes_essay_as_fallback():
     assert classify_custom("Describe your ideal work environment") == "essay"
     assert classify_custom("Are you authorized to work in the US?") == "eligibility"
