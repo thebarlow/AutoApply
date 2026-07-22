@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db.database import Account
@@ -70,6 +71,51 @@ def dev_login(request: Request, db: Session = Depends(get_db)):
 
     request.session["account_id"] = acct.id
     return {"account_id": acct.id, "profile_id": acct.profile_id, "email": acct.email}
+
+
+class SeedAtsJobBody(BaseModel):
+    job_key: str
+    apply_url: str
+    ats_type: str
+
+
+@router.post("/api/dev/seed-ats-job")
+def seed_ats_job(
+    body: SeedAtsJobBody,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(current_profile_id),
+):
+    """Upsert a staged ATS job for the extension autofill harness (non-prod only).
+
+    The extension matches an ATS apply page to a staged job by URL, then POSTs the
+    plan request keyed by ``job_key``; both need a persisted row on this profile.
+    Idempotent so the harness can re-run without piling up rows.
+
+    Note: the interface spec's ``state="scraped"`` has no matching ``JobState``
+    member (the enum only has NEW/PENDING_REVIEW/READY/APPLIED/CONTACT/REJECTED/
+    DELETED); ``Job.state`` is an unconstrained String column, so the literal is
+    used directly.
+    """
+    if os.getenv("APP_ENV") == "production":
+        raise HTTPException(status_code=404)
+
+    job = Job.get(body.job_key, db, profile_id)
+    if job is None:
+        job = Job(
+            job_key=body.job_key,
+            profile_id=profile_id,
+            source="dev-seed",
+            url=body.apply_url,
+        )
+        db.add(job)
+    job.title = job.title or "E2E ATS Fixture"
+    job.company = job.company or "Acme"
+    job.state = "scraped"
+    job.apply_url_raw = body.apply_url
+    job.apply_url_resolved = body.apply_url
+    job.ats_type = body.ats_type
+    db.commit()
+    return {"job_key": body.job_key, "profile_id": profile_id}
 
 
 def _provision_throwaway_account(db: Session, email: str) -> Account:

@@ -335,3 +335,6 @@ export const scrapeSelected = (jobs) =>
   })
 
 export const getLastSearch = () => _fetch('/api/scraper/last-search')
+
+export const getApplicationPlan = (jobKey) =>
+  _fetch(`/api/scraper/jobs/${encodeURIComponent(jobKey)}/application-plan`)

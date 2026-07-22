@@ -2,6 +2,7 @@
 import { getProfile, updateProfile, resetProfile, getPrompt, putPrompt, resetPrompt, getThemes } from '../../api'
 import HelpIcon from '../shared/HelpIcon'
 import ProfileTreeEditor from './profile-tree/ProfileTreeEditor'
+import ApplicationAnswers from './ApplicationAnswers'
 
 // ─── Shared ────────────────────────────────────────────────────────────────────
 
@@ -897,6 +898,7 @@ const PROFILE_DATA_DEFAULTS = {
   location: '', linkedin: '', github: '', website: '',
   skills: [], work_history: [], education: [], projects: [],
   target_roles: [], target_salary_min: null, target_salary_max: null,
+  application_answers: { eligibility: {}, eeo: {} },
 }
 
 export default function ProfileDetailView({ profileId, onDelete }) {
@@ -973,6 +975,12 @@ export default function ProfileDetailView({ profileId, onDelete }) {
             <ResumePageLimit value={d.resume_max_pages} onSave={handleSave} />
             <ResumeTheme value={d.resume_theme} onSave={handleSave} />
           </div>
+        </AccordionSection>
+        <AccordionSection id="application-answers" title="Application Answers">
+          <ApplicationAnswers
+            value={d.application_answers}
+            onChange={(next) => handleSave({ application_answers: next })}
+          />
         </AccordionSection>
         <PromptsSection
           data={d}

@@ -19,6 +19,7 @@ DEFAULT_PRICES: dict[str, int] = {
     "ats": 1,
     "rematch": 1,
     "draft": 1,
+    "map_fields": 2,      # LLM essay-draft pass over custom application questions
 }
 
 

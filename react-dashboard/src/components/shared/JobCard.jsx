@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { BORDER_CLASS } from '../findjobs/borderStatus'
 import AtsChip from './AtsChip'
+import ApplicationPlanModal from '../widgets/ApplicationPlanModal'
 
 function ProcessingIcon() {
   const dots = Array.from({ length: 8 }, (_, i) => {
@@ -43,9 +45,10 @@ export function relativeAge(iso) {
   return `${Math.floor(days / 30)}mo ago`
 }
 
-export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, postedAt, salaryMin, salaryMax, salaryRaw, location = null, flagged = false, borderStatus = null, leading = null, trailing = null, atsType = null, easyApply = null, atsDomain = null }) {
+export default function JobCard({ title, company, statusIcon, docs = {}, selected = false, state, score, appliedAt, scrapedAt, postedAt, salaryMin, salaryMax, salaryRaw, location = null, flagged = false, borderStatus = null, leading = null, trailing = null, atsType = null, easyApply = null, atsDomain = null, jobKey = null }) {
   const hasResume = docs.resume
   const hasCoverLetter = docs.coverLetter
+  const [planOpen, setPlanOpen] = useState(false)
 
   function ScorePill() {
     if (score == null) return null
@@ -91,6 +94,7 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
   const hasMetadata = salaryText || dateText
 
   return (
+    <>
     <motion.div
       whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.06)' }}
       transition={{ duration: 0.15 }}
@@ -105,6 +109,14 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
           {flagged && <FlagIconFilled />}
           <p className="text-sm font-medium text-space-text truncate">{title}</p>
           <AtsChip atsType={atsType} easyApply={easyApply} atsDomain={atsDomain} />
+          {jobKey && (
+            <button
+              className="text-[10px] px-1.5 py-0.5 rounded bg-space-mid text-space-dim shrink-0"
+              onClick={(e) => { e.stopPropagation(); setPlanOpen(true) }}
+            >
+              Plan
+            </button>
+          )}
         </div>
         <p className="text-xs text-space-dim">{company}</p>
         {location && (
@@ -136,6 +148,10 @@ export default function JobCard({ title, company, statusIcon, docs = {}, selecte
         {trailing}
       </div>
     </motion.div>
+    {jobKey && (
+      <ApplicationPlanModal jobKey={jobKey} open={planOpen} onClose={() => setPlanOpen(false)} />
+    )}
+    </>
   )
 }
 

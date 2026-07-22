@@ -11,6 +11,14 @@ how-to).
   run-on-every-change regression suite — specs assert at presence/visibility
   level and never click destructive controls (delete / mark-applied / generate),
   so runs don't mutate data or burn LLM credits.
+- **`e2e/extension/` is a separate Playwright project**, not part of this one.
+  It loads the unpacked `browser-extension/` via a persistent Chromium context
+  to exercise the MV3 service worker and drive ATS form enumeration + autofill
+  against local HTML fixtures (`e2e/extension/fixtures/`). Requires **headed**
+  Chromium (MV3 service workers don't register headless) — run via
+  `cd e2e/extension && npm test`. Its own config/fixtures live under
+  `e2e/extension/`, separate `package.json`/`node_modules` from this harness.
+  See `e2e/extension/CONTEXT.md` for its own caveats and how to add a fixture.
 
 ## Caveats / known limitations
 

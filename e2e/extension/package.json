@@ -1,0 +1,13 @@
+{
+  "name": "auto-apply-e2e-extension",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright harness that loads the unpacked extension against ATS fixtures",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

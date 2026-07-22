@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ashby fixture — Job Application</title>
+  <!--
+    Captured 2026-07-22 from a live Ashby-hosted application form
+    (jobs.ashbyhq.com/ashby/.../application). Scripts/styles stripped; real
+    field markup preserved. Ashby quirk: system fields use both `name` and `id`
+    of the form `_systemfield_<field>` (name, email, phone), and the inputs are
+    React-controlled (note the hashed class names + tracked value) — so a plain
+    .value assignment is ignored and the native setter path (_setNativeValue) is
+    what makes the fill stick. The live form's essay/custom questions (textareas
+    with UUID names) are deliberately OMITTED to keep the fixture canonical-only
+    so needs_essay_pass() stays false and no LLM/metering fires.
+  -->
+</head>
+<body>
+  <main>
+    <h1>Manager of Renewals @ Ashby</h1>
+    <form action="#" method="post">
+      <div><label for="_systemfield_name">Name</label><input placeholder="Type here..." name="_systemfield_name" required="" id="_systemfield_name" type="text" class="_input_80epu_28" value=""></div>
+      <div><label for="_systemfield_email">Email</label><input placeholder="hello@example.com..." name="_systemfield_email" required="" id="_systemfield_email" type="email" class="_input_80epu_28" value=""></div>
+      <div><label for="_systemfield_phone">Phone</label><input placeholder="Type here..." name="_systemfield_phone" id="_systemfield_phone" type="tel" class="_input_80epu_28" value=""></div>
+    </form>
+  </main>
+</body>
+</html>

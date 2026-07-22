@@ -40,7 +40,24 @@ git history is the archive (see `.claude/skills/update-todo/`).
      by domain (Greenhouse/Lever/Ashby/Workday/iCIMS/Taleo/…). Foundation for everything below;
      independently useful as a per-job label. Core/DB/API/UI fully implemented: `core/ats.py` (classify_ats + unwrap_apply_url), Alembic migration `aa12atsdetect01` (five new nullable columns), PATCH `/api/scraper/jobs/{job_key}/ats-resolution` endpoint, AtsChip React component, admin-only extension Live/Local server toggle (browser-extension serverMode storage + /api/ext/me returns is_admin). Spec/plan: `docs/superpowers/specs|plans/2026-07-19-ats-detection*`.
      **Manual smoke test:** Task 2 Step 6 PENDING maintainer execution (see `browser-extension/CONTEXT.md`).
-  2. **Field-mapping engine** — map profile + generated docs to a given ATS's form fields.
+  2. **Field-mapping engine** _(IMPLEMENTED 2026-07-20 on `feat/field-mapping-engine`; not yet merged to main)_ —
+     maps profile + generated documents onto an ATS form → read-only `ApplicationPlan` (no form
+     writing). All 12 plan tasks done: canonical taxonomy (`core/application_fields.py`), EEO
+     guard + classifier (`core/application_classify.py`), `User.application_answers` profile section
+     (eligibility + EEO, all optional), static schemas greenhouse/lever/ashby (`core/ats_schemas.py`),
+     Pydantic models (`EnumeratedField`/`PlannedField`/`ApplicationPlan`), the pure engine
+     (`core/application_mapper.py` — LLM-free, essay drafting injected), `Job.application_plan` column
+     + migration `aa13applyplan01`, POST/GET `/api/scraper/jobs/{job_key}/application-plan` +
+     `map_fields` metering (only when the essay pass runs) + `web/application_plan_service.py`, the
+     read-only `ApplicationPlanModal.jsx`, the `ApplicationAnswers.jsx` settings section, and
+     read-only browser-extension form enumeration + soft nudge. Backend 1074 pass / frontend 207 pass
+     (the 2 remaining failures are pre-existing, unrelated: scraper caplog order-flake + `api.profileTree`).
+     **Follow-ups before/after merge:**
+     - **PENDING manual smoke test** of the extension enumeration flow against real Greenhouse/Lever/Ashby
+       apply pages (selectors + job→page matching untested on live DOM) — see `browser-extension/CONTEXT.md`.
+     - **`ApplicationAnswers` mounted UNGATED** — spec wanted it friends_family/beta-gated, but no
+       client-side tier-gating mechanism exists in the dashboard; gate it when one is introduced.
+     Spec: `docs/superpowers/specs/2026-07-20-field-mapping-engine-design.md`; plan: `docs/superpowers/plans/2026-07-20-field-mapping-engine.md`.
   3. **Form-fill + submit automation** — drive the form per-ATS; start with the low-defense
      form-based ATSs (Greenhouse/Lever/Ashby, mostly no login), fall back to manual for the rest.
   4. **Credential vault** — store logins for account-based ATSs (Workday/iCIMS/Taleo).
@@ -135,6 +152,83 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Extension autofill hardening — per-field error isolation + checkbox match fix.** **DONE 2026-07-21**
+  — commit `7342b74`. `fillForm()` (`browser-extension/content/form_fill.js`) now wraps each field's
+  `_findControl`/`_writeValue` in try/catch so one control throwing (e.g. a file input rejecting a
+  programmatic `.value` write — greenhouse/lever/ashby static schemas all declare a required
+  resume/resume_file field) no longer aborts the loop and strands subsequent fields. Also tightened
+  `_writeValue`'s checkbox/radio branch: `value === "true"` previously matched *any* checkbox/radio
+  regardless of the control's own DOM value; now it only matches boolean-style controls whose own
+  value is `""`, `"on"`, or `"true"`, so it no longer overreaches into real radio-group options.
+  Verified via `e2e/extension/`'s `autofill.spec.ts` (greenhouse/lever/ashby fixtures) +
+  `extension-loads.spec.ts` — all 4 tests pass.
+
+- [x] **Extension ATS autofill harness — Task 5 (Lever/Ashby specs, docs, doc-sync).** **DONE 2026-07-21**
+  — Parametrized `e2e/extension/tests/autofill.spec.ts` over all three fixtures (greenhouse, lever,
+  ashby), each with its own `JOB_KEY`/apply URL/route glob/before-after screenshot pair; all three
+  pass, asserting the per-ATS canonical email field fills (Ashby's React-controlled
+  `_systemfield_email` confirmed via the native-setter write path). Found and fixed a real bug along
+  the way: `core/ats_schemas.py`'s `ashby` static schema used generic field ids (`name`/`email`/
+  `phone`) that don't match the live DOM (`_systemfield_name`/`_systemfield_email`/
+  `_systemfield_phone`), so `form_fill.js`'s `[name=...]`/`getElementById` lookup could never find
+  the control — the static-schema fill silently failed even though the field existed. Fixed to use
+  the real DOM ids (matches the convention already followed by greenhouse/lever's schemas). New
+  `e2e/extension/CONTEXT.md` documents the harness (persistent-context extension load, storage-key
+  seeding, canonical-fields-only-fixtures ⇒ no-LLM invariant, how to add an ATS). Corrected a
+  misleading prior smoke-test note in `browser-extension/CONTEXT.md` — the 2026-07-20 "Live-DOM
+  enumeration validated" entry exercised `enumerateForm()` by direct injection, not through the real
+  content-script trigger path (broken until Task 4's `setTimeout` fix); reworded so the record isn't
+  taken as live-path validation. Added a `browser-extension/CONTEXT.md` subsection documenting
+  `form_fill.js` (status filter, control lookup order, native-setter write, EEO-never-inferred rule)
+  and a Future Work item flagging that the `http://localhost:8080/*` `host_permissions` entry ships
+  in the production manifest and must be reviewed/removed before store packaging. **Sub-project 3's
+  extension autofill-writer 5-task plan is now complete.** Remaining gaps (tracked, not blocking):
+  multi-step/wizard ATS forms are unsupported; essay/custom-field drafting is untested by this
+  harness (fixtures are canonical-only by design); live (non-fixture) end-to-end verification is
+  still open (see `browser-extension/CONTEXT.md` → "Full-pipeline steps still to verify manually").
+
+- [x] **Extension ATS autofill harness — Task 4 (autofill writer + wiring + spec).** **DONE 2026-07-21**
+  — commit `a6a7d18`. New `browser-extension/content/form_fill.js`: content-script global
+  `fillForm(plannedFields) -> {filled: number}` writes an `ApplicationPlan`'s resolved values into
+  the live ATS form (native-setter + input/change events for React-controlled inputs; handles
+  text/textarea/select/checkbox/radio); only writes fields with status `filled`/`drafted` and a
+  non-empty value. Registered in `manifest.json`'s ATS `content_scripts` entry after
+  `form_enumerate.js`. `service_worker.js`'s `handleEnumerateForm` now reads the plan POST response
+  body and returns its `fields` array (previously discarded); `injector.js`'s
+  `_runFormEnumeration` calls `fillForm(result.fields)` on success. New
+  `e2e/extension/tests/autofill.spec.ts` drives a live Greenhouse fixture end-to-end and asserts
+  `#email` gets filled. Fixed two real (non-test-only) bugs found along the way: (1) `manifest.json`
+  `host_permissions` was missing `http://localhost:8080/*`, so the extension's "local mode"
+  server-routing toggle silently failed — Chrome blocks CORS-exempt fetches to hosts not listed
+  there, and the local FastAPI server sends no CORS headers; (2) `injector.js` called
+  `_maybeEnumerateApplyForm()` synchronously at script-load time, but content scripts in one
+  manifest entry share an isolated world and run in file order (injector.js →
+  form_enumerate.js → form_fill.js), so `enumerateForm`/`fillForm` weren't defined yet — form
+  enumeration (shipped in a prior task) had never actually run at runtime. Now deferred via
+  `setTimeout(_maybeEnumerateApplyForm, 0)`. **Task 5 (Lever/Ashby specs + docs) not started** —
+  see `.superpowers/sdd/progress.md` in the `extension-ats-e2e` worktree.
+
+- [x] **Extension ATS autofill harness — Task 3 (harness scaffold + smoke spec).** **DONE 2026-07-21**
+  — commit `95395e8`. New `e2e/extension/` Playwright project (separate from the dashboard harness
+  at `e2e/`): `playwright.config.ts` launches a **persistent Chromium context** with the unpacked
+  `browser-extension/` loaded (required for MV3 service-worker registration — headed only, no
+  headless support), `fixtures.ts` exports a `context`/`serviceWorker` fixture pair for reuse by
+  the upcoming autofill spec, and `tests/extension-loads.spec.ts` smoke-asserts the service worker
+  registers with a `chrome-extension://` URL. Reuses backend readiness (`GET /health`) and the
+  Task 1 dev endpoints. Run via `cd e2e/extension && npm test`. Task 2 (ATS fixture HTML under
+  `e2e/extension/fixtures/`) was already present. Task 4 (autofill spec) completed above.
+
+- [x] **Extension ATS autofill harness — Task 1 (dev seed endpoint).** **DONE 2026-07-21**
+  — commit `d57c70a`. Added non-production-only `POST /api/dev/seed-ats-job` (`web/routers/dev.py`,
+  same `APP_ENV=production` 404 guard as `dev-login`): upserts a `Job` on the caller's profile from
+  `{job_key, apply_url, ats_type}` with `state="scraped"` (literal string — `JobState` has no
+  matching enum member) + `apply_url_raw`/`apply_url_resolved`/`ats_type`, idempotent. Lets a
+  Playwright/extension harness stage a job, then drive an ATS apply page and request its
+  `application_plan`. Tests in `tests/web/test_dev_seed_ats.py`. Docs in `web/CONTEXT.md` → Dev
+  Endpoints and `.claude/CLAUDE.md` routing table. Part of the 5-task plan
+  `docs/superpowers/plans/2026-07-21-extension-autofill-harness.md` (fixtures, harness scaffold,
+  autofill writer + wiring, Lever/Ashby specs + docs still to come).
 
 - [x] **Playwright smoke + live-drive E2E harness.** **DONE 2026-07-21** — commit `e5239d1`.
   New top-level `e2e/` Playwright project: config auto-boots/reuses the local stack (uvicorn `:8080`

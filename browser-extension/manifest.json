@@ -7,7 +7,11 @@
   "host_permissions": [
     "https://*.linkedin.com/*",
     "https://*.indeed.com/*",
-    "https://autoapply.matthewbarlow.me/*"
+    "https://autoapply.matthewbarlow.me/*",
+    "http://localhost:8080/*",
+    "*://*.greenhouse.io/*",
+    "*://*.lever.co/*",
+    "*://*.ashbyhq.com/*"
   ],
   "background": {
     "service_worker": "background/service_worker.js",
@@ -24,6 +28,10 @@
     {
       "matches": ["https://www.indeed.com/jobs*", "https://myjobs.indeed.com/*"],
       "js": ["lib/browser_shim.js", "content/injector.js", "content/indeed.js"]
+    },
+    {
+      "matches": ["*://*.greenhouse.io/*", "*://*.lever.co/*", "*://*.ashbyhq.com/*"],
+      "js": ["content/injector.js", "content/form_enumerate.js", "content/form_fill.js"]
     }
   ],
   "icons": {

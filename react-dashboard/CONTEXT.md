@@ -46,7 +46,9 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Out-of-credits (HTTP 402) global signal | `src/api.js` — `_fetch` dispatches `auto-apply:credits-error` + `auto-apply:credits-stale`; toasted in `src/App.jsx` |
 | Gateway-error (502/503/504) retry for idempotent calls | `src/api.js` — `_fetch` accepts opt-in `retries`/`retryDelay` options and retries only gateway statuses with linear backoff (deploy-window rollovers); the actual fetch is `_fetchOnce`, and thrown errors carry `err.status`. `uploadJob` sets `retries:3` (server dedupes by URL) |
 | Grid layout or viewport sizing | `src/components/Dashboard.jsx` |
-| Job card appearance (title, company, status icon, doc badges) | `src/components/shared/JobCard.jsx` |
+| Job card appearance (title, company, status icon, doc badges) | `src/components/shared/JobCard.jsx` — a "Plan" button (gated on the `jobKey` prop, passed only from `Pipeline.jsx`) opens `ApplicationPlanModal` |
+| Read-only application-plan preview (field → value → status table) | `src/components/widgets/ApplicationPlanModal.jsx` — fetches `getApplicationPlan(jobKey)` (`GET /api/scraper/jobs/{job_key}/application-plan`); empty-state until the extension enumerates the form; no editing/submission |
+| Application answers settings (eligibility + EEO self-ID, all optional; "Decline to self-identify"; black option text) | `src/components/widgets/ApplicationAnswers.jsx` — mounted in `ProfileDetail.jsx`, persisted via `updateProfile` into `data.application_answers`. **Currently ungated** (spec wanted friends_family/beta gating; no client tier-gating mechanism exists — follow-up) |
 | Pipeline tabs (Inbox / Processing / Outbound / Archives) | `src/components/widgets/Pipeline.jsx` |
 | Tab job-state filters | `src/components/widgets/Pipeline.jsx` — `TABS` config |
 | Job detail preview (Description / Resume / Cover sub-tabs) | `src/components/widgets/Settings.jsx` — Preview tab section |

@@ -20,6 +20,10 @@ core/
 ├── document_builder.py  # Snapshots profile data at generation time and joins LLM prose to structured profile data
 ├── document_assembler.py # PURE module — renders a structured document to canonical-ordered Markdown (no DB, no LLM)
 ├── document_parser.py    # Inverse of document_assembler — reconstructs a structured document from rendered Markdown (canonical AND legacy LLM formats)
+├── application_fields.py # Canonical application-form field taxonomy with deterministic/eligibility/EEO value resolvers (pure, no LLM, no network)
+├── application_classify.py # Label heuristics: is_eeo_label (demographic guard, runs first), match_eligibility, classify_custom (pure strings)
+├── ats_schemas.py       # Hand-authored STATIC_SCHEMAS (greenhouse/lever/ashby only) mapping native form field ids → canonical keys; schema_for()
+├── application_mapper.py # build_plan()/needs_essay_pass(): orchestrates taxonomy+classifier+schemas into an ApplicationPlan (pure; essay drafting injected)
 ├── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ├── pricing.py           # Fixed-unit price card: price_for()/unit_usd()/resolve_generate_action()
 ├── credits.py           # Credit ledger: prepaid fixed debit, refund, grant/reconcile, tiered signup grants
@@ -27,6 +31,24 @@ core/
 ├── payments.py          # Tier-aware pricing calculator: compute_credits()/packs_for_tier()/resolve_price_id() (no Stripe SDK calls)
 └── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, construct_event
 ```
+
+## Field-mapping engine (sub-project 2 of document-submission automation)
+
+Maps a profile + generated documents onto an ATS application form, producing a
+read-only `ApplicationPlan` (no form writing — that is a later sub-project).
+Pipeline: `application_fields.py` (canonical taxonomy + resolvers, `FieldKind` ∈
+deterministic/eligibility/eeo/essay/unknown) + `application_classify.py`
+(routing) + `ats_schemas.py` (static greenhouse/lever/ashby schemas) feed
+`application_mapper.build_plan()`. Objective/EEO answers resolve deterministically
+from `User.application_answers` (`{eligibility, eeo}`); free-text questions get one
+injected LLM draft via `draft_essays`. **EEO safety:** demographic fields are
+guarded out of the LLM path twice — `is_eeo_label` in `classify_custom`, and an
+explicit branch in `build_plan` before the essay bucket; `needs_essay_pass` also
+excludes them so metering never fires on a demographic-only form. The
+`map_fields` price (in `pricing.py`, default 2 units) is charged **only** when the
+essay pass actually runs. The plan is stored as JSON on `Job.application_plan`
+(migration `aa13applyplan01`) and surfaced via `serialize()`. LLM drafting lives
+in `job.draft_application_answers()` (grounded in `user.master_resume()`).
 
 ## Profile Schema Engine
 
@@ -126,6 +148,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | ATS parseability gate (mechanical hard-block + LLM advisory) | `ats_gate.py` → `run_gate()` / `Job.run_ats_check()` |
 | Mechanical ATS checks (contact, sections, skills, glyph-junk, text-layer) | `ats_gate.py` → `check_mechanical()` |
 | Semantic ATS roundtrip check (LLM re-parse of extracted text) | `ats_gate.py` → `check_roundtrip()` |
+| Canonical application-form field taxonomy + value resolvers | `application_fields.py` → `CANONICAL_FIELDS`, `resolve_canonical()`, `CanonicalField`, `ResolveContext` |
 | Fixed-unit price card | `pricing.py` → `price_for()`, `unit_usd()`, `resolve_generate_action()` |
 | Credit ledger: grants, prepaid fixed debit, refund, reconciliation | `credits.py` → `grant_credits()`, `debit_fixed()`, `refund_debit()`, `reconcile_balance()`, `signup_grant_for_tier()` |
 | Per-action prepaid gate + debit settle around LLM calls | `metering.py` → `meter_action()` |
@@ -220,6 +243,32 @@ Two-layer gate that validates the rendered résumé PDF before the application i
 - Advances state to `applied` only when the stored report passed and is current.
 
 The `ats_parse` prompt used by the semantic layer is a DB-seeded `PromptDefault` (type key `"ats_parse"`). It is **not** in `PROMPT_TYPE_KEYS` — it is seeded directly by `init_db` and is not exposed for per-profile override.
+
+## Application Field Taxonomy (`core/application_fields.py`)
+
+**Task 1 of the field-mapping engine spec.** A pure, deterministic, zero-network module that defines a
+canonical application-form field taxonomy mapping stable field keys to value resolvers.
+
+**Schema:** `CanonicalField(key, kind, resolve)` where `kind` is one of:
+- `"deterministic"` — user profile data (first_name, email, phone, links, location, resume_file)
+- `"eligibility"` — user-supplied application answers (work_authorized, sponsorship, relocation, start_date, years_experience)
+- `"eeo"` — user-supplied EEO self-identification (gender, race/ethnicity, veteran status, disability)
+- `"essay"` — long-form text (cover letter body — future)
+- `"unknown"` — unrecognized field
+
+**CANONICAL_FIELDS dict:** 19 fields (deterministic + eligibility + EEO). Each resolver is a pure
+function `(ResolveContext) → str | None` with no side effects. Resolvers read from:
+- `ResolveContext.user` — `User` entity (`.first_name`, `.email`, `.phone`, `.linkedin`, `.github`, `.website`, `.location`)
+- `ResolveContext.documents` — dict of document keys to rendered prose (e.g. `"resume_file"`, `"cover_letter_text"`)
+- `ResolveContext.answers` — dict of application-answer groups (e.g. `answers["eligibility"]["work_authorized"]`)
+- `ResolveContext.job` — `Job` entity (unused in Task 1, reserved for future)
+
+**Entry point:** `resolve_canonical(key: str, ctx: ResolveContext) → str | None` looks up a field by
+canonical key and resolves its value, or returns `None` if unknown/unset.
+
+**Known gap:** Eligibility and EEO answers are not yet stored in the DB (no `application_answers` table
+or profile section). Task 2 (mapper engine + profile section) will add this storage and populate
+`ResolveContext.answers`.
 
 ## Credits & Metering (`core/pricing.py`, `core/credits.py`, `core/metering.py`)
 

@@ -76,6 +76,7 @@ function JobList({ jobs, processingKeys = new Set(), selectedJob, onJobSelect, s
             atsType={job.ats_type ?? null}
             easyApply={job.easy_apply ?? null}
             atsDomain={job.ats_domain ?? null}
+            jobKey={job.job_key}
             docs={{
               resume: !!(job.resume_path || job.resume_md_exists),
               coverLetter: !!(job.cover_path || job.cover_md_exists),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 import logging
 import threading
 from typing import Any
@@ -12,9 +13,15 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.database import ProfileConfig
+from core.application_mapper import build_plan, needs_essay_pass
 from core.ats import classify_ats, unwrap_apply_url
 from core.job import Job, JobState
+from core.metering import meter_action
+from core.pricing import price_for
+from core.schemas import EnumeratedField
+from core.user import User
 from scraper.search import search_sources
+from web.application_plan_service import EssayDraftError, make_essay_drafter
 from web.sse import send as _sse_send
 from web.intake_pipeline import run_pipeline
 from web.tenancy import current_profile_id
@@ -323,3 +330,92 @@ def resolve_ats(
         "ats_domain": job.ats_domain,
         "apply_url_resolved": job.apply_url_resolved,
     }
+
+
+class ApplicationPlanRequest(BaseModel):
+    enumerated_fields: list[EnumeratedField] = []
+
+
+def _documents_for(job: Job) -> dict[str, str]:
+    """Resume file pointer + cover letter text for plan resolution."""
+    cover_text = ""
+    if job.cover_path:
+        try:
+            from pathlib import Path
+            cover_text = Path(job.cover_path).read_text(encoding="utf-8")
+        except OSError:
+            cover_text = ""
+    return {"resume_file": job.resume_path or "", "cover_letter_text": cover_text}
+
+
+@router.post("/jobs/{job_key}/application-plan")
+def compute_application_plan(
+    job_key: str,
+    body: ApplicationPlanRequest,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(bearer_or_session_profile),
+) -> dict[str, Any]:
+    """Compute, persist, and return the application plan for a job's form.
+
+    Args:
+        job_key: The job whose application form is being mapped.
+        body: Optionally the fields the extension enumerated off the live page.
+        db: SQLAlchemy session.
+        profile_id: Owning tenant's profile id (bearer or session).
+
+    Returns:
+        The computed ApplicationPlan, serialized.
+    """
+    job = Job.get(job_key, db, profile_id=profile_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    user = User.load(db, profile_id=profile_id)
+    documents = _documents_for(job)
+    fields = body.enumerated_fields
+
+    if needs_essay_pass(job, fields):
+        try:
+            with meter_action(db, profile_id, action="map_fields", job_key=job_key,
+                              price=price_for("map_fields")):
+                plan = build_plan(job, user, documents, enumerated_fields=fields,
+                                  draft_essays=make_essay_drafter(user, job))
+        except EssayDraftError:
+            # LLM drafting failed; meter_action refunded the debit. Still return
+            # the deterministic plan (essay fields left undrafted), unmetered.
+            plan = build_plan(job, user, documents, enumerated_fields=fields)
+    else:
+        plan = build_plan(job, user, documents, enumerated_fields=fields)
+
+    job.application_plan = plan.model_dump_json()
+    db.commit()
+    db.refresh(job)
+    try:
+        _sse_send("job", job.serialize(), profile_id=profile_id)
+    except Exception:
+        logger.exception("[application-plan] broadcast failed for %s", job_key)
+    return plan.model_dump()
+
+
+@router.get("/jobs/{job_key}/application-plan")
+def get_application_plan(
+    job_key: str,
+    db: Session = Depends(get_db),
+    profile_id: int = Depends(bearer_or_session_profile),
+) -> dict[str, Any]:
+    """Return the last stored plan and the answers-completeness flag.
+
+    Args:
+        job_key: The job to look up.
+        db: SQLAlchemy session.
+        profile_id: Owning tenant's profile id (bearer or session).
+
+    Returns:
+        Dict with the stored plan (or null if never computed) and whether the
+        profile's application_answers cover the eligibility/EEO fields.
+    """
+    job = Job.get(job_key, db, profile_id=profile_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    user = User.load(db, profile_id=profile_id)
+    plan = json.loads(job.application_plan) if job.application_plan else None
+    return {"plan": plan, "application_answers_complete": user.application_answers_complete()}
