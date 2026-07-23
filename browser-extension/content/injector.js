@@ -280,7 +280,12 @@ async function _runFormEnumeration() {
       `${_AP_LOG} posted ${enumerated_fields.length} fields for ${jobKey} to ${result.server_url} — reopen the "Plan" modal to view`
     );
     if (Array.isArray(result.fields) && typeof fillForm === "function") {
-      fillForm(result.fields);
+      const report = await fillForm(result.fields);
+      const notFilled = report.results.filter((r) => r.status !== "filled");
+      console.info(
+        `${_AP_LOG} fill: ${report.filled}/${report.results.length} committed`,
+        notFilled.length ? notFilled : "(all filled)"
+      );
     }
     if (result.application_answers_complete === false) {
       _showAnswersNudge(result.server_url);
