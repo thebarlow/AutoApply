@@ -338,11 +338,15 @@ class User(Base):
         from core.llm import llm_label
 
         with llm_label("resume-parse"):
+            # Long résumés (4+ pages) produce large structured JSON; a tight
+            # budget truncates the output (finish_reason='length'), yielding
+            # invalid JSON. Give a generous budget and a matching timeout, and
+            # fail loudly if the model still hits the cap.
             response = client.chat.completions.create(
                 model=model,
                 temperature=0,
-                timeout=30,
-                max_tokens=8000,
+                timeout=90,
+                max_tokens=32768,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": md_text},
@@ -353,7 +357,13 @@ class User(Base):
         record_usage(response, model)
         from core.schemas import ParseResponse, parse_llm_json
 
-        raw = response.choices[0].message.content or ""
+        choice = response.choices[0]
+        if getattr(choice, "finish_reason", None) == "length":
+            raise ValueError(
+                "Résumé parse truncated: the model hit its output token limit "
+                "before finishing. The résumé may be unusually long."
+            )
+        raw = choice.message.content or ""
         try:
             parsed = parse_llm_json(raw, ParseResponse).model_dump()
         except RuntimeError as exc:
