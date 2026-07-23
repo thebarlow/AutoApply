@@ -380,5 +380,11 @@ rule existed, run `python -m scripts.flag_failed_scrapes` (dry run) then
 - All DB writes inside `Job` methods use the session passed in; callers are responsible for commit/rollback.
 - The résumé refine + structured-edit paths pass `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). (`web/routers/jobs.py` `put_document` also passes `max_pages=1`.)
 - `_refine_doc_md` uses `max_tokens=32768` to avoid truncation on rewrites.
+- `User.from_markdown` (résumé-parse LLM call, backing `from_pdf` and the parse/propose
+  endpoint) uses `max_tokens=32768` and `timeout=90` — a long (4+ page) résumé produces
+  large structured JSON that overflowed the former 8000-token cap, truncating the output
+  (`finish_reason='length'`) and surfacing downstream as a confusing 422 "invalid JSON".
+  It now checks `finish_reason == "length"` and raises a clear `ValueError`
+  ("Résumé parse truncated…") instead of letting truncated JSON reach the parser.
 - Structured résumé generate/refine call the LLM through `_llm_json_with_retry` (module-level in `job.py`): it appends a strict-JSON instruction (`_JSON_RETRY_SUFFIX`) and retries once with a corrective nudge when `parse_llm_json` fails. This guards against small/fast models breaking a markdown value out of its JSON string.
 - Refinement settings are clamped server-side on `User._hydrate()` (audit, 2026-07-18): `resume_refine_max_turns` / `cover_refine_max_turns` → 0–`MAX_REFINE_TURNS` (5), pass scores → [0,1]. Refinement turns run unmetered inside the flat generation price, so client-supplied values must never expand them. Tests: `tests/core/test_refine_clamp.py`.

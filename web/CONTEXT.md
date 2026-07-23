@@ -48,7 +48,7 @@ web/
 | Session LLM cost tracking | `routers/session_cost_router.py` |
 | Credit balance / history, admin grants, system balance | `routers/credits.py` |
 | Stripe Checkout (packs/checkout/verify/webhook/history) | `routers/payments.py` |
-| Profile CRUD, tree, résumé parse, upload (config router) | `routers/config.py` — per-tenant keys read internally via `_get` (`profile_config`); global infra keys via `_get_global` (`config`). The legacy key-value HTTP routes and the orphaned `_set`/`_set_global` helpers were removed (audit, 2026-07-19 — see Known Issues) |
+| Profile CRUD, tree, résumé parse, upload (config router) | `routers/config.py` — per-tenant keys read internally via `_get` (`profile_config`); global infra keys via `_get_global` (`config`). The legacy key-value HTTP routes and the orphaned `_set`/`_set_global` helpers were removed (audit, 2026-07-19 — see Known Issues). `parse_propose` logs a WARNING (module `logger`) with profile id + file suffix + exception on parse failure before raising the 422, so production parse failures are visible in the Railway logs (the 422 detail alone never reached server logs) |
 | Prompt template get/set per profile | `routers/prompts.py` |
 | Active LLM task status (for UI polling) | `routers/llm_status_router.py` |
 | Onboarding/setup state | `routers/setup_status.py` |
