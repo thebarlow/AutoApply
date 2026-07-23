@@ -387,4 +387,8 @@ rule existed, run `python -m scripts.flag_failed_scrapes` (dry run) then
   It now checks `finish_reason == "length"` and raises a clear `ValueError`
   ("Résumé parse truncated…") instead of letting truncated JSON reach the parser.
 - Structured résumé generate/refine call the LLM through `_llm_json_with_retry` (module-level in `job.py`): it appends a strict-JSON instruction (`_JSON_RETRY_SUFFIX`) and retries once with a corrective nudge when `parse_llm_json` fails. This guards against small/fast models breaking a markdown value out of its JSON string.
+- Parsed résumé "list" sections must stamp a unique `order` on each item `GroupNode`
+  (`core/parsed_sections.py` `build_section_from_parsed` and `merge_section`): `validate_tree`
+  rejects a `ListNode` whose children share a sibling order, which otherwise 422s `parse/apply`
+  (with no server log — see `web/CONTEXT.md` → Known Issues) for a multi-row novel section.
 - Refinement settings are clamped server-side on `User._hydrate()` (audit, 2026-07-18): `resume_refine_max_turns` / `cover_refine_max_turns` → 0–`MAX_REFINE_TURNS` (5), pass scores → [0,1]. Refinement turns run unmetered inside the flat generation price, so client-supplied values must never expand them. Tests: `tests/core/test_refine_clamp.py`.

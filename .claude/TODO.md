@@ -196,6 +196,17 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Stamp unique item order in parsed list sections (parse/apply 422 fix).** **DONE 2026-07-23**
+  — commit `a9d7f60`. A novel résumé "list" section (e.g. CERTIFICATIONS) with 2+ rows built item
+  `GroupNode`s with no `order`, all defaulting to 0; `validate_tree` rejects a `ListNode` whose
+  children share a sibling order, so `parse/apply` raised a 422 with **no server log** — surfacing as
+  a phantom "can't parse résumé" failure. Two fixes in `core/parsed_sections.py`:
+  `build_section_from_parsed` stamps `order=entry_idx` on each list item, and `merge_section`
+  re-indexes item order after extending (raw extend collided 0..n twice). Regression tests for both
+  paths in `tests/core/test_parsed_sections.py`. Also documented the silent-422 logging gap in
+  `web/CONTEXT.md` → Known Issues (both `parse_apply` validation branches raise without logging;
+  add a `logger.warning` before the raise when next touching that code).
+
 - [x] **Raise résumé-parse token budget and guard truncation.** **DONE 2026-07-23** — commit
   `e424d19`. A 4-page résumé overflowed `User.from_markdown`'s 8000-token output cap, truncating the
   structured JSON (`finish_reason='length'`) and surfacing as a 422 "invalid JSON". Raised
