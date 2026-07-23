@@ -73,3 +73,58 @@ function _fire(el) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
+
+// Normalize option/value text for matching + commit verification: trim,
+// collapse internal whitespace, case-fold. Equality on this (not "non-empty")
+// keeps a pre-existing selection from being misread as our commit.
+function _normText(s) {
+  return (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+// Commit a plan value into a react-select-style combobox (Greenhouse). Types
+// the value to open/filter the menu, polls for a matching [role="option"],
+// commits on mousedown, and verifies the rendered single-value equals the
+// option. Resolves true only on a verified commit; otherwise clears the field
+// and resolves false. Anchors on the stable ARIA contract, not emotion hashes.
+async function _commitCombobox(el, value) {
+  const want = _normText(value);
+  if (!want) return false;
+  el.focus();
+  _setNativeValue(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+
+  const deadline = Date.now() + 1500;
+  let target = null;
+  while (Date.now() < deadline) {
+    const opts = [...document.querySelectorAll('[role="option"]')];
+    const exact = opts.find((o) => _normText(o.textContent) === want);
+    if (exact) { target = exact; break; }
+    const starts = opts.filter((o) => _normText(o.textContent).startsWith(want));
+    if (starts.length === 1) { target = starts[0]; break; }
+    await new Promise((r) => setTimeout(r, 60));
+  }
+  if (!target) { _clearCombobox(el); return false; }
+
+  const committed = _normText(target.textContent);
+  for (const type of ["mousedown", "mouseup", "click"]) {
+    target.dispatchEvent(new MouseEvent(type, { bubbles: true }));
+  }
+
+  const container = el.closest('[class*="control"], [class*="select"]') || el.parentElement;
+  const sv =
+    (container && container.querySelector('[class*="singleValue"], [class*="single-value"]')) || null;
+  if (sv && _normText(sv.textContent) === committed) return true;
+  _clearCombobox(el);
+  return false;
+}
+
+// Reset a combobox to empty so nothing looks half-filled: Escape (close menu),
+// wipe the input via the native setter + input, blur. react-select discards
+// unselected text on blur; the explicit reset guarantees it across variants.
+function _clearCombobox(el) {
+  el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  el.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", bubbles: true }));
+  _setNativeValue(el, "");
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.blur();
+}

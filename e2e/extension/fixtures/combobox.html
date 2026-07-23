@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>combobox fixture</title></head>
+<body>
+  <form>
+    <!--
+      Faithful to the Greenhouse react-select ARIA contract (see
+      docs/superpowers/specs/2026-07-22-combobox-fill-commit-design.md §2):
+      a role=combobox input whose menu commits on an option's MOUSEDOWN and
+      renders the choice as a *__singleValue node in the control. Deliberately
+      NOT real react-select (version-coupled + slow); the interaction contract
+      is what the commit logic verifies.
+    -->
+    <div class="select__control" data-field="country">
+      <div class="select__value"><!-- singleValue injected here on commit --></div>
+      <input id="country" role="combobox" aria-autocomplete="list" aria-expanded="false" type="text" value="" autocomplete="off" />
+      <div class="select__menu" hidden></div>
+    </div>
+  </form>
+  <script>
+    (function () {
+      const OPTIONS = ['United States', 'United Kingdom', 'Canada', 'Germany'];
+      const control = document.querySelector('.select__control');
+      const input = document.getElementById('country');
+      const valueBox = control.querySelector('.select__value');
+      const menu = control.querySelector('.select__menu');
+
+      function renderMenu() {
+        const q = input.value.trim().toLowerCase();
+        menu.innerHTML = '';
+        if (!q) { menu.hidden = true; input.setAttribute('aria-expanded', 'false'); return; }
+        const matches = OPTIONS.filter((o) => o.toLowerCase().includes(q));
+        const list = document.createElement('div');
+        list.setAttribute('role', 'listbox');
+        for (const o of matches) {
+          const opt = document.createElement('div');
+          opt.setAttribute('role', 'option');
+          opt.textContent = o;
+          // react-select commits on mousedown, not click.
+          opt.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            const sv = document.createElement('div');
+            sv.className = 'select__single-value select__singleValue';
+            sv.textContent = o;
+            valueBox.innerHTML = '';
+            valueBox.appendChild(sv);
+            input.value = '';
+            menu.hidden = true;
+            input.setAttribute('aria-expanded', 'false');
+          });
+          list.appendChild(opt);
+        }
+        menu.innerHTML = '';
+        menu.appendChild(list);
+        menu.hidden = matches.length === 0;
+        input.setAttribute('aria-expanded', matches.length ? 'true' : 'false');
+      }
+
+      input.addEventListener('input', renderMenu);
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { menu.hidden = true; input.setAttribute('aria-expanded', 'false'); }
+      });
+    })();
+  </script>
+</body>
+</html>
