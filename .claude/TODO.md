@@ -23,6 +23,27 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Features
 
+- [ ] **Usage-based (metered) LLM billing instead of fixed-unit prices.** Idea (2026-07-23): cap a
+  call's `max_tokens` at whatever the user's remaining balance can afford, then debit dynamically
+  from *actual* tokens used (from `usage` on the response) rather than a flat per-action unit price.
+  This directly resolves the "fixed-price LLM oracle" risk (see Known accepted limitations) — no more
+  worst-case-cost-vs-unit-price gamble — and lets long inputs (e.g. 4-page résumé parses) run as large
+  as the balance allows. Design work: a token→credit conversion rate (with margin), pre-call balance
+  gating on an *estimated* max (still needed so the call can't overspend), post-call reconciliation of
+  the real cost, UX for "this action costs a variable amount," and how it coexists with / replaces the
+  current prepaid fixed-unit model in `core/metering.py` + `core/pricing.py`. Bigger than a tweak —
+  its own spec.
+
+- [ ] **Robust error logging for Railway (hosted).** The local rotating-file logging
+  (`core/logging_config.py`, "Structured error logging v1") doesn't help on Railway — the `/data`
+  volume log file isn't easily inspectable and container restarts/redeploys scatter context. Build
+  hosted-grade error observability: ensure tracebacks/`logger.exception` output reaches Railway's
+  log stream (stdout/stderr JSON so it's queryable in the Railway logs UI), decide on structured
+  (JSON) vs. plain formatting per env, and consider the deferred v2 from error-logging-v1 — a
+  queryable DB error table + in-app admin viewer — so production failures are diagnosable without
+  SSHing into the container. Scope: log routing/format by `APP_ENV`, request-context enrichment
+  (profile_id, route, request id), and where errors surface (Railway stream vs. DB vs. admin UI).
+
 - [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
   its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone
   job-detail pages too (LinkedIn/Indeed single-job views), so a user can capture a job they've
@@ -174,6 +195,20 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Raise résumé-parse token budget and guard truncation.** **DONE 2026-07-23** — commit
+  `e424d19`. A 4-page résumé overflowed `User.from_markdown`'s 8000-token output cap, truncating the
+  structured JSON (`finish_reason='length'`) and surfacing as a 422 "invalid JSON". Raised
+  `max_tokens` 8000→32768 and `timeout` 30→90s, and added a `finish_reason == "length"` check that
+  raises a clear `ValueError` ("Résumé parse truncated…") instead of a confusing downstream
+  JSON-parse error. Small hardening; documented in `core/CONTEXT.md` → Key Invariants.
+
+- [x] **Log resume parse failures before returning 422.** **DONE 2026-07-23** — commit `b84ed6a`.
+  `POST /api/config/profiles/{id}/parse/propose` (`web/routers/config.py`) returned 422 with the
+  error only in the response body; server-side logging never recorded it, so production parse
+  failures were invisible in the Railway logs. The `except (ValueError, RuntimeError)` block now
+  logs a WARNING (profile id, file suffix, exception) via a new module-level `logger` before
+  raising. Observability-only; no behavior change.
 
 - [x] **Extension autofill hardening — per-field error isolation + checkbox match fix.** **DONE 2026-07-21**
   — commit `7342b74`. `fillForm()` (`browser-extension/content/form_fill.js`) now wraps each field's
