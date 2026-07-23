@@ -37,6 +37,63 @@ test('_commitCombobox clears the field and returns false when no option matches'
   await page.close();
 });
 
+const ASYNC_SINGLEVALUE = `
+  <form>
+    <div class="select__control">
+      <div class="select__value"></div>
+      <input id="country" role="combobox" aria-autocomplete="list" type="text" value="" />
+      <div class="select__menu" hidden></div>
+    </div>
+    <script>
+      (function () {
+        var input = document.getElementById('country');
+        var box = document.querySelector('.select__value');
+        var menu = document.querySelector('.select__menu');
+        input.addEventListener('input', function () {
+          var q = input.value.trim().toLowerCase();
+          menu.innerHTML = ''; menu.hidden = !q;
+          if (!q) return;
+          ['Canada','Germany'].filter(function (o) { return o.toLowerCase().indexOf(q) === 0; })
+            .forEach(function (o) {
+              var d = document.createElement('div');
+              d.setAttribute('role','option'); d.textContent = o;
+              d.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                // Simulate real react-select: the singleValue node is rendered
+                // via React setState on a LATER tick, not synchronously in the
+                // mousedown handler.
+                setTimeout(function () {
+                  var sv = document.createElement('div');
+                  sv.className = 'select__singleValue'; sv.textContent = o;
+                  box.innerHTML = ''; box.appendChild(sv);
+                  input.value = ''; menu.hidden = true;
+                }, 120);
+              });
+              menu.appendChild(d);
+            });
+        });
+      })();
+    </script>
+  </form>`;
+
+async function loadAsyncSingleValue(context: any) {
+  const page = await context.newPage();
+  await page.setContent(`<!doctype html><html><body>${ASYNC_SINGLEVALUE}</body></html>`);
+  await page.addScriptTag({ path: FILL_JS });
+  return page;
+}
+
+test('_commitCombobox polls for a singleValue node rendered asynchronously after mousedown', async ({ context }) => {
+  const page = await loadAsyncSingleValue(context);
+  const ok = await page.evaluate(async () => {
+    const el = document.getElementById('country');
+    return await (globalThis as any)._commitCombobox(el, 'Canada');
+  });
+  expect(ok).toBe(true);
+  await expect(page.locator('.select__value [class*="singleValue"]')).toHaveText('Canada');
+  await page.close();
+});
+
 const MIXED = `
   <form>
     <label for="email">Email</label>

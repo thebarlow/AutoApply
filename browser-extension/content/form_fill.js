@@ -8,7 +8,7 @@ async function fillForm(plannedFields) {
   let filled = 0;
   for (const f of plannedFields) {
     if (!f) continue;
-    const entry = { field_id: (f && f.field_id) || "", input_type: (f && f.input_type) || "", status: "skipped" };
+    const entry = { field_id: f.field_id || "", input_type: f.input_type || "", status: "skipped" };
     results.push(entry);
     if ((f.status !== "filled" && f.status !== "drafted") || f.value == null || f.value === "") {
       continue; // skipped — includes every EEO field (non-filled status / empty value)
@@ -133,9 +133,13 @@ async function _commitCombobox(el, value) {
   }
 
   const container = el.closest('[class*="control"], [class*="select"]') || el.parentElement;
-  const sv =
-    (container && container.querySelector('[class*="singleValue"], [class*="single-value"]')) || null;
-  if (sv && _normText(sv.textContent) === committed) return true;
+  const verifyDeadline = Date.now() + 500;
+  while (Date.now() < verifyDeadline) {
+    const sv =
+      (container && container.querySelector('[class*="singleValue"], [class*="single-value"]')) || null;
+    if (sv && _normText(sv.textContent) === committed) return true;
+    await new Promise((r) => setTimeout(r, 60));
+  }
   _clearCombobox(el);
   return false;
 }
