@@ -2,21 +2,43 @@
 // Writes an application plan's resolved values into the live form. Loaded as a
 // plain content script alongside injector.js/form_enumerate.js on ATS apply
 // pages (no module system — fillForm() joins the shared page-context globals).
-function fillForm(plannedFields) {
-  if (!Array.isArray(plannedFields)) return { filled: 0 };
+async function fillForm(plannedFields) {
+  if (!Array.isArray(plannedFields)) return { filled: 0, results: [] };
+  const results = [];
   let filled = 0;
   for (const f of plannedFields) {
-    if (!f || (f.status !== "filled" && f.status !== "drafted")) continue;
-    if (f.value == null || f.value === "") continue;
+    if (!f) continue;
+    const entry = { field_id: (f && f.field_id) || "", input_type: (f && f.input_type) || "", status: "skipped" };
+    results.push(entry);
+    if ((f.status !== "filled" && f.status !== "drafted") || f.value == null || f.value === "") {
+      continue; // skipped — includes every EEO field (non-filled status / empty value)
+    }
+    const el = _findControl(f.field_id);
+    if (!el) { entry.status = "not_found"; continue; }
     try {
-      const el = _findControl(f.field_id);
-      if (el && _writeValue(el, f.value)) filled++;
+      const status = await _writeField(el, f);
+      entry.status = status;
+      if (status === "filled") filled++;
     } catch (_) {
       // One bad control (e.g. a file input throwing on programmatic .value
       // assignment) shouldn't strand every remaining field.
+      entry.status = "failed";
     }
   }
-  return { filled };
+  return { filled, results };
+}
+
+// Route a single field to the right writer and return its status. Comboboxes
+// are genuinely async (poll + commit); everything else resolves synchronously.
+async function _writeField(el, f) {
+  const role = (el.getAttribute("role") || "").toLowerCase();
+  const isCombo = role === "combobox" || el.hasAttribute("aria-autocomplete");
+  const multi = el.getAttribute("aria-multiselectable") === "true" || f.input_type === "multiselect";
+  if (isCombo || f.input_type === "combobox") {
+    if (multi) return "skipped"; // multi-select combobox (EEO) is never partially committed
+    return (await _commitCombobox(el, f.value)) ? "filled" : "uncommitted";
+  }
+  return _writeValue(el, f.value) ? "filled" : "failed";
 }
 
 function _findControl(fieldId) {
