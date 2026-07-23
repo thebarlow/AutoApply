@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -44,6 +45,8 @@ from core.parsed_sections import (
     replace_section,
 )
 from web.tenancy import current_profile_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -581,6 +584,12 @@ def parse_propose(
     except PromptNotConfiguredError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except (ValueError, RuntimeError) as exc:
+        logger.warning(
+            "resume parse failed for profile %s (%s): %s",
+            profile_id,
+            Path(resume_path).suffix.lower() or "?",
+            exc,
+        )
         raise HTTPException(status_code=422, detail=str(exc))
 
     parsed = ParseResponse.model_validate(raw_dict)
