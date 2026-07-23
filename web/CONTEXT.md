@@ -238,6 +238,15 @@ Admin-gated, dev-only endpoints not intended for production user flows.
 
 ## Known Issues
 
+- **`parse/apply` 422s are silent — no server log.** Both `validate_tree`/`validate_tree_limits`
+  guards in `config.py::parse_apply` (onboarding branch and per-section branch) raise
+  `HTTPException(422, str(exc))` **without logging**, unlike `parse_propose` which logs
+  parse failures. A tree-validation 422 therefore leaves no trace in Railway/stdout, so a
+  user-reported "can't parse résumé, 422" can look like an LLM failure when it is actually
+  the apply/persist step. When touching this code, add a `logger.warning` before the raise.
+  (Root-caused a real incident: a résumé with a multi-row novel "list" section tripped
+  `validate_tree`'s duplicate-sibling-order check — see `core/parsed_sections.py`
+  `build_section_from_parsed`/`merge_section`, now fixed to stamp unique item `order`.)
 - **`parse/apply` trusts `is_onboarding` from the client.** When `proposal.is_onboarding`
   is true, `parse_apply` REBUILDS the profile tree from scratch and replaces the stored
   `profile_tree`. Safe today because intake only fires on empty profiles, but before any

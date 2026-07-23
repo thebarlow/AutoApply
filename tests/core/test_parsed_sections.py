@@ -1,7 +1,9 @@
-from core.schemas import ParseResponse
+from core.schemas import ExtraSection, ParsedEntry, ParsedField, ParseResponse
 from core.parsed_sections import (
+    build_section_from_parsed, merge_section,
     builtin_sections_from_parse, set_section_customize, iter_leaf_fields, _item_name,
 )
+from core.profile_tree import RootNode, validate_tree
 
 
 def _parsed(**kw):
@@ -55,3 +57,43 @@ def test_set_section_customize_flips_writable_fields():
     set_section_customize(exp, False, "")
     assert all(not f.llm_output for f in iter_leaf_fields(exp))
     assert exp.prompt == ""
+
+
+def test_multi_entry_list_section_has_unique_item_orders():
+    """A novel 'list' section with 2+ entries must pass validate_tree.
+
+    Regression: item GroupNodes previously all defaulted to order=0, which
+    tripped validate_tree's duplicate-sibling-order check and 422'd parse/apply
+    (e.g. a CERTIFICATIONS section with multiple rows).
+    """
+    certs = ExtraSection(name="CERTIFICATIONS", kind="list", entries=[
+        ParsedEntry(fields=[ParsedField(label="Name", value="AWS Cloud Practitioner")]),
+        ParsedEntry(fields=[ParsedField(label="Name", value="ITIL Foundation")]),
+    ])
+    section = build_section_from_parsed(certs)
+    lst = section.children[0]
+    assert [c.order for c in lst.children] == [0, 1]
+    root = RootNode()
+    root.children.append(section)
+    validate_tree(root)  # must not raise
+
+
+def test_merge_list_sections_reindexes_item_orders():
+    """Merging two list sections must not collide sibling orders.
+
+    Regression: both lists number items from 0, so a raw extend produced a
+    duplicate order that tripped validate_tree and 422'd the merge action.
+    """
+    def _certs(*names):
+        return ExtraSection(name="CERTS", kind="list", entries=[
+            ParsedEntry(fields=[ParsedField(label="Name", value=n)]) for n in names
+        ])
+
+    existing = build_section_from_parsed(_certs("A", "B"))
+    incoming = build_section_from_parsed(_certs("C"))
+    merge_section(existing, incoming)
+    lst = existing.children[0]
+    assert [c.order for c in lst.children] == [0, 1, 2]
+    root = RootNode()
+    root.children.append(existing)
+    validate_tree(root)  # must not raise

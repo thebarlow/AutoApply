@@ -168,10 +168,13 @@ def build_section_from_parsed(extra: ExtraSection, order: int = 0) -> SectionNod
         for i, lbl in enumerate(labels)
     ])
     children = []
-    for e in extra.entries:
+    for entry_idx, e in enumerate(extra.entries):
         by_label = {f.label: f.value for f in e.fields}
         item_values = {lbl: by_label.get(lbl, "") for lbl in labels}
-        children.append(GroupNode(name=_item_name("", item_values), children=[
+        # order must be unique across sibling items; validate_tree rejects a
+        # ListNode whose children share an order (e.g. a multi-row CERTIFICATIONS
+        # section), which otherwise 422s the parse/apply step.
+        children.append(GroupNode(name=_item_name("", item_values), order=entry_idx, children=[
             FieldNode(name=lbl, kind="text", order=i, value=by_label.get(lbl, ""),
                       llm_output=False)
             for i, lbl in enumerate(labels)
@@ -332,6 +335,10 @@ def merge_section(existing: SectionNode, incoming: SectionNode) -> None:
     el, il = _list_node(existing), _list_node(incoming)
     if el is not None and il is not None:
         el.children.extend(il.children)
+        # Re-index sibling order: both lists number their items from 0, so a raw
+        # extend collides (validate_tree rejects duplicate sibling order → 422).
+        for i, item in enumerate(el.children):
+            item.order = i
         return
     for kind, combine in (("taglist", _union), ("bullets", _append)):
         ef, inf = _single_field(existing, kind), _single_field(incoming, kind)
