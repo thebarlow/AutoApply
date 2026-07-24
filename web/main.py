@@ -222,16 +222,13 @@ logger = logging.getLogger("web.unhandled")
 
 @app.exception_handler(Exception)
 async def _log_unhandled_exception(request, exc: Exception):
-    """Log any unhandled exception with request context, then re-raise.
+    """Return a controlled 500 for any unhandled exception.
 
-    Logging here (rather than swallowing) lets the exception flow through
-    `DbErrorHandler` + the JSON log stream for hosted error observability,
-    while Starlette still produces its standard 500 response afterward.
+    Logging happens in `RequestContextMiddleware` (context still bound there).
+    Here we only produce the response so the exception does not escape to
+    uvicorn and get recorded a second time under a different logger name.
     """
-    logger.exception(
-        "Unhandled exception on %s", request.scope.get("path", "?"), exc_info=exc
-    )
-    raise exc
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
 @app.exception_handler(InsufficientCredits)

@@ -1,6 +1,7 @@
 """Bind per-request logging context (request id, route, profile) for every request."""
 from __future__ import annotations
 
+import logging
 import uuid
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -8,6 +9,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from core import log_context
+
+logger = logging.getLogger("web.request")
 
 
 def _resolve_profile_id(request: Request) -> int | None:
@@ -48,6 +51,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         )
         try:
             response = await call_next(request)
+        except Exception:
+            # Log here — the context bag is still bound, so the record (and its
+            # error_events row) carries request_id/route/profile_id. The app-level
+            # Exception handler runs in ServerErrorMiddleware, OUTSIDE this
+            # middleware, after clear() below has wiped the context.
+            logger.exception("Unhandled exception on %s", route)
+            raise
         finally:
             log_context.clear()
         response.headers["X-Request-ID"] = request_id
