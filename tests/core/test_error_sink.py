@@ -56,6 +56,36 @@ def test_prune_respects_max_rows(monkeypatch, sink):
     db.close()
 
 
+def test_dedup_refreshes_traceback(sink):
+    import sys
+
+    def _info():
+        try:
+            raise ValueError("same")
+        except ValueError:
+            return sys.exc_info()
+
+    _emit("boom", _info())
+    _emit("boom", _info())
+    db = sink()
+    row = db.query(ErrorEvent).one()
+    assert row.count == 2
+    assert row.traceback and "ValueError: same" in row.traceback
+    db.close()
+
+
+def test_dedup_bump_does_not_prune(monkeypatch, sink):
+    monkeypatch.setenv("ERROR_LOG_MAX_ROWS", "2")
+    _emit("keep-a")
+    _emit("keep-b")
+    # Third distinct insert would prune to 2; but bumping an existing
+    # fingerprint must NOT delete other rows.
+    _emit("keep-a")
+    db = sink()
+    assert db.query(ErrorEvent).count() == 2
+    db.close()
+
+
 def test_emit_swallows_db_errors(monkeypatch):
     monkeypatch.setattr(dbmod, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("down")))
     _emit("boom")  # must not raise

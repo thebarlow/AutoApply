@@ -120,9 +120,12 @@ class DbErrorHandler(logging.Handler):
             if existing is not None:
                 existing.count += 1
                 existing.last_seen = now
+                existing.traceback = tb
+                existing.message = record.getMessage()
                 existing.route = getattr(record, "route", None)
                 existing.profile_id = getattr(record, "profile_id", None)
                 existing.request_id = getattr(record, "request_id", None)
+                db.commit()
             else:
                 db.add(
                     ErrorEvent(
@@ -139,8 +142,8 @@ class DbErrorHandler(logging.Handler):
                         fingerprint=fp,
                     )
                 )
-            db.commit()
-            self._prune(db)
+                db.commit()
+                self._prune(db)
         finally:
             db.close()
 
