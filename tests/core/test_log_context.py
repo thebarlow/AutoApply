@@ -50,3 +50,16 @@ def test_bind_method_and_email_stamped_on_record():
         assert rec.account_email == "a@b.com"
     finally:
         log_context.clear()
+
+
+def test_fmt_formats_without_bound_context():
+    import logging
+    from core.logging_config import _FMT
+    from core.log_context import ContextFilter, clear
+
+    clear()
+    rec = logging.LogRecord("l", 20, "a.py", 1, "hello", None, None)
+    ContextFilter().filter(rec)
+    line = logging.Formatter(_FMT).format(rec)
+    assert "hello" in line
+    assert "None" in line  # unbound context renders as None, not a KeyError

@@ -19,7 +19,7 @@ from pathlib import Path
 
 _CONFIGURED = False
 
-_FMT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+_FMT = "%(asctime)s %(levelname)s [%(name)s] [%(request_id)s %(method)s %(route)s] %(message)s"
 _MAX_BYTES = 5 * 1024 * 1024
 _BACKUP_COUNT = 5
 
