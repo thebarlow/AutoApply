@@ -59,27 +59,51 @@ def test_prune_respects_max_rows(monkeypatch, sink):
 def test_dedup_refreshes_traceback(sink):
     import sys
 
-    def _info():
+    # Both call sites raise via the same shared helper, so the top-of-stack
+    # frame (where the exception is actually raised) is identical for both
+    # occurrences -- they share a fingerprint and dedup into one row. But the
+    # *caller* differs (_boom_first vs _boom_second), so the full formatted
+    # traceback text differs between the two occurrences, letting us tell
+    # whether the stored traceback was refreshed to the second occurrence or
+    # left as the first.
+    def _raise(msg):
+        raise ValueError(msg)
+
+    def _boom_first():
+        _raise("same")
+
+    def _boom_second():
+        _raise("same")
+
+    def _info(fn):
         try:
-            raise ValueError("same")
+            fn()
         except ValueError:
             return sys.exc_info()
 
-    _emit("boom", _info())
-    _emit("boom", _info())
+    _emit("boom", _info(_boom_first))
+    _emit("boom", _info(_boom_second))
     db = sink()
-    row = db.query(ErrorEvent).one()
+    rows = db.query(ErrorEvent).all()
+    assert len(rows) == 1  # same fingerprint -> deduped, not two rows
+    row = rows[0]
     assert row.count == 2
-    assert row.traceback and "ValueError: same" in row.traceback
+    assert row.traceback
+    assert "_boom_second" in row.traceback
+    assert "_boom_first" not in row.traceback
     db.close()
 
 
 def test_dedup_bump_does_not_prune(monkeypatch, sink):
-    monkeypatch.setenv("ERROR_LOG_MAX_ROWS", "2")
+    # Insert two distinct rows under a high cap so both survive.
+    monkeypatch.setenv("ERROR_LOG_MAX_ROWS", "1000")
     _emit("keep-a")
     _emit("keep-b")
-    # Third distinct insert would prune to 2; but bumping an existing
-    # fingerprint must NOT delete other rows.
+    # Now lower the cap below the current row count and bump an *existing*
+    # fingerprint. If the bump path incorrectly ran prune (the pre-fix
+    # behavior), it would delete down to 1 row; the correct behavior only
+    # prunes on the insert path, so both rows must survive the bump.
+    monkeypatch.setenv("ERROR_LOG_MAX_ROWS", "1")
     _emit("keep-a")
     db = sink()
     assert db.query(ErrorEvent).count() == 2
