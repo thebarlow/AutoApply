@@ -3,6 +3,7 @@
   "name": "Job Scraper",
   "version": "1.1.0",
   "description": "Scrapes job listings from LinkedIn and Indeed into AutoApply.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArhbXdayNJgnYSox7iJPydZ3z+HayhgpOuDclpcd7PagVFSaqvB6Bgn92Qw88I2ZjawdipDAaMmfhlAghsWLTXCXzkYIx6iXaRa71bG+HNxONdclWoh3hM9TpzjI5R9ZYLKx59ZTFMElytYdUOfW/07w77sAnhFbS3zFo9TbkZq7am4qfWtIRU4w5mHRL8iES46CQiCSn4OzC/M29qOHUaiVck4bkyR/P2muLwKgbm3hf4mBUCFEVaXybCt7tAD0x6Php/sF033WC8VzjlBl+FuRlc5nLAlEPVfuRlJBO+o3up/GcrBaiPWtBC/rlszsRS8WkXHsBArs2u+yi236xnwIDAQAB",
   "permissions": ["storage", "identity", "tabs"],
   "host_permissions": [
     "https://*.linkedin.com/*",
