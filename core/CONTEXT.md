@@ -12,7 +12,7 @@ core/
 ├── section_presets.py   # Preset section subtrees mirroring the legacy master profile (header/summary/experience/education/projects/skills)
 ├── llm.py               # LLM client construction and model resolution
 ├── logging_config.py    # setup_logging(): root logger → stdout (JsonFormatter when APP_ENV=production, else plain) + size-rotating file (5MB×5, always plain) + thread/sys excepthook; env-configurable (LOG_LEVEL/LOG_DIR/LOG_FILE); idempotent, never crashes startup
-├── log_context.py       # contextvars-backed log context bag (request_id/route/profile_id): bind()/clear()/snapshot() + ContextFilter — wired onto the console handler in logging_config.py, but nothing calls bind() yet (no request middleware), so fields log as null
+├── log_context.py       # contextvars-backed log context bag (request_id/route/profile_id): bind()/clear()/snapshot() + ContextFilter — wired onto the console handler in logging_config.py; bound per-request by web/middleware_request_context.py's RequestContextMiddleware (see web/CONTEXT.md)
 ├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
 ├── session_cost.py      # Thread-safe accumulator for per-session LLM spend (from usage.cost)
 ├── skill_analytics.py   # Skill token normalization + frequency aggregation across jobs (no LLM)

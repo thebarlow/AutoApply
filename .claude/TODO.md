@@ -52,11 +52,19 @@ git history is the archive (see `.claude/skills/update-todo/`).
   `JsonFormatter()` when `APP_ENV=production` else the existing plain formatter. The console
   handler now uses `_console_formatter()` and has `ContextFilter` attached, so route/profile_id/
   request_id populate whenever they're bound. The rotating file handler is unchanged (still
-  plain-text). Tests in `tests/core/test_json_formatter.py` (6/6 passing). **Still in progress —
-  not the final task.** **Remaining:** call `bind()`/`clear()` from request middleware (`web/`)
-  so the context fields actually get populated per-request (currently `ContextFilter` injects
-  `None` for all three since nothing binds them yet); then Railway log-drain docs and the
-  deferred v2 DB-error-table/admin-viewer scope above.
+  plain-text). Tests in `tests/core/test_json_formatter.py` (6/6 passing). **Task 3 DONE
+  2026-07-23** — commit `dc0bdd5`: new `web/middleware_request_context.py`
+  (`RequestContextMiddleware(BaseHTTPMiddleware)`) calls `log_context.bind(request_id, route,
+  profile_id)` at the start of every request (`request_id` a fresh uuid4 hex; `route` the request
+  path; `profile_id` best-effort-resolved from `request.session["account_id"]` →
+  `db.database.Account.profile_id` via a throwaway `SessionLocal()`, swallowing any error to
+  `None`), sets an `X-Request-ID` response header, and clears the context in a `finally` block.
+  Wired in `web/main.py` via `app.add_middleware(RequestContextMiddleware)` right after
+  `ImpersonationReadOnlyMiddleware` and before `SessionMiddleware` (which must stay outermost/
+  last-added). Tests in `tests/web/test_request_context_mw.py` (2/2 passing); full `tests/web`
+  suite (404 tests) green. Starlette 0.49.3 — the documented contextvar-propagation risk across
+  `BaseHTTPMiddleware`'s task boundary did not manifest. **Remaining:** Railway log-drain docs and
+  the deferred v2 DB-error-table/admin-viewer scope above.
 
 - [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
   its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone
