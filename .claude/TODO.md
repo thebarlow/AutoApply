@@ -6,6 +6,13 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Bugs
 
+- [ ] **[deploy] Allowlist the pinned extension redirect URL on Railway + have users reinstall.**
+  Follow-up to commit `be9bd72` (pinned Chrome `key`). For live extension sign-in to work, add
+  `https://hhdmojkjnegdgdaacleldfgonicipnac.chromiumapp.org/` to `EXTENSION_REDIRECT_URLS` on Railway
+  (production) — keep the existing Firefox value, comma-separated — and redeploy. After redeploy, users
+  must re-download/reinstall the extension to pick up the pinned `key` (the ID only changes on a fresh
+  load-unpacked). Until both are done, Chrome sign-in still 400s with a redirect-mismatch.
+
 - [ ] **[audit 2026-07-19] Pre-existing order-dependent test failures (test pollution).** Both
   pass in isolation but fail in full-suite runs; present on clean HEAD before the dead-code
   cleanup:
@@ -195,6 +202,17 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Pin Chrome `key` in extension manifest to stabilize the OAuth redirect URL.** **DONE 2026-07-23**
+  — commit `be9bd72`. Chrome load-unpacked derived the extension ID from the install path, so every
+  machine got a different `chrome.identity.getRedirectURL()` that fell off `EXTENSION_REDIRECT_URLS`
+  and 400'd sign-in. Added a fixed `"key"` to `browser-extension/manifest.json`, giving a constant
+  extension ID (`hhdmojkjnegdgdaacleldfgonicipnac`) and redirect URL
+  (`https://hhdmojkjnegdgdaacleldfgonicipnac.chromiumapp.org/`) across machines. Private key at
+  `backups/extension_key.pem` (gitignored) — kept for store publishing. Resolved the "pin a Chrome
+  `key`" Future Work item in `browser-extension/CONTEXT.md`. **Still open (deploy step):** the stable
+  redirect URL must be added to `EXTENSION_REDIRECT_URLS` on Railway (production) or live sign-in still
+  400s, and users must re-download/reinstall the extension after redeploy — see the open action below.
 
 - [x] **Stamp unique item order in parsed list sections (parse/apply 422 fix).** **DONE 2026-07-23**
   — commit `a9d7f60`. A novel résumé "list" section (e.g. CERTIFICATIONS) with 2+ rows built item
