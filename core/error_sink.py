@@ -14,6 +14,25 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 _ADDR_RE = re.compile(r"0x[0-9a-fA-F]+")
+_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_QUOTED_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
+_INT_RE = re.compile(r"\b\d+\b")
+
+
+def _normalize(text: str) -> str:
+    """Strip volatile tokens (addresses, UUIDs, quoted literals, integers).
+
+    Applied only to fingerprint inputs so the same underlying error dedups
+    even when its message embeds request-specific ids or values. The full
+    original message is still stored verbatim in the ``message`` column.
+    """
+    text = _ADDR_RE.sub("0xADDR", text)
+    text = _UUID_RE.sub("<uuid>", text)
+    text = _QUOTED_RE.sub("<str>", text)
+    text = _INT_RE.sub("<n>", text)
+    return text
 
 
 def _now() -> str:
@@ -42,7 +61,7 @@ def fingerprint(record: logging.LogRecord) -> str:
         parts.append(str(record.exc_info[1]))
     else:
         parts.append(record.getMessage())
-    raw = "|".join(_ADDR_RE.sub("0xADDR", p) for p in parts)
+    raw = "|".join(_normalize(p) for p in parts)
     return hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()
 
 

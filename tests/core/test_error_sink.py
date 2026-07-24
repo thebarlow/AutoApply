@@ -49,8 +49,8 @@ def test_identical_errors_dedup_and_increment(sink):
 
 def test_prune_respects_max_rows(monkeypatch, sink):
     monkeypatch.setenv("ERROR_LOG_MAX_ROWS", "3")
-    for i in range(6):
-        _emit(f"msg-{i}")  # distinct messages → distinct fingerprints
+    for suffix in "abcdef":
+        _emit(f"msg-{suffix}")  # distinct, digit-free → distinct fingerprints
     db = sink()
     assert db.query(ErrorEvent).count() == 3
     db.close()
@@ -65,3 +65,17 @@ def test_fingerprint_stable_across_line_numbers():
     fp1 = fingerprint(logging.LogRecord("l", 40, "a.py", 10, "m", None, None))
     fp2 = fingerprint(logging.LogRecord("l", 40, "a.py", 99, "m", None, None))
     assert fp1 == fp2  # message-only fingerprint ignores lineno
+
+
+def test_fingerprint_ignores_ids_in_message():
+    fp1 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "user 12 not found", None, None))
+    fp2 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "user 999 not found", None, None))
+    assert fp1 == fp2
+
+
+def test_fingerprint_ignores_uuid_and_quotes():
+    m1 = "job '4a1f2c3d-0000-4000-8000-000000000001' failed"
+    m2 = "job '9c2b7e10-0000-4000-8000-000000000002' failed"
+    fp1 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, m1, None, None))
+    fp2 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, m2, None, None))
+    assert fp1 == fp2
