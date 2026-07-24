@@ -43,6 +43,20 @@ git history is the archive (see `.claude/skills/update-todo/`).
   queryable DB error table + in-app admin viewer — so production failures are diagnosable without
   SSHing into the container. Scope: log routing/format by `APP_ENV`, request-context enrichment
   (profile_id, route, request id), and where errors surface (Railway stream vs. DB vs. admin UI).
+  **Task 1 DONE 2026-07-23** — commit `3d069e9`: new `core/log_context.py`, a contextvars-backed
+  log context bag (`bind()`/`clear()`/`snapshot()` for request_id/route/profile_id) +
+  `ContextFilter` (injects those fields onto every `LogRecord`). Self-contained; not yet wired
+  in. **Task 2 DONE 2026-07-23** — commit `b81a83e`: `core/logging_config.py` gained
+  `JsonFormatter` (single-line JSON: `ts, level, logger, msg, route, profile_id, request_id`,
+  plus rendered `exc_info` traceback when present) and `_console_formatter()`, which selects
+  `JsonFormatter()` when `APP_ENV=production` else the existing plain formatter. The console
+  handler now uses `_console_formatter()` and has `ContextFilter` attached, so route/profile_id/
+  request_id populate whenever they're bound. The rotating file handler is unchanged (still
+  plain-text). Tests in `tests/core/test_json_formatter.py` (6/6 passing). **Still in progress —
+  not the final task.** **Remaining:** call `bind()`/`clear()` from request middleware (`web/`)
+  so the context fields actually get populated per-request (currently `ContextFilter` injects
+  `None` for all three since nothing binds them yet); then Railway log-drain docs and the
+  deferred v2 DB-error-table/admin-viewer scope above.
 
 - [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
   its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone
