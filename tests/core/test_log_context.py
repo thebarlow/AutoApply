@@ -5,13 +5,25 @@ from core.log_context import ContextFilter, bind, clear, snapshot
 
 def test_snapshot_defaults_to_none():
     clear()
-    assert snapshot() == {"request_id": None, "route": None, "profile_id": None}
+    assert snapshot() == {
+        "request_id": None,
+        "route": None,
+        "method": None,
+        "profile_id": None,
+        "account_email": None,
+    }
 
 
 def test_bind_then_snapshot():
     clear()
     bind(request_id="abc", route="/api/x", profile_id=7)
-    assert snapshot() == {"request_id": "abc", "route": "/api/x", "profile_id": 7}
+    assert snapshot() == {
+        "request_id": "abc",
+        "route": "/api/x",
+        "method": None,
+        "profile_id": 7,
+        "account_email": None,
+    }
     clear()
     assert snapshot()["request_id"] is None
 
@@ -25,3 +37,16 @@ def test_filter_injects_attributes():
     assert rec.route == "/r"
     assert rec.profile_id == 3
     clear()
+
+
+def test_bind_method_and_email_stamped_on_record():
+    from core import log_context
+
+    log_context.bind(method="POST", account_email="a@b.com")
+    try:
+        rec = logging.LogRecord("l", 40, "a.py", 1, "m", None, None)
+        log_context.ContextFilter().filter(rec)
+        assert rec.method == "POST"
+        assert rec.account_email == "a@b.com"
+    finally:
+        log_context.clear()

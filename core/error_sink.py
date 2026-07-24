@@ -125,6 +125,8 @@ class DbErrorHandler(logging.Handler):
                 existing.route = getattr(record, "route", None)
                 existing.profile_id = getattr(record, "profile_id", None)
                 existing.request_id = getattr(record, "request_id", None)
+                existing.method = getattr(record, "method", None)
+                existing.account_email = getattr(record, "account_email", None)
                 db.commit()
             else:
                 db.add(
@@ -139,6 +141,8 @@ class DbErrorHandler(logging.Handler):
                         route=getattr(record, "route", None),
                         profile_id=getattr(record, "profile_id", None),
                         request_id=getattr(record, "request_id", None),
+                        method=getattr(record, "method", None),
+                        account_email=getattr(record, "account_email", None),
                         fingerprint=fp,
                     )
                 )

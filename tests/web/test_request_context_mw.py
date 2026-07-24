@@ -23,6 +23,7 @@ def test_binds_request_id_and_route_and_sets_header():
     body = resp.json()
     assert body["request_id"]
     assert body["route"] == "/ping"
+    assert body["method"] == "GET"
     assert resp.headers["x-request-id"] == body["request_id"]
 
 

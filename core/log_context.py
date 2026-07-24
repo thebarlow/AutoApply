@@ -10,7 +10,7 @@ from __future__ import annotations
 import contextvars
 import logging
 
-_FIELDS = ("request_id", "route", "profile_id")
+_FIELDS = ("request_id", "route", "method", "profile_id", "account_email")
 
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "log_request_id", default=None
@@ -18,15 +18,27 @@ _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _route: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "log_route", default=None
 )
+_method: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "log_method", default=None
+)
 _profile_id: contextvars.ContextVar[int | None] = contextvars.ContextVar(
     "log_profile_id", default=None
 )
+_account_email: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "log_account_email", default=None
+)
 
-_VARS = {"request_id": _request_id, "route": _route, "profile_id": _profile_id}
+_VARS = {
+    "request_id": _request_id,
+    "route": _route,
+    "method": _method,
+    "profile_id": _profile_id,
+    "account_email": _account_email,
+}
 
 
 def bind(**fields: object) -> None:
-    """Set any subset of ``request_id``/``route``/``profile_id`` on the context."""
+    """Set any subset of ``request_id``/``route``/``method``/``profile_id``/``account_email`` on the context."""
     for name, value in fields.items():
         if name in _VARS:
             _VARS[name].set(value)  # type: ignore[arg-type]

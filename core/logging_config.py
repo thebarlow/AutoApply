@@ -35,7 +35,9 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "msg": record.getMessage(),
             "route": getattr(record, "route", None),
+            "method": getattr(record, "method", None),
             "profile_id": getattr(record, "profile_id", None),
+            "account_email": getattr(record, "account_email", None),
             "request_id": getattr(record, "request_id", None),
         }
         if record.exc_info:

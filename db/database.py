@@ -50,7 +50,9 @@ class ErrorEvent(Base):
     message = Column(Text, nullable=False)
     traceback = Column(Text, nullable=True)
     route = Column(String, nullable=True)
+    method = Column(String, nullable=True)
     profile_id = Column(Integer, nullable=True)
+    account_email = Column(String, nullable=True)
     request_id = Column(String, nullable=True)
     fingerprint = Column(String, nullable=False, index=True)
 

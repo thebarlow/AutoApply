@@ -40,3 +40,14 @@ def test_json_formatter_missing_context_is_none():
     assert out["route"] is None
     assert out["profile_id"] is None
     assert out["request_id"] is None
+    assert out["method"] is None
+    assert out["account_email"] is None
+
+
+def test_json_formatter_includes_method_and_email():
+    rec = logging.LogRecord("l", 40, "a.py", 1, "m", None, None)
+    rec.method = "GET"
+    rec.account_email = "x@y.com"
+    out = json.loads(JsonFormatter().format(rec))
+    assert out["method"] == "GET"
+    assert out["account_email"] == "x@y.com"

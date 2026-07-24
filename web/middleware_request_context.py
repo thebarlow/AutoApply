@@ -13,25 +13,27 @@ from core import log_context
 logger = logging.getLogger("web.request")
 
 
-def _resolve_profile_id(request: Request) -> int | None:
-    """Best-effort profile id from the session; never raises."""
+def _resolve_identity(request: Request) -> tuple[int | None, str | None]:
+    """Best-effort (profile_id, account_email) from the session; never raises."""
     try:
         account_id = request.session.get("account_id")
     except Exception:
-        return None  # SessionMiddleware not installed / no session
+        return None, None  # SessionMiddleware not installed / no session
     if not account_id:
-        return None
+        return None, None
     try:
         from db.database import Account, SessionLocal
 
         db = SessionLocal()
         try:
             acct = db.query(Account).filter_by(id=account_id).first()
-            return acct.profile_id if acct else None
+            if acct is None:
+                return None, None
+            return acct.profile_id, getattr(acct, "email", None)
         finally:
             db.close()
     except Exception:
-        return None
+        return None, None
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -44,10 +46,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         # routing resolves the template inside call_next. Parameterized routes thus
         # produce higher-cardinality route values in error_events/logs.
         route = request.scope.get("path", "")
+        profile_id, account_email = _resolve_identity(request)
         log_context.bind(
             request_id=request_id,
             route=route,
-            profile_id=_resolve_profile_id(request),
+            method=request.method,
+            profile_id=profile_id,
+            account_email=account_email,
         )
         try:
             response = await call_next(request)
