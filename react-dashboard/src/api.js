@@ -338,3 +338,14 @@ export const getLastSearch = () => _fetch('/api/scraper/last-search')
 
 export const getApplicationPlan = (jobKey) =>
   _fetch(`/api/scraper/jobs/${encodeURIComponent(jobKey)}/application-plan`)
+
+export const getErrors = (params = {}) => {
+  const qs = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== '' && v != null)
+  ).toString()
+  return _fetch(`/api/admin/errors${qs ? `?${qs}` : ''}`)
+}
+
+export const getErrorDetail = (id) => _fetch(`/api/admin/errors/${id}`)
+
+export const clearErrors = () => _fetch('/api/admin/errors', { method: 'DELETE' })
