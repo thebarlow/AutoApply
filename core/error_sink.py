@@ -18,7 +18,9 @@ _UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
 _QUOTED_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
-_INT_RE = re.compile(r"\b\d+\b")
+# Strip 1-2 digit and 4+ digit runs (ids, counts) but PRESERVE standalone
+# 3-digit numbers so HTTP status / error codes (404, 500) stay distinct.
+_INT_RE = re.compile(r"\b\d{1,2}\b|\b\d{4,}\b")
 
 
 def _normalize(text: str) -> str:
@@ -27,6 +29,9 @@ def _normalize(text: str) -> str:
     Applied only to fingerprint inputs so the same underlying error dedups
     even when its message embeds request-specific ids or values. The full
     original message is still stored verbatim in the ``message`` column.
+    Standalone 3-digit numbers (e.g. HTTP status/error codes like 404, 500)
+    are preserved rather than stripped, so errors differing only by code
+    remain distinct fingerprints.
     """
     text = _ADDR_RE.sub("0xADDR", text)
     text = _UUID_RE.sub("<uuid>", text)

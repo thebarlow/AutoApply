@@ -122,9 +122,15 @@ def test_fingerprint_stable_across_line_numbers():
 
 
 def test_fingerprint_ignores_ids_in_message():
-    fp1 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "user 12 not found", None, None))
-    fp2 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "user 999 not found", None, None))
+    fp1 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "user 1234 not found", None, None))
+    fp2 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "user 9876 not found", None, None))
     assert fp1 == fp2
+
+
+def test_fingerprint_keeps_three_digit_codes():
+    fp1 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "HTTP 500 from upstream", None, None))
+    fp2 = fingerprint(logging.LogRecord("l", 40, "a.py", 1, "HTTP 404 from upstream", None, None))
+    assert fp1 != fp2
 
 
 def test_fingerprint_ignores_uuid_and_quotes():

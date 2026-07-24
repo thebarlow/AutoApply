@@ -98,6 +98,7 @@ def setup_logging() -> None:
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(context_filter)
         root.addHandler(file_handler)
     except OSError as exc:
         root.warning(
