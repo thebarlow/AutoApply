@@ -8,10 +8,12 @@ with full tracebacks. Idempotent and never raises on log-path failure.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
 import threading
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -20,6 +22,32 @@ _CONFIGURED = False
 _FMT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 _MAX_BYTES = 5 * 1024 * 1024
 _BACKUP_COUNT = 5
+
+
+class JsonFormatter(logging.Formatter):
+    """Render a ``LogRecord`` as a single-line JSON object for Railway ingestion."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Return the record as a JSON string with context fields and traceback."""
+        payload = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+            "route": getattr(record, "route", None),
+            "profile_id": getattr(record, "profile_id", None),
+            "request_id": getattr(record, "request_id", None),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+
+def _console_formatter() -> logging.Formatter:
+    """Return ``JsonFormatter`` in production, else a plain formatter."""
+    if os.environ.get("APP_ENV") == "production":
+        return JsonFormatter()
+    return logging.Formatter(_FMT)
 
 
 def _log_file_path() -> Path:
@@ -47,10 +75,15 @@ def setup_logging() -> None:
 
     root = logging.getLogger()
     root.setLevel(level)
-    formatter = logging.Formatter(_FMT)
+    formatter = logging.Formatter(_FMT)  # plain formatter for the rotating file
+
+    from core.log_context import ContextFilter
+
+    context_filter = ContextFilter()
 
     console = logging.StreamHandler(stream=sys.stdout)
-    console.setFormatter(formatter)
+    console.setFormatter(_console_formatter())
+    console.addFilter(context_filter)
     root.addHandler(console)
 
     log_path = _log_file_path()
