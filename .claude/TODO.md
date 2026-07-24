@@ -74,8 +74,15 @@ git history is the archive (see `.claude/skills/update-todo/`).
   env var `ERROR_LOG_DB` disables it). `core/logging_config.py`'s `setup_logging()` now calls it
   near the end, wrapped in try/except. Tests in `tests/core/test_error_sink.py` (5/5 passing:
   insert, dedup+increment, prune-by-max-rows, exception-swallowing, fingerprint stability across
-  line numbers). **Remaining:** Railway log-drain docs and an admin API/UI to view/surface the
-  persisted `error_events`.
+  line numbers). **Task 5 DONE 2026-07-23** — commit `135eff2`: `web/main.py` gained a global
+  `@app.exception_handler(Exception)` (`_log_unhandled_exception`, module logger
+  `web.unhandled`) registered above the existing `InsufficientCredits` handler — it calls
+  `logger.exception(...)` with the request path, then re-raises so Starlette's standard 500
+  response is unaffected. This routes every unhandled exception through the Task 3 request-context
+  fields, the Task 2 JSON console formatter, and the Task 4 DB error sink, without changing
+  client-visible behavior. Test in `tests/web/test_unhandled_exception_logged.py`; full
+  `tests/web` suite (405 tests) green. **Remaining:** Railway log-drain docs and an admin API/UI
+  to view/surface the persisted `error_events`.
 
 - [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
   its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone

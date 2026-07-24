@@ -6,7 +6,7 @@ FastAPI backend. Serves the REST API on port 8080. The frontend (React) is a sep
 
 ```
 web/
-├── main.py                       # FastAPI app; includes all routers; registers AuthGate + Session middleware
+├── main.py                       # FastAPI app; includes all routers; registers AuthGate + Session middleware; global catch-all exception handler logs-then-reraises unhandled errors (see Key Design Notes → Hosted error observability)
 ├── tenancy.py                    # current_profile_id seam (session in prod / dev stub otherwise) + scoped(); honors impersonation (see Auth below)
 ├── middleware_impersonation.py   # ImpersonationReadOnlyMiddleware — blocks unsafe methods while impersonating (see Auth below)
 ├── middleware_request_context.py # RequestContextMiddleware — binds request_id/route/profile_id into core.log_context per request (see Key Design Notes → Hosted error observability)
@@ -137,7 +137,13 @@ web/
   and before `SessionMiddleware`** (`SessionMiddleware` must stay outermost/last-added so
   `scope["session"]` is populated before this middleware's profile-id lookup runs). These fields
   feed `core.log_context.ContextFilter` (see `core/logging_config.py`), which stamps them onto
-  every `LogRecord` — so production JSON log lines are now request-traceable. See
+  every `LogRecord` — so production JSON log lines are now request-traceable.
+  **Global unhandled-exception logging (Task 5, DONE)** — `main.py`'s
+  `@app.exception_handler(Exception)` (`_log_unhandled_exception`, module logger
+  `web.unhandled`) is registered above the `InsufficientCredits` handler; it calls
+  `logger.exception(...)` with the request path and re-raises, so Starlette's normal 500
+  response still reaches the client while the traceback flows through the request-context
+  fields, the JSON console formatter, and the `DbErrorHandler` sink above. See
   `.claude/TODO.md` → "Robust error logging for Railway (hosted)" for the rest of the feature
   (Railway log-drain docs, deferred DB-error-table/admin-viewer v2).
 - **Docs tier-gating (`routers/docs_router.py`)** — `GET /api/docs` (list) and
