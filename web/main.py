@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -214,6 +215,23 @@ app.include_router(dev_router.router)
 app.include_router(output_formats_router.router)
 app.include_router(themes_router.router)
 app.include_router(auth_routes.router)
+
+
+logger = logging.getLogger("web.unhandled")
+
+
+@app.exception_handler(Exception)
+async def _log_unhandled_exception(request, exc: Exception):
+    """Log any unhandled exception with request context, then re-raise.
+
+    Logging here (rather than swallowing) lets the exception flow through
+    `DbErrorHandler` + the JSON log stream for hosted error observability,
+    while Starlette still produces its standard 500 response afterward.
+    """
+    logger.exception(
+        "Unhandled exception on %s", request.scope.get("path", "?"), exc_info=exc
+    )
+    raise exc
 
 
 @app.exception_handler(InsufficientCredits)
