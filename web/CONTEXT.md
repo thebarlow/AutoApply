@@ -128,11 +128,12 @@ web/
 
 - **Hosted error observability (in progress) — request context binding (Task 3, DONE)** —
   `web/middleware_request_context.py`'s `RequestContextMiddleware` binds `request_id` (fresh
-  uuid4 hex), `route` (`request.scope["path"]`), and `profile_id` (best-effort from
-  `request.session["account_id"]` → `db.database.Account.profile_id` via a throwaway
-  `SessionLocal()`, swallowing any lookup error to `None`) into `core.log_context` for the
-  duration of the request, sets an `X-Request-ID` response header, and clears the context in a
-  `finally` block so it never leaks across requests. Registered in `main.py` via
+  uuid4 hex), `route` (`request.scope["path"]`), `method` (`request.method`), and `profile_id`
+  + `account_email` (best-effort via `_resolve_identity`, which looks up
+  `request.session["account_id"]` → `db.database.Account.profile_id`/`.email` via a throwaway
+  `SessionLocal()`, swallowing any lookup error to `(None, None)`) into `core.log_context` for
+  the duration of the request, sets an `X-Request-ID` response header, and clears the context in
+  a `finally` block so it never leaks across requests. Registered in `main.py` via
   `app.add_middleware(RequestContextMiddleware)` **right after `ImpersonationReadOnlyMiddleware`
   and before `SessionMiddleware`** (`SessionMiddleware` must stay outermost/last-added so
   `scope["session"]` is populated before this middleware's profile-id lookup runs). These fields

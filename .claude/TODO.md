@@ -23,6 +23,36 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Features
 
+- [ ] **Error observability hardening (2026-07-24 plan).** Follow-up plan at
+  `docs/superpowers/plans/2026-07-24-error-observability-hardening.md` (see
+  `.superpowers/sdd/progress.md` in the `error-observability` worktree for live status).
+  1. [x] **Task 1 — normalize ids/uuids/quotes out of fingerprint.** `core/error_sink.py`'s
+     `fingerprint()` now strips hex addresses, UUIDs, quoted string literals, and bare
+     integers (in that order) before hashing, so messages differing only by an embedded
+     id/uuid/quoted value dedup to the same fingerprint.
+  2. [x] **Task 2 — refresh traceback/message on dedup; prune only on insert.**
+     `core/error_sink.py` already had this behavior; commit `ee54a62` strengthened
+     `tests/core/test_error_sink.py` (`test_dedup_refreshes_traceback`,
+     `test_dedup_bump_does_not_prune`) so they actually fail against reverted/buggy
+     behavior instead of vacuously passing. No production code changed.
+  3. [x] **Task 3 — add `method` + `account_email` (context, schema, migration, sink,
+     formatter).** `core/log_context.py`'s context bag gained `method`/`account_email`
+     ContextVars; `web/middleware_request_context.py`'s `_resolve_identity` (renamed from
+     `_resolve_profile_id`) now returns `(profile_id, account_email)` and binds
+     `method=request.method`; `core/logging_config.py`'s `JsonFormatter` and
+     `core/error_sink.py`'s `DbErrorHandler` (insert + dedup-update) both carry the two
+     fields through to `db.database.ErrorEvent`; migration `aa15errlog02` adds the columns
+     (down_revision `aa14errlog01`, now head).
+  4. [x] **Task 4 — surface `method` + `account_email` in the admin API and UI.**
+     `web/routers/admin.py` list + detail dicts carry both fields; `ErrorLog.jsx` gained a
+     Method column and an `email (#id)` identity cell (commit `52926f2`).
+  5. [x] **Task 5 — add request context to the dev/console log format.** `_FMT` in
+     `core/logging_config.py` now includes `[request_id method route]` (commit `cee7b62`).
+     Follow-up (minor, tracked in `.superpowers/sdd/progress.md`): the rotating file handler
+     uses `_FMT` but relies on the console handler stamping the shared record; consider
+     attaching `ContextFilter` to the file handler directly.
+  6. [x] Task 6 — docs pass.
+
 - [ ] **Railway log-drain docs.** Non-blocking follow-up from "Robust error logging for
   Railway (hosted)" (see Done) — document how to point Railway's log stream at an external
   log drain / query the JSON console lines, for anyone who wants search/alerting beyond the
