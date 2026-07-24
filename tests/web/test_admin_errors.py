@@ -51,9 +51,24 @@ def _seed(db):
     db.add(ErrorEvent(
         created_at="2026-07-23T00:00:00+00:00", last_seen="2026-07-23T00:00:00+00:00",
         count=3, level="ERROR", logger="x", message="boom", traceback="TB",
-        route="/api/x", profile_id=2, request_id="rid", fingerprint="fp1",
+        route="/api/x", method="POST", profile_id=2, account_email="a@b.com",
+        request_id="rid", fingerprint="fp1",
     ))
     db.commit()
+
+
+def test_list_and_detail_include_method_and_email(client):
+    c, db = client
+    app = c.app
+    _admin_ok(app, db)
+    _seed(db)
+    row = TestClient(app).get("/api/admin/errors").json()["errors"][0]
+    assert row["method"] == "POST"
+    assert row["account_email"] == "a@b.com"
+    eid = db.query(ErrorEvent).one().id
+    detail = TestClient(app).get(f"/api/admin/errors/{eid}").json()
+    assert detail["method"] == "POST"
+    assert detail["account_email"] == "a@b.com"
 
 
 def test_list_errors_admin_only(client):

@@ -222,7 +222,9 @@ def list_errors(
                 "logger": r.logger,
                 "message": r.message,
                 "route": r.route,
+                "method": r.method,
                 "profile_id": r.profile_id,
+                "account_email": r.account_email,
                 "request_id": r.request_id,
                 "count": r.count,
                 "created_at": r.created_at,
@@ -245,7 +247,8 @@ def get_error(
         raise HTTPException(status_code=404, detail="not found")
     return {
         "id": r.id, "level": r.level, "logger": r.logger, "message": r.message,
-        "traceback": r.traceback, "route": r.route, "profile_id": r.profile_id,
+        "traceback": r.traceback, "route": r.route, "method": r.method,
+        "profile_id": r.profile_id, "account_email": r.account_email,
         "request_id": r.request_id, "count": r.count,
         "created_at": r.created_at, "last_seen": r.last_seen,
     }

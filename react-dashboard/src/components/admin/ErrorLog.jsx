@@ -86,20 +86,21 @@ export default function ErrorLog() {
         </div>
 
         <div className="border border-space-border rounded-lg overflow-hidden">
-          <div className="grid grid-cols-[1fr_auto_1fr_auto_2fr_auto] gap-2 px-3 py-2 text-xs uppercase tracking-widest text-space-dim bg-white/5">
-            <span>Last seen</span><span>Level</span><span>Route</span><span>Profile</span><span>Message</span><span>×</span>
+          <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr_2fr_auto] gap-2 px-3 py-2 text-xs uppercase tracking-widest text-space-dim bg-white/5">
+            <span>Last seen</span><span>Level</span><span>Route</span><span>Method</span><span>Profile</span><span>Message</span><span>×</span>
           </div>
           <div className="max-h-96 overflow-y-auto">
             {rows.map((r) => (
               <Fragment key={r.id}>
                 <div
-                  className="grid grid-cols-[1fr_auto_1fr_auto_2fr_auto] gap-2 px-3 py-2 text-sm items-center border-t border-space-border/50 cursor-pointer hover:bg-white/5"
+                  className="grid grid-cols-[1fr_auto_1fr_auto_1fr_2fr_auto] gap-2 px-3 py-2 text-sm items-center border-t border-space-border/50 cursor-pointer hover:bg-white/5"
                   onClick={() => expand(r.id)}
                 >
                   <span className="text-space-dim">{r.last_seen}</span>
                   <span>{r.level}</span>
                   <span className="truncate" title={r.route}>{r.route}</span>
-                  <span className="text-space-dim">{r.profile_id ?? '—'}</span>
+                  <span>{r.method || '—'}</span>
+                  <span className="text-space-dim">{r.account_email ? `${r.account_email} (#${r.profile_id})` : (r.profile_id ?? '—')}</span>
                   <span className="truncate" title={r.message}>{r.message}</span>
                   <span>×{r.count}</span>
                 </div>
