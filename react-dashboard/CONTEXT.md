@@ -199,4 +199,4 @@ Customization checklist rendered during intake (onboarding `StepResume` and the 
 - Primary accent: `purple-400` / `purple-500` / `purple-600`
 - Status colors: `green-400` (applied), `blue-400` (contact), `red-400` (rejected), `yellow-*` (new)
 - Animations: framer-motion `motion.div` + `AnimatePresence` throughout
-- Consistent input styling via shared `inputClass` string in Settings/ProfileDetail
+- Consistent input styling via shared `inputClass` string (defined in `ProfileDetail.jsx`, imported by Settings/ApplicationAnswers)
