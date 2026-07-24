@@ -55,6 +55,7 @@ longer exist.
 | `identity` | `Identity` | OAuth `(provider, provider_subject)` (unique together) → `account`. Many identities per account (link-by-verified-email). Not tenant-guarded. | Auth |
 | `credit_ledger` | `CreditLedger` | Append-only credit history: `profile_id, delta, reason, action, job_key, raw_cost_usd, meta, created_by, created_at`. Source of truth for `account.credit_balance`. Not tenant-guarded (keyed by `profile_id` but not in `_TENANT_TABLES`). | Credits |
 | `allowed_email` | `AllowedEmail` | Runtime invite allowlist: `email` (unique, lowercased via validator), `invited_by` (FK → `account.id`), `created_at`, `tier` (default `standard`), `is_admin` (default false). `tier`/`is_admin` carry the intended user type, applied to the `Account` at first-login provisioning (`_provision_account`); env `ADMIN_EMAILS` still OR's into admin. Supplements the `ALLOWED_EMAILS` env var — `is_allowed_email` checks both. Rows upserted by `POST /api/admin/invite` (repeat email updates type + resends). | Auth |
+| `error_events` | `ErrorEvent` | **Global infra table, admin-only — NOT tenant-scoped.** One row per unique `fingerprint()` (logger + exception type + normalized top frame, or logger+message when no traceback); `count`/`last_seen` bump on repeat instead of inserting a new row. Columns: `id`, `created_at`, `last_seen`, `count`, `level`, `logger`, `message`, `traceback`, `route`, `profile_id` (plain context column — which tenant's request triggered it — not a partition key), `request_id`, `fingerprint` (indexed). Populated by `core/error_sink.py`'s `DbErrorHandler`, which prunes rows older than `ERROR_LOG_MAX_AGE_DAYS` and caps total rows at `ERROR_LOG_MAX_ROWS` on every insert. Read/managed via admin-only `GET`/`GET {id}`/`DELETE /api/admin/errors` (`web/routers/admin.py`) and the React "Error Log" admin panel. **Deliberately excluded from `_TENANT_TABLES`/the `before_flush` tenant guard** — same pattern as `account`/`identity`/`credit_ledger` above; it is an operational log spanning all tenants, not tenant-owned data. | Error Observability |
 
 ## Prompt seeding at startup
 
@@ -164,6 +165,12 @@ populated mainly for `ats_type="other"`). `core/ats.py` classifies a URL into
 `stage-job` time for in-platform jobs and exposes a separate tenant-scoped PATCH to
 backfill the columns once the browser extension resolves an external URL — see
 `web/CONTEXT.md` → API Surface.
+
+### `error_events` table (`aa14errlog01`)
+
+`aa14errlog01` (chained onto `aa13applyplan01`; **current head**) adds the global
+`error_events` table — see "Tables beyond `jobs` / `config`" above for columns and
+the not-tenant-scoped rationale.
 
 ### Data migration: extraction-prompt refresh (`aa11extract01`)
 
