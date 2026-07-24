@@ -42,8 +42,8 @@ class ErrorEvent(Base):
 
     __tablename__ = "error_events"
     id = Column(Integer, primary_key=True)
-    created_at = Column(String, nullable=False)
-    last_seen = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, index=True)
+    last_seen = Column(String, nullable=False, index=True)
     count = Column(Integer, nullable=False, default=1)
     level = Column(String, nullable=False)
     logger = Column(String, nullable=False)

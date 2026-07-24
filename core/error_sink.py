@@ -10,6 +10,7 @@ import hashlib
 import logging
 import os
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 
 _ADDR_RE = re.compile(r"0x[0-9a-fA-F]+")
@@ -64,12 +65,23 @@ def _max_age_days() -> int:
 class DbErrorHandler(logging.Handler):
     """Write ERROR records to ``error_events`` (dedup + prune). Never raises."""
 
+    _local = threading.local()
+
     def emit(self, record: logging.LogRecord) -> None:
-        """Persist ``record``, swallowing all exceptions (logging must not fail)."""
+        """Persist ``record``, swallowing all exceptions (logging must not fail).
+
+        Guarded against re-entrancy: if this handler's own DB work ever emits
+        an ERROR log, the guard prevents an infinite recursive emit loop.
+        """
+        if getattr(self._local, "in_emit", False):
+            return
+        self._local.in_emit = True
         try:
             self._emit(record)
         except Exception:  # logging must never cascade-fail
             pass
+        finally:
+            self._local.in_emit = False
 
     def _emit(self, record: logging.LogRecord) -> None:
         """Upsert-by-fingerprint then prune, using a fresh, short-lived session."""
@@ -126,7 +138,7 @@ class DbErrorHandler(logging.Handler):
         from db.database import ErrorEvent
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=_max_age_days())).isoformat()
-        db.query(ErrorEvent).filter(ErrorEvent.created_at < cutoff).delete(
+        db.query(ErrorEvent).filter(ErrorEvent.last_seen < cutoff).delete(
             synchronize_session=False
         )
         max_rows = _max_rows()

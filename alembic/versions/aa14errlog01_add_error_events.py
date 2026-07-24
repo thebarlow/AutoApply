@@ -33,9 +33,11 @@ def upgrade() -> None:
     )
     op.create_index("ix_error_events_fingerprint", "error_events", ["fingerprint"])
     op.create_index("ix_error_events_created_at", "error_events", ["created_at"])
+    op.create_index("ix_error_events_last_seen", "error_events", ["last_seen"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_error_events_last_seen", table_name="error_events")
     op.drop_index("ix_error_events_created_at", table_name="error_events")
     op.drop_index("ix_error_events_fingerprint", table_name="error_events")
     op.drop_table("error_events")
