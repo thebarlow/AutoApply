@@ -127,8 +127,8 @@ guard does not require `profile_id` on them):
   → `account`. One account can have multiple identities (Google + GitHub linked by
   verified email).
 
-Added by Alembic migration `5285bd395643` (chained onto `bdf3f4523095`; **current
-head**). On first OAuth login `web/auth/identity.resolve_or_provision_account`
+Added by Alembic migration `5285bd395643` (chained onto `bdf3f4523095`; head has
+since advanced — current head is `aa15errlog02`). On first OAuth login `web/auth/identity.resolve_or_provision_account`
 provisions a profile (seeded prompts + skill aliases) for a new email; the **first
 admin login claims the existing `profile_id=1`**. In production `current_profile_id`
 resolves the session account's profile (the dev stub still applies locally / in
@@ -154,8 +154,8 @@ gating logic.
 
 ### ATS detection columns (`aa12atsdetect01`)
 
-Added by Alembic migration `aa12atsdetect01` (chained onto `aa11extract01`; **current
-head**): five columns on `jobs` recording how a job is applied to —
+Added by Alembic migration `aa12atsdetect01` (chained onto `aa11extract01`): five
+columns on `jobs` recording how a job is applied to —
 `easy_apply` (BOOLEAN), `apply_url_raw` (TEXT, as scraped/staged), `apply_url_resolved`
 (TEXT, after following redirects), `ats_type` (TEXT — `easy_apply` | `greenhouse` |
 `lever` | `ashby` | `workday` | `icims` | `taleo` | `smartrecruiters` | `jobvite` |
@@ -175,7 +175,7 @@ rationale. `aa15errlog02` (chained onto `aa14errlog01`; **current head**) adds t
 
 ### Data migration: extraction-prompt refresh (`aa11extract01`)
 
-`aa11extract01` (chained onto `aa10units01`; **current head**) is a **data-only**
+`aa11extract01` (chained onto `aa10units01`) is a **data-only**
 migration: it rewrites every `prompts`/`prompt_defaults` extraction row whose content
 is byte-for-byte the old factory default (rstrip-tolerant match) to the new
 atomic-skill default, closing the hosted-DB gap where commit `2ed4745`'s seed-file
