@@ -43,6 +43,7 @@ from core.credits import InsufficientCredits
 from fastapi.responses import JSONResponse
 from web.auth.middleware import AuthGateMiddleware
 from web.middleware_impersonation import ImpersonationReadOnlyMiddleware
+from web.middleware_request_context import RequestContextMiddleware
 
 
 def _timed(label: str, fn):
@@ -181,6 +182,7 @@ app = FastAPI(
 # the request scope before AuthGateMiddleware inspects it.
 app.add_middleware(AuthGateMiddleware)
 app.add_middleware(ImpersonationReadOnlyMiddleware)
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=_session_secret(),
