@@ -117,4 +117,11 @@ def setup_logging() -> None:
 
     sys.excepthook = _sys_excepthook
 
+    try:
+        from core.error_sink import install_db_error_handler
+
+        install_db_error_handler(root)
+    except Exception:  # never let logging setup fail on the DB sink
+        root.warning("Could not install DB error handler", exc_info=True)
+
     _CONFIGURED = True
