@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from core.credits import grant_credits
 from core.email import send_invite
 from core.pricing import unit_usd
 from core.payments import tier_multipliers
-from db.database import Account, AllowedEmail, Purchase, get_db
+from db.database import Account, AllowedEmail, ErrorEvent, Purchase, get_db
 from web.routers.credits import openrouter_remaining, require_real_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -189,6 +189,84 @@ def grant_to_user(profile_id: int, body: GrantRequest,
     grant_credits(db, profile_id, body.amount, reason="admin_grant",
                   created_by=admin.id)
     return {"granted": body.amount, "balance": target.credit_balance}
+
+
+@router.get("/errors")
+def list_errors(
+    level: str | None = Query(None),
+    route: str | None = Query(None),
+    profile_id: int | None = Query(None),
+    since: str | None = Query(None),
+    limit: int = Query(200, le=1000),
+    db: Session = Depends(get_db),
+    admin: Account = Depends(require_real_admin),
+):
+    """List deduped error rows (newest first), traceback omitted."""
+    q = db.query(ErrorEvent)
+    if level:
+        q = q.filter(ErrorEvent.level == level)
+    if route:
+        q = q.filter(ErrorEvent.route == route)
+    if profile_id is not None:
+        q = q.filter(ErrorEvent.profile_id == profile_id)
+    if since:
+        q = q.filter(ErrorEvent.last_seen >= since)
+    total = q.count()
+    rows = q.order_by(ErrorEvent.last_seen.desc()).limit(limit).all()
+    return {
+        "total": total,
+        "errors": [
+            {
+                "id": r.id,
+                "level": r.level,
+                "logger": r.logger,
+                "message": r.message,
+                "route": r.route,
+                "profile_id": r.profile_id,
+                "request_id": r.request_id,
+                "count": r.count,
+                "created_at": r.created_at,
+                "last_seen": r.last_seen,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/errors/{error_id}")
+def get_error(
+    error_id: int,
+    db: Session = Depends(get_db),
+    admin: Account = Depends(require_real_admin),
+):
+    """Full error row including traceback and all context."""
+    r = db.query(ErrorEvent).filter_by(id=error_id).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return {
+        "id": r.id, "level": r.level, "logger": r.logger, "message": r.message,
+        "traceback": r.traceback, "route": r.route, "profile_id": r.profile_id,
+        "request_id": r.request_id, "count": r.count,
+        "created_at": r.created_at, "last_seen": r.last_seen,
+    }
+
+
+@router.delete("/errors")
+def clear_errors(
+    before: str | None = Query(None),
+    level: str | None = Query(None),
+    db: Session = Depends(get_db),
+    admin: Account = Depends(require_real_admin),
+):
+    """Delete error rows (optionally narrowed by ``before`` last_seen / ``level``)."""
+    q = db.query(ErrorEvent)
+    if before:
+        q = q.filter(ErrorEvent.last_seen < before)
+    if level:
+        q = q.filter(ErrorEvent.level == level)
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
 
 
 @router.post("/impersonate/stop")
