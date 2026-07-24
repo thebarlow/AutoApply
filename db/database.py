@@ -32,6 +32,29 @@ class Config(Base):
     value = Column(Text)
 
 
+class ErrorEvent(Base):
+    """Global operational log of ERROR-level events (admin-only, NOT tenant-scoped).
+
+    Populated by ``core.error_sink.DbErrorHandler``. ``profile_id`` is a plain
+    context column, not a tenancy partition — do not add this table to the
+    ``before_flush`` tenant guard.
+    """
+
+    __tablename__ = "error_events"
+    id = Column(Integer, primary_key=True)
+    created_at = Column(String, nullable=False)
+    last_seen = Column(String, nullable=False)
+    count = Column(Integer, nullable=False, default=1)
+    level = Column(String, nullable=False)
+    logger = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    traceback = Column(Text, nullable=True)
+    route = Column(String, nullable=True)
+    profile_id = Column(Integer, nullable=True)
+    request_id = Column(String, nullable=True)
+    fingerprint = Column(String, nullable=False, index=True)
+
+
 class ProfileConfig(Base):
     """Per-tenant key-value settings. Composite PK (profile_id, key).
 
