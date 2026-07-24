@@ -20,6 +20,17 @@ git history is the archive (see `.claude/skills/update-todo/`).
      `scraper.runner` logs when the full suite runs.
   2. `react-dashboard/src/api.profileTree.test.js` "getProfileTree GETs the tree route".
 
+- [ ] **`error_sink.py` SELECT-then-INSERT dedup race.** Pre-existing, low-volume: two
+  concurrent errors with the same fingerprint can both miss the SELECT and double-insert.
+  Not worth a lock/upsert until volume justifies it.
+
+- [ ] **Age-prune no longer runs on bump-only steady state.** `_prune` only fires on insert
+  (by design, post-hardening); if an app hits a steady state of pure dedup-bumps (no new
+  fingerprints), `ERROR_LOG_MAX_AGE_DAYS` stops being enforced until the next novel error.
+
+- [ ] **`account_email` in `error_events` is new PII at rest.** Admin-gated today; flag for
+  the eventual data-retention/GDPR pass (retention window, export/delete-on-request).
+
 - [ ] **Follow-ups for email deliverability (non-blocking).**
   1. **Verify auth in practice:** send a real invite to Gmail → "Show original" → confirm
      SPF/DKIM/DMARC all say PASS. Beats the Cloudflare dashboard widget (report-driven,
@@ -29,36 +40,6 @@ git history is the archive (see `.claude/skills/update-todo/`).
      often a paid VMC cert); irrelevant to spam placement.
 
 ## Features
-
-- [ ] **Error observability hardening (2026-07-24 plan).** Follow-up plan at
-  `docs/superpowers/plans/2026-07-24-error-observability-hardening.md` (see
-  `.superpowers/sdd/progress.md` in the `error-observability` worktree for live status).
-  1. [x] **Task 1 — normalize ids/uuids/quotes out of fingerprint.** `core/error_sink.py`'s
-     `fingerprint()` now strips hex addresses, UUIDs, quoted string literals, and bare
-     integers (in that order) before hashing, so messages differing only by an embedded
-     id/uuid/quoted value dedup to the same fingerprint.
-  2. [x] **Task 2 — refresh traceback/message on dedup; prune only on insert.**
-     `core/error_sink.py` already had this behavior; commit `ee54a62` strengthened
-     `tests/core/test_error_sink.py` (`test_dedup_refreshes_traceback`,
-     `test_dedup_bump_does_not_prune`) so they actually fail against reverted/buggy
-     behavior instead of vacuously passing. No production code changed.
-  3. [x] **Task 3 — add `method` + `account_email` (context, schema, migration, sink,
-     formatter).** `core/log_context.py`'s context bag gained `method`/`account_email`
-     ContextVars; `web/middleware_request_context.py`'s `_resolve_identity` (renamed from
-     `_resolve_profile_id`) now returns `(profile_id, account_email)` and binds
-     `method=request.method`; `core/logging_config.py`'s `JsonFormatter` and
-     `core/error_sink.py`'s `DbErrorHandler` (insert + dedup-update) both carry the two
-     fields through to `db.database.ErrorEvent`; migration `aa15errlog02` adds the columns
-     (down_revision `aa14errlog01`, now head).
-  4. [x] **Task 4 — surface `method` + `account_email` in the admin API and UI.**
-     `web/routers/admin.py` list + detail dicts carry both fields; `ErrorLog.jsx` gained a
-     Method column and an `email (#id)` identity cell (commit `52926f2`).
-  5. [x] **Task 5 — add request context to the dev/console log format.** `_FMT` in
-     `core/logging_config.py` now includes `[request_id method route]` (commit `cee7b62`).
-     Follow-up (minor, tracked in `.superpowers/sdd/progress.md`): the rotating file handler
-     uses `_FMT` but relies on the console handler stamping the shared record; consider
-     attaching `ContextFilter` to the file handler directly.
-  6. [x] Task 6 — docs pass.
 
 - [ ] **Railway log-drain docs.** Non-blocking follow-up from "Robust error logging for
   Railway (hosted)" (see Done) — document how to point Railway's log stream at an external
@@ -227,6 +208,19 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Error observability hardening.** **DONE, MERGED & PUSHED 2026-07-24** — merge commit
+  `667a7ec` (branch `worktree-error-observability`, now deleted). 6-task follow-up on top of
+  "Robust error logging for Railway" (below): `fingerprint()` normalizes hex addresses/UUIDs/
+  quoted literals/integers while preserving standalone 3-digit codes (404/500 stay distinct);
+  dedup refreshes traceback/message on bump, `_prune` runs only on insert; new `method` +
+  `account_email` fields flow request → context bag → `JsonFormatter` → `error_events`
+  (migration `aa15errlog02`, down_revision `aa14errlog01`, now the single alembic head;
+  `_resolve_profile_id` renamed `_resolve_identity`); admin API + `ErrorLog.jsx` surface both
+  (Method column, `email (#id)` identity cell); dev/console `_FMT` gained `[request_id method
+  route]`, rotating file handler now has its own `ContextFilter`. 972 core+web tests pass.
+  Non-blocking follow-ups tracked under Bugs (SELECT-then-INSERT dedup race, age-prune on
+  bump-only steady state, `account_email` PII-at-rest).
 
 - [x] **Pin Chrome `key` in extension manifest to stabilize the OAuth redirect URL.** **DONE 2026-07-23**
   — commit `be9bd72`. Chrome load-unpacked derived the extension ID from the install path, so every
@@ -402,206 +396,3 @@ Known accepted limitations (each would be its own feature if prioritized):
   `docs/superpowers/plans/2026-07-21-extension-autofill-harness.md` (fixtures, harness scaffold,
   autofill writer + wiring, Lever/Ashby specs + docs still to come).
 
-- [x] **Playwright smoke + live-drive E2E harness.** **DONE 2026-07-21** — commit `e5239d1`.
-  New top-level `e2e/` Playwright project: config auto-boots/reuses the local stack (uvicorn `:8080`
-  + Vite `:5173`), non-destructive smoke specs (landing `/about`, dashboard nav, Find-Jobs search UI),
-  and a `global-setup` that logs in once and saves `storageState`. Added a **non-production-only**
-  `POST /api/dev/login` (`web/routers/dev.py`) that sets `session["account_id"]` for local E2E —
-  needed because the identity gate (`/api/me`) has no dev bypass, unlike the `current_profile_id`
-  tenancy seam. Usage docs in `e2e/README.md`; caveats in `e2e/CONTEXT.md`. This is a smoke/ad-hoc
-  drive harness, **not** a run-on-every-change regression suite.
-  **Check-pages harness enhancements (commit `e1e350e`):** `npm run deck` (`e2e/scripts/deck.mjs`)
-  builds a self-contained HTML slide deck from `screenshots/*.png` (filter arg shows one shot);
-  the landing spec now settles load/scroll animations (scroll + `document.getAnimations()` +
-  paint delay, dropped `networkidle` which never fires under Vite HMR) before its full-page shot;
-  and `dev-login` resolves the account by `E2E_LOGIN_EMAIL` (default owner) → admin → first, plus
-  provisions a throwaway account/profile on an empty DB to drive new-user onboarding.
-
-- [x] **Focus Skills-section generation on relevant skills only.** **DONE 2026-07-19** — commit
-  `b76e817`. Rewrote `SECTION_PROMPT_DEFAULTS["skills"]` (`core/section_presets.py`): ≤5
-  job-relevant categories, most-relevant first, omit categories the job doesn't call for (e.g.
-  frontend for a backend role), **exclude soft/interpersonal skills entirely** (teamwork/
-  communication/adaptability/problem-solving — those belong in summary + cover), cap ~5 lines,
-  inventory-only. The `skill_relevance (Skills)` eval check in `prompts/defaults/resume_eval_sectioned.md`
-  now flags whole irrelevant categories, soft skills, and over-length (>~5 lines/5 categories);
-  the `hallucination` line clarified to never flag soft skills as hallucinations. Per-profile DB
-  data (local SQLite profile 9 + LIVE Railway Postgres profile 1 Skills-section + eval prompts)
-  updated out-of-band (not tracked in git).
-
-- [x] **Tune Skills-section to include role-common + staple skills (fix overshoot).** **DONE 2026-07-19.**
-  Follow-on to `b76e817`: it overshot to ~5 skills. Reworded `SECTION_PROMPT_DEFAULTS["skills"]`
-  and the `skill_relevance` eval check so a skill is included when it is (a) named in the job,
-  (b) commonly expected for the target role/title, or (c) a core programming/tooling staple (Git,
-  Docker, CI/CD, pytest) — provided it is in the inventory; dropped the "~5 lines" cap for a
-  "roughly 4–5 categories, ~12–18 skills" target; eval no longer flags role-relevant tooling/
-  staples as bloat. Local SQLite profile 9 Skills-section prompt updated out-of-band (backup in
-  `backups/`). LIVE Railway Postgres profile 1 (Master / barlowmatt96) Skills-section + per-profile
-  `resume_eval_sectioned` prompts synced to the new wording out-of-band 2026-07-19 (safety copies in
-  `backups/live_profile1_*`).
-
-- [x] **Skill-chip parsing splits parenthesized lists.** **DONE 2026-07-19** — commit `70ff26f`.
-  Added paren-aware `split_skill_tokens` in `core/skill_analytics.py`: `Category (a, b)` now
-  emits clean chips `Category`, `a`, `b`; unbalanced parens fall back to plain comma split;
-  case-insensitive order-preserving dedupe. Wired into all skill readers (`job_has_skill`,
-  `aggregate_skill_frequency`, and `core/job.py` skill-match chips / ATS lists / extraction
-  prompt sections / `serialize`), so already-stored rows are repaired read-side — no migration.
-  Phrase fields (`_split_ext_phrases`) untouched. Tests in `tests/core/test_skill_analytics.py`.
-
-- [x] **[audit 2026-07-19, dead code] Dead-code audit cleanup.** **COMPLETE 2026-07-19** —
-  commits `e93318c`, `fbd8a4b`, `4c99550`, `8fcbd9e`, `cc417a2`.
-  - `8fcbd9e`: removed superseded `core/job.py` legacy methods — `save_batch`
-    (`save_batch_returning` is the sole path), `get_or_raise`, `list_for_review`, `set_state`,
-    `generate_resume_docx`, `_build_frontmatter`, stray `warnings` import; deleted
-    `tests/core/test_resume_docx.py`, migrated batch-save tests. The md eval/refine methods
-    (`evaluate_resume_md`/`evaluate_cover_md`/`refine_cover_md`/`_refine_doc_md`) were KEPT —
-    dispatched dynamically via `getattr(job, f"evaluate_{doc_type}_md")` in
-    `web/intake_pipeline.py`.
-  - `cc417a2`: swept unused helpers — `User.load_from_json`, `core/utils.strip_header_block`,
-    `core/stripe_client.retrieve_price`, `core/session_cost.get_session_start`,
-    `web/llm_status.is_processing`, `generator/themes.get_theme`,
-    `core/output_formats.DEFAULT_FORMAT_ID`, and `web/routers/config.py`'s `_set`/`_set_global`
-    (orphaned by the route removal; `_get`/`_get_global`/`_get_providers`/`_read_env`/
-    `_env_key_name` kept — imported by `jobs.py`/`setup_status.py`). Removed unused
-    `deleteProfile`/`getDefaultPrompt` exports from `react-dashboard/src/api.js` (backend routes
-    kept). Wired `ws.stop` into `tray_app/main.py` aboutToQuit. Pruned matching tests; rewrote
-    `tests/web/test_profile_config_access.py` to seed rows directly.
-  - Deliberately KEPT (verified live or intentionally retained): `User.education_degrees`
-    (`{user.education_degrees}` in eval prompt templates), `GET /extension/download` (linked from
-    the served "Browser Extension" Obsidian doc), `core/credits.CREDITS_PER_DOLLAR`
-    (documentation) and `reconcile_balance` (billing-ops repair helper, no endpoint),
-    `document_builder.apply_resume_patch` (retained per 2026-06-22 plan pending separate
-    approval).
-  - Two pre-existing order-dependent test failures discovered (not caused by this cleanup) —
-    tracked under Bugs.
-
-  Earlier in the same audit — deleted unconsumed endpoints from `web/routers/config.py`:
-  `GET/PUT /api/config/{templates,scoring,sources,search,job_searches}`, `GET /api/job-fields`,
-  `GET /api/user-profile-fields`, `GET /api/config/profiles/{id}/file` — superseded by the
-  profile-tree API (`/api/config/profiles/{id}/tree`) and the scraper router; scoring weights are
-  still read internally from `profile_config`. Orphaned tests removed
-  (`tests/web/test_config_api.py`, `tests/web/test_config_tenant_isolation.py`,
-  `serve_profile_file` cases in `test_profile_api.py` / `test_profile_tenant_scoping.py`).
-  Commits `e93318c`, `fbd8a4b`; details in `web/CONTEXT.md` → Known Issues.
-  Continued (`4c99550`): removed legacy `POST /api/admin/credits/grant` and
-  `POST /api/admin/credits/tier` from `web/routers/credits.py` (no consumers; AdminPage uses the
-  budget-checked `POST /api/admin/users/{profile_id}/grant` in `web/routers/admin.py`). Tier
-  changes now have no API surface — set `Account.tier` directly if needed. Deleted
-  `tests/web/test_admin_set_tier.py` and pruned the two admin-grant tests from
-  `tests/web/test_credits_api.py`.
-
-- [x] **[audit 2026-07-18, security] Residual hardening (findings 2 & 3).** **DONE 2026-07-19** —
-  `require_real_admin` no longer falls back to the dev-tenant account under `APP_ENV=production`
-  (sessionless request → 403 even if the outer auth gate is ever bypassed;
-  `tests/web/test_admin_prod_fallback.py`), and `web/main.py` logs a startup warning when
-  production resolves `CREDIT_DEFAULT_RATE <= 0` (billing silently off;
-  `tests/web/test_billing_disabled_warning.py`). Finding 1 (user-authored prompts as a
-  fixed-price oracle) accepted — see Known accepted limitations.
-
-- [x] **[audit 2026-07-18, security] Payment-bypass sweep (2 fixes).** **DONE 2026-07-18** —
-  full-codebase audit (secrets / tenant bleed / LLM billing bypass). Fixed the two exploitable
-  holes: (1) **unclamped refinement settings** — `resume/cover_refine_max_turns` and pass scores
-  from the user-writable profile blob fed the unmetered post-generation refine loop (unlimited
-  free LLM calls per flat-priced generation); now clamped on hydrate to 0–5 turns / [0,1] score
-  (`core/user.py`, `MAX_REFINE_TURNS`); (2) **free-text prompt-slot models** on the platform key —
-  now validated against `core.llm.allowed_models()` (`LLM_ALLOWED_MODELS` env; prod default =
-  `{LLM_DEFAULT_MODEL}`; local unrestricted) at `PUT /api/prompts` (422) and again at
-  `get_client_for_profile` (stale rows fall back to default). Tests:
-  `tests/core/test_refine_clamp.py`, `tests/core/test_model_allowlist.py`, prompts-router cases.
-  Secrets, tenant scoping, SSE, payments webhook, admin gates all checked clean; three accepted
-  residual risks logged under Known accepted limitations above.
-
-- [x] **[audit 2026-07-18, security] Pre-beta tenant-isolation + file-read holes.** **DONE 2026-07-18** —
-  closed two classes of pre-beta holes: (A) **arbitrary file read** — `serve_profile_file`
-  (`GET /api/config/profiles/{id}/file`) now contains the served path to `profiles/`
-  (`is_relative_to`, 404 otherwise), and `_reject_foreign_file_pointers` (called in
-  `update_profile` PUT) 422s any client-supplied `resume_path`/`md_path`/`cover_letter_path`
-  outside `profiles/` at the write boundary — blocking reads of the platform `.env` via the
-  file-serve and résumé-parse sinks; (B) **cross-tenant leak/corruption** — `POST /skills/owned`,
-  `POST /skills/profile`, `DELETE /skills/profile`, and `POST /api/profile/export-master` now
-  inject `current_profile_id` into `User.load` instead of defaulting to profile 1. Regression
-  tests added (`tests/web/test_profile_api.py`). Details in `web/CONTEXT.md` → Known Issues.
-
-- [x] **Tier-gate browser-extension docs.** **DONE 2026-07-18** — split the extension
-  install/usage guide out of Getting Started into its own `Browser Extension.md`
-  (frontmatter `tiers: friends_family, beta`), rewritten for extension v1.1.0 (OAuth popup
-  sign-in, Scrape-button flow/states, clear-history). `web/routers/docs_router.py` now honors
-  a `tiers:` frontmatter key: gated docs are filtered from `GET /api/docs` and 403 on direct
-  `GET /api/docs/{filename}` unless the caller's account tier matches (admins bypass). Getting
-  Started keeps the tier-agnostic manual-upload path.
-
-- [x] **Upload modal UX: backdrop-close + refresh.** **DONE 2026-07-18** — Pipeline's manual
-  `UploadModal` now closes on backdrop click; a successful (non-duplicate) upload fires an
-  `onUploaded` callback (Pipeline → App) that refetches jobs so the new card appears immediately
-  instead of waiting on SSE. Empty-Inbox help link repointed to `/docs#adding-jobs`.
-
-- [x] **Drop registered invitees from admin Invited list.** **DONE 2026-07-18** —
-  `admin.list_invites` (`GET /api/admin/invites`) now excludes any allowlisted email that already
-  has an `Account`, so a user leaves the Invited list once they sign in and appear under Users.
-
-- [x] **Manual upload 502 during deploy window.** **DONE 2026-07-18** — manual job uploads that
-  landed mid-Railway-restart got a raw 502 (proxy had no healthy upstream). `_fetch`
-  (`react-dashboard/src/api.js`) now supports opt-in `retries`/`retryDelay` and retries only
-  gateway statuses (502/503/504) with linear backoff; thrown errors carry `err.status`. Enabled on
-  `uploadJob` (`retries:3`), which is idempotent server-side (deduped by URL).
-
-- [x] **User View name stale after résumé parse.** **DONE 2026-07-18** — `UserHome` fetched
-  profiles only on mount, so post-onboarding the "Welcome back {name}" header showed the pre-parse
-  name until a manual refresh. `Wizard` `onFinish` now dispatches `auto-apply:profile-updated`
-  (instead of reloading the page); `UserHome` listens and refetches profiles + its `usePrerequisites`
-  so the header updates in place. Test: `UserHome.refresh.test.jsx`.
-
-- [x] **Add search function to skill list.** **DONE 2026-07-18** — `TagListField`
-  (`react-dashboard/src/components/widgets/profile-tree/fieldWidgets.jsx`) now live-matches the
-  "Add…" draft against existing chips: partial matches highlight (ring), non-matches dim, and an
-  exact case-insensitive duplicate shows an "Already in your list" hint and is blocked from being
-  re-added. Client-side (no network); generic across all taglists. Tests in `fieldWidgets.test.jsx`.
-
-- [x] **Hosted-DB extraction prompt stale.** **DONE 2026-07-18 (deploys on next release)** —
-  Alembic migration `aa11extract01` refreshes every `prompts`/`prompt_defaults` extraction row
-  whose content is byte-for-byte the old factory default to the new atomic-skill default
-  (rstrip-tolerant match; user-customised prompts left untouched; reversible). Runs automatically
-  via alembic-on-startup on the next Railway deploy.
-
-- [x] **Job view chips false amber on owned skills.** **DONE 2026-07-18** — root cause was
-  extraction emitting verbose phrases ("Strong proficiency in Python") and comma-bearing
-  parentheticals into `ext_required_skills`, so the whole-phrase `skill_key` never matched a
-  profile skill and the chip showed a false résumé gap. Two-layer fix: (A) `owned_skills` now
-  recovers ownership when an owned skill key appears as a bounded word inside a multi-word phrase
-  (`web/routers/skills.py`, tests in `tests/web/test_skills_api.py`); (B) tightened the extraction
-  prompt (`prompts/defaults/extraction.md`) to require atomic skill tokens, no qualifiers,
-  no bundled/parenthetical/comma entries — also updated the local DB copies. Hosted-DB migration
-  tracked as an open Bug above.
-
-- [x] **Fixed-unit credit pricing (monetization rework).** **DONE + DEPLOYED 2026-07-16** —
-  replaced post-paid cost×rate metering with prepaid fixed prices (`core/pricing.py` price card:
-  intake 2u, generate_fresh 4u, regenerate 2u, score/extract/parse/ats/rematch/draft 1u; standard
-  job = 10u), atomic upfront `debit_fixed` + refund-on-failure (`core/credits.py`, no negative
-  balances), tiered signup grants (20/50/200) and unit-denominated packs (`core/payments.py`,
-  net ÷ $0.02 × tier multiplier), price hints + price-aware 402 toast in the UI, and a one-shot
-  Alembic redenomination (`aa10units01`, ÷20 + top-up) — **ran against live Postgres; verified**
-  (beta account topped to 200u, ledger invariant holds). Suite 1001 green.
-  Spec: `docs/superpowers/specs/2026-07-15-fixed-unit-pricing-design.md`.
-
-- [x] **[audit 2026-07-15, security] Metering + tenant-scoping sweep (6 fixes).** **DONE 2026-07-15** —
-  fixed: unauthenticated `/ws/tray` in prod (now 4003) + cross-tenant apply-payload singleton;
-  unmetered ATS gate; unbilled résumé parse; skill-match outside the extract meter; `/api/session-cost`
-  leaking global spend (admin-only in prod); dead unscoped `tray._gate_report_for`. Everything else
-  checked clean (config/prompt ownership, tenant filters, admin gates, Stripe webhook, SSE scoping).
-
-- [x] **[audit 2026-07-13] Full codebase audit + all follow-ups.** Findings doc
-  `docs/audit-2026-07-13.md` (S1–S5/R1–R4/I1–I4); every actionable item completed 2026-07-13/15:
-  global-config prompt surface deleted (S1 + `aa09rmprompts01` purge), `draft` metered (S2),
-  server-derived `is_onboarding` (S3), `require_real_admin` standardized (S4), dead-code sweep
-  (R2–R4), extraction cost metered (I1), SSE credits nudge for navbar balance (I2), scraper
-  `logger.exception` (I3), tenant-scoped SSE stream + profile-namespaced output artifacts
-  (cross-tenant leak fixes). Details in git history and `web/CONTEXT.md`.
-
-- [x] **Structured error logging v1** (2026-07-12) — `core/logging_config.py` rotating-file +
-  excepthooks, wired at web/tray startup; `logger.exception` on failure paths. Root causes of the
-  motivating bugs also fixed (extraction truncation retry; SQLite WAL/busy_timeout). Deferred v2:
-  queryable DB error table + dashboard viewer.
-
-- [x] **Profile Schema Engine #1–#6** (June 2026, pushed) — user-defined recursive résumé tree
-  end-to-end: schema engine, builder UI, per-section LLM generation + prompts, tree-v1 rendering/
-  refinement/ATS/feedback (retired typed `ResumeDocument` path for new docs), onboarding parse,
-  live PDF preview, output formats + résumé themes. Specs/plans under `docs/superpowers/`.

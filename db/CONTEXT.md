@@ -166,11 +166,12 @@ populated mainly for `ats_type="other"`). `core/ats.py` classifies a URL into
 backfill the columns once the browser extension resolves an external URL — see
 `web/CONTEXT.md` → API Surface.
 
-### `error_events` table (`aa14errlog01`)
+### `error_events` table (`aa14errlog01`, `aa15errlog02`)
 
-`aa14errlog01` (chained onto `aa13applyplan01`; **current head**) adds the global
-`error_events` table — see "Tables beyond `jobs` / `config`" above for columns and
-the not-tenant-scoped rationale.
+`aa14errlog01` (chained onto `aa13applyplan01`) adds the global `error_events` table —
+see "Tables beyond `jobs` / `config`" above for columns and the not-tenant-scoped
+rationale. `aa15errlog02` (chained onto `aa14errlog01`; **current head**) adds the
+`method`/`account_email` columns.
 
 ### Data migration: extraction-prompt refresh (`aa11extract01`)
 
