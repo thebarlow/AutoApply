@@ -14,7 +14,7 @@ def _resolve_profile_id(request: Request) -> int | None:
     """Best-effort profile id from the session; never raises."""
     try:
         account_id = request.session.get("account_id")
-    except (AssertionError, KeyError, AttributeError):
+    except Exception:
         return None  # SessionMiddleware not installed / no session
     if not account_id:
         return None
@@ -36,6 +36,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         request_id = uuid.uuid4().hex
+        # NOTE: `route` is the raw request path (e.g. "/jobs/123"), not the matched
+        # route template ("/jobs/{job_id}") — BaseHTTPMiddleware binds context before
+        # routing resolves the template inside call_next. Parameterized routes thus
+        # produce higher-cardinality route values in error_events/logs.
         route = request.scope.get("path", "")
         log_context.bind(
             request_id=request_id,
