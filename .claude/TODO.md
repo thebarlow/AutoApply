@@ -81,8 +81,14 @@ git history is the archive (see `.claude/skills/update-todo/`).
   response is unaffected. This routes every unhandled exception through the Task 3 request-context
   fields, the Task 2 JSON console formatter, and the Task 4 DB error sink, without changing
   client-visible behavior. Test in `tests/web/test_unhandled_exception_logged.py`; full
-  `tests/web` suite (405 tests) green. **Remaining:** Railway log-drain docs and an admin API/UI
-  to view/surface the persisted `error_events`.
+  `tests/web` suite (405 tests) green. **Task 7 DONE 2026-07-23** — commit `d74f8f6`: admin
+  `error_events` API — `GET /api/admin/errors` (filters: `level`/`route`/`profile_id`/`since`),
+  `GET /api/admin/errors/{id}` (detail incl. traceback/request_id), `DELETE /api/admin/errors`
+  (clear all) — admin-gated, in `web/routers/admin.py`. **Task 8 DONE 2026-07-23** — commit
+  `f0b8784`: frontend admin panel — `react-dashboard/src/api.js` gained `getErrors(params)`/
+  `getErrorDetail(id)`/`clearErrors()`; new `react-dashboard/src/components/admin/ErrorLog.jsx`
+  (filter bar, grouped/expandable error table, "Clear all"), wired into `AdminPage.jsx` as a new
+  `errors` nav entry. Tests in `ErrorLog.test.jsx`. **Remaining:** Railway log-drain docs.
 
 - [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
   its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone
