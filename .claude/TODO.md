@@ -30,6 +30,41 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Features
 
+- [ ] **Error observability hardening (2026-07-24 plan).** Follow-up plan at
+  `docs/superpowers/plans/2026-07-24-error-observability-hardening.md` (see
+  `.superpowers/sdd/progress.md` in the `error-observability` worktree for live status).
+  1. [x] **Task 1 — normalize ids/uuids/quotes out of fingerprint.** `core/error_sink.py`'s
+     `fingerprint()` now strips hex addresses, UUIDs, quoted string literals, and bare
+     integers (in that order) before hashing, so messages differing only by an embedded
+     id/uuid/quoted value dedup to the same fingerprint.
+  2. [x] **Task 2 — refresh traceback/message on dedup; prune only on insert.**
+     `core/error_sink.py` already had this behavior; commit `ee54a62` strengthened
+     `tests/core/test_error_sink.py` (`test_dedup_refreshes_traceback`,
+     `test_dedup_bump_does_not_prune`) so they actually fail against reverted/buggy
+     behavior instead of vacuously passing. No production code changed.
+  3. [x] **Task 3 — add `method` + `account_email` (context, schema, migration, sink,
+     formatter).** `core/log_context.py`'s context bag gained `method`/`account_email`
+     ContextVars; `web/middleware_request_context.py`'s `_resolve_identity` (renamed from
+     `_resolve_profile_id`) now returns `(profile_id, account_email)` and binds
+     `method=request.method`; `core/logging_config.py`'s `JsonFormatter` and
+     `core/error_sink.py`'s `DbErrorHandler` (insert + dedup-update) both carry the two
+     fields through to `db.database.ErrorEvent`; migration `aa15errlog02` adds the columns
+     (down_revision `aa14errlog01`, now head).
+  4. [x] **Task 4 — surface `method` + `account_email` in the admin API and UI.**
+     `web/routers/admin.py` list + detail dicts carry both fields; `ErrorLog.jsx` gained a
+     Method column and an `email (#id)` identity cell (commit `52926f2`).
+  5. [x] **Task 5 — add request context to the dev/console log format.** `_FMT` in
+     `core/logging_config.py` now includes `[request_id method route]` (commit `cee7b62`).
+     Follow-up (minor, tracked in `.superpowers/sdd/progress.md`): the rotating file handler
+     uses `_FMT` but relies on the console handler stamping the shared record; consider
+     attaching `ContextFilter` to the file handler directly.
+  6. [x] Task 6 — docs pass.
+
+- [ ] **Railway log-drain docs.** Non-blocking follow-up from "Robust error logging for
+  Railway (hosted)" (see Done) — document how to point Railway's log stream at an external
+  log drain / query the JSON console lines, for anyone who wants search/alerting beyond the
+  in-app admin Error Log viewer.
+
 - [ ] **Usage-based (metered) LLM billing instead of fixed-unit prices.** Idea (2026-07-23): cap a
   call's `max_tokens` at whatever the user's remaining balance can afford, then debit dynamically
   from *actual* tokens used (from `usage` on the response) rather than a flat per-action unit price.
@@ -40,16 +75,6 @@ git history is the archive (see `.claude/skills/update-todo/`).
   the real cost, UX for "this action costs a variable amount," and how it coexists with / replaces the
   current prepaid fixed-unit model in `core/metering.py` + `core/pricing.py`. Bigger than a tweak —
   its own spec.
-
-- [ ] **Robust error logging for Railway (hosted).** The local rotating-file logging
-  (`core/logging_config.py`, "Structured error logging v1") doesn't help on Railway — the `/data`
-  volume log file isn't easily inspectable and container restarts/redeploys scatter context. Build
-  hosted-grade error observability: ensure tracebacks/`logger.exception` output reaches Railway's
-  log stream (stdout/stderr JSON so it's queryable in the Railway logs UI), decide on structured
-  (JSON) vs. plain formatting per env, and consider the deferred v2 from error-logging-v1 — a
-  queryable DB error table + in-app admin viewer — so production failures are diagnosable without
-  SSHing into the container. Scope: log routing/format by `APP_ENV`, request-context enrichment
-  (profile_id, route, request id), and where errors surface (Railway stream vs. DB vs. admin UI).
 
 - [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
   its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone
@@ -224,6 +249,67 @@ Known accepted limitations (each would be its own feature if prioritized):
   paths in `tests/core/test_parsed_sections.py`. Also documented the silent-422 logging gap in
   `web/CONTEXT.md` → Known Issues (both `parse_apply` validation branches raise without logging;
   add a `logger.warning` before the raise when next touching that code).
+
+- [x] **Robust error logging for Railway (hosted).** **DONE 2026-07-23** — all 8 tasks
+  merged. The local rotating-file logging
+  (`core/logging_config.py`, "Structured error logging v1") doesn't help on Railway — the `/data`
+  volume log file isn't easily inspectable and container restarts/redeploys scatter context. Built
+  hosted-grade error observability: tracebacks/`logger.exception` output now reaches Railway's
+  log stream (stdout/stderr JSON so it's queryable in the Railway logs UI), structured (JSON) vs.
+  plain formatting is selected per env, and the deferred v2 from error-logging-v1 — a queryable
+  DB error table + in-app admin viewer — is shipped, so production failures are diagnosable
+  without SSHing into the container.
+  **Task 1** — commit `3d069e9`: new `core/log_context.py`, a contextvars-backed
+  log context bag (`bind()`/`clear()`/`snapshot()` for request_id/route/profile_id) +
+  `ContextFilter` (injects those fields onto every `LogRecord`). Self-contained; not yet wired
+  in. **Task 2** — commit `b81a83e`: `core/logging_config.py` gained
+  `JsonFormatter` (single-line JSON: `ts, level, logger, msg, route, profile_id, request_id`,
+  plus rendered `exc_info` traceback when present) and `_console_formatter()`, which selects
+  `JsonFormatter()` when `APP_ENV=production` else the existing plain formatter. The console
+  handler now uses `_console_formatter()` and has `ContextFilter` attached, so route/profile_id/
+  request_id populate whenever they're bound. The rotating file handler is unchanged (still
+  plain-text). Tests in `tests/core/test_json_formatter.py` (6/6 passing). **Task 3**
+  — commit `dc0bdd5`: new `web/middleware_request_context.py`
+  (`RequestContextMiddleware(BaseHTTPMiddleware)`) calls `log_context.bind(request_id, route,
+  profile_id)` at the start of every request (`request_id` a fresh uuid4 hex; `route` the request
+  path; `profile_id` best-effort-resolved from `request.session["account_id"]` →
+  `db.database.Account.profile_id` via a throwaway `SessionLocal()`, swallowing any error to
+  `None`), sets an `X-Request-ID` response header, and clears the context in a `finally` block.
+  Wired in `web/main.py` via `app.add_middleware(RequestContextMiddleware)` right after
+  `ImpersonationReadOnlyMiddleware` and before `SessionMiddleware` (which must stay outermost/
+  last-added). Tests in `tests/web/test_request_context_mw.py` (2/2 passing); full `tests/web`
+  suite (404 tests) green. Starlette 0.49.3 — the documented contextvar-propagation risk across
+  `BaseHTTPMiddleware`'s task boundary did not manifest. **Task 6** — commit
+  `bdc8e42`: Alembic migration `aa14errlog01` adds the global `error_events` table
+  (`db.database.ErrorEvent`) — admin-only, deliberately **not** tenant-scoped/excluded from
+  `_TENANT_TABLES` (see `db/CONTEXT.md`). Tests in `tests/core/test_error_events_model.py`.
+  **Task 4** — commit
+  `33de040`: new `core/error_sink.py` — `fingerprint(record)` (sha1 dedup key: logger + exception
+  type + normalized top frame, or logger+message when no `exc_info`), `DbErrorHandler`
+  (`logging.Handler` that upserts into `db.database.ErrorEvent` by fingerprint — increments
+  count/bumps last_seen on an existing row else inserts; uses its own short-lived `SessionLocal()`
+  session; prunes rows older than `ERROR_LOG_MAX_AGE_DAYS` (default 30) and caps total rows at
+  `ERROR_LOG_MAX_ROWS` (default 1000); `emit()` swallows all exceptions so logging can never
+  cascade-fail), and `install_db_error_handler(root)` (attaches the handler at ERROR level unless
+  env var `ERROR_LOG_DB` disables it). `core/logging_config.py`'s `setup_logging()` now calls it
+  near the end, wrapped in try/except. Tests in `tests/core/test_error_sink.py` (5/5 passing:
+  insert, dedup+increment, prune-by-max-rows, exception-swallowing, fingerprint stability across
+  line numbers). **Task 5** — commit `135eff2`: `web/main.py` gained a global
+  `@app.exception_handler(Exception)` (`_log_unhandled_exception`, module logger
+  `web.unhandled`) registered above the existing `InsufficientCredits` handler — it calls
+  `logger.exception(...)` with the request path, then re-raises so Starlette's standard 500
+  response is unaffected. This routes every unhandled exception through the Task 3 request-context
+  fields, the Task 2 JSON console formatter, and the Task 4 DB error sink, without changing
+  client-visible behavior. Test in `tests/web/test_unhandled_exception_logged.py`; full
+  `tests/web` suite (405 tests) green. **Task 7** — commit `d74f8f6`: admin
+  `error_events` API — `GET /api/admin/errors` (filters: `level`/`route`/`profile_id`/`since`),
+  `GET /api/admin/errors/{id}` (detail incl. traceback/request_id), `DELETE /api/admin/errors`
+  (clear all) — admin-gated, in `web/routers/admin.py`. **Task 8** — commit
+  `f0b8784`: frontend admin panel — `react-dashboard/src/api.js` gained `getErrors(params)`/
+  `getErrorDetail(id)`/`clearErrors()`; new `react-dashboard/src/components/admin/ErrorLog.jsx`
+  (filter bar, grouped/expandable error table, "Clear all"), wired into `AdminPage.jsx` as a new
+  `errors` nav entry. Tests in `ErrorLog.test.jsx`. Non-blocking follow-up (Railway
+  log-drain docs) tracked as its own Features item.
 
 - [x] **Raise résumé-parse token budget and guard truncation.** **DONE 2026-07-23** — commit
   `e424d19`. A 4-page résumé overflowed `User.from_markdown`'s 8000-token output cap, truncating the

@@ -6,9 +6,10 @@ FastAPI backend. Serves the REST API on port 8080. The frontend (React) is a sep
 
 ```
 web/
-├── main.py                       # FastAPI app; includes all routers; registers AuthGate + Session middleware
+├── main.py                       # FastAPI app; includes all routers; registers AuthGate + Session middleware; global catch-all exception handler logs-then-reraises unhandled errors (see Key Design Notes → Hosted error observability)
 ├── tenancy.py                    # current_profile_id seam (session in prod / dev stub otherwise) + scoped(); honors impersonation (see Auth below)
 ├── middleware_impersonation.py   # ImpersonationReadOnlyMiddleware — blocks unsafe methods while impersonating (see Auth below)
+├── middleware_request_context.py # RequestContextMiddleware — binds request_id/route/profile_id into core.log_context per request (see Key Design Notes → Hosted error observability)
 ├── sse.py                        # Server-Sent Events helpers (tenant-scoped job update broadcasts)
 ├── llm_status.py                 # In-memory tracker for active LLM jobs (keyed by job_key+action)
 ├── intake_pipeline.py            # Post-ingest pipeline (score + generate) run per new job
@@ -125,6 +126,27 @@ web/
   state, does a manual token exchange (`_ext_fetch_claims`, no Authlib session), and
   branches to the ext path; otherwise the unchanged website Authlib flow runs.
 
+- **Hosted error observability (in progress) — request context binding (Task 3, DONE)** —
+  `web/middleware_request_context.py`'s `RequestContextMiddleware` binds `request_id` (fresh
+  uuid4 hex), `route` (`request.scope["path"]`), `method` (`request.method`), and `profile_id`
+  + `account_email` (best-effort via `_resolve_identity`, which looks up
+  `request.session["account_id"]` → `db.database.Account.profile_id`/`.email` via a throwaway
+  `SessionLocal()`, swallowing any lookup error to `(None, None)`) into `core.log_context` for
+  the duration of the request, sets an `X-Request-ID` response header, and clears the context in
+  a `finally` block so it never leaks across requests. Registered in `main.py` via
+  `app.add_middleware(RequestContextMiddleware)` **right after `ImpersonationReadOnlyMiddleware`
+  and before `SessionMiddleware`** (`SessionMiddleware` must stay outermost/last-added so
+  `scope["session"]` is populated before this middleware's profile-id lookup runs). These fields
+  feed `core.log_context.ContextFilter` (see `core/logging_config.py`), which stamps them onto
+  every `LogRecord` — so production JSON log lines are now request-traceable.
+  **Global unhandled-exception logging (Task 5, DONE)** — `main.py`'s
+  `@app.exception_handler(Exception)` (`_log_unhandled_exception`, module logger
+  `web.unhandled`) is registered above the `InsufficientCredits` handler; it calls
+  `logger.exception(...)` with the request path and re-raises, so Starlette's normal 500
+  response still reaches the client while the traceback flows through the request-context
+  fields, the JSON console formatter, and the `DbErrorHandler` sink above. See
+  `.claude/TODO.md` → "Robust error logging for Railway (hosted)" for the rest of the feature
+  (Railway log-drain docs, deferred DB-error-table/admin-viewer v2).
 - **Docs tier-gating (`routers/docs_router.py`)** — `GET /api/docs` (list) and
   `GET /api/docs/{filename}` (content) resolve the caller's `(tier, is_admin)` from the
   `Account` row (via `get_db` + `current_profile_id` deps; defaults to `standard`/non-admin

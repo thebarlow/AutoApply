@@ -4,10 +4,12 @@ import Navbar from './Navbar'
 import { getMe } from '../api'
 import ManageUsers from './admin/ManageUsers'
 import ResumeCompare from './admin/ResumeCompare'
+import ErrorLog from './admin/ErrorLog'
 
 const FUNCTIONS = [
   { key: 'users', label: 'Manage Users' },
   { key: 'resume-compare', label: 'Résumé Compare' },
+  { key: 'errors', label: 'Error Log' },
 ]
 
 export default function AdminPage() {
@@ -53,6 +55,7 @@ export default function AdminPage() {
           <section className="flex-1 min-w-0 overflow-y-auto">
             {active === 'users' && <ManageUsers />}
             {active === 'resume-compare' && <ResumeCompare />}
+            {active === 'errors' && <ErrorLog />}
           </section>
         </div>
       </div>
