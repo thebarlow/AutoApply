@@ -13,6 +13,7 @@ core/
 ├── llm.py               # LLM client construction and model resolution
 ├── logging_config.py    # setup_logging(): root logger → stdout (JsonFormatter when APP_ENV=production, else plain) + size-rotating file (5MB×5, always plain) + thread/sys excepthook; env-configurable (LOG_LEVEL/LOG_DIR/LOG_FILE); idempotent, never crashes startup
 ├── log_context.py       # contextvars-backed log context bag (request_id/route/profile_id): bind()/clear()/snapshot() + ContextFilter — wired onto the console handler in logging_config.py; bound per-request by web/middleware_request_context.py's RequestContextMiddleware (see web/CONTEXT.md)
+├── error_sink.py        # DbErrorHandler: persists ERROR-level log records to the error_events table (dedup by fingerprint(), prune-on-insert); install_db_error_handler() wires it into setup_logging(); env ERROR_LOG_DB/ERROR_LOG_MAX_ROWS/ERROR_LOG_MAX_AGE_DAYS; emit() swallows all exceptions and uses its own short-lived SessionLocal() session — must never raise
 ├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
 ├── session_cost.py      # Thread-safe accumulator for per-session LLM spend (from usage.cost)
 ├── skill_analytics.py   # Skill token normalization + frequency aggregation across jobs (no LLM)

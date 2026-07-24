@@ -63,8 +63,19 @@ git history is the archive (see `.claude/skills/update-todo/`).
   `ImpersonationReadOnlyMiddleware` and before `SessionMiddleware` (which must stay outermost/
   last-added). Tests in `tests/web/test_request_context_mw.py` (2/2 passing); full `tests/web`
   suite (404 tests) green. Starlette 0.49.3 — the documented contextvar-propagation risk across
-  `BaseHTTPMiddleware`'s task boundary did not manifest. **Remaining:** Railway log-drain docs and
-  the deferred v2 DB-error-table/admin-viewer scope above.
+  `BaseHTTPMiddleware`'s task boundary did not manifest. **Task 4 DONE 2026-07-23** — commit
+  `33de040`: new `core/error_sink.py` — `fingerprint(record)` (sha1 dedup key: logger + exception
+  type + normalized top frame, or logger+message when no `exc_info`), `DbErrorHandler`
+  (`logging.Handler` that upserts into `db.database.ErrorEvent` by fingerprint — increments
+  count/bumps last_seen on an existing row else inserts; uses its own short-lived `SessionLocal()`
+  session; prunes rows older than `ERROR_LOG_MAX_AGE_DAYS` (default 30) and caps total rows at
+  `ERROR_LOG_MAX_ROWS` (default 1000); `emit()` swallows all exceptions so logging can never
+  cascade-fail), and `install_db_error_handler(root)` (attaches the handler at ERROR level unless
+  env var `ERROR_LOG_DB` disables it). `core/logging_config.py`'s `setup_logging()` now calls it
+  near the end, wrapped in try/except. Tests in `tests/core/test_error_sink.py` (5/5 passing:
+  insert, dedup+increment, prune-by-max-rows, exception-swallowing, fingerprint stability across
+  line numbers). **Remaining:** Railway log-drain docs and an admin API/UI to view/surface the
+  persisted `error_events`.
 
 - [ ] **Scrape buttons on individual job pages (extension).** The extension currently surfaces
   its Scrape affordance only in the job-search/results list. Add a Scrape button on the standalone
