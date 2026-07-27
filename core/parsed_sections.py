@@ -155,7 +155,7 @@ def build_section_from_parsed(extra: ExtraSection, order: int = 0) -> SectionNod
         return SectionNode(name=name, role="", order=order, children=[field])
 
     if extra.kind == "fields":
-        fields = [FieldNode(name=f.label or f"Field {i+1}", kind="text",
+        fields = [FieldNode(name=f.label or f"Field {i+1}", key=f"field_{i}", kind="text",
                             value=f.value, order=i, llm_output=False)
                   for i, f in enumerate(extra.fields)]
         return SectionNode(name=name, role="", order=order,
@@ -163,9 +163,14 @@ def build_section_from_parsed(extra: ExtraSection, order: int = 0) -> SectionNod
 
     # kind == "list"
     labels = _union_labels(extra.entries)
+    # keys must be unique per sibling field within a group (validate_tree rejects
+    # a GroupNode whose fields share a key); labels alone default to "" on
+    # FieldNode, so every multi-column list section (e.g. Role/Date/Description)
+    # collided on key="" and 422'd the parse/apply step.
+    keys = [f"field_{i}" for i in range(len(labels))]
     template = GroupNode(name=f"{name} Item", children=[
-        FieldNode(name=lbl, kind="text", order=i, llm_output=False)
-        for i, lbl in enumerate(labels)
+        FieldNode(name=lbl, key=key, kind="text", order=i, llm_output=False)
+        for i, (lbl, key) in enumerate(zip(labels, keys))
     ])
     children = []
     for entry_idx, e in enumerate(extra.entries):
@@ -175,9 +180,9 @@ def build_section_from_parsed(extra: ExtraSection, order: int = 0) -> SectionNod
         # ListNode whose children share an order (e.g. a multi-row CERTIFICATIONS
         # section), which otherwise 422s the parse/apply step.
         children.append(GroupNode(name=_item_name("", item_values), order=entry_idx, children=[
-            FieldNode(name=lbl, kind="text", order=i, value=by_label.get(lbl, ""),
+            FieldNode(name=lbl, key=key, kind="text", order=i, value=by_label.get(lbl, ""),
                       llm_output=False)
-            for i, lbl in enumerate(labels)
+            for i, (lbl, key) in enumerate(zip(labels, keys))
         ]))
     lst = ListNode(name=name, item_template=template, children=children)
     return SectionNode(name=name, role="", order=order, children=[lst])
