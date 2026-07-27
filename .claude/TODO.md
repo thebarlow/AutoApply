@@ -244,6 +244,14 @@ Known accepted limitations (each would be its own feature if prioritized):
   `web/CONTEXT.md` → Known Issues (both `parse_apply` validation branches raise without logging;
   add a `logger.warning` before the raise when next touching that code).
 
+- [x] **Assign unique field keys for multi-column parsed list sections (2nd parse/apply 422 fix).**
+  **DONE 2026-07-27** — commit `f8112dd`. A live user's multi-column "list"-kind extra section
+  (custom Role/Date/Description columns, e.g. "Leadership Activities") left every `FieldNode` key
+  defaulted to `""`; `validate_tree` rejects sibling `FieldNode`s sharing a key, 422ing parse/apply.
+  Distinct from the `order` bug above (same function, different `validate_tree` invariant). Fixed
+  in `core/parsed_sections.py`'s `build_section_from_parsed` ("list" and "fields" kind branches) by
+  passing explicit `key=` to each `FieldNode()`.
+
 - [x] **Robust error logging for Railway (hosted).** **DONE 2026-07-23** — all 8 tasks
   merged. The local rotating-file logging
   (`core/logging_config.py`, "Structured error logging v1") doesn't help on Railway — the `/data`

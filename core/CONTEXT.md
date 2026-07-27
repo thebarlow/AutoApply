@@ -393,4 +393,11 @@ rule existed, run `python -m scripts.flag_failed_scrapes` (dry run) then
   (`core/parsed_sections.py` `build_section_from_parsed` and `merge_section`): `validate_tree`
   rejects a `ListNode` whose children share a sibling order, which otherwise 422s `parse/apply`
   (with no server log — see `web/CONTEXT.md` → Known Issues) for a multi-row novel section.
+- Sibling `FieldNode`s within a parsed section must also get a unique explicit `key=` at
+  construction time (`build_section_from_parsed`'s "list" and "fields" kind branches) — leaving
+  it defaulted to `""` makes every field in a multi-column row (e.g. Role/Date/Description) share
+  the same key, which `validate_tree` also rejects as a duplicate sibling key (422 on
+  parse/apply). Two independent `validate_tree` invariants — duplicate `order` and duplicate
+  `key` — have separately bitten this function; watch for a third if new FieldNode/GroupNode
+  construction sites are added here without an explicit unique identifier.
 - Refinement settings are clamped server-side on `User._hydrate()` (audit, 2026-07-18): `resume_refine_max_turns` / `cover_refine_max_turns` → 0–`MAX_REFINE_TURNS` (5), pass scores → [0,1]. Refinement turns run unmetered inside the flat generation price, so client-supplied values must never expand them. Tests: `tests/core/test_refine_clamp.py`.
