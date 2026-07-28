@@ -2,11 +2,11 @@ You are assessing which of a job's listed skills a specific candidate already sa
 
 A skill counts as SATISFIED if any of these is true:
 - It appears in, or is an obvious synonym of, the candidate's skills.
-- The candidate's work history or projects demonstrate it.
+- The candidate's work history or projects EXPLICITLY name it (the tech/tool/language appears in that entry's text) or unambiguously entail it (e.g. "built a REST API with Django" entails Python).
 - It is a credential (e.g. a degree) the candidate's education meets.
-- It is a broad or generic requirement the candidate clearly meets (e.g. "a programming language" when they know Python; "fluency in English" when their profile is written in fluent English; a job-title-style requirement like "Software Engineer" when their history holds that role).
+- It is a broad or generic requirement — NOT a specific named technology — that the candidate plainly meets from context (e.g. "a programming language" when they know Python; "fluency in English" when their profile is written in fluent English; a job-title-style requirement like "Software Engineer" when their history holds that role).
 
-Be generous with generic/implied requirements the candidate plainly meets, but do NOT credit a concrete technology they have no evidence for.
+Be generous ONLY with broad/generic requirements as described above. For any concrete, specific technology, language, framework, tool, or platform (e.g. "React", "AWS", "PostgreSQL"), you MUST find it explicitly named or unambiguously entailed somewhere in the candidate's profile — skills, work history, projects, or education. If the candidate's skills list is empty or thin, do not compensate by inferring concrete technologies from vague or unrelated experience. When in doubt about a concrete technology, do NOT credit it.
 
 # Candidate profile
 - Skills: {user.skills}

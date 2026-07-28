@@ -41,6 +41,19 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Features
 
+- [ ] **A/B test default prompt quality, starting with job preprocessing (extraction).**
+  Idea (2026-07-27): our default prompts (`prompts/defaults/*.md`) were hand-written and
+  never systematically evaluated — the skill_match false-positive bug is one symptom of
+  this. Want to run structured A/B tests of prompt variants against real job/résumé data to
+  measure and improve quality, starting with `extraction.md` (job description parsing,
+  upstream of scoring/skill-match/generation — errors here cascade). User wants to try this
+  as an agent loop (e.g. `/loop`): an agent generates prompt variants, runs them against a
+  fixed job/profile eval set, scores results (accuracy, hallucination rate, or a rubric),
+  and iterates. Needs: a frozen eval set (jobs + expected extraction fields), a scoring
+  method (LLM-judge vs. deterministic diff vs. human spot-check), and a place to record
+  variant results so improvements are traceable. Not started — needs its own
+  spec/plan before implementation.
+
 - [ ] **Railway log-drain docs.** Non-blocking follow-up from "Robust error logging for
   Railway (hosted)" (see Done) — document how to point Railway's log stream at an external
   log drain / query the JSON console lines, for anyone who wants search/alerting beyond the
@@ -208,6 +221,24 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Tighten `skill_match` prompt to require real evidence for concrete techs.** **DONE
+  2026-07-27** — friend testing the app hit false-positive skill matches: a résumé with no
+  Skills section still got required skills marked as satisfied, because `skill_match.md`
+  told the LLM to be generous about "implied" requirements without distinguishing concrete
+  named technologies from broad/generic ones. Rewrote `prompts/defaults/skill_match.md` so
+  the generosity clause applies only to broad/generic requirements; any concrete
+  tech/framework/tool/platform must be explicitly named or unambiguously entailed in the
+  candidate's skills/work-history/projects/education, with an explicit "empty skills list is
+  not license to infer from vague experience" instruction. Local dev `PromptDefault` row
+  updated directly (seed is idempotent — editing the file alone doesn't reach existing rows).
+  **Live Railway DB NOT reseeded** — needs explicit approval per the manual-reseed policy in
+  `core/CONTEXT.md`. Confirmed the "give every profile a default hidden Skills section +
+  let users mark a skill chip as owned" idea was already fully built (`legacy_to_tree`
+  always creates a Skills section even when empty; `visible` flag + empty-section-omission
+  already hide it until populated; `SkillChipModal.jsx` → `addProfileSkill`/
+  `removeProfileSkill` already wires the chip-click "a skill I have" toggle) — no code
+  change needed there.
 
 - [x] **Error observability hardening.** **DONE, MERGED & PUSHED 2026-07-24** — merge commit
   `667a7ec` (branch `worktree-error-observability`, now deleted). 6-task follow-up on top of
