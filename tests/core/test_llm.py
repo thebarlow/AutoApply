@@ -66,3 +66,26 @@ def test_call_llm_passes_max_tokens():
     call_llm("prompt", client, "gpt-4", max_tokens=256)
     call_args = client.chat.completions.create.call_args
     assert call_args.kwargs["max_tokens"] == 256
+
+
+def test_claude_cli_provider_returns_wrapper_client():
+    from core.llm_claude_cli import ClaudeCliClient
+    env = {"LLM_PROVIDER_TYPE": "claude_cli", "APP_ENV": "development"}
+    with mock.patch.dict(os.environ, env, clear=True):
+        client, model = get_client_for_profile(None)
+    assert isinstance(client, ClaudeCliClient)
+    assert model == "claude-cli"
+
+
+def test_claude_cli_provider_needs_no_api_key():
+    env = {"LLM_PROVIDER_TYPE": "claude_cli", "APP_ENV": "development", "LLM_API_KEY": ""}
+    with mock.patch.dict(os.environ, env, clear=True):
+        # must not raise "No platform LLM key"
+        get_client_for_profile(None)
+
+
+def test_claude_cli_provider_blocked_in_production():
+    env = {"LLM_PROVIDER_TYPE": "claude_cli", "APP_ENV": "production"}
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(RuntimeError, match="production"):
+            get_client_for_profile(None)

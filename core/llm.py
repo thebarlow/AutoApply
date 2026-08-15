@@ -84,11 +84,16 @@ def get_client_for_profile(user: Any = None, model_override: str = "") -> tuple:
         RuntimeError: If provider type, API key, or model cannot be resolved.
     """
     provider_type = (os.getenv("LLM_PROVIDER_TYPE") or "openrouter").lower()
+    if provider_type == "claude_cli":
+        if os.getenv("APP_ENV") == "production":
+            raise RuntimeError("LLM_PROVIDER_TYPE=claude_cli is not allowed when APP_ENV=production.")
+        from core.llm_claude_cli import ClaudeCliClient
+        return ClaudeCliClient(), "claude-cli"
     base_url = _PROVIDER_BASE_URLS.get(provider_type)
     if not base_url:
         raise RuntimeError(
             f"Unknown LLM_PROVIDER_TYPE {provider_type!r}. "
-            f"Expected one of {sorted(_PROVIDER_BASE_URLS)}."
+            f"Expected one of {sorted(_PROVIDER_BASE_URLS) + ['claude_cli']}."
         )
     api_key = os.getenv("LLM_API_KEY") or _read_env_file().get("LLM_API_KEY", "")
     if not api_key:
