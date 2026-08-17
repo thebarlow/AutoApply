@@ -78,3 +78,10 @@ def test_timeout_raises_runtime_error():
     with mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=300)):
         with pytest.raises(RuntimeError, match="timed out"):
             client.chat.completions.create(model="m", max_tokens=1, messages=[{"role": "user", "content": "x"}])
+
+
+def test_claude_cli_not_on_path_raises_runtime_error():
+    client = ClaudeCliClient()
+    with mock.patch("subprocess.run", side_effect=FileNotFoundError("claude not found")):
+        with pytest.raises(RuntimeError, match="claude CLI not found|PATH"):
+            client.chat.completions.create(model="m", max_tokens=1, messages=[{"role": "user", "content": "x"}])

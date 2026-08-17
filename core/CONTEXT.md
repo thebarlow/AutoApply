@@ -129,9 +129,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Full profile render for prompt injection | `user.py` → `User.render_for_prompt()` |
 | Master resume markdown for prompt injection | `user.py` → `User.master_resume()` |
 | Prompt file resolution per type | `user.py` → `User.resolve_prompt()` |
-| LLM client construction (active provider) | `llm.py` → `get_openai_client()` |
-| LLM client for named provider | `llm.py` → `get_client_for_named_provider()` |
-| LLM client from user profile config | `llm.py` → `get_client_for_profile()` |
+| LLM client construction | `llm.py` → `get_client_for_profile()` (resolves provider/model from env) |
 | Local `claude` CLI LLM provider (dev-only wrapper) | `llm_claude_cli.py` → `ClaudeCliClient` (OpenAI-SDK-shaped, selected via `LLM_PROVIDER_TYPE=claude_cli`, production access guarded) |
 | Single-turn LLM call helper | `llm.py` → `call_llm()` |
 | Session LLM cost tracking | `session_cost.py` |
@@ -161,12 +159,9 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 
 ## LLM Integration
 
-See project memory note: the project uses the **OpenAI SDK** with multi-provider support (not the Anthropic SDK). Provider/model/API key are stored in the Config DB table and resolved at request time via `core/llm.py`.
+See project memory note: the project uses the **OpenAI SDK** with multi-provider support (not the Anthropic SDK). Provider/model/API key are resolved at request time via `core/llm.py`.
 
-`llm.py` supports three resolution paths:
-1. **Active provider** (`get_openai_client`) — reads `llm_active_provider` from Config DB; API key from env `LLM_KEY_{PROVIDER_NAME}`.
-2. **Named provider** (`get_client_for_named_provider`) — looks up a named entry from `named_providers` config; API key from env `LLM_KEY_{ID}`.
-3. **User profile** (`get_client_for_profile`) — uses `user.llm_provider_type` / `user.llm_model`; API key from env `LLM_KEY_PROFILE_{user.id}`.
+**LLM client resolution** — `get_client_for_profile()` returns (client, model) by reading `LLM_PROVIDER_TYPE` and `LLM_DEFAULT_MODEL` from env; API key is resolved from env via `LLM_API_KEY`. The platform owns LLM keys server-side (multi-tenant billing).
 
 **Dev-only provider: Local `claude` CLI** (`ClaudeCliClient` in `llm_claude_cli.py`) — selected via `LLM_PROVIDER_TYPE=claude_cli`, runs the local `claude` CLI (`claude -p --output-format json`) headless. Cost=0, tokens from CLI's JSON `usage` field. Production access is guarded: `get_client_for_profile()` raises `RuntimeError` if `claude_cli` is set in production. Enables local testing/development without external API keys or billing.
 

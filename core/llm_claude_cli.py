@@ -37,6 +37,10 @@ class ClaudeCliClient:
                 text=True,
                 timeout=_TIMEOUT_SECONDS,
             )
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                "claude CLI not found on PATH — install it or set LLM_PROVIDER_TYPE back to openrouter"
+            ) from e
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(f"claude -p timed out after {_TIMEOUT_SECONDS}s") from e
 
