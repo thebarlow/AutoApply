@@ -222,6 +222,17 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **Add ClaudeCliClient local LLM provider wrapper.** **DONE 2026-08-15**
+  — commits `34ccc6b` (ClaudeCliClient implementation) + `6b984c9` (wire into LLM_PROVIDER_TYPE).
+  A dev-only local LLM backend for testing without OpenRouter: `core/llm_claude_cli.py`
+  implements `ClaudeCliClient`, an OpenAI-SDK-shaped wrapper around the local `claude` CLI
+  (runs `claude -p --output-format json` headless). Selected via `LLM_PROVIDER_TYPE=claude_cli`
+  in `.env`; `core/llm.py` wires it into `get_client_for_profile()` and guards production
+  access. Subprocesses single-turn (no tools), no cost tracking (cost=0), token counts from the
+  CLI's JSON `usage` field. Raises `RuntimeError` if `claude_cli` is selected when
+  `APP_ENV=production`. Tests: `tests/core/test_llm_claude_cli.py` (6 tests) +
+  `tests/core/test_llm.py` (3 new tests for provider selection + guard + error message).
+
 - [x] **Tighten `skill_match` prompt to require real evidence for concrete techs.** **DONE
   2026-07-27** — friend testing the app hit false-positive skill matches: a résumé with no
   Skills section still got required skills marked as satisfied, because `skill_match.md`

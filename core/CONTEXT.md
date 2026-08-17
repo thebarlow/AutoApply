@@ -11,6 +11,7 @@ core/
 ├── profile_tree.py      # Recursive typed profile/résumé tree (closed node vocab) + validate_tree + tree_to_legacy adapter + legacy_to_tree migration
 ├── section_presets.py   # Preset section subtrees mirroring the legacy master profile (header/summary/experience/education/projects/skills)
 ├── llm.py               # LLM client construction and model resolution
+├── llm_claude_cli.py    # ClaudeCliClient: dev-only OpenAI-SDK-shaped wrapper around local `claude` CLI; selected via LLM_PROVIDER_TYPE=claude_cli; production access guarded by core/llm.py
 ├── logging_config.py    # setup_logging(): root logger → stdout (JsonFormatter when APP_ENV=production, else plain) + size-rotating file (5MB×5, always plain) + thread/sys excepthook; env-configurable (LOG_LEVEL/LOG_DIR/LOG_FILE); idempotent, never crashes startup
 ├── log_context.py       # contextvars-backed log context bag (request_id/route/profile_id/method/account_email): bind()/clear()/snapshot() + ContextFilter — wired onto the console handler in logging_config.py; bound per-request by web/middleware_request_context.py's RequestContextMiddleware (see web/CONTEXT.md)
 ├── error_sink.py        # DbErrorHandler: persists ERROR-level log records to the error_events table (dedup by fingerprint(); prune-on-insert only, not on dedup-bumps); install_db_error_handler() wires it into setup_logging(); env ERROR_LOG_DB/ERROR_LOG_MAX_ROWS/ERROR_LOG_MAX_AGE_DAYS; emit() swallows all exceptions + re-entrancy-guarded, uses its own short-lived SessionLocal() session — must never raise. fingerprint() runs each component through _normalize() (strips hex addresses, UUIDs, quoted literals, and integer runs) so messages differing only by ids/values collapse to ONE row; the full original message is still stored verbatim in the message column. On a dedup hit, traceback/message/route/method/profile_id/account_email/request_id are all refreshed to the latest occurrence. KNOWN LIMITATION: rows with profile_id/account_email = None are non-request or pre-auth errors (background threads don't inherit request contextvars; webhooks/scrapers aren't user-scoped; sys/thread excepthooks have no request) — expected, not a bug
@@ -131,6 +132,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | LLM client construction (active provider) | `llm.py` → `get_openai_client()` |
 | LLM client for named provider | `llm.py` → `get_client_for_named_provider()` |
 | LLM client from user profile config | `llm.py` → `get_client_for_profile()` |
+| Local `claude` CLI LLM provider (dev-only wrapper) | `llm_claude_cli.py` → `ClaudeCliClient` (OpenAI-SDK-shaped, selected via `LLM_PROVIDER_TYPE=claude_cli`, production access guarded) |
 | Single-turn LLM call helper | `llm.py` → `call_llm()` |
 | Session LLM cost tracking | `session_cost.py` |
 | Case-folded grouping key for a raw token (alias-aware) | `skill_analytics.py` → `skill_key()` |
@@ -165,6 +167,8 @@ See project memory note: the project uses the **OpenAI SDK** with multi-provider
 1. **Active provider** (`get_openai_client`) — reads `llm_active_provider` from Config DB; API key from env `LLM_KEY_{PROVIDER_NAME}`.
 2. **Named provider** (`get_client_for_named_provider`) — looks up a named entry from `named_providers` config; API key from env `LLM_KEY_{ID}`.
 3. **User profile** (`get_client_for_profile`) — uses `user.llm_provider_type` / `user.llm_model`; API key from env `LLM_KEY_PROFILE_{user.id}`.
+
+**Dev-only provider: Local `claude` CLI** (`ClaudeCliClient` in `llm_claude_cli.py`) — selected via `LLM_PROVIDER_TYPE=claude_cli`, runs the local `claude` CLI (`claude -p --output-format json`) headless. Cost=0, tokens from CLI's JSON `usage` field. Production access is guarded: `get_client_for_profile()` raises `RuntimeError` if `claude_cli` is set in production. Enables local testing/development without external API keys or billing.
 
 `call_llm` accumulates spend via `session_cost.add_cost(usage.cost)` on every response, and also calls `metering.record_call(usage.cost, model, prompt_tokens, completion_tokens)` — a no-op unless an action meter is open (see "Credits & Metering" below).
 

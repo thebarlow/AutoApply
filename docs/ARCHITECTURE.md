@@ -95,7 +95,8 @@ PDF rendering: `core/utils.render_pdf` runs **pandoc → Jinja2 HTML template + 
 | `scraper/` | API scrapers for Remotive/RemoteOK (dormant; `POST /api/scraper/run` registered but not wired into the UI) |
 | `core/job.py` | `Job` entity + **all** LLM-driven methods: score, extract, generate résumé/cover, evaluate, refine; structured-JSON parsing with retry; PDF rendering orchestration |
 | `core/user.py` | `User` entity; profile load/save/validation, prompt resolution, degree/skill helpers |
-| `core/llm.py` | OpenAI-SDK client construction + model resolution (multi-provider); `call_llm` single-turn helper + session-cost accounting |
+| `core/llm.py` | OpenAI-SDK client construction + model resolution (multi-provider including dev-only local `claude` CLI via `core/llm_claude_cli.py`); `call_llm` single-turn helper + session-cost accounting |
+| `core/llm_claude_cli.py` | `ClaudeCliClient`: dev-only OpenAI-SDK-shaped wrapper around local `claude` CLI (selected via `LLM_PROVIDER_TYPE=claude_cli`); production access guarded by `core/llm.py` |
 | `core/schemas.py` | Pydantic models: LLM **response** contracts (`ScoreResponse`, `EvalResponse`, `ExtractionResponse`, `ParseResponse`, `ResumeGeneration`) and stored **document** models (`ResumeDocument`, `CoverDocument`, sub-models); `parse_llm_json` |
 | `core/document_builder.py` | Snapshots profile at generation time + joins LLM prose to structural data (`build_resume_document`/`build_cover_document`); `apply_resume_patch` for refine |
 | `core/document_assembler.py` | Pure renderer: structured document → canonical-ordered Markdown (no DB, no LLM) |
@@ -331,7 +332,7 @@ key-writing is disabled when `APP_ENV=production`.
 | Var | Value |
 |---|---|
 | `DATABASE_URL` | Railway Postgres URL |
-| `LLM_PROVIDER_TYPE` | `openrouter` \| `anthropic` \| `openai` \| `gemini` |
+| `LLM_PROVIDER_TYPE` | `openrouter` \| `anthropic` \| `openai` \| `gemini` \| `claude_cli` (dev-only; blocked in production) |
 | `LLM_API_KEY` | platform LLM key |
 | `LLM_DEFAULT_MODEL` | default model id |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth app creds |
