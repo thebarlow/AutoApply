@@ -96,10 +96,14 @@ def put_prompt(
     _require_profile(profile_id, db)
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="Prompt content cannot be empty")
-    # Model runs on the platform's LLM key at a flat per-action price, so the
-    # selection must come from the server-side allowlist ("" = platform default).
+    # On the platform key the model runs at a flat per-action price, so it must
+    # come from the server-side allowlist ("" = platform default). BYOK accounts
+    # pay their provider directly and may pick any model their key offers.
     from core.llm import model_allowed
-    if body.model and not model_allowed(body.model):
+    from core import byok
+    from core.credits import get_account_for_profile
+    if (body.model and not byok.has_key(get_account_for_profile(db, profile_id))
+            and not model_allowed(body.model)):
         raise HTTPException(status_code=422, detail="Model not available")
     now = datetime.now(timezone.utc).isoformat()
     row = db.query(Prompt).filter_by(profile_id=profile_id, type_key=type_key).first()

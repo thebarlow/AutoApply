@@ -177,6 +177,12 @@ class Account(Base):
     tier = Column(String, nullable=False, default="standard")
     stripe_customer_id = Column(String, nullable=True)
     banned = Column(Boolean, nullable=False, default=False)
+    # Bring-your-own-key (core/byok.py). The key is Fernet-encrypted with the
+    # KEY_ENCRYPTION_KEY env var; only last4 is ever returned to the client.
+    llm_provider = Column(String, nullable=True)
+    llm_api_key_enc = Column(Text, nullable=True)
+    llm_key_last4 = Column(String, nullable=True)
+    llm_default_model = Column(String, nullable=True)
 
 
 class Identity(Base):

@@ -393,9 +393,11 @@ def api_me(request: Request, db: Session = Depends(get_db)):
             )
             if target is not None:
                 impersonating = {"profile_id": target.profile_id, "email": target.email}
+    from core import byok
     return {
         "email": acct.email,
         "is_admin": acct.is_admin,
         "profile_name": user.name if user else "",
         "impersonating": impersonating,
+        "byok": byok.has_key(acct),
     }

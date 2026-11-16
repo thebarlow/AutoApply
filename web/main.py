@@ -39,6 +39,7 @@ from web.routers import extension as extension_router
 from web.routers import dev as dev_router
 from web.routers import output_formats as output_formats_router
 from web.routers import themes as themes_router
+from web.routers import llm_key as llm_key_router
 from web.auth import routes as auth_routes
 from core.credits import InsufficientCredits
 from fastapi.responses import JSONResponse
@@ -214,6 +215,7 @@ app.include_router(extension_router.router)
 app.include_router(dev_router.router)
 app.include_router(output_formats_router.router)
 app.include_router(themes_router.router)
+app.include_router(llm_key_router.router)
 app.include_router(auth_routes.router)
 
 
