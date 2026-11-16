@@ -35,10 +35,14 @@ git history is the archive (see `.claude/skills/update-todo/`).
      often a paid VMC cert); irrelevant to spam placement.
 
 - [ ] **Chromium PDF render runs without its sandbox** because the container runs as root; add a
-  non-root `USER` to the Dockerfile so Chromium can sandbox.
+  non-root `USER` to the Dockerfile so Chromium can sandbox (verify Railway allows unprivileged user
+  namespaces), or move rendering to a secret-less service. Partially mitigated 2026-11-16: images and
+  inline styles stripped from user content, Chromium launched with a secret-free env (see
+  `generator/CONTEXT.md` → Render security). Residual: root renderer could read the parent's
+  `/proc/<pid>/environ`.
 
-- [ ] **Markdown `javascript:` hrefs survive into rendered PDFs** — add a link-scheme filter
-  (allow http/https/mailto/tel) in the render path.
+- [x] **Markdown `javascript:` hrefs survive into rendered PDFs.** **DONE 2026-11-16** —
+  `core/utils._sanitize_fragment` keeps only http(s)/mailto/tel/# hrefs; scheme-less links become https.
 
 - [ ] **Verify Railway/Cloudflare `X-Forwarded-For` behavior** for the IP-keyed `auth` rate-limit
   bucket (first hop must be the real client, not a proxy, or all users share one bucket).

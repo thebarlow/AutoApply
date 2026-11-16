@@ -30,7 +30,70 @@ logger = logging.getLogger(__name__)
 # passthrough that ``-raw_html`` alone does not close; ``native_divs``/
 # ``native_spans`` would otherwise still turn literal ``<div>``/``<span>`` tags
 # into elements carrying arbitrary attributes.
-_PANDOC_FROM = "markdown-raw_html-raw_attribute-native_divs-native_spans"
+_PANDOC_FROM = (
+    "markdown-raw_html-raw_attribute-native_divs-native_spans"
+    # Attribute syntaxes ({style=...} on spans/links/divs/headers/code) would
+    # let user markdown inject CSS — e.g. a url(data:...) the renderer decodes.
+    "-bracketed_spans-link_attributes-fenced_divs-header_attributes"
+    "-inline_code_attributes-fenced_code_attributes"
+)
+
+# Chromium runs with --no-sandbox (the container is root; see generator/CONTEXT.md),
+# so the renderer's parsing surface is the main exposure. data: URIs bypass the
+# request interceptor entirely (they are not network requests), so images are
+# stripped from user/LLM content before render; résumés and cover letters never
+# embed images (templates use inline SVG). Links keep only safe schemes.
+_IMG_TAG = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+_IMG_ALT = re.compile(r'\balt="([^"]*)"', re.IGNORECASE)
+_STYLE_ATTR = re.compile(r'\s+style="[^"]*"', re.IGNORECASE)
+_HREF_ATTR = re.compile(r'\s+href="([^"]*)"', re.IGNORECASE)
+_SAFE_HREF = re.compile(r"^(https?:|mailto:|tel:|#)", re.IGNORECASE)
+# Any other scheme (javascript:, data:, file:, vbscript:, ...) is dropped.
+_HAS_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.IGNORECASE)
+
+
+def _sanitize_fragment(html: str) -> str:
+    """Strip images, inline styles, and unsafe link schemes from a pandoc fragment.
+
+    Operates on pandoc's own output (attribute values already HTML-escaped and
+    double-quoted), so these narrow regexes are reliable here; they are not a
+    general HTML sanitizer.
+    """
+    def _img_to_alt(m: re.Match) -> str:
+        alt = _IMG_ALT.search(m.group(0))
+        return alt.group(1) if alt else ""
+
+    def _href(m: re.Match) -> str:
+        url = m.group(1).strip()
+        if _SAFE_HREF.match(url):
+            return m.group(0)
+        if url and not _HAS_SCHEME.match(url) and not url.startswith("/"):
+            # Scheme-less "example.com" from a profile field: a relative link is
+            # dead in a PDF, so make it the absolute https link the user meant.
+            return f' href="https://{url}"'
+        return ""
+
+    html = _IMG_TAG.sub(_img_to_alt, html)
+    html = _STYLE_ATTR.sub("", html)
+    return _HREF_ATTR.sub(_href, html)
+
+
+# Environment passed to Chromium. A compromised renderer can read its own
+# environment, so platform secrets (Stripe, session, LLM, KEY_ENCRYPTION_KEY,
+# DATABASE_URL) must not be inherited. Only what Chromium needs to start.
+_CHROMIUM_ENV_KEYS = (
+    "PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TZ",
+    "FONTCONFIG_FILE", "FONTCONFIG_PATH", "XDG_RUNTIME_DIR", "XDG_CACHE_HOME",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    # Windows (local dev): Chromium will not start without these.
+    "SYSTEMROOT", "SystemRoot", "WINDIR", "LOCALAPPDATA", "APPDATA",
+    "USERPROFILE", "PROGRAMDATA", "COMSPEC",
+)
+
+
+def _chromium_env() -> dict[str, str | float | bool]:
+    """Minimal environment for the Chromium process: no app secrets."""
+    return {k: os.environ[k] for k in _CHROMIUM_ENV_KEYS if k in os.environ}
 
 
 def _render_concurrency() -> int:
@@ -128,7 +191,7 @@ def markdown_to_html(md_text: str) -> str:
         subprocess.CalledProcessError: If pandoc exits non-zero.
     """
     md_text = re.sub(r"(?<=\S)\n(- )", r"\n\n\1", md_text)
-    return subprocess.run(
+    fragment = subprocess.run(
         ["pandoc", "-f", _PANDOC_FROM, "-t", "html"],
         input=md_text,
         check=True,
@@ -136,6 +199,7 @@ def markdown_to_html(md_text: str) -> str:
         text=True,
         encoding="utf-8",
     ).stdout
+    return _sanitize_fragment(fragment)
 
 
 def build_render_html(
@@ -237,7 +301,7 @@ def render_pdf(
     html = build_render_html(md_path, template_path, meta=meta, css_path=css_path)
 
     with _RENDER_SEMAPHORE, sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(env=_chromium_env())
         try:
             context = browser.new_context(java_script_enabled=False)
             context.route("**/*", _route_handler)

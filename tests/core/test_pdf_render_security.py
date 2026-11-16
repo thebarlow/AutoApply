@@ -124,7 +124,7 @@ def test_route_handler_allowlist(url: str, expected: str) -> None:
     assert route.outcome == expected
 
 
-def test_real_render_blocks_network_image(tmp_path: Path, monkeypatch) -> None:
+def test_real_render_never_requests_image_url(tmp_path: Path, monkeypatch) -> None:
     pytest.importorskip("playwright.sync_api")
     seen: list[tuple[str, bool]] = []
     real = utils._route_handler
@@ -138,8 +138,9 @@ def test_real_render_blocks_network_image(tmp_path: Path, monkeypatch) -> None:
     out = tmp_path / "out.pdf"
     render_pdf(md, out, GENERATOR / "master_template.html", meta={"name": "Jane"})
     assert out.stat().st_size > 0
-    blocked = [u for u, ok in seen if not ok]
-    assert any("169.254.169.254" in u for u in blocked)
+    # Images are stripped from the fragment before render, so the metadata URL
+    # is never even requested (the route interceptor remains the backstop).
+    assert not any("169.254.169.254" in u for u, _ in seen)
 
 
 def test_real_render_normal_resume(tmp_path: Path) -> None:
@@ -178,3 +179,56 @@ def test_render_concurrency_env(monkeypatch) -> None:
     assert utils._render_concurrency() == 2
     monkeypatch.setenv("PDF_RENDER_CONCURRENCY", "0")
     assert utils._render_concurrency() == 1
+
+
+# ─── Sandbox-less renderer mitigations (2026-11-16) ─────────────────────────
+
+import os as _os
+
+from core.utils import _chromium_env, markdown_to_html
+
+
+@pytest.mark.parametrize("md", [
+    "![x](data:image/webp;base64,UklGRgAAAABXRUJQ)",
+    "![x](http://169.254.169.254/latest)",
+])
+def test_images_never_reach_renderer(md):
+    out = markdown_to_html(md)
+    assert "<img" not in out.lower()
+
+
+@pytest.mark.parametrize("md", [
+    '[y]{style="background:url(data:image/png;base64,AAAA)"}',
+    '[link](https://a.com){style="color:red"}',
+    '# Head {style="color:red"}',
+    '::: {style="x"}\nbody\n:::',
+])
+def test_attribute_syntax_cannot_inject_style(md):
+    # The attribute text may survive as visible literal text; it must never be
+    # an actual style attribute on an element.
+    assert ' style="' not in markdown_to_html(md).lower()
+
+
+@pytest.mark.parametrize("md", [
+    "[x](javascript:alert(1))", "[x](data:text/html,hi)", "[x](file:///etc/passwd)",
+    "[x](vbscript:msgbox)",
+])
+def test_unsafe_link_schemes_dropped(md):
+    out = markdown_to_html(md).lower()
+    assert "href" not in out
+
+
+def test_safe_links_kept_and_schemeless_upgraded():
+    out = markdown_to_html("[a](https://a.com) [m](mailto:a@b.c) [w](matthewbarlow.me)")
+    assert 'href="https://a.com"' in out
+    assert 'href="mailto:a@b.c"' in out
+    assert 'href="https://matthewbarlow.me"' in out
+
+
+def test_chromium_env_excludes_secrets(monkeypatch):
+    for k in ("STRIPE_SECRET_KEY", "SESSION_SECRET", "LLM_API_KEY",
+              "KEY_ENCRYPTION_KEY", "DATABASE_URL", "GITHUB_CLIENT_SECRET"):
+        monkeypatch.setenv(k, "secret-value")
+    env = _chromium_env()
+    assert "secret-value" not in env.values()
+    assert env.get("PATH") == _os.environ.get("PATH")
