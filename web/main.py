@@ -51,6 +51,7 @@ from fastapi.responses import JSONResponse
 from web.auth.middleware import AuthGateMiddleware
 from web.middleware_body_limit import BodySizeLimitMiddleware
 from web.middleware_impersonation import ImpersonationReadOnlyMiddleware
+from web.middleware_rate_limit import RateLimitMiddleware
 from web.middleware_request_context import RequestContextMiddleware
 from web.middleware_security_headers import SecurityHeadersMiddleware
 
@@ -202,6 +203,9 @@ app.add_middleware(AuthGateMiddleware)
 app.add_middleware(ImpersonationReadOnlyMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
+# RateLimitMiddleware runs inside SessionMiddleware (it keys on the session's
+# account_id) and before the auth gate/body limit so a flood is refused cheaply.
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     SessionMiddleware,

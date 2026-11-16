@@ -69,6 +69,13 @@ def disable_background_spawns(monkeypatch):
     monkeypatch.setattr(_jobs_mod, "_spawn", lambda *a, **k: None)
 
 
+@pytest.fixture(autouse=True)
+def disable_rate_limit(monkeypatch):
+    """The in-process limiter's buckets are global, so suite-wide traffic from
+    one TestClient would trip it. tests/web/test_rate_limit.py re-enables it."""
+    monkeypatch.setenv("RATE_LIMIT_DISABLED", "1")
+
+
 @pytest.fixture
 def tenant_db():
     """In-memory DB with the tenant guard installed."""
