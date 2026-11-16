@@ -1,123 +1,111 @@
-# Auto Apply
-
+# AutoApply
 
 <table style="border: none; border-collapse: collapse;">
 <tr>
-<td><img src="./assets/icon.png" width="200"></td>
-<td>Semi-automated job scraping, tailored resume + cover letter generation, and application management. Scrape a LinkedIn posting with the browser extension, let an LLM tailor your documents to it, then drag-and-drop them into the application via the system tray app.</td>
+<td><img src="./assets/icon.png" width="160"></td>
+<td>Capture job postings from LinkedIn, Indeed and remote job boards, score how well each one fits you, and generate a tailored résumé and cover letter for it. Review and edit the result, export clean PDFs, then apply.</td>
 </tr>
 </table>
 
+**Live at [autoapply.matthewbarlow.me](https://autoapply.matthewbarlow.me).** Sign in with Google or GitHub.
+
 ---
 
-## 1. Download & Setup
+## Using the hosted app
 
-### Requirements
+1. **Sign in** with Google or GitHub. Anyone with a verified email can create an account.
+2. **Choose how AI is paid for.** Every AI action (scoring, generation, résumé parsing) runs on a language model.
+   - **Your own API key (free).** Paste an OpenRouter, OpenAI, Anthropic or Google Gemini key in your user settings and pick any text model your key offers. AutoApply charges nothing; your provider bills you directly. Keys are stored encrypted and never shown again.
+   - **Credits.** No key? Buy a prepaid credit pack through Stripe. Each action has a fixed price, shown before you run it.
+3. **Build your profile.** Upload your master résumé and AutoApply parses it into editable sections, or fill them in by hand. The richer the profile, the better the tailoring.
+4. **Add jobs**, in any of three ways:
+   - the **browser extension** on a LinkedIn or Indeed posting (see below);
+   - the **Find Jobs** tab, which searches Remotive and RemoteOK;
+   - pasting a posting in by hand.
+5. **Work each job** from the dashboard:
+   - **Score** compares the posting to your profile and shows which required skills you have and which you're missing.
+   - **Résumé** and **Cover letter** generate tailored documents. Edit any field directly, or leave notes on a section and let the model revise it. An ATS check confirms the rendered PDF still reads correctly.
+   - **Apply** opens the original posting. Download the PDFs, or drag them in from the desktop tray app if you run AutoApply locally.
 
-- **Python 3.10+** must be installed ([python.org/downloads](https://www.python.org/downloads/)). The server, tray app, and scrapers all run on Python.
+AutoApply is free with your own key. If it helped you, you can [buy me a coffee](https://buymeacoffee.com/mrbarlow).
 
-### New to Git?
+### Browser extension
 
-`git` is the tool used to download (clone) this project. If you don't have it yet:
+The extension adds a Scrape button to LinkedIn and Indeed job pages and sends postings to your account. On supported application forms (Greenhouse, Lever, Ashby) it can show and fill the fields AutoApply mapped from your profile.
 
-1. Download the official installer from **[git-scm.com/downloads](https://git-scm.com/downloads)** and pick your operating system.
-2. Run the installer and accept the defaults — no special options are needed.
-3. Close and reopen your terminal (or Command Prompt) so it picks up the new `git` command.
-4. Confirm it works by running `git --version`; you should see a version number.
+It isn't in the Chrome or Firefox stores yet, so load it from this repository:
 
-Once that prints a version, continue with the clone command below.
+- **Chrome:** open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and select the `browser-extension` folder. The file picker shows folders only, which is expected.
+- **Firefox:** open `about:debugging`, choose **This Firefox**, click **Load Temporary Add-on…**, and select `browser-extension/manifest.json`.
+
+Then click the extension icon and sign in.
+
+---
+
+## Running it locally
+
+Requirements: Windows, Git, and Node 18+. `setup.bat` installs Python 3.10+ and [pandoc](https://pandoc.org/installing.html) through winget if they're missing.
 
 ```bash
 git clone https://github.com/thebarlow/AutoApply.git
-cd auto_apply
-setup.bat
+cd AutoApply
+setup.bat          # creates .venv, installs Python deps, Playwright Chromium and pandoc,
+                   # initializes the database, and builds the dashboard
 ```
 
-`setup.bat` installs Python if needed, creates the `.venv` virtual environment, and deletes itself on success. You can skip it and run `start.bat` directly — it detects a missing setup and runs `setup.bat` automatically on first launch.
+Copy `.env.example` to `.env` and set an LLM provider:
 
----
+```ini
+LLM_PROVIDER_TYPE=openrouter      # openrouter | openai | anthropic | gemini
+LLM_API_KEY=your-provider-key
+LLM_DEFAULT_MODEL=openai/gpt-4o-mini
+```
 
-## 2. Start the App
+If you have [Claude Code](https://claude.com/claude-code) installed and signed in, `LLM_PROVIDER_TYPE=claude_cli` uses your local `claude` CLI instead of an API key. This works for local development only; the hosted app refuses it.
 
 ```bash
-start.bat
+start.bat          # API server (port 8080) + desktop tray app
+start.bat dev      # also runs the Vite dev server with hot reload
 ```
 
-This launches the FastAPI server (port 8080) in its own console window and the PyQt6 system tray app in the foreground.
-
-Then open the dashboard at **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)**.
-
-On first launch you'll land in the onboarding flow.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080). Locally there is no login: the app runs as a single user on a SQLite database (`auto_apply.db`).
 
 ---
 
-## 3. Onboarding
+## How it's built
 
-### Create a User Profile
+| Layer | Stack |
+|---|---|
+| API | FastAPI, SQLAlchemy, Alembic; SQLite locally, PostgreSQL in production |
+| Frontend | React, Vite, Tailwind |
+| LLM | OpenAI SDK against any OpenAI-compatible provider; responses validated against Pydantic schemas with JSON-repair retries |
+| Documents | Typed JSON stored in the database is the source of truth; Markdown → pandoc → Jinja2 HTML → headless Chromium → PDF |
+| Auth | Google and GitHub OAuth (Authlib), signed-cookie sessions |
+| Billing | Prepaid fixed-price credits, Stripe Checkout and webhooks |
+| Extension | Manifest V3 (Chrome and Firefox) |
+| Hosting | Railway: Docker build, managed Postgres, migrations run on startup |
 
-Every generated document needs two things: a **User** and a **Job**. You must create at least one User Profile, which can seed itself from your existing master resume. You can create multiple profiles to target different roles (e.g. Data Scientist, Software Dev, Quant) and maximize document quality.
+Some design decisions:
 
-> Tip: A detailed master resume produces better output. The richer your profile, the more material the LLM has to tailor from. Read the job **Score** breakdowns to see what your profile is missing relative to a posting.
+- **Multi-tenant by construction.** Every tenant-owned row carries a `profile_id`. Queries go through a scoping helper, and a SQLAlchemy `before_flush` guard rejects writes that cross tenants.
+- **Bring-your-own-key billing.** A user's own key is encrypted at rest (Fernet) and pinned for the length of each action. Removing the key partway through can't push the rest of that action onto the platform key unbilled.
+- **Structured LLM output.** Generated documents are schema-validated JSON, not free-form Markdown, so users can edit individual fields and the model can patch individual sections.
+- **Defensive rendering.** User and model content is never rendered as raw HTML, and Chromium renders PDFs offline with JavaScript disabled.
+- **Fail-closed configuration.** Security checks resolve the environment through one helper. A missing `APP_ENV` on the host is treated as production, and an unrecognized value stops the app from starting.
+- **Operational visibility.** Structured JSON logs, plus an admin error log that groups repeated errors by fingerprint with an atomic upsert.
 
-### Add an LLM Provider key
+The full architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-Auto Apply relies on a Large Language Model for all document generation. Your profile must include a working API key from a major provider — this key determines which models are used for every generation task. Pick a provider and create a key:
-
-- **[OpenRouter](https://openrouter.ai/workspaces/default/keys)** — access to many frontier models
-- **[OpenAI](https://platform.openai.com/api-keys)** — ChatGPT models
-- **[Anthropic / Claude](https://platform.claude.com/dashboard)**
-- **[Google Gemini](https://aistudio.google.com/apikey)**
-
-Each provider has a reasonable default model preselected. You're encouraged to experiment with different models at different generation stages to balance quality against cost.
-
-### Install the browser extension
-
-Jobs are scraped from the LinkedIn job board via a custom browser extension.
-
-**Firefox**
-1. Navigate to `about:debugging`
-2. Select **This Firefox** in the left sidebar
-3. Click **Load Temporary Add-on…**
-4. Select `auto_apply/browser-extension/manifest.json`
-
-**Chrome**
-1. Navigate to `chrome://extensions`
-2. Enable **Developer mode** (top right)
-3. Click **Load unpacked**
-4. Select the `auto_apply/browser-extension/` folder
-
----
-
-## 4. Generate & Apply
-
-1. **Scrape** — use the extension on a LinkedIn posting. The job appears in your dashboard **Inbox**, and the server automatically processes the raw description into a structured form (visible in real time).
-2. **Open the job** — click a Job Card in the Inbox; it opens in the **Preview** panel on the right. (If you don't see it, exit your User Profile settings — they share the same panel.)
-3. **Work the tabs** — the Preview panel has tabs, each with an action button on the right:
-   - **Description** — raw scraped text plus the AI-processed version fed into later LLM calls; can be re-processed.
-   - **Resume** — generate a tailored résumé.
-   - **Cover Letter** — generate a tailored cover letter.
-   - **Score** — assess how well you fit the job and how well the job fits you.
-
-   Each action uses a customizable prompt under the active profile, with sensible defaults to start.
-4. **Apply** — once at least a cover letter exists, the job's Preview shows an **Apply** button. It reopens the original posting and launches the system tray app. Drag the generated files from the tray into LinkedIn or an ATS upload field.
-5. **Mark applied** — in the tray app, the checkmark next to a document marks the job **applied** (moves it to **Archives**). The **x** marks it **deleted** (also moves to Archives, recoverable until the server restarts; cleaned from the DB on next start).
-
----
-
-## Further Help
-
-- Technical architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- In-app help docs: **[http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)** (server must be running).
-- FastAPI endpoints reference: **[http://127.0.0.1:8080/endpoints](http://127.0.0.1:8080/endpoints)**.
-
-### Dev server (UI development)
-
-For live-reloading React changes, run the Vite dev server from `react-dashboard/`:
+### Tests
 
 ```bash
-npm run dev
+.venv/Scripts/python -m pytest -q              # backend (~1,200 tests)
+cd react-dashboard && npx vitest run            # frontend
+cd e2e && npm test                              # Playwright smoke tests against a local stack
 ```
 
-It serves the dashboard on **[http://localhost:5173](http://localhost:5173)** against the same backend. Frontend errors surface in the browser console (F12 → Console); backend errors appear in the server console window opened by `start.bat`.
-</content>
-</invoke>
+---
+
+## Privacy
+
+See the [Privacy Policy](https://autoapply.matthewbarlow.me/privacy) and [Terms](https://autoapply.matthewbarlow.me/terms).
