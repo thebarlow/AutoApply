@@ -54,7 +54,8 @@ class ErrorEvent(Base):
     profile_id = Column(Integer, nullable=True)
     account_email = Column(String, nullable=True)
     request_id = Column(String, nullable=True)
-    fingerprint = Column(String, nullable=False, index=True)
+    # UNIQUE (migration aa16errdedup01) so the handler can upsert atomically.
+    fingerprint = Column(String, nullable=False, index=True, unique=True)
 
 
 class ProfileConfig(Base):
