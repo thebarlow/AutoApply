@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from core.env import is_production
+
 _CONFIGURED = False
 
 _FMT = "%(asctime)s %(levelname)s [%(name)s] [%(request_id)s %(method)s %(route)s] %(message)s"
@@ -47,7 +49,7 @@ class JsonFormatter(logging.Formatter):
 
 def _console_formatter() -> logging.Formatter:
     """Return ``JsonFormatter`` in production, else a plain formatter."""
-    if os.environ.get("APP_ENV") == "production":
+    if is_production():
         return JsonFormatter()
     return logging.Formatter(_FMT)
 

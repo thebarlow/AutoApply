@@ -9,8 +9,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from core.env import is_production, validate_app_env
 from core.logging_config import setup_logging
 
+# Fail the boot on a misspelled APP_ENV rather than silently picking a mode;
+# every security control keys off this value (see core/env.py).
+validate_app_env()
 setup_logging()
 
 from fastapi import FastAPI, HTTPException
@@ -118,7 +122,7 @@ def _warn_if_billing_disabled() -> None:
     signup free LLM usage. Warn rather than crash: an admin may legitimately
     run a free period, but it must never happen unnoticed.
     """
-    if os.getenv("APP_ENV") != "production":
+    if not is_production():
         return
     from core.credits import default_rate
 
@@ -166,7 +170,7 @@ def _session_secret() -> str:
     production. A weak/known secret lets anyone forge a session cookie and bypass
     auth entirely, so fail fast at startup rather than ship a guessable key."""
     secret = os.getenv("SESSION_SECRET")
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         if not secret or secret == _DEV_SESSION_SECRET:
             raise RuntimeError(
                 "SESSION_SECRET must be set to a strong random value in production"
@@ -187,7 +191,7 @@ app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=_session_secret(),
-    https_only=os.getenv("APP_ENV") == "production",
+    https_only=is_production(),
     same_site="lax",
 )
 

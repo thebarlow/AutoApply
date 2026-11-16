@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from typing import Any, Generator
 
+from core.env import is_production
+
 import openai
 
 _ENV_PATH = Path(__file__).parent.parent / ".env"
@@ -60,7 +62,7 @@ def allowed_models() -> set[str] | None:
     raw = os.getenv("LLM_ALLOWED_MODELS", "").strip()
     if raw:
         return {m.strip() for m in raw.split(",") if m.strip()}
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         default = (os.getenv("LLM_DEFAULT_MODEL")
                    or _read_env_file().get("LLM_DEFAULT_MODEL", "")).strip()
         return {default} if default else set()

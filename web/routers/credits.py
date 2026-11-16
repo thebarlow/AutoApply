@@ -8,6 +8,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from core.env import is_production
 from db.database import Account, CreditLedger, get_db
 from web.tenancy import current_profile_id
 
@@ -37,7 +38,7 @@ def require_real_admin(request: Request, db: Session = Depends(get_db)) -> Accou
     # The dev-tenant fallback must never apply in production: the outer auth
     # gate already 401s unauthenticated /api/*, but if it were bypassed (new
     # exempt path, middleware reorder) this would otherwise grant admin.
-    if acct is None and os.getenv("APP_ENV") != "production":
+    if acct is None and not is_production():
         acct = db.query(Account).filter_by(profile_id=get_dev_tenant_id(db)).first()
     if acct is None or not acct.is_admin:
         raise HTTPException(status_code=403, detail="admin only")

@@ -10,10 +10,10 @@ is populated before dispatch.
 """
 from __future__ import annotations
 
-import os
-
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+from core.env import is_production
 
 _GATED_PREFIXES = ("/api/",)
 _EXEMPT_PATHS = (
@@ -28,7 +28,7 @@ class AuthGateMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or os.getenv("APP_ENV") != "production":
+        if scope["type"] != "http" or not is_production():
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.env import is_production
 from db.database import Account
 
 from core.document_assembler import assemble_resume_markdown
@@ -57,7 +58,7 @@ def dev_login(request: Request, db: Session = Depends(get_db)):
        provision a throwaway account on a fresh empty profile, so the onboarding
        flow can be driven from its real authed-but-profile-less entry state.
     """
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         raise HTTPException(status_code=404)
 
     target = os.getenv("E2E_LOGIN_EMAIL", _DEFAULT_LOGIN_EMAIL).lower()
@@ -96,7 +97,7 @@ def seed_ats_job(
     DELETED); ``Job.state`` is an unconstrained String column, so the literal is
     used directly.
     """
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         raise HTTPException(status_code=404)
 
     job = Job.get(body.job_key, db, profile_id)
