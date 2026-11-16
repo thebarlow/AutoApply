@@ -300,8 +300,8 @@ balances can never go negative and there's no separate gate-then-debit race.
 `Account.credit_balance` in the same transaction. `reconcile_balance`
 recomputes the cached balance from `SUM(credit_ledger.delta)`.
 `signup_grant_for_tier(tier)` (env `CREDIT_SIGNUP_GRANTS` JSON map, defaults
-`standard` 20 / `friends_family` 50 / `beta` 200 units) sizes the signup
-grant per tier. **`grant_credits`/`debit_fixed`/`reconcile_balance` are
+`standard` 0 / `friends_family` 50 / `beta` 200 units; standard was 20 until
+the 2026-11-16 open-signup release) sizes the signup grant per tier. **`grant_credits`/`debit_fixed`/`reconcile_balance` are
 no-ops (return `None`) when `get_account_for_profile` finds no `Account`
 row** — i.e. local/dev/tray/test runs that have no authenticated account are
 unaffected. Deleted: `credit_floor`, `debit_for_action`, `to_credits`,

@@ -6,13 +6,6 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 ## Bugs
 
-- [ ] **[deploy] Allowlist the pinned extension redirect URL on Railway + have users reinstall.**
-  Follow-up to commit `be9bd72` (pinned Chrome `key`). For live extension sign-in to work, add
-  `https://hhdmojkjnegdgdaacleldfgonicipnac.chromiumapp.org/` to `EXTENSION_REDIRECT_URLS` on Railway
-  (production) — keep the existing Firefox value, comma-separated — and redeploy. After redeploy, users
-  must re-download/reinstall the extension to pick up the pinned `key` (the ID only changes on a fresh
-  load-unpacked). Until both are done, Chrome sign-in still 400s with a redirect-mismatch.
-
 - [ ] **[deploy] Verify on Railway that `ADMIN_EMAILS` includes the owner before deploying the
   admin re-sync** (commit `222fe05`). `sync_admin_flag` now promotes *and demotes* on every login;
   if the owner isn't in `ADMIN_EMAILS` (and has no admin `allowed_email` invite row) they lose admin
@@ -36,9 +29,27 @@ git history is the archive (see `.claude/skills/update-todo/`).
   1. **Verify auth in practice:** send a real invite to Gmail → "Show original" → confirm
      SPF/DKIM/DMARC all say PASS. Beats the Cloudflare dashboard widget (report-driven,
      24–72h lag; empty/stale until traffic flows).
-  2. **Tighten DMARC to `p=quarantine`** after ~a week of clean aggregate reports.
+  2. **Tighten DMARC to `p=quarantine` around 2026-11-23.** SPF/DKIM/DMARC records verified
+     correct 2026-11-16. Invite emails land in Gmail Promotions — content-based, not auth.
   3. Ignore Cloudflare's "BIMI in use — fail" — BIMI is optional (needs `p=quarantine`+
      often a paid VMC cert); irrelevant to spam placement.
+
+- [ ] **Chromium PDF render runs without its sandbox** because the container runs as root; add a
+  non-root `USER` to the Dockerfile so Chromium can sandbox.
+
+- [ ] **Markdown `javascript:` hrefs survive into rendered PDFs** — add a link-scheme filter
+  (allow http/https/mailto/tel) in the render path.
+
+- [ ] **Verify Railway/Cloudflare `X-Forwarded-For` behavior** for the IP-keyed `auth` rate-limit
+  bucket (first hop must be the real client, not a proxy, or all users share one bucket).
+
+- [ ] **A 6th SSE tab silently gets no live updates** — `/api/events` 429s over the per-account cap
+  and `EventSource` doesn't reconnect; surface a notice or retry.
+
+- [ ] **No frontend toast for 413** (input/body too large) — only 429 has one in `api.js`.
+
+- [ ] **2 pre-existing `tests/core/test_model_allowlist.py` failures** are caused by the local `.env`
+  `LLM_PROVIDER_TYPE=claude_cli` leaking into tests — the tests should clear that env var.
 
 ## Features
 
@@ -230,8 +241,9 @@ git history is the archive (see `.claude/skills/update-todo/`).
 
 Stack complete and live at `https://autoapply.matthewbarlow.me`:
 **Multi-tenancy ✅ → Hosting ✅ → (1) Auth ✅ → (2) Credits ✅ → (3) Payments ✅ → (4) Onboarding ✅**
-(guided tour, demo job, resume-upload first-run, all three job-ingestion paths). Monetization now
-runs on prepaid fixed-unit pricing (see Done). Specs/plans under `docs/superpowers/`;
+(guided tour, demo job, resume-upload first-run, all three job-ingestion paths). **Out of beta with
+open signups as of the 2026-11-16 release** (`OPEN_SIGNUPS=true`, standard signup grant 0, BYOK is
+the free path). Monetization runs on prepaid fixed-unit pricing (see Done). Specs/plans under `docs/superpowers/`;
 architecture in `docs/ARCHITECTURE.md`; read `web/CONTEXT.md` → Auth / Credits before touching those.
 
 Known accepted limitations (each would be its own feature if prioritized):
@@ -246,6 +258,14 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Open signups.** **DONE 2026-11-16** — `OPEN_SIGNUPS=true` bypasses the invite allowlist
+  (`signups_open()` in `web/auth/identity.py`; bans still apply; unset to re-close without a
+  deploy). Standard signup grant dropped 20 → 0 (invite tiers keep theirs) since BYOK is the free
+  path. Sign-in copy updated.
+
+- [x] **[deploy] Chrome extension sign-in on live.** **DONE 2026-11-16** — pinned redirect URL
+  allowlisted in `EXTENSION_REDIRECT_URLS` on Railway; user confirmed Chrome sign-in works on live.
 
 - [x] **Security audit H3 + M1: unmetered-LLM audit, input caps, rate limiting, SSE cap.** **DONE
   2026-11-16** — every `get_client_for_profile` call site audited; the one tenant-reachable unmetered

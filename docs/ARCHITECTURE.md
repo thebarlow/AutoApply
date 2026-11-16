@@ -6,7 +6,7 @@
 auto_apply/
 ├── browser-extension/          # Stage 1a: Firefox/Chrome MV3 extension (LinkedIn + Indeed)
 │   └── CONTEXT.md
-├── scraper/                    # Stage 1b: API scrapers (Remotive, RemoteOK) — dormant
+├── scraper/                    # Stage 1b: API scrapers (Remotive, RemoteOK) — the "Find Jobs" tab
 │   └── CONTEXT.md
 ├── core/                       # Shared business logic: Job/User entities, LLM client, schemas, document build/assemble
 │   └── CONTEXT.md
@@ -27,6 +27,8 @@ auto_apply/
 ├── Obsidian/                   # Project user docs / developer notes (served via docs_router)
 ├── docs/                       # ARCHITECTURE.md (this file), user docs, specs/plans (superpowers)
 ├── tests/                      # pytest suite (core/, web/)
+├── workflows/                  # Local, UI-independent fetch/score/generate/eval/render scripts (python -m workflows.<script>)
+│   └── CONTEXT.md
 ├── start.bat                   # Launch script: starts uvicorn server + tray app together
 ├── README.md                   # Human-facing setup + usage guide
 └── .claude/                    # CLAUDE.md (routing rules), TODO.md (backlog), skills, settings
@@ -36,7 +38,7 @@ auto_apply/
 
 Three stages: **Scrape → Review & Generate → Apply**.
 
-1. **Scrape** — the browser extension (LinkedIn/Indeed) and dormant API scrapers POST jobs to the API; rows land in SQLite.
+1. **Scrape** — the browser extension (LinkedIn/Indeed) and the "Find Jobs" API scrapers (Remotive/RemoteOK) POST jobs to the API; rows land in SQLite.
 2. **Review & Generate** — the React dashboard drives per-job scoring, structured résumé/cover generation, an evaluate→refine quality loop, and structured field-level editing. All LLM-driven logic lives on the `Job` entity in `core/job.py`.
 3. **Apply** — generated PDFs are handed to the PyQt6 tray app for drag-and-drop submission to an ATS; the job is then marked applied.
 
@@ -59,8 +61,8 @@ Scoring updates score fields but does **not** change state.
 ## Data Flow
 
 ```
-browser-extension                  scraper/ (Remotive, RemoteOK — dormant)
-        │  POST /api/scraper/stage-job     │  POST /api/scraper/run
+browser-extension                  scraper/ (Remotive, RemoteOK — Find Jobs tab)
+        │  POST /api/scraper/stage-job     │  POST /api/scraper/scrape-selected
         └──────────────┬────────────────────┘
                        ▼
               SQLite DB (jobs, state=new)
@@ -85,17 +87,20 @@ browser-extension                  scraper/ (Remotive, RemoteOK — dormant)
               user drags PDFs to ATS → mark applied → state=applied
 ```
 
-PDF rendering: `core/utils.render_pdf` runs **pandoc → Jinja2 HTML template + paired CSS → Chromium** (headless print-to-PDF), with optional single-page auto-shrink. Templates live in `generator/` (`*_template.html` + `*.css`).
+PDF rendering: `core/utils.render_pdf` runs **pandoc → Jinja2 HTML template + paired CSS → Chromium** (headless print-to-PDF), with optional single-page auto-shrink. Templates live in `generator/` (`*_template.html` + `*.css`). User content never reaches the page as raw HTML and Chromium renders offline with JS disabled — see "Security" below.
 
 ## Module Responsibilities
 
 | Module | Responsibility |
 |---|---|
 | `browser-extension/` | MV3 extension; injects Scrape buttons on LinkedIn/Indeed; dedupes; POSTs job data to the API |
-| `scraper/` | API scrapers for Remotive/RemoteOK (dormant; `POST /api/scraper/run` registered but not wired into the UI) |
+| `scraper/` | API scrapers for Remotive/RemoteOK, driven by the dashboard "Find Jobs" tab (`POST /api/scraper/search` preview → `POST /api/scraper/scrape-selected` persist + metered intake) |
 | `core/job.py` | `Job` entity + **all** LLM-driven methods: score, extract, generate résumé/cover, evaluate, refine; structured-JSON parsing with retry; PDF rendering orchestration |
 | `core/user.py` | `User` entity; profile load/save/validation, prompt resolution, degree/skill helpers |
 | `core/llm.py` | OpenAI-SDK client construction + model resolution (multi-provider including dev-only local `claude` CLI via `core/llm_claude_cli.py`); `call_llm` single-turn helper + session-cost accounting |
+| `core/byok.py`, `core/secret_box.py` | Bring-your-own LLM key: provider registry (OpenRouter/OpenAI/Anthropic/Gemini), per-action pinned credential, model listing/validation; Fernet encryption of stored keys (`KEY_ENCRYPTION_KEY`) |
+| `core/env.py` | Fail-closed `APP_ENV` resolution (`is_production()`/`is_dev()`/`validate_app_env()`) — the only sanctioned production check |
+| `core/limits.py` | Central input-size caps for everything that can reach an LLM prompt or a render (Pydantic 422 / `InputTooLarge` → 413) |
 | `core/llm_claude_cli.py` | `ClaudeCliClient`: dev-only OpenAI-SDK-shaped wrapper around local `claude` CLI (selected via `LLM_PROVIDER_TYPE=claude_cli`); production access guarded by `core/llm.py` |
 | `core/schemas.py` | Pydantic models: LLM **response** contracts (`ScoreResponse`, `EvalResponse`, `ExtractionResponse`, `ParseResponse`, `ResumeGeneration`) and stored **document** models (`ResumeDocument`, `CoverDocument`, sub-models); `parse_llm_json` |
 | `core/document_builder.py` | Snapshots profile at generation time + joins LLM prose to structural data (`build_resume_document`/`build_cover_document`); `apply_resume_patch` for refine |
@@ -110,8 +115,9 @@ PDF rendering: `core/utils.render_pdf` runs **pandoc → Jinja2 HTML template + 
 | `prompts/` | `defaults/*.md` seed source for the DB-backed prompt tables (not read at runtime) |
 | `generator/` | Jinja2 HTML + CSS PDF templates and generated output artifacts (`outputs/`) |
 | `react-dashboard/` | React + Vite frontend; job table, overlays, interactive document modal (inline edit + feedback), settings — talks to the API via REST + SSE |
-| `web/` | FastAPI app + REST API; resolves LLM client/prompt/template then delegates to `Job`; document GET/PUT API; evaluate→refine intake pipeline |
+| `web/` | FastAPI app + REST API; resolves LLM client/prompt/template then delegates to `Job`; document GET/PUT API; evaluate→refine intake pipeline; pure-ASGI middlewares for auth, security headers (`middleware_security_headers.py`), body size (`middleware_body_limit.py`), and rate limits (`middleware_rate_limit.py`) |
 | `tray_app/` | PyQt6 desktop process; receives job payloads over WebSocket; draggable résumé/cover handles; marks jobs applied |
+| `workflows/` | Local-only pipeline scripts (fetch profile/jobs, skill-match, generate, eval loop, render) that talk to `auto_apply.db` directly, outside the web app |
 
 ## ATS Detection
 
@@ -182,6 +188,20 @@ Unmetered accounts (no `Account` row, or `credit_rate == 0`, the developer
 tier) run the body ungated and are never debited. A content-free `credits` SSE
 event nudges the dashboard to refetch balance on both debit and refund.
 
+**Bring-your-own key (BYOK, 2026-11-16).** An account may store its own
+OpenRouter/OpenAI/Anthropic/Gemini key (`/api/account/llm-key`,
+`web/routers/llm_key.py`; UI `ApiKeySettings.jsx` on User home + the
+onboarding modal). The key is Fernet-encrypted at rest (`core/secret_box.py`,
+env `KEY_ENCRYPTION_KEY`; migration `aa17byok01` adds
+`account.llm_provider`/`llm_api_key_enc`/`llm_key_last4`/`llm_default_model`)
+and is write-only — responses carry only provider, last4, and default model.
+BYOK use is **free**: `meter_action` never debits a BYOK account and pins the
+credential for the whole action (`core/byok.py` contextvar), so deleting the
+key mid-action can't fall through to the platform key unbilled.
+`core/llm.py` `get_client_for_profile` resolves pinned BYOK credential →
+stored key → platform env key; BYOK skips the model allowlist (the user pays
+their provider). Credits remain the path for users without a key.
+
 **Metering topology:** the intake pipeline debits **one** `intake` (2u) around
 extract + score + skill-match; the generate endpoints resolve
 `generate_fresh` (4u) vs `regenerate` (2u) via `resolve_generate_action` and
@@ -197,7 +217,10 @@ refunded.
 **Grants.** New accounts receive a signup grant sized by tier
 (`core.credits.signup_grant_for_tier(tier)`, env `CREDIT_SIGNUP_GRANTS` JSON
 map, defaults `standard` 0 / `friends_family` 50 / `beta` 200 units) at
-provisioning, reason `signup_grant`. Admin grants go through the
+provisioning, reason `signup_grant`. The standard grant dropped from 20 to 0
+with open signups (2026-11-16): the free path is BYOK, and a free grant would
+only fund abuse of the platform key; invite tiers keep theirs. A 0 grant
+writes no ledger row. Admin grants go through the
 budget-checked `POST /api/admin/users/{profile_id}/grant`
 (`web/routers/admin.py`, admin-only), which calls `grant_credits` with
 reason `admin_grant` — the same `grant_credits` the Stripe webhook
@@ -293,6 +316,44 @@ claw back granted credits; reversal is admin-manual only.
 - DB writes inside `Job` methods use the caller-supplied session; callers own commit/rollback (except `Document.upsert`, which commits).
 - The `documents` table is the source of truth; `.md` and PDF are derived artifacts and are never hand-edited.
 - Structured résumé generate/refine route through `_llm_json_with_retry`; `_refine_doc_md` uses `max_tokens=32768` to avoid truncation.
+- Every tenant-owned row carries `profile_id`; reads go through `scoped()` and a `before_flush` tenant guard rejects unstamped inserts (see "Tenant scoping" in `db/CONTEXT.md`).
+- Every tenant-reachable LLM call runs inside `meter_action` (or on the tenant's own BYOK key).
+
+## Security
+
+Hardening shipped with the open-signup release (2026-11-16 security audit):
+
+- **Fail-closed environment.** `core/env.py` `is_production()` is the only
+  sanctioned production check. `APP_ENV` must be `production`/`development`/
+  `test` (anything else aborts boot via `validate_app_env()`); unset on
+  Railway (any `RAILWAY_*` runtime var) resolves to `production`; unset
+  locally resolves to `development`. Auth gate, tenancy seam, dev endpoints,
+  `.env` writes, `/ws/tray`, and JSON logging all switch on it.
+- **Headers + CSP.** `web/middleware_security_headers.py` (pure ASGI) adds
+  `nosniff`, `X-Frame-Options: DENY`, a strict-origin referrer policy, HSTS in
+  production, and a `'self'`-only CSP (`frame-ancestors 'none'`). PDF responses
+  get `SAMEORIGIN`/`frame-ancestors 'self'` so the dashboard can iframe them.
+  Adding any external origin (fonts, Stripe.js, a CDN) requires a CSP update.
+  FastAPI's docs/OpenAPI routes are disabled in production.
+- **Auth.** Banned or deleted accounts are rejected on every request (not just
+  at login); `is_admin` is re-synced from `ADMIN_EMAILS`/admin invite rows on
+  every login (promotes **and** demotes). `.dockerignore` keeps secrets,
+  backups, and DB files out of the image.
+- **PDF render isolation.** pandoc runs with `-raw_html` (and raw
+  attributes/native divs/spans off), templates use Jinja `autoescape=True`,
+  and Chromium runs with JavaScript disabled and a route handler that aborts
+  every request except `about:blank`/`data:` (no SSRF/file reads). Renders are
+  capped by a semaphore (`PDF_RENDER_CONCURRENCY`, default 2).
+- **Input caps + rate limits.** `core/limits.py` caps every LLM-bound field
+  (422) and whole JSON payloads (413); `web/middleware_body_limit.py` caps raw
+  bodies before parsing (2 MB, 10 MB for uploads). `web/middleware_rate_limit.py`
+  keeps in-process token buckets — `auth` (per IP, 30/min), `api` (unsafe
+  `/api/` methods per account, 120/min), `heavy` (LLM/PDF routes, 20/min) —
+  answering 429 + `Retry-After`. Buckets are per-process, so the limiter
+  assumes a single Railway instance. SSE streams are capped per account
+  (`SSE_MAX_STREAMS_PER_ACCOUNT`, default 5).
+- **Secrets.** BYOK keys are encrypted at rest (`KEY_ENCRYPTION_KEY`) and never
+  returned to the client.
 
 ## Deployment (Railway)
 
@@ -316,8 +377,13 @@ on first boot. (To port existing local SQLite data, run
 the logged-in account's profile in production. A pure-ASGI gate
 (`web/auth/middleware.py`) 401s unauthenticated `/api/*` requests; the SPA shell
 loads unauthenticated and shows a login screen when `/api/me` returns 401.
-Access is invite-gated by `ALLOWED_EMAILS`; `ADMIN_EMAILS` bypass it and the
-first admin login claims the existing `profile_id=1`. `GET /health` is exempt
+Signups are **open** (`OPEN_SIGNUPS=true`, since 2026-11-16): any verified
+Google/GitHub email may sign up; bans still apply, and unsetting the var
+re-closes signups to the invite allowlist (`ALLOWED_EMAILS` + the
+`allowed_email` table) without a deploy. `ADMIN_EMAILS` bypass the allowlist
+and the first admin login claims the existing `profile_id=1`. Public
+`/privacy` and `/terms` pages (`react-dashboard/src/components/legal/`) load
+logged out. `GET /health` is exempt
 for the platform healthcheck. Provider redirect URIs to register:
 `https://autoapply.matthewbarlow.me/auth/callback/google` and `…/github`.
 
@@ -325,7 +391,7 @@ for the platform healthcheck. Provider redirect URIs to register:
 Generated documents and uploaded resumes (via `core/paths.py`) live under it.
 
 **Secrets / config:** all via Railway environment variables. Runtime `.env`
-key-writing is disabled when `APP_ENV=production`.
+key-writing is disabled in production (`core.env.is_production()`).
 
 **Required environment variables:**
 
@@ -343,27 +409,40 @@ key-writing is disabled when `APP_ENV=production`.
 | `OPEN_SIGNUPS` | `true` = any verified Google/GitHub email may sign up (bans still apply) |
 | `ADMIN_EMAILS` | comma-separated admin/owner emails |
 | `DATA_DIR` | `/data` |
-| `APP_ENV` | `production` |
+| `APP_ENV` | `production` — must be `production`/`development`/`test`; any other value aborts boot. If unset, Railway resolves to `production` (fail-closed) and local runs to `development` |
 | `PORT` | provided by Railway |
+
+**Optional tuning variables:**
+
+| Var | Default | Effect |
+|---|---|---|
+| `PDF_RENDER_CONCURRENCY` | `2` | max concurrent Chromium renders (min 1) |
+| `RATE_LIMIT_DISABLED` | unset | `1`/`true`/`yes` turns the rate limiter off |
+| `RATE_LIMIT_AUTH_PER_MIN` | `30` | `/auth/*` requests per client IP |
+| `RATE_LIMIT_API_PER_MIN` | `120` | unsafe-method `/api/` requests per account |
+| `RATE_LIMIT_HEAVY_PER_MIN` | `20` | LLM-triggering / PDF-rendering requests per account |
+| `SSE_MAX_STREAMS_PER_ACCOUNT` | `5` | concurrent `/api/events` streams per account (over → 429) |
 
 **Railway service settings:** build from Dockerfile; healthcheck path `/health`;
 attach a volume at `/data`.
 
 **Not deployed:** the tray app and browser extension remain local clients.
 
-## Roadmap: SaaS conversion (planned — not yet built)
+## SaaS conversion (complete — out of beta 2026-11-16)
 
-The app is being converted to a multi-user SaaS in four sequenced sub-projects,
+The app was converted to a multi-user SaaS in four sequenced sub-projects,
 each with its own spec → plan → implementation cycle (designs under
-`docs/superpowers/`, status in `.claude/TODO.md`). The multi-tenancy foundation is
-already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
+`docs/superpowers/`, status in `.claude/TODO.md`), layered on the multi-tenancy
+foundation (see "Tenant scoping" in `db/CONTEXT.md`). All four are live; the
+2026-11-16 release opened signups (`OPEN_SIGNUPS`) and added BYOK:
 
 1. **Auth & Identity** *(implemented)* — Google/GitHub OAuth via Authlib +
    Starlette signed-cookie sessions. Adds `account` + `identity` tables (one
    account = one `user_profile`/tenant, linked by verified email).
    `web.tenancy.current_profile_id` resolves the logged-in account's profile in
    production; a pure-ASGI gate on `/api/*` (`web/auth/middleware.py`) replaced
-   the HTTP Basic gate; access is invite-gated by `ALLOWED_EMAILS`.
+   the HTTP Basic gate; access was invite-gated by `ALLOWED_EMAILS` until open
+   signups (2026-11-16).
    Spec: `docs/superpowers/specs/2026-06-11-auth-identity-design.md`.
 2. **Credits & Metering** *(implemented)* — per-tenant `credit_ledger` +
    cached `account.credit_balance`/`credit_rate`; `meter_action` gates and
@@ -371,7 +450,7 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
    admin grant/system-balance endpoints. See "Credits & Metering" above.
 3. **Payments** *(implemented)* — Stripe Checkout for credit packs + webhook →
    credit grants via `grant_credits(reason="purchase")`. See "Payments" above.
-4. **Onboarding UX rework** *(in progress)* — the required API-key step is dropped
+4. **Onboarding UX rework** *(implemented)* — the required API-key step is dropped
    (an optional bring-your-own-key panel replaced it in 2026-11; BYOK actions are free): the
    welcome wizard is now a single "Upload Master Resume" modal triggered on first
    login (no parsed résumé), parsing against the auto-provisioned profile using
@@ -386,7 +465,13 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
    `PATCH /api/onboarding/tour` (`web/routers/onboarding.py`) →
    `user.onboarding_tour`.
    Specs: `docs/superpowers/specs/2026-06-15-resume-first-onboarding-design.md`,
-   `…/2026-07-06-onboarding-guided-tour-design.md`. Still open: surface the
-   credits/buy flow in onboarding, and close the *automated* job-ingestion gap
-   (a manual paste path exists and auto-scores; the browser extension still
-   points at localhost and the API scrapers are dormant).
+   `…/2026-07-06-onboarding-guided-tour-design.md`. Jobs arrive via manual
+   paste, the browser extension (signs in against the live site), and the
+   "Find Jobs" API scrapers.
+
+**Next planned project: remote MCP connector.** Expose AutoApply as a remote
+MCP server so Claude/ChatGPT subscribers can drive it from their own chat app,
+with the LLM work running on their subscription. "Sign in with your Claude
+subscription" inside AutoApply itself is off the table — Anthropic prohibits
+subscription OAuth in third-party apps — so the connector complements BYOK
+rather than replacing it. Tracked in `.claude/TODO.md`.
