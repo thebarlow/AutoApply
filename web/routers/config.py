@@ -10,9 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core import limits as _lim
 from core.env import is_production
 from db.database import get_db
 from db.database import Config, PromptDefault, ProfileConfig
@@ -153,7 +154,7 @@ class ProfileNameBody(BaseModel):
 
 
 class ProfileBody(BaseModel):
-    name: str
+    name: str = Field(max_length=_lim.MAX_LABEL)
     data: dict
     llm_api_key: str = ""
 
@@ -302,6 +303,7 @@ def update_profile(
 ) -> dict[str, Any]:
     if profile_id != caller_id:
         raise HTTPException(status_code=404, detail="Profile not found")
+    _lim.ensure_json_within(body.data, _lim.MAX_PROFILE_JSON, "Profile data")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -421,6 +423,7 @@ def put_profile_tree(
 ) -> dict[str, Any]:
     if profile_id != caller_id:
         raise HTTPException(status_code=404, detail="Profile not found")
+    _lim.ensure_json_within(body.tree, _lim.MAX_PROFILE_JSON, "Profile tree")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -712,6 +715,8 @@ def parse_apply(
     """
     if profile_id != caller_id:
         raise HTTPException(status_code=404, detail="Profile not found")
+    _lim.ensure_json_within(proposal.model_dump(mode="json"), _lim.MAX_PROFILE_JSON,
+                            "Parsed profile")
     row = db.query(User).filter_by(id=profile_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -832,10 +837,18 @@ def parse_apply(
 @router.post("/api/config/profile/upload")
 def upload_profile_file(file: UploadFile = File(...)) -> dict[str, str]:
     """Save an uploaded resume file to the profiles/ directory and return its absolute path."""
-    MAX_BYTES = 10 * 1024 * 1024
-    contents = file.file.read()
-    if len(contents) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    # Read in chunks and stop one chunk past the cap, so an oversize upload is
+    # never fully buffered in memory. The raw request body is also capped
+    # before parsing by web/middleware_body_limit.py.
+    max_bytes = _lim.MAX_UPLOAD_BYTES
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := file.file.read(1024 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+        chunks.append(chunk)
+    contents = b"".join(chunks)
     filename = file.filename or "resume"
     suffix = Path(filename).suffix.lower()
     if suffix not in (".pdf", ".md", ".txt"):
@@ -942,9 +955,9 @@ class SectionPromptDraft(BaseModel):
 class _SectionPromptDraftBody(BaseModel):
     """Request body for POST /api/config/section-prompt/draft."""
 
-    section_name: str = ""
-    purpose: str = ""
-    tailoring: str = ""
+    section_name: str = Field("", max_length=_lim.MAX_LABEL)
+    purpose: str = Field("", max_length=_lim.MAX_SECTION_PROMPT_FIELD)
+    tailoring: str = Field("", max_length=_lim.MAX_SECTION_PROMPT_FIELD)
 
 
 @router.post("/api/config/section-prompt/draft")

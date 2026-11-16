@@ -46,8 +46,10 @@ from web.routers import themes as themes_router
 from web.routers import llm_key as llm_key_router
 from web.auth import routes as auth_routes
 from core.credits import InsufficientCredits
+from core.limits import InputTooLarge
 from fastapi.responses import JSONResponse
 from web.auth.middleware import AuthGateMiddleware
+from web.middleware_body_limit import BodySizeLimitMiddleware
 from web.middleware_impersonation import ImpersonationReadOnlyMiddleware
 from web.middleware_request_context import RequestContextMiddleware
 from web.middleware_security_headers import SecurityHeadersMiddleware
@@ -194,9 +196,12 @@ app = FastAPI(title="Auto Apply", lifespan=lifespan, **_api_docs_kwargs())
 # the most-recently-added middleware outermost, so the session is populated on
 # the request scope before AuthGateMiddleware inspects it.
 # SecurityHeadersMiddleware sits outside the auth gate so its 401s get headers too.
+# BodySizeLimitMiddleware sits outside the auth gate (an oversize body is refused
+# before anything reads it) but inside SecurityHeaders so its 413s get headers.
 app.add_middleware(AuthGateMiddleware)
 app.add_middleware(ImpersonationReadOnlyMiddleware)
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     SessionMiddleware,
@@ -256,6 +261,15 @@ async def _insufficient_credits_handler(request, exc: InsufficientCredits):
             "price": exc.price,
             "action": exc.action,
         },
+    )
+
+
+@app.exception_handler(InputTooLarge)
+async def _input_too_large_handler(request, exc: InputTooLarge):
+    """413 for a tenant payload over its ``core/limits.py`` cap (audit H3)."""
+    return JSONResponse(
+        status_code=413,
+        content={"error": "payload_too_large", "detail": str(exc)},
     )
 
 

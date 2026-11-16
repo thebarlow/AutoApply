@@ -114,4 +114,6 @@ def test_put_tree_rejects_oversized(client):
                           "llm_input": False, "regen_lock": False,
                           "min": None, "max": None}]})
     r = client.put("/api/config/profiles/1/tree", json={"tree": tree})
-    assert r.status_code == 422
+    # 600 sections also exceed the serialized-size cap (core/limits.py), which
+    # is checked first (413); either way the tree is refused.
+    assert r.status_code in (413, 422)
