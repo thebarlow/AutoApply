@@ -160,6 +160,21 @@ export default function Docs() {
                 );
               })}
             </ul>
+            <div className="mt-6 pt-4 border-t border-space-border">
+              <p className="text-xs uppercase tracking-widest text-space-dim mb-2">Legal</p>
+              <ul className="space-y-2">
+                <li>
+                  <a href="/privacy" className="text-base font-semibold text-space-dim hover:text-space-text transition-colors">
+                    Privacy Policy
+                  </a>
+                </li>
+                <li>
+                  <a href="/terms" className="text-base font-semibold text-space-dim hover:text-space-text transition-colors">
+                    Terms of Service
+                  </a>
+                </li>
+              </ul>
+            </div>
           </nav>
 
           <article className="prose prose-invert prose-headings:text-space-text prose-p:text-space-dim prose-li:text-space-dim prose-a:text-violet-400 hover:prose-a:text-violet-300 flex-1 min-w-0 overflow-y-auto">
