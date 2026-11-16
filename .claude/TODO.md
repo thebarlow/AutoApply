@@ -183,8 +183,11 @@ git history is the archive (see `.claude/skills/update-todo/`).
   chat** (subscription OAuth in third-party apps is prohibited by Anthropic since Feb 2026, so
   "Sign in with Claude subscription" is off the table). Separate project; complements BYOK.
 
-- [ ] **Buy me a coffee donation link** (URL pending from user). BYOK use is free, so give those
-  users an optional way to support the project.
+- [ ] **Self-serve account deletion/export.** The Privacy Policy currently tells users to email
+  `barlowmatt96@gmail.com` to delete or export their data. Add an in-app "Export my data" (JSON
+  of profile, jobs, documents, purchases) and "Delete my account" (account, identity,
+  extension tokens, profile + all tenant rows, uploaded résumé files; keep purchase records
+  only as long as tax rules require), then update `legal/Privacy.jsx`.
 
 - [ ] **Re-parse résumé into an existing populated profile.** Backend `parse/apply` already
   supports it (add-only-safe skip defaults), but only onboarding + the new-profile wizard surface
@@ -244,6 +247,16 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Privacy Policy + Terms of Service pages.** **DONE 2026-11-16** — public `/privacy` and
+  `/terms` SPA routes (`react-dashboard/src/components/legal/`, effective 16 Nov 2026), reachable
+  logged out (auth gate only guards `/api/*`; `tests/web/test_legal_pages_public.py`). Linked from
+  the landing footer, the sign-in card ("By signing in you agree…"), and the logged-in User home.
+  Sign-in card copy also updated for open signups (the closed-beta message is gone).
+
+- [x] **Buy me a coffee donation link.** **DONE 2026-11-16** — plain new-tab link to
+  `https://buymeacoffee.com/mrbarlow` in the site footer and the User home ("AutoApply is free
+  with your own API key…"). No BMC widget script, so the CSP is unchanged.
 
 - [x] **Security audit hardening (H2, M3, L2, L3, L6, L7).** **DONE 2026-11-16** — fail-closed
   `APP_ENV` resolution via `core/env.py` (unknown value aborts boot; unset on Railway → production);
