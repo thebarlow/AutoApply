@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -27,6 +27,7 @@ from core.document_parser import (
 from db.database import get_db, Config, Document
 from core.metering import meter_action
 from core.credits import InsufficientCredits
+from core import limits as _lim
 from web.sse import send as _sse_send
 from web.tenancy import current_profile_id, scoped
 from web import llm_status
@@ -158,12 +159,12 @@ def update_job_state(
 
 
 class JobFieldsUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    company: str | None = None
-    location: str | None = None
-    salary: str | None = None
-    url: str | None = None
+    title: str | None = Field(None, max_length=_lim.MAX_JOB_SHORT_FIELD)
+    description: str | None = Field(None, max_length=_lim.MAX_JOB_DESCRIPTION)
+    company: str | None = Field(None, max_length=_lim.MAX_JOB_SHORT_FIELD)
+    location: str | None = Field(None, max_length=_lim.MAX_JOB_SHORT_FIELD)
+    salary: str | None = Field(None, max_length=_lim.MAX_JOB_SHORT_FIELD)
+    url: str | None = Field(None, max_length=_lim.MAX_URL)
 
 
 @router.patch("/{job_key}/fields")
@@ -194,13 +195,13 @@ class FlagUpdate(BaseModel):
 
 
 class FeedbackNote(BaseModel):
-    section: str = ""
-    label: str = ""
-    note: str = ""
+    section: str = Field("", max_length=_lim.MAX_LABEL)
+    label: str = Field("", max_length=_lim.MAX_LABEL)
+    note: str = Field("", max_length=_lim.MAX_FEEDBACK_NOTE)
 
 
 class FeedbackRequest(BaseModel):
-    notes: list[FeedbackNote]
+    notes: list[FeedbackNote] = Field(max_length=_lim.MAX_FEEDBACK_NOTES)
 
 
 @router.patch("/{job_key}/flag")
@@ -567,6 +568,9 @@ def put_document(
 ):
     if doc_type not in ("resume", "cover"):
         raise HTTPException(status_code=400, detail="doc_type must be 'resume' or 'cover'")
+    # The stored document is re-fed to the LLM on refine/feedback and drives a
+    # PDF render, so bound it like any other tenant-controlled prompt input.
+    _lim.ensure_json_within(payload, _lim.MAX_DOCUMENT_JSON, "Document")
     job = Job.get(job_key, db, profile_id=profile_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")

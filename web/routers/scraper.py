@@ -8,11 +8,12 @@ import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.database import ProfileConfig
+from core import limits as _lim
 from core.application_mapper import build_plan, needs_essay_pass
 from core.ats import classify_ats, unwrap_apply_url
 from core.job import Job, JobState
@@ -34,20 +35,23 @@ logger = logging.getLogger(__name__)
 MAX_SCRAPE_BATCH = 25
 
 
+_SHORT = _lim.MAX_JOB_SHORT_FIELD
+
+
 class StageJobRequest(BaseModel):
-    source: str
-    job_key: str
-    title: str
-    company: str
-    url: str
-    description: str
-    location: str = ""
-    salary: str = ""
+    source: str = Field(max_length=_SHORT)
+    job_key: str = Field(max_length=_SHORT)
+    title: str = Field(max_length=_SHORT)
+    company: str = Field(max_length=_SHORT)
+    url: str = Field(max_length=_lim.MAX_URL)
+    description: str = Field(max_length=_lim.MAX_JOB_DESCRIPTION)
+    location: str = Field("", max_length=_SHORT)
+    salary: str = Field("", max_length=_SHORT)
     remote: bool = False
-    posted_at: str = ""
-    scraped_at: str = ""
+    posted_at: str = Field("", max_length=_SHORT)
+    scraped_at: str = Field("", max_length=_SHORT)
     easy_apply: bool | None = None
-    apply_url_raw: str = ""
+    apply_url_raw: str = Field("", max_length=_lim.MAX_URL)
 
 
 @router.post("/stage-job")
@@ -101,7 +105,9 @@ def stage_job(
                 job.ats_domain = host
                 job.apply_url_resolved = target
                 db.commit()
-        job.intake()
+        # No job.intake() here: it ran an unmetered extraction + skill-match in
+        # its own thread. run_pipeline already does both inside the metered
+        # 'intake' bundle (H3 audit).
         try:
             _sse_send("job", job.serialize(), profile_id=profile_id)
         except Exception:
@@ -153,7 +159,8 @@ def scrape_selected(
     inserted = Job.save_batch_returning(scraped, db, profile_id)
     inserted_keys = {job.job_key for job in inserted}
     for job in inserted:
-        job.intake()
+        # Extraction runs inside run_pipeline's metered 'intake' bundle; the old
+        # job.intake() call duplicated it unmetered (H3 audit).
         try:
             _sse_send("job", job.serialize(), profile_id=profile_id)
         except Exception:
@@ -333,7 +340,8 @@ def resolve_ats(
 
 
 class ApplicationPlanRequest(BaseModel):
-    enumerated_fields: list[EnumeratedField] = []
+    enumerated_fields: list[EnumeratedField] = Field(
+        default_factory=list, max_length=_lim.MAX_ENUMERATED_FIELDS)
 
 
 def _documents_for(job: Job) -> dict[str, str]:

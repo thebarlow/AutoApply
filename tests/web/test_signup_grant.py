@@ -15,20 +15,20 @@ def _db():
     return db
 
 
-def test_standard_signup_gets_20_units():
+def test_standard_signup_gets_no_free_units():
+    # Open signups (2026-11-16): standard accounts start at 0; free use is BYOK.
     db = _db()
     claims = identity.Claims(
         provider="google", subject="sub-1", email="new@x.c", email_verified=True
     )
     acct = identity._provision_account(db, email="new@x.c", is_admin=False, claims=claims)
 
-    assert acct.credit_balance == 20
-    grant = (
+    assert acct.credit_balance == 0
+    assert (
         db.query(CreditLedger)
         .filter_by(reason="signup_grant", profile_id=acct.profile_id)
         .first()
-    )
-    assert grant is not None and grant.delta == 20
+    ) is None
 
 
 def test_beta_invite_signup_gets_200_units():
@@ -58,7 +58,7 @@ def test_provision_account_admin_gets_zero_rate():
     acct = identity._provision_account(db, email="admin@x.c", is_admin=True, claims=claims)
 
     assert acct.credit_rate == 0.0
-    assert acct.credit_balance == 20
+    assert acct.credit_balance == 0
 
 
 def test_default_rate_defaults_to_one(monkeypatch):

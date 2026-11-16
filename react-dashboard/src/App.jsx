@@ -67,6 +67,17 @@ export default function App() {
     return () => window.removeEventListener('auto-apply:credits-error', handler)
   }, [pushToast])
 
+  // Rate-limit signal (dispatched from api.js on HTTP 429)
+  useEffect(() => {
+    const handler = (e) => {
+      const s = e?.detail?.retryAfter
+      pushToast(s ? `Too many requests — wait ${s}s and try again.`
+        : 'Too many requests — wait a moment and try again.')
+    }
+    window.addEventListener('auto-apply:rate-limited', handler)
+    return () => window.removeEventListener('auto-apply:rate-limited', handler)
+  }, [pushToast])
+
   // Purchase success signal (dispatched from Navbar after Stripe Checkout redirect)
   useEffect(() => {
     const handler = () => pushToast('Payment received — credits added.')

@@ -35,6 +35,11 @@ async function _fetchOnce(url, options) {
         window.dispatchEvent(new Event('auto-apply:credits-stale'))
       }
     }
+    // Rate-limited (web/middleware_rate_limit.py): App.jsx toasts it.
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get('Retry-After')) || null
+      window.dispatchEvent(new CustomEvent('auto-apply:rate-limited', { detail: { retryAfter } }))
+    }
     const err = new Error(`${options?.method ?? 'GET'} ${url} → ${res.status}`)
     err.status = res.status
     throw err

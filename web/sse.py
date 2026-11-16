@@ -20,10 +20,20 @@ _lock = threading.Lock()
 _clients: list[tuple[queue.SimpleQueue, int | None]] = []
 
 
-def subscribe(profile_id: int | None = None) -> queue.SimpleQueue:
-    """Register a new SSE client for a tenant and return its queue."""
+def subscribe(
+    profile_id: int | None = None, *, max_per_profile: int | None = None
+) -> queue.SimpleQueue | None:
+    """Register a new SSE client for a tenant and return its queue.
+
+    With ``max_per_profile``, returns None instead when that tenant already
+    holds that many open streams (checked and registered under one lock).
+    """
     q: queue.SimpleQueue = queue.SimpleQueue()
     with _lock:
+        if max_per_profile is not None and profile_id is not None:
+            open_streams = sum(1 for (_, pid) in _clients if pid == profile_id)
+            if open_streams >= max_per_profile:
+                return None
         _clients.append((q, profile_id))
     return q
 

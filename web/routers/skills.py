@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import re
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core import limits as _lim
 from core.skill_analytics import skill_key
 from core.user import User
 from db.database import SkillAlias, get_db
@@ -15,18 +17,21 @@ from web.tenancy import current_profile_id
 router = APIRouter(prefix="/api/skills")
 
 
+_Skill = Annotated[str, Field(max_length=_lim.MAX_LABEL)]
+
+
 class AssignBody(BaseModel):
-    skill: str
-    canonical: str
+    skill: _Skill
+    canonical: _Skill
 
 
 class SkillBody(BaseModel):
-    skill: str
+    skill: _Skill
 
 
 class SkillsBody(BaseModel):
-    skills: list[str]
-    job_key: str | None = None
+    skills: list[_Skill] = Field(max_length=_lim.MAX_SKILLS_PER_REQUEST)
+    job_key: str | None = Field(None, max_length=_lim.MAX_JOB_SHORT_FIELD)
 
 
 def _raw_key(token: str) -> str | None:

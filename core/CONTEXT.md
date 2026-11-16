@@ -133,6 +133,7 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Master resume markdown for prompt injection | `user.py` → `User.master_resume()` |
 | Prompt file resolution per type | `user.py` → `User.resolve_prompt()` |
 | LLM client construction | `llm.py` → `get_client_for_profile()` (pinned BYOK credential → account's stored key → platform env) |
+| Input-size caps for LLM-bound tenant input (one place to tune) | `limits.py` → `MAX_*` constants, `ensure_json_within()` / `InputTooLarge` (web maps to 413). `Job.intake()` is **unmetered** — keep it off tenant-reachable paths (web uses `run_pipeline`) |
 | BYOK key storage, decryption, model listing/validation | `byok.py` → `config_for_account()`, `config_for_profile_id()`, `list_text_models()`; `secret_box.py` → `encrypt()`/`decrypt()` |
 | Local `claude` CLI LLM provider (dev-only wrapper) | `llm_claude_cli.py` → `ClaudeCliClient` (OpenAI-SDK-shaped, selected via `LLM_PROVIDER_TYPE=claude_cli`, production access guarded) |
 | Single-turn LLM call helper | `llm.py` → `call_llm()` |

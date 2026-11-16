@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import Literal, TypeVar
+from typing import Annotated, Literal, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
+
+from core import limits as _lim
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -460,12 +462,17 @@ class AtsParsedFields(BaseModel):
 
 
 class EnumeratedField(BaseModel):
-    """A form field the extension read off a live application page."""
+    """A form field the extension read off a live application page.
 
-    field_id: str
-    label: str = ""
-    input_type: str = "text"
-    options: list[str] = []
+    Labels feed the essay-draft LLM prompt, so every string is size-capped
+    (``core/limits.py``, audit H3).
+    """
+
+    field_id: str = Field(max_length=_lim.MAX_LABEL)
+    label: str = Field("", max_length=_lim.MAX_ESSAY_LABEL)
+    input_type: str = Field("text", max_length=_lim.MAX_LABEL)
+    options: list[Annotated[str, Field(max_length=_lim.MAX_LABEL)]] = Field(
+        default_factory=list, max_length=_lim.MAX_ESSAY_OPTIONS)
     required: bool = False
 
 

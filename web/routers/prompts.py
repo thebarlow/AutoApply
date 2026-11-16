@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db.database import Prompt, PromptDefault, get_db
+from core import limits as _lim
 from core.user import User
 from db.seed import PROMPT_TYPE_KEYS
 from web.tenancy import current_profile_id
@@ -57,8 +58,8 @@ def _slot(profile_id: int, type_key: str, db: Session) -> dict:
 
 
 class PromptBody(BaseModel):
-    content: str
-    model: str = ""
+    content: str = Field(max_length=_lim.MAX_PROMPT_CONTENT)
+    model: str = Field("", max_length=_lim.MAX_MODEL_ID)
 
 
 @router.get("/defaults/{type_key}")
