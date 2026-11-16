@@ -55,6 +55,33 @@ def is_allowed_email(db: Session, email: str) -> bool:
     return db.query(AllowedEmail).filter_by(email=e).first() is not None
 
 
+def _invite_grants_admin(db: Session, email: str) -> bool:
+    from db.database import AllowedEmail
+    invite = db.query(AllowedEmail).filter_by(email=email.lower()).first()
+    return bool(invite is not None and invite.is_admin)
+
+
+def sync_admin_flag(db: Session, acct: Account) -> None:
+    """Re-derive ``acct.is_admin`` from its sources of truth on every login.
+
+    Admin is granted by ADMIN_EMAILS (env) or by an admin-created invite with
+    ``is_admin`` (the ``allowed_email`` row persists after signup). The account
+    is admin iff at least one source still says so: removing an email from
+    ADMIN_EMAILS demotes it unless an admin invite also grants it, and an
+    invite-made admin is never demoted just because it isn't in ADMIN_EMAILS.
+
+    A demoted account whose rate is the admin rate (0) is moved onto the
+    default billing rate, else it would keep free LLM usage after demotion.
+    """
+    want = is_admin_email(acct.email) or _invite_grants_admin(db, acct.email)
+    if bool(acct.is_admin) == want:
+        return
+    acct.is_admin = want
+    if not want and not (acct.credit_rate or 0.0):
+        acct.credit_rate = default_rate()
+    db.commit()
+
+
 def resolve_existing_account(db: Session, claims: Claims) -> Account:
     """Map OAuth claims to an EXISTING account; never provision (Option B).
 
@@ -76,6 +103,7 @@ def resolve_existing_account(db: Session, claims: Claims) -> Account:
         acct = db.query(Account).filter_by(id=ident.account_id).first()
         if acct is None or acct.banned:
             raise NoExtensionAccount(email)
+        sync_admin_flag(db, acct)
         return acct
 
     acct = db.query(Account).filter_by(email=email).first()
@@ -86,6 +114,7 @@ def resolve_existing_account(db: Session, claims: Claims) -> Account:
         provider_subject=claims.subject, created_at=_now(),
     ))
     db.commit()
+    sync_admin_flag(db, acct)
     return acct
 
 
@@ -140,6 +169,8 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
         acct = db.query(Account).filter_by(id=ident.account_id).first()
         if acct is not None and acct.banned:
             raise BetaAccessDenied(email)
+        if acct is not None:
+            sync_admin_flag(db, acct)
         return acct
 
     admin = is_admin_email(email)
@@ -155,6 +186,7 @@ def _resolve_or_provision(db: Session, claims: Claims) -> Account:
             provider_subject=claims.subject, created_at=_now(),
         ))
         db.commit()
+        sync_admin_flag(db, acct)
         return acct
 
     return _provision_account(db, email=email, is_admin=admin, claims=claims)
