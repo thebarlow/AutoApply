@@ -5,6 +5,7 @@ import CreditBalance from '../widgets/CreditBalance'
 // Silence the async API calls that happen inside CreditBalance
 vi.mock('../../api', () => ({
   getCredits: () => new Promise(() => {}),
+  getLlmKey: () => Promise.resolve({ has_key: false }),
   getSystemBalance: () => new Promise(() => {}),
 }))
 

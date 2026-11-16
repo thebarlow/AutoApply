@@ -87,8 +87,11 @@ def get_setup_status(
             "resume_parsed": bool,   # Active profile has structured resume data
         }
     """
+    from core import byok
+    from core.credits import get_account_for_profile
     return {
-        "llm_configured": _has_configured_llm_provider(db),
+        "llm_configured": _has_configured_llm_provider(db)
+        or byok.has_key(get_account_for_profile(db, profile_id)),
         "resume_parsed": _has_parsed_resume(db, profile_id),
         "onboarding_tour": _tour_state(db, profile_id),
     }

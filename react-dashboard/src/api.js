@@ -349,3 +349,36 @@ export const getErrors = (params = {}) => {
 export const getErrorDetail = (id) => _fetch(`/api/admin/errors/${id}`)
 
 export const clearErrors = () => _fetch('/api/admin/errors', { method: 'DELETE' })
+
+// ─── Bring-your-own LLM key ──────────────────────────────────────────────────
+// The raw key is sent on write only; responses carry provider + masked last4.
+const _json = (method, body) => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+})
+
+export const getLlmKey = () => _fetch('/api/account/llm-key')
+
+export const getLlmKeyModels = () => _fetch('/api/account/llm-key/models')
+
+// Returns { ok: true, models } or { ok: false, error } — the server's message
+// ("OpenAI rejected this key.") is shown to the user as-is.
+export async function testLlmKey(provider, apiKey) {
+  const res = await fetch('/api/account/llm-key/test', _json('POST', { provider, api_key: apiKey }))
+  const body = await res.json().catch(() => ({}))
+  return res.ok ? { ok: true, models: body.models ?? [] } : { ok: false, error: body.detail ?? `Error ${res.status}` }
+}
+
+export async function saveLlmKey(provider, apiKey, defaultModel) {
+  const res = await fetch('/api/account/llm-key',
+    _json('PUT', { provider, api_key: apiKey, default_model: defaultModel }))
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.detail ?? `Error ${res.status}`)
+  return body
+}
+
+export const setLlmDefaultModel = (defaultModel) =>
+  _fetch('/api/account/llm-key', _json('PATCH', { default_model: defaultModel }))
+
+export const deleteLlmKey = () => _fetch('/api/account/llm-key', { method: 'DELETE' })

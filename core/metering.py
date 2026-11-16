@@ -17,6 +17,7 @@ from contextvars import ContextVar
 
 from sqlalchemy.orm import Session
 
+from core import byok
 from core.credits import (
     InsufficientCredits,
     debit_fixed,
@@ -70,6 +71,17 @@ def meter_action(db: Session, profile_id: int, *, action: str,
       and annotate the debit row with the summed actual LLM cost on success.
     """
     acct = get_account_for_profile(db, profile_id)
+    # BYOK accounts pay their provider directly: never debit, and pin the
+    # credential for the whole action so the free/charged decision made here
+    # can't be dodged by deleting the key mid-action (see core/byok.py).
+    byok_cfg = byok.config_for_account(acct)
+    if byok_cfg is not None:
+        token = byok.set_active(byok_cfg)
+        try:
+            yield
+        finally:
+            byok.reset_active(token)
+        return
     metered = acct is not None and not acct.is_admin and (acct.credit_rate or 0.0) > 0
     if not metered:
         yield

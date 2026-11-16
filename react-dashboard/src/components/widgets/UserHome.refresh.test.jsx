@@ -13,6 +13,8 @@ vi.mock('../../api', () => ({
   getMe: () => Promise.resolve({ is_admin: false }),
   getPurchaseHistory: () => Promise.resolve([]),
   getCredits: () => Promise.resolve({ balance: 0 }),
+  getLlmKey: () => Promise.resolve({ has_key: false }),
+  getLlmKeyModels: () => Promise.resolve({ models: [] }),
 }))
 
 // Force the "Welcome back {name}" branch (not first-run) so the name is rendered.

@@ -73,16 +73,39 @@ def model_allowed(model: str) -> bool:
     return allowed is None or model in allowed
 
 
-def get_client_for_profile(user: Any = None, model_override: str = "") -> tuple:
-    """Return (client, model) for the platform LLM provider, resolved from env.
+def _byok_client(cfg: Any, model_override: str) -> tuple:
+    """Build a client on the account's own provider key (no model allowlist)."""
+    model = model_override or cfg.default_model
+    if not model:
+        raise RuntimeError("No model selected for your API key. Pick a default model in Settings.")
+    client = openai.OpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+    _install_request_labeling(client)
+    return client, model
 
-    The platform owns LLM keys server-side; ``user`` is accepted for call-site
-    compatibility but no longer influences provider selection. ``model_override``
-    takes precedence over ``LLM_DEFAULT_MODEL`` when non-empty.
+
+def get_client_for_profile(user: Any = None, model_override: str = "") -> tuple:
+    """Return (client, model) for ``user``'s LLM provider.
+
+    Resolution order:
+      1. The BYOK credential pinned by the active ``meter_action`` (if any).
+      2. The account's own stored key (``core/byok.py``), looked up by profile.
+      3. The platform provider from env (``LLM_PROVIDER_TYPE``/``LLM_API_KEY``).
+
+    BYOK calls may use any model the user's provider offers; platform calls are
+    bounded by the model allowlist. ``model_override`` takes precedence over
+    the default model when non-empty.
 
     Raises:
         RuntimeError: If provider type, API key, or model cannot be resolved.
     """
+    from core import byok
+
+    cfg = byok.active()
+    if cfg is None and user is not None and getattr(user, "id", None) is not None:
+        cfg = byok.config_for_profile_id(user.id)
+    if cfg is not None:
+        return _byok_client(cfg, model_override)
+
     provider_type = (os.getenv("LLM_PROVIDER_TYPE") or "openrouter").lower()
     if provider_type == "claude_cli":
         if os.getenv("APP_ENV") == "production":

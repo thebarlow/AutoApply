@@ -10,7 +10,9 @@ core/
 ├── user.py              # User entity; profile load/save, prompt resolution, degree/skills helpers
 ├── profile_tree.py      # Recursive typed profile/résumé tree (closed node vocab) + validate_tree + tree_to_legacy adapter + legacy_to_tree migration
 ├── section_presets.py   # Preset section subtrees mirroring the legacy master profile (header/summary/experience/education/projects/skills)
-├── llm.py               # LLM client construction and model resolution
+├── llm.py               # LLM client construction and model resolution (BYOK → platform fallback)
+├── byok.py              # Bring-your-own-key: PROVIDERS, ByokConfig, per-action credential contextvar, config_for_account/profile_id, list_text_models (key validation)
+├── secret_box.py        # Fernet encrypt/decrypt for at-rest secrets, keyed by env KEY_ENCRYPTION_KEY
 ├── llm_claude_cli.py    # ClaudeCliClient: dev-only OpenAI-SDK-shaped wrapper around local `claude` CLI; selected via LLM_PROVIDER_TYPE=claude_cli; production access guarded by core/llm.py
 ├── logging_config.py    # setup_logging(): root logger → stdout (JsonFormatter when APP_ENV=production, else plain) + size-rotating file (5MB×5, always plain) + thread/sys excepthook; env-configurable (LOG_LEVEL/LOG_DIR/LOG_FILE); idempotent, never crashes startup
 ├── log_context.py       # contextvars-backed log context bag (request_id/route/profile_id/method/account_email): bind()/clear()/snapshot() + ContextFilter — wired onto the console handler in logging_config.py; bound per-request by web/middleware_request_context.py's RequestContextMiddleware (see web/CONTEXT.md)
@@ -30,7 +32,7 @@ core/
 ├── ats_gate.py          # Two-layer ATS parseability gate over the rendered résumé PDF (mechanical + semantic)
 ├── pricing.py           # Fixed-unit price card: price_for()/unit_usd()/resolve_generate_action()
 ├── credits.py           # Credit ledger: prepaid fixed debit, refund, grant/reconcile, tiered signup grants
-├── metering.py          # meter_action context manager: prepaid per-action debit + refund-on-failure around LLM calls
+├── metering.py          # meter_action context manager: prepaid per-action debit + refund-on-failure around LLM calls (BYOK accounts: never debited, credential pinned)
 ├── payments.py          # Tier-aware pricing calculator: compute_credits()/packs_for_tier()/resolve_price_id() (no Stripe SDK calls)
 └── stripe_client.py     # Thin wrapper over the stripe SDK: create_customer, create_checkout_session, construct_event
 ```
@@ -129,7 +131,8 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 | Full profile render for prompt injection | `user.py` → `User.render_for_prompt()` |
 | Master resume markdown for prompt injection | `user.py` → `User.master_resume()` |
 | Prompt file resolution per type | `user.py` → `User.resolve_prompt()` |
-| LLM client construction | `llm.py` → `get_client_for_profile()` (resolves provider/model from env) |
+| LLM client construction | `llm.py` → `get_client_for_profile()` (pinned BYOK credential → account's stored key → platform env) |
+| BYOK key storage, decryption, model listing/validation | `byok.py` → `config_for_account()`, `config_for_profile_id()`, `list_text_models()`; `secret_box.py` → `encrypt()`/`decrypt()` |
 | Local `claude` CLI LLM provider (dev-only wrapper) | `llm_claude_cli.py` → `ClaudeCliClient` (OpenAI-SDK-shaped, selected via `LLM_PROVIDER_TYPE=claude_cli`, production access guarded) |
 | Single-turn LLM call helper | `llm.py` → `call_llm()` |
 | Session LLM cost tracking | `session_cost.py` |
@@ -161,7 +164,9 @@ These endpoints are consumed by the 2B editor. Validation failures → HTTP 422.
 
 See project memory note: the project uses the **OpenAI SDK** with multi-provider support (not the Anthropic SDK). Provider/model/API key are resolved at request time via `core/llm.py`.
 
-**LLM client resolution** — `get_client_for_profile()` returns (client, model) by reading `LLM_PROVIDER_TYPE` and `LLM_DEFAULT_MODEL` from env; API key is resolved from env via `LLM_API_KEY`. The platform owns LLM keys server-side (multi-tenant billing).
+**LLM client resolution** — `get_client_for_profile(user, model_override)` returns (client, model). Resolution order: (1) the BYOK credential pinned by the active `meter_action` (`byok.active()`); (2) the account's own stored key, looked up by `user.id` (`byok.config_for_profile_id`); (3) the platform provider from env (`LLM_PROVIDER_TYPE`, `LLM_DEFAULT_MODEL`, `LLM_API_KEY`). BYOK clients use the provider's base URL, any model the key offers (no allowlist), and `model_override` → the account's `llm_default_model`; a BYOK account with no model selected raises `RuntimeError`. Platform calls stay bounded by the model allowlist below.
+
+**Bring-your-own key (`byok.py`, `secret_box.py`)** — an account can store its own provider key (`openrouter`/`openai`/`anthropic`/`gemini`, all called through the OpenAI SDK at each provider's OpenAI-compatible base URL). Product rule (2026-11-16): **BYOK usage is completely free** — `meter_action` never debits a BYOK account; accounts without a key use the platform key + prepaid credits. The key is Fernet-encrypted by `secret_box` with env `KEY_ENCRYPTION_KEY`: missing/malformed → `SecretBoxUnavailable` (save → 503); a wrong/rotated env key makes `decrypt` return `None`, which `config_for_account` treats as "no key stored" (logged), so **losing or rotating `KEY_ENCRYPTION_KEY` silently drops every user back to platform+credits until they re-enter their key**. `has_key()` is a cheap no-decrypt check (used by `/api/me`, setup-status, prompt-model validation). `list_text_models(provider, key)` doubles as key validation (raises `KeyValidationError` on 400/401/403 or unreachable): it filters to text-output models per provider; Anthropic uses the native `/models` with `x-api-key`; OpenRouter's `/models` is public, so it first probes `/key` (falls back to `/auth/key`) to authenticate. The decrypted key never leaves the server.
 
 **Dev-only provider: Local `claude` CLI** (`ClaudeCliClient` in `llm_claude_cli.py`) — selected via `LLM_PROVIDER_TYPE=claude_cli`, runs the local `claude` CLI (`claude -p --output-format json`) headless. Cost=0, tokens from CLI's JSON `usage` field. Production access is guarded: `get_client_for_profile()` raises `RuntimeError` if `claude_cli` is set in production. Enables local testing/development without external API keys or billing.
 
@@ -323,6 +328,11 @@ call from `web/`:
   balance instead of lagging until the next load/402.
 - Unmetered accounts (no `Account` row, or `credit_rate == 0` — the developer
   tier) run the body ungated and record/debit nothing.
+- **BYOK accounts** (`byok.config_for_account` returns a config) are checked
+  first: never debited, and the decrypted credential is pinned in a
+  `ContextVar` (`byok.set_active`) for the whole action, so deleting the key
+  mid-action can't make the rest of an unbilled action fall through to the
+  platform key.
 
 **Metering topology:** intake pipeline = **one** `intake` (2u) meter around
 extract + score + skill-match (`web/intake_pipeline.py`); generate endpoints

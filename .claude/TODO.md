@@ -126,8 +126,10 @@ git history is the archive (see `.claude/skills/update-todo/`).
   5. **Submission confirmation** — detect success and auto-mark applied (see extension CONTEXT
      "Auto-mark as applied on submission" future-work note).
 
-- [ ] **Gate the per-prompt user model override to admins only.** The model-override control on
-  prompts should be admin-only for now — regular users shouldn't pick their own model until
+- [ ] **Gate the per-prompt user model override to admins only (platform-key path only).**
+  _Scope narrowed 2026-11-16:_ BYOK users pay their own provider, so they may pick any model their
+  key offers (`PUT /api/prompts` skips the allowlist for them); this item now only concerns users on
+  the platform key. The model-override control on prompts should be admin-only for those users — regular users shouldn't pick their own model until
   tiered-model pricing is worked out (different models cost different credits). Revisit once
   pricing per model tier is designed (see the "High-effort toggle" item — same underlying
   cost-vs-quality knob). _Partially mitigated 2026-07-18:_ a server-side model allowlist
@@ -167,6 +169,13 @@ git history is the archive (see `.claude/skills/update-todo/`).
      generator. Consider feeding it in as an optional baseline ("improve on this, don't discard
      it"). Decide the semantics vs. the item `prompt` (which currently carries baseline facts).
   Note: today, non-LLM-output fields render verbatim; LLM-output fields ignore the prior value.
+
+- [ ] **Remote MCP connector so Claude/ChatGPT subscribers can drive AutoApply from their own
+  chat** (subscription OAuth in third-party apps is prohibited by Anthropic since Feb 2026, so
+  "Sign in with Claude subscription" is off the table). Separate project; complements BYOK.
+
+- [ ] **Buy me a coffee donation link** (URL pending from user). BYOK use is free, so give those
+  users an optional way to support the project.
 
 - [ ] **Re-parse résumé into an existing populated profile.** Backend `parse/apply` already
   supports it (add-only-safe skip defaults), but only onboarding + the new-profile wizard surface
@@ -219,11 +228,30 @@ Known accepted limitations (each would be its own feature if prioritized):
 - [audit 2026-07-18] Prompt content is fully user-authored and runs on the platform key at flat
   unit prices (fixed-price LLM oracle). Accepted 2026-07-19: fine as long as worst-case output
   cost per call stays below the unit price (allowlisted cheap models keep this true — recheck
-  if the allowlist ever adds a pricier model or max_tokens grows).
+  if the allowlist ever adds a pricier model or max_tokens grows). BYOK users (2026-11-16) bypass
+  this entirely — they run on their own key, unmetered, so the oracle only applies to the
+  platform-key path.
 - Stripe dashboard product names/descriptions may still mention pre-redenomination credit
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Bring-your-own LLM key (BYOK).** **DONE 2026-11-16** (branch `feat/byok`) — accounts can
+  store their own OpenRouter/OpenAI/Anthropic/Gemini key; BYOK usage is completely free (product
+  decision), credits remain for users without a key. `core/secret_box.py` (Fernet, env
+  `KEY_ENCRYPTION_KEY` — losing/rotating it makes stored keys unreadable, users re-enter),
+  `core/byok.py` (providers, per-action credential contextvar, `list_text_models` doubles as key
+  validation), `core/llm.py` resolution pinned BYOK → stored key → platform env (BYOK skips the
+  model allowlist), `core/metering.py` never debits BYOK and pins the credential for the action.
+  `Account` gains `llm_provider`/`llm_api_key_enc`/`llm_key_last4`/`llm_default_model` (migration
+  `aa17byok01`, down_revision `aa16errdedup01`, new single head). `web/routers/llm_key.py`
+  (`/api/account/llm-key`: GET/POST test/PUT/PATCH/GET models/DELETE; write-only key, 409 without
+  an Account, 503 without the encryption key); `/api/me` gains `byok`; setup-status
+  `llm_configured` counts a BYOK key; BYOK accounts may set any per-prompt model. Frontend
+  `ApiKeySettings.jsx` (User home + collapsible onboarding panel), `CreditBalance.jsx` shows
+  "Own API key · free". Tests: `tests/core/test_byok.py`, `tests/web/test_llm_key_api.py`,
+  `ApiKeySettings.test.jsx`. **Deploy note:** set `KEY_ENCRYPTION_KEY` on Railway before users
+  can save keys.
 
 - [x] **`error_sink.py` dedup race + age-prune on bump-only steady state.** **DONE 2026-11-16**
   — `DbErrorHandler` replaced its SELECT-then-INSERT with an atomic dialect-aware upsert
