@@ -233,7 +233,6 @@ architecture in `docs/ARCHITECTURE.md`; read `web/CONTEXT.md` → Auth / Credits
 
 Known accepted limitations (each would be its own feature if prioritized):
 - No automatic credit clawback on Stripe refunds/chargebacks (admin-manual).
-- Free non-LLM endpoints are not rate-limited.
 - [audit 2026-07-18] Prompt content is fully user-authored and runs on the platform key at flat
   unit prices (fixed-price LLM oracle). Accepted 2026-07-19: fine as long as worst-case output
   cost per call stays below the unit price (allowlisted cheap models keep this true — recheck
@@ -244,6 +243,15 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Security audit H3 + M1: unmetered-LLM audit, input caps, rate limiting, SSE cap.** **DONE
+  2026-11-16** — every `get_client_for_profile` call site audited; the one tenant-reachable unmetered
+  path (`Job.intake()` from `stage-job`/`scrape-selected`, a duplicate extraction + skill-match outside
+  the metered `intake` bundle) removed. `core/limits.py` centralizes input caps (Pydantic 422 /
+  `InputTooLarge` 413), `web/middleware_body_limit.py` caps raw bodies pre-parse, résumé upload reads
+  in chunks. `web/middleware_rate_limit.py`: in-process token buckets (auth 30/min per IP, unsafe
+  `/api/` 120/min per account, LLM/PDF routes 20/min), 429 + `Retry-After`, frontend toast. SSE
+  streams capped at 5 per account, poll 50 ms → 250 ms. Limiter assumes a single Railway instance.
 
 - [x] **Security audit hardening (H2, M3, L2, L3, L6, L7).** **DONE 2026-11-16** — fail-closed
   `APP_ENV` resolution via `core/env.py` (unknown value aborts boot; unset on Railway → production);
