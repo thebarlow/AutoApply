@@ -20,14 +20,6 @@ git history is the archive (see `.claude/skills/update-todo/`).
      `scraper.runner` logs when the full suite runs.
   2. `react-dashboard/src/api.profileTree.test.js` "getProfileTree GETs the tree route".
 
-- [ ] **`error_sink.py` SELECT-then-INSERT dedup race.** Pre-existing, low-volume: two
-  concurrent errors with the same fingerprint can both miss the SELECT and double-insert.
-  Not worth a lock/upsert until volume justifies it.
-
-- [ ] **Age-prune no longer runs on bump-only steady state.** `_prune` only fires on insert
-  (by design, post-hardening); if an app hits a steady state of pure dedup-bumps (no new
-  fingerprints), `ERROR_LOG_MAX_AGE_DAYS` stops being enforced until the next novel error.
-
 - [ ] **`account_email` in `error_events` is new PII at rest.** Admin-gated today; flag for
   the eventual data-retention/GDPR pass (retention window, export/delete-on-request).
 
@@ -222,6 +214,19 @@ Known accepted limitations (each would be its own feature if prioritized):
 
 ## Done
 
+- [x] **`error_sink.py` dedup race + age-prune on bump-only steady state.** **DONE 2026-11-16**
+  — `DbErrorHandler` replaced its SELECT-then-INSERT with an atomic dialect-aware upsert
+  (`sqlalchemy.dialects.postgresql|sqlite.insert(...).on_conflict_do_update` on `fingerprint`,
+  chosen from the session bind's dialect; refresh-on-dedup semantics unchanged, `RETURNING
+  count` distinguishes insert from bump). Migration `aa16errdedup01` (down_revision
+  `aa15errlog02`, new single head) collapses existing duplicate-fingerprint rows (sum `count`,
+  min `created_at`, max `last_seen`, latest row's message/traceback/context) and makes
+  `ix_error_events_fingerprint` UNIQUE; `ErrorEvent.fingerprint` declares `unique=True`. The
+  `ERROR_LOG_MAX_AGE_DAYS` prune now also runs on dedup-bumps, time-gated to once per 10 min
+  per process (module-level monotonic timestamp); row-cap prune stays insert-only. New tests
+  in `tests/core/test_error_sink.py` (upsert increments, threaded same-fingerprint race → one
+  row count 2, gated age-prune on bump) + `tests/db/test_error_dedup_migration.py`.
+
 - [x] **Tighten `skill_match` prompt to require real evidence for concrete techs.** **DONE
   2026-07-27** — friend testing the app hit false-positive skill matches: a résumé with no
   Skills section still got required skills marked as satisfied, because `skill_match.md`
@@ -250,8 +255,8 @@ Known accepted limitations (each would be its own feature if prioritized):
   `_resolve_profile_id` renamed `_resolve_identity`); admin API + `ErrorLog.jsx` surface both
   (Method column, `email (#id)` identity cell); dev/console `_FMT` gained `[request_id method
   route]`, rotating file handler now has its own `ContextFilter`. 972 core+web tests pass.
-  Non-blocking follow-ups tracked under Bugs (SELECT-then-INSERT dedup race, age-prune on
-  bump-only steady state, `account_email` PII-at-rest).
+  Non-blocking follow-ups: SELECT-then-INSERT dedup race + age-prune on bump-only steady
+  state (both DONE 2026-11-16), `account_email` PII-at-rest (still under Bugs).
 
 - [x] **Pin Chrome `key` in extension manifest to stabilize the OAuth redirect URL.** **DONE 2026-07-23**
   — commit `be9bd72`. Chrome load-unpacked derived the extension ID from the install path, so every
