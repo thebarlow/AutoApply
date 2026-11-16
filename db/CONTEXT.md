@@ -55,7 +55,7 @@ longer exist.
 | `identity` | `Identity` | OAuth `(provider, provider_subject)` (unique together) → `account`. Many identities per account (link-by-verified-email). Not tenant-guarded. | Auth |
 | `credit_ledger` | `CreditLedger` | Append-only credit history: `profile_id, delta, reason, action, job_key, raw_cost_usd, meta, created_by, created_at`. Source of truth for `account.credit_balance`. Not tenant-guarded (keyed by `profile_id` but not in `_TENANT_TABLES`). | Credits |
 | `allowed_email` | `AllowedEmail` | Runtime invite allowlist: `email` (unique, lowercased via validator), `invited_by` (FK → `account.id`), `created_at`, `tier` (default `standard`), `is_admin` (default false). `tier`/`is_admin` carry the intended user type, applied to the `Account` at first-login provisioning (`_provision_account`); env `ADMIN_EMAILS` still OR's into admin. Supplements the `ALLOWED_EMAILS` env var — `is_allowed_email` checks both. Rows upserted by `POST /api/admin/invite` (repeat email updates type + resends). | Auth |
-| `error_events` | `ErrorEvent` | **Global infra table, admin-only — NOT tenant-scoped.** One row per unique `fingerprint()` (logger + exception type + normalized top frame, or logger+message when no traceback); `count`/`last_seen` bump on repeat instead of inserting a new row. Columns: `id`, `created_at`, `last_seen`, `count`, `level`, `logger`, `message`, `traceback`, `route`, `method`, `profile_id` (plain context column — which tenant's request triggered it — not a partition key), `account_email`, `request_id`, `fingerprint` (indexed). `method`/`account_email` added in migration `aa15errlog02`; all `nullable=True` (non-request/pre-auth errors have no method/identity — expected, not a bug). Populated by `core/error_sink.py`'s `DbErrorHandler`, which prunes rows older than `ERROR_LOG_MAX_AGE_DAYS` and caps total rows at `ERROR_LOG_MAX_ROWS` on every insert. Read/managed via admin-only `GET`/`GET {id}`/`DELETE /api/admin/errors` (`web/routers/admin.py`) and the React "Error Log" admin panel. **Deliberately excluded from `_TENANT_TABLES`/the `before_flush` tenant guard** — same pattern as `account`/`identity`/`credit_ledger` above; it is an operational log spanning all tenants, not tenant-owned data. | Error Observability |
+| `error_events` | `ErrorEvent` | **Global infra table, admin-only — NOT tenant-scoped.** One row per unique `fingerprint()` (logger + exception type + normalized top frame, or logger+message when no traceback); `count`/`last_seen` bump on repeat instead of inserting a new row. Columns: `id`, `created_at`, `last_seen`, `count`, `level`, `logger`, `message`, `traceback`, `route`, `method`, `profile_id` (plain context column — which tenant's request triggered it — not a partition key), `account_email`, `request_id`, `fingerprint` (UNIQUE index `ix_error_events_fingerprint` since `aa16errdedup01`). `method`/`account_email` added in migration `aa15errlog02`; all `nullable=True` (non-request/pre-auth errors have no method/identity — expected, not a bug). Populated by `core/error_sink.py`'s `DbErrorHandler`, which upserts atomically (`INSERT ... ON CONFLICT (fingerprint) DO UPDATE`, dialect-aware), prunes rows older than `ERROR_LOG_MAX_AGE_DAYS` + caps total rows at `ERROR_LOG_MAX_ROWS` on every insert, and also age-prunes on dedup-bumps at most once per 10 minutes per process. Read/managed via admin-only `GET`/`GET {id}`/`DELETE /api/admin/errors` (`web/routers/admin.py`) and the React "Error Log" admin panel. **Deliberately excluded from `_TENANT_TABLES`/the `before_flush` tenant guard** — same pattern as `account`/`identity`/`credit_ledger` above; it is an operational log spanning all tenants, not tenant-owned data. | Error Observability |
 
 ## Prompt seeding at startup
 
@@ -128,7 +128,7 @@ guard does not require `profile_id` on them):
   verified email).
 
 Added by Alembic migration `5285bd395643` (chained onto `bdf3f4523095`; head has
-since advanced — current head is `aa15errlog02`). On first OAuth login `web/auth/identity.resolve_or_provision_account`
+since advanced — current head is `aa16errdedup01`). On first OAuth login `web/auth/identity.resolve_or_provision_account`
 provisions a profile (seeded prompts + skill aliases) for a new email; the **first
 admin login claims the existing `profile_id=1`**. In production `current_profile_id`
 resolves the session account's profile (the dev stub still applies locally / in
@@ -166,12 +166,18 @@ populated mainly for `ats_type="other"`). `core/ats.py` classifies a URL into
 backfill the columns once the browser extension resolves an external URL — see
 `web/CONTEXT.md` → API Surface.
 
-### `error_events` table (`aa14errlog01`, `aa15errlog02`)
+### `error_events` table (`aa14errlog01`, `aa15errlog02`, `aa16errdedup01`)
 
 `aa14errlog01` (chained onto `aa13applyplan01`) adds the global `error_events` table —
 see "Tables beyond `jobs` / `config`" above for columns and the not-tenant-scoped
-rationale. `aa15errlog02` (chained onto `aa14errlog01`; **current head**) adds the
-`method`/`account_email` columns.
+rationale. `aa15errlog02` (chained onto `aa14errlog01`) adds the
+`method`/`account_email` columns. `aa16errdedup01` (chained onto `aa15errlog02`;
+**current head**) collapses any duplicate-fingerprint rows (keeper = latest `last_seen`,
+ties → highest `id`; keeps its message/traceback/context, sums `count`, min `created_at`,
+max `last_seen`) then swaps `ix_error_events_fingerprint` for a UNIQUE index so
+`core/error_sink.py` can upsert with `ON CONFLICT (fingerprint)`. Plain
+`create_index`/`drop_index` (no batch rebuild) — works on SQLite and Postgres.
+Downgrade restores the non-unique index; collapsed rows stay collapsed.
 
 ### Data migration: extraction-prompt refresh (`aa11extract01`)
 

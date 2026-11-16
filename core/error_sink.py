@@ -1,8 +1,8 @@
 """Persist ERROR-level log records to the ``error_events`` table.
 
 A ``logging.Handler`` that writes in its own short-lived session, dedups by a
-stable fingerprint, prunes to configured bounds, and swallows every exception so
-logging can never cascade-fail.
+stable fingerprint via an atomic dialect-aware upsert, prunes to configured
+bounds, and swallows every exception so logging can never cascade-fail.
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 _ADDR_RE = re.compile(r"0x[0-9a-fA-F]+")
@@ -86,6 +87,32 @@ def _max_age_days() -> int:
         return 30
 
 
+# Age-prune also runs on dedup bumps (so ERROR_LOG_MAX_AGE_DAYS is enforced in a
+# bump-only steady state), but gated per process so a hot error loop doesn't
+# issue a DELETE on every occurrence. Row-cap pruning stays insert-only.
+_AGE_PRUNE_INTERVAL_S = 600.0
+_last_age_prune: float | None = None
+_clock = time.monotonic
+
+
+def _age_prune_due() -> bool:
+    """Return True if the per-process age-prune gate interval has elapsed."""
+    return (
+        _last_age_prune is None or _clock() - _last_age_prune >= _AGE_PRUNE_INTERVAL_S
+    )
+
+
+def _dialect_insert(dialect_name: str):
+    """Return the dialect-specific ``insert`` construct supporting ON CONFLICT."""
+    if dialect_name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    elif dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert
+    else:
+        raise NotImplementedError(f"error sink upsert unsupported on {dialect_name}")
+    return insert
+
+
 class DbErrorHandler(logging.Handler):
     """Write ERROR records to ``error_events`` (dedup + prune). Never raises."""
 
@@ -108,51 +135,52 @@ class DbErrorHandler(logging.Handler):
             self._local.in_emit = False
 
     def _emit(self, record: logging.LogRecord) -> None:
-        """Upsert-by-fingerprint then prune, using a fresh, short-lived session."""
+        """Atomically upsert-by-fingerprint then prune, in a fresh short-lived session.
+
+        A single ``INSERT ... ON CONFLICT (fingerprint) DO UPDATE`` replaces the
+        old SELECT-then-INSERT, so two concurrent errors with the same
+        fingerprint can no longer both miss and double-insert (the UNIQUE index
+        from migration ``aa16errdedup01`` arbitrates). On conflict the row's
+        ``count``/``last_seen`` bump and message/traceback/context refresh to
+        the latest occurrence.
+        """
         from db.database import ErrorEvent, SessionLocal
 
-        fp = fingerprint(record)
         now = _now()
-        tb = self.format_traceback(record)
+        context = {
+            "message": record.getMessage(),
+            "traceback": self.format_traceback(record),
+            "route": getattr(record, "route", None),
+            "profile_id": getattr(record, "profile_id", None),
+            "request_id": getattr(record, "request_id", None),
+            "method": getattr(record, "method", None),
+            "account_email": getattr(record, "account_email", None),
+        }
         db = SessionLocal()
         try:
-            existing = (
-                db.query(ErrorEvent)
-                .filter(ErrorEvent.fingerprint == fp)
-                .order_by(ErrorEvent.id.desc())
-                .first()
+            insert = _dialect_insert(db.get_bind().dialect.name)
+            table = ErrorEvent.__table__
+            stmt = insert(table).values(
+                created_at=now,
+                last_seen=now,
+                count=1,
+                level=record.levelname,
+                logger=record.name,
+                fingerprint=fingerprint(record),
+                **context,
             )
-            if existing is not None:
-                existing.count += 1
-                existing.last_seen = now
-                existing.traceback = tb
-                existing.message = record.getMessage()
-                existing.route = getattr(record, "route", None)
-                existing.profile_id = getattr(record, "profile_id", None)
-                existing.request_id = getattr(record, "request_id", None)
-                existing.method = getattr(record, "method", None)
-                existing.account_email = getattr(record, "account_email", None)
-                db.commit()
-            else:
-                db.add(
-                    ErrorEvent(
-                        created_at=now,
-                        last_seen=now,
-                        count=1,
-                        level=record.levelname,
-                        logger=record.name,
-                        message=record.getMessage(),
-                        traceback=tb,
-                        route=getattr(record, "route", None),
-                        profile_id=getattr(record, "profile_id", None),
-                        request_id=getattr(record, "request_id", None),
-                        method=getattr(record, "method", None),
-                        account_email=getattr(record, "account_email", None),
-                        fingerprint=fp,
-                    )
-                )
-                db.commit()
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[table.c.fingerprint],
+                set_={"count": table.c.count + 1, "last_seen": now, **context},
+            ).returning(table.c.count)
+            new_count = db.execute(stmt).scalar_one()
+            db.commit()
+            # count == 1 only when the row was freshly inserted.
+            if new_count == 1:
                 self._prune(db)
+            elif _age_prune_due():
+                self._prune_age(db)
+                db.commit()
         finally:
             db.close()
 
@@ -168,10 +196,7 @@ class DbErrorHandler(logging.Handler):
         """Delete rows older than ``ERROR_LOG_MAX_AGE_DAYS`` and cap total rows."""
         from db.database import ErrorEvent
 
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=_max_age_days())).isoformat()
-        db.query(ErrorEvent).filter(ErrorEvent.last_seen < cutoff).delete(
-            synchronize_session=False
-        )
+        self._prune_age(db)
         max_rows = _max_rows()
         surplus = db.query(ErrorEvent).count() - max_rows
         if surplus > 0:
@@ -186,6 +211,20 @@ class DbErrorHandler(logging.Handler):
                 synchronize_session=False
             )
         db.commit()
+
+    @staticmethod
+    def _prune_age(db) -> None:
+        """Delete rows older than ``ERROR_LOG_MAX_AGE_DAYS`` (caller commits)."""
+        global _last_age_prune
+        from db.database import ErrorEvent
+
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=_max_age_days())
+        ).isoformat()
+        db.query(ErrorEvent).filter(ErrorEvent.last_seen < cutoff).delete(
+            synchronize_session=False
+        )
+        _last_age_prune = _clock()
 
 
 def install_db_error_handler(root: logging.Logger) -> None:
