@@ -25,7 +25,7 @@ browser-extension/
 Exposes a unified promise-based `xb` API over `chrome.*` (Chrome) or `browser.*` (Firefox). All extension code uses `xb.*` instead of `chrome.*` directly. Covers `xb.storage.local`, `xb.identity` (OAuth), and `xb.runtime.sendMessage`.
 
 ### Authentication — OAuth + bearer token
-1. User opens the extension popup and clicks "Sign in with Google" or "Sign in with GitHub".
+1. User opens the extension popup and clicks "Sign in with Google" (the GitHub button was removed 2026-11-16).
 2. `popup.js` calls `xb.identity.launchWebAuthFlow()` pointing to `https://autoapply.matthewbarlow.me/auth/ext/login/{provider}?redirect_uri=<xb.identity.getRedirectURL()>`.
 3. On success the server redirects back with `#token=<jwt>` in the fragment. The popup parses this and stores it under the `extToken` key in `xb.storage.local`.
 4. If the OAuth account has no AutoApply record, the server returns `#error=no_account`; the popup shows "No AutoApply account. Sign up at autoapply.matthewbarlow.me first."

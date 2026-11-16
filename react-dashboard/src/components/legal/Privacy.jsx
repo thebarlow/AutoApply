@@ -19,9 +19,8 @@ export default function Privacy() {
       <Section title="What we collect">
         <List>
           <li>
-            <strong className="text-white">Sign-in details.</strong> You sign in with Google or
-            GitHub. We store your email address, which provider you used, and the account ID
-            that provider gives us. We never see or store a password.
+            <strong className="text-white">Sign-in details.</strong> You sign in with Google. We
+            store your email address and the account ID Google gives us. We never see or store a password.
           </li>
           <li>
             <strong className="text-white">Your profile and résumé.</strong> The résumé files
@@ -104,7 +103,7 @@ export default function Privacy() {
           fill those fields in for you to review. It does not submit applications on its own.
         </p>
         <p>
-          The extension signs in with the same Google or GitHub account and keeps a sign-in
+          The extension signs in with the same Google account and keeps a sign-in
           token in your browser's extension storage. We store only a hashed copy of that token,
           and you can sign out of the extension to revoke it.
         </p>
@@ -137,7 +136,7 @@ export default function Privacy() {
           services that handle your data are the ones named above:
         </p>
         <List>
-          <li>Google or GitHub, for sign-in</li>
+          <li>Google, for sign-in</li>
           <li>OpenRouter, or the AI provider for your own key, for AI processing</li>
           <li>Stripe, for payments</li>
           <li>Resend, for email</li>

@@ -41,7 +41,12 @@ from web.auth.ext_token import (
 
 router = APIRouter()
 
-_PROVIDERS = ("google", "github")
+# Enabled sign-in providers. GitHub was removed as a sign-in option on
+# 2026-11-16 (product decision; no live account used it). Its OAuth client
+# registration and claims code below stay in place, so re-adding "github" here
+# re-enables it; until then /auth/login|callback/github and the extension's
+# github flow return 404.
+_PROVIDERS = ("google",)
 
 oauth = OAuth()
 oauth.register(

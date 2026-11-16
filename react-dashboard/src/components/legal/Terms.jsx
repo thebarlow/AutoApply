@@ -19,7 +19,7 @@ export default function Terms() {
 
       <Section title="Your account">
         <p>
-          You sign in with a Google or GitHub account and are responsible for what happens under
+          You sign in with a Google account and are responsible for what happens under
           your account. Keep the information you give AutoApply accurate. Your use of the
           service is also covered by the <a href="/privacy" className="text-purple-300 hover:text-purple-200 underline">Privacy Policy</a>.
         </p>

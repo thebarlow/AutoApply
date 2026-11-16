@@ -3,10 +3,10 @@ import { render, screen } from '@testing-library/react'
 import SignInCard from './SignInCard'
 
 describe('SignInCard', () => {
-  it('logged out: shows Google + GitHub OAuth links', () => {
+  it('logged out: shows only the Google sign-in link (GitHub removed)', () => {
     render(<SignInCard isAuthed={false} />)
     expect(screen.getByRole('link', { name: /google/i }).getAttribute('href')).toBe('/auth/login/google')
-    expect(screen.getByRole('link', { name: /github/i }).getAttribute('href')).toBe('/auth/login/github')
+    expect(screen.queryByRole('link', { name: /github/i })).toBeNull()
   })
 
   it('logged out + betaClosed: shows the sign-in-rejected message', () => {

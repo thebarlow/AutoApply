@@ -120,6 +120,5 @@ async function renderServerToggle(isAdmin) {
 }
 
 document.getElementById("loginGoogle").addEventListener("click", () => signIn("google"));
-document.getElementById("loginGithub").addEventListener("click", () => signIn("github"));
 document.getElementById("logout").addEventListener("click", signOut);
 render();

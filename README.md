@@ -7,13 +7,13 @@
 </tr>
 </table>
 
-**Live at [autoapply.matthewbarlow.me](https://autoapply.matthewbarlow.me).** Sign in with Google or GitHub.
+**Live at [autoapply.matthewbarlow.me](https://autoapply.matthewbarlow.me).** Sign in with Google.
 
 ---
 
 ## Using the hosted app
 
-1. **Sign in** with Google or GitHub. Anyone with a verified email can create an account.
+1. **Sign in** with Google. Anyone with a verified Google account can create an account.
 2. **Choose how AI is paid for.** Every AI action (scoring, generation, résumé parsing) runs on a language model.
    - **Your own API key (free).** Paste an OpenRouter, OpenAI, Anthropic or Google Gemini key in your user settings and pick any text model your key offers. AutoApply charges nothing; your provider bills you directly. Keys are stored encrypted and never shown again.
    - **Credits.** No key? Buy a prepaid credit pack through Stripe. Each action has a fixed price, shown before you run it.
@@ -80,7 +80,7 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080). Locally there is no login: 
 | Frontend | React, Vite, Tailwind |
 | LLM | OpenAI SDK against any OpenAI-compatible provider; responses validated against Pydantic schemas with JSON-repair retries |
 | Documents | Typed JSON stored in the database is the source of truth; Markdown → pandoc → Jinja2 HTML → headless Chromium → PDF |
-| Auth | Google and GitHub OAuth (Authlib), signed-cookie sessions |
+| Auth | Google OAuth (Authlib), signed-cookie sessions |
 | Billing | Prepaid fixed-price credits, Stripe Checkout and webhooks |
 | Extension | Manifest V3 (Chrome and Firefox) |
 | Hosting | Railway: Docker build, managed Postgres, migrations run on startup |

@@ -19,7 +19,7 @@ export default function SignInCard({ isAuthed, betaClosed }) {
               email or suspended account), not that signups are closed. */}
           {betaClosed ? (
             <p className="text-red-400 text-sm mb-6">
-              We couldn't sign you in. Make sure the email on your Google or GitHub
+              We couldn't sign you in. Make sure the email on your Google
               account is verified. If your account was suspended, contact{' '}
               <span className="select-all text-red-300">{CONTACT_EMAIL}</span>.
             </p>
@@ -32,9 +32,6 @@ export default function SignInCard({ isAuthed, betaClosed }) {
           <div className="flex flex-col gap-3">
             <a href="/auth/login/google">
               <button className={oauthBtn}>Sign in with Google</button>
-            </a>
-            <a href="/auth/login/github">
-              <button className={oauthBtn}>Sign in with GitHub</button>
             </a>
           </div>
           <p className="mt-4 text-xs text-space-dim">

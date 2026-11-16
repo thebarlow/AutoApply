@@ -372,7 +372,7 @@ startup by `init_db()` → `alembic upgrade head`; a fresh Postgres self-migrate
 on first boot. (To port existing local SQLite data, run
 `scripts/port_sqlite_to_pg.py` separately — not part of normal deploy.)
 
-**Access:** Google/GitHub OAuth (`web/auth/`). Sessions are signed cookies
+**Access:** Google OAuth (`web/auth/`; GitHub sign-in removed 2026-11-16 — its client code remains, gated off by `_PROVIDERS` in `web/auth/routes.py`). Sessions are signed cookies
 (`SESSION_SECRET`). The tenancy seam (`web.tenancy.current_profile_id`) resolves
 the logged-in account's profile in production. A pure-ASGI gate
 (`web/auth/middleware.py`) 401s unauthenticated `/api/*` requests; the SPA shell
@@ -402,11 +402,11 @@ key-writing is disabled in production (`core.env.is_production()`).
 | `LLM_API_KEY` | platform LLM key |
 | `LLM_DEFAULT_MODEL` | default model id |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth app creds |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app creds |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app creds (unused while GitHub sign-in is disabled) |
 | `SESSION_SECRET` | random secret for signed session cookies |
 | `KEY_ENCRYPTION_KEY` | Fernet key encrypting users' stored bring-your-own LLM keys (`core/secret_box.py`; generate with `secret_box.generate_key()`). Without it the app boots but saving a key returns 503. Losing or rotating it makes all stored keys unreadable — users must re-enter them |
 | `ALLOWED_EMAILS` | comma-separated invite allowlist (ignored when `OPEN_SIGNUPS=true`) |
-| `OPEN_SIGNUPS` | `true` = any verified Google/GitHub email may sign up (bans still apply) |
+| `OPEN_SIGNUPS` | `true` = any verified Google email may sign up (bans still apply) |
 | `ADMIN_EMAILS` | comma-separated admin/owner emails |
 | `DATA_DIR` | `/data` |
 | `APP_ENV` | `production` — must be `production`/`development`/`test`; any other value aborts boot. If unset, Railway resolves to `production` (fail-closed) and local runs to `development` |
