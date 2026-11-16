@@ -10,8 +10,9 @@ core/
 ├── user.py              # User entity; profile load/save, prompt resolution, degree/skills helpers
 ├── profile_tree.py      # Recursive typed profile/résumé tree (closed node vocab) + validate_tree + tree_to_legacy adapter + legacy_to_tree migration
 ├── section_presets.py   # Preset section subtrees mirroring the legacy master profile (header/summary/experience/education/projects/skills)
+├── env.py               # Fail-closed environment resolution — the ONLY place APP_ENV is read (see Key Invariants)
 ├── llm.py               # LLM client construction and model resolution
-├── logging_config.py    # setup_logging(): root logger → stdout (JsonFormatter when APP_ENV=production, else plain) + size-rotating file (5MB×5, always plain) + thread/sys excepthook; env-configurable (LOG_LEVEL/LOG_DIR/LOG_FILE); idempotent, never crashes startup
+├── logging_config.py    # setup_logging(): root logger → stdout (JsonFormatter when is_production(), else plain) + size-rotating file (5MB×5, always plain) + thread/sys excepthook; env-configurable (LOG_LEVEL/LOG_DIR/LOG_FILE); idempotent, never crashes startup
 ├── log_context.py       # contextvars-backed log context bag (request_id/route/profile_id/method/account_email): bind()/clear()/snapshot() + ContextFilter — wired onto the console handler in logging_config.py; bound per-request by web/middleware_request_context.py's RequestContextMiddleware (see web/CONTEXT.md)
 ├── error_sink.py        # DbErrorHandler: persists ERROR-level log records to the error_events table (dedup by fingerprint(); prune-on-insert only, not on dedup-bumps); install_db_error_handler() wires it into setup_logging(); env ERROR_LOG_DB/ERROR_LOG_MAX_ROWS/ERROR_LOG_MAX_AGE_DAYS; emit() swallows all exceptions + re-entrancy-guarded, uses its own short-lived SessionLocal() session — must never raise. fingerprint() runs each component through _normalize() (strips hex addresses, UUIDs, quoted literals, and integer runs) so messages differing only by ids/values collapse to ONE row; the full original message is still stored verbatim in the message column. On a dedup hit, traceback/message/route/method/profile_id/account_email/request_id are all refreshed to the latest occurrence. KNOWN LIMITATION: rows with profile_id/account_email = None are non-request or pre-auth errors (background threads don't inherit request contextvars; webhooks/scrapers aren't user-scoped; sys/thread excepthooks have no request) — expected, not a bug
 ├── utils.py             # Misc helpers (sanitization, path utilities, PDF rendering)
@@ -400,4 +401,13 @@ rule existed, run `python -m scripts.flag_failed_scrapes` (dry run) then
   parse/apply). Two independent `validate_tree` invariants — duplicate `order` and duplicate
   `key` — have separately bitten this function; watch for a third if new FieldNode/GroupNode
   construction sites are added here without an explicit unique identifier.
+- **Environment detection is fail-closed (`core/env.py`).** Every security-relevant
+  production check calls `is_production()` / `is_dev()` — never `os.environ["APP_ENV"]`
+  directly. Resolution: `APP_ENV` in `{production, development, test}`
+  (case/whitespace-insensitive) wins; any other non-empty value raises `InvalidAppEnv`
+  (`web/main.py` calls `validate_app_env()` at import, so a typo aborts boot); unset/empty +
+  any `RAILWAY_*` env var (excluding names ending `_TOKEN` — the local `.env` carries a CLI
+  `RAILWAY_TOKEN`) → production (`on_railway()`); unset + no Railway → development with a
+  one-time warning. `tests/conftest.py` has an autouse fixture that strips `RAILWAY_*` so tests
+  never resolve to production by accident.
 - Refinement settings are clamped server-side on `User._hydrate()` (audit, 2026-07-18): `resume_refine_max_turns` / `cover_refine_max_turns` → 0–`MAX_REFINE_TURNS` (5), pass scores → [0,1]. Refinement turns run unmetered inside the flat generation price, so client-supplied values must never expand them. Tests: `tests/core/test_refine_clamp.py`.
