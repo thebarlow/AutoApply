@@ -31,8 +31,18 @@ Two-panel layout split 3:2 in a 5-column grid:
 - **Landing / About page** (`src/components/landing/`): public marketing page shown to
   logged-out visitors (all routes redirect to `/about`) and reachable at `/about` for
   logged-in users via the navbar "About" link. Pure frontend, no API calls. The old
-  `LoginScreen.jsx` was retired — its OAuth buttons + beta-closed message live in
-  `landing/SignInCard.jsx`.
+  `LoginScreen.jsx` was retired — its OAuth buttons live in `landing/SignInCard.jsx`.
+  Signups are open: the default copy says anyone can sign up (free with an own API key, or
+  buy credits); the `betaClosed` prop (still named for the `?beta=closed` redirect) now
+  shows a "We couldn't sign you in" message (unverified OAuth email or suspended account)
+  with the contact email. A "By signing in you agree to the Terms and Privacy Policy" line
+  sits under the buttons, and `legal/SiteFooter.jsx` closes the page.
+- **Legal pages** (`src/components/legal/`): public `/privacy` and `/terms` routes, registered
+  in **both** the logged-out and logged-in `<Routes>` in `App.jsx`. The server needs no
+  change: the auth gate only guards `/api/*`, and the SPA catch-all serves `index.html`
+  (covered by `tests/web/test_legal_pages_public.py`). Effective date lives in
+  `LegalPage.jsx` (`EFFECTIVE_DATE`); contact email and Buy-me-a-coffee URL in `legal/links.js`.
+  Links use plain `<a>` (not router `<Link>`) so the components render without a router.
 - **User home** — `widgets/UserHome.jsx`: stats dashboard (bar/pie charts via recharts) + profile card grid; shown as right-panel home tab
 
 ---
@@ -59,6 +69,10 @@ Two-panel layout split 3:2 in a 5-column grid:
 | User profile list, active profile selector, Create Profile modal | `src/components/widgets/Settings.jsx` — User tab |
 | Profile card grid (select / set active profile) | `src/components/widgets/ProfileCards.jsx` |
 | Stats dashboard (charts, job-state counts, time windows) | `src/components/widgets/UserHome.jsx` |
+| Privacy Policy / Terms of Service content | `src/components/legal/Privacy.jsx`, `src/components/legal/Terms.jsx` — shared shell/`Section`/`List`/`Email` helpers + `EFFECTIVE_DATE` in `legal/LegalPage.jsx` |
+| Public site footer (Privacy, Terms, Buy me a coffee) | `src/components/legal/SiteFooter.jsx` — on the landing page and both legal pages |
+| Contact email + Buy-me-a-coffee URL constants | `src/components/legal/links.js` (`CONTACT_EMAIL`, `COFFEE_URL`) — plain new-tab link, no BMC widget script (CSP is `script-src 'self'`) |
+| Logged-in Privacy/Terms + Buy-me-a-coffee links | `src/components/widgets/UserHome.jsx` — small row under `ApiKeySettings` |
 | Skill alias/own-skill modal (opened from In-Demand legend names + job-description chips) | `src/components/widgets/SkillChipModal.jsx` |
 | Processed-description skill chips (3-state ownership color: green have / amber required-gap / neutral) | `src/components/widgets/Settings.jsx` — `ExtractionView` (fetches `getOwnedSkills(skills, jobKey)`, passing the current job key so the cached semantic match is merged into owned chips) |
 | Re-check skill ownership button (↻ beside "Required Skills") | `src/components/widgets/Settings.jsx` — `ExtractionView`; calls `rematchSkills(jobKey)` (`POST /api/jobs/{job_key}/rematch-skills`) to recompute the semantic cache, then re-fetches owned skills |
@@ -138,7 +152,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Rotating stat counter ("You've applied to {x} jobs"); clicking the highlighted phrase cycles Applied → Scraped → Resumes (`STAT_METRICS`), reading `stats.totals` from `/api/stats`
 - In-Demand Skills recharts pie/bar charts; time-window selector (Today / Week / All Time) drives the counter via `getStats(win)`
 - Embeds `ProfileCards` for quick profile switching
-- Renders `ApiKeySettings` (bring-your-own LLM key) under the `CreditBalance` settings widget
+- Renders `ApiKeySettings` (bring-your-own LLM key) under the `CreditBalance` settings widget, followed by a "buy me a coffee" line and Privacy Policy / Terms of Service links (the persistent legal links for logged-in users)
 - Fetches profiles once on mount; also refetches profiles + its own `usePrerequisites` on the `auto-apply:profile-updated` window event so the "Welcome back {name}" header reflects a just-parsed résumé without a page refresh
 
 ### parse/ParsePreview.jsx

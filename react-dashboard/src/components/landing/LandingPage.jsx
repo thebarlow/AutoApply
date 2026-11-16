@@ -2,6 +2,7 @@ import Hero from './Hero'
 import HowItWorks from './HowItWorks'
 import Features from './Features'
 import SignInCard from './SignInCard'
+import SiteFooter from '../legal/SiteFooter'
 
 export default function LandingPage({ me, betaClosed }) {
   const isAuthed = !!me
@@ -22,6 +23,7 @@ export default function LandingPage({ me, betaClosed }) {
       <div className="px-6 pb-28 pt-8">
         <SignInCard isAuthed={isAuthed} betaClosed={betaClosed} />
       </div>
+      <SiteFooter />
     </div>
   )
 }

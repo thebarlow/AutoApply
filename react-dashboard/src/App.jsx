@@ -10,6 +10,8 @@ import Docs from './components/Docs'
 import AdminPage from './components/AdminPage'
 import FindJobs from './components/FindJobs'
 import LandingPage from './components/landing/LandingPage'
+import Privacy from './components/legal/Privacy'
+import Terms from './components/legal/Terms'
 import { getJobs, getActivePromptStatus, getLlmStatus, markJobSeen, getMe, stopImpersonation } from './api'
 import { usePrerequisites } from './hooks/usePrerequisites'
 
@@ -224,6 +226,8 @@ export default function App() {
     return (
       <Routes>
         <Route path="/about" element={<LandingPage me={null} betaClosed={betaClosed} />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<Navigate to="/about" replace />} />
       </Routes>
     )
@@ -239,6 +243,8 @@ export default function App() {
           <LandingPage me={me} />
         </div>
       } />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="/docs" element={<Docs />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route path="/find-jobs" element={<FindJobs />} />

@@ -9,14 +9,24 @@ describe('SignInCard', () => {
     expect(screen.getByRole('link', { name: /github/i }).getAttribute('href')).toBe('/auth/login/github')
   })
 
-  it('logged out + betaClosed: shows the closed-beta message', () => {
+  it('logged out + betaClosed: shows the sign-in-rejected message', () => {
     render(<SignInCard isAuthed={false} betaClosed />)
-    expect(screen.getByText(/closed beta/i)).toBeTruthy()
+    expect(screen.getByText(/couldn't sign you in/i)).toBeTruthy()
+    expect(screen.getByText('barlowmatt96@gmail.com')).toBeTruthy()
+    expect(screen.queryByText(/closed beta|invite list/i)).toBeNull()
   })
 
-  it('logged out without betaClosed: no closed-beta message', () => {
+  it('logged out without betaClosed: open-signup copy, no rejection message', () => {
     render(<SignInCard isAuthed={false} />)
-    expect(screen.queryByText(/closed beta/i)).toBeNull()
+    expect(screen.queryByText(/couldn't sign you in/i)).toBeNull()
+    expect(screen.getByText(/anyone can sign up/i)).toBeTruthy()
+  })
+
+  it('logged out: links the Terms and Privacy Policy near the sign-in buttons', () => {
+    render(<SignInCard isAuthed={false} />)
+    expect(screen.getByText(/by signing in you agree/i)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /^terms$/i }).getAttribute('href')).toBe('/terms')
+    expect(screen.getByRole('link', { name: /privacy policy/i }).getAttribute('href')).toBe('/privacy')
   })
 
   it('logged in: shows Go to dashboard and no OAuth links', () => {
