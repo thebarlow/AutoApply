@@ -101,7 +101,9 @@ def stage_job(
                 job.ats_domain = host
                 job.apply_url_resolved = target
                 db.commit()
-        job.intake()
+        # No job.intake() here: it ran an unmetered extraction + skill-match in
+        # its own thread. run_pipeline already does both inside the metered
+        # 'intake' bundle (H3 audit).
         try:
             _sse_send("job", job.serialize(), profile_id=profile_id)
         except Exception:
@@ -153,7 +155,8 @@ def scrape_selected(
     inserted = Job.save_batch_returning(scraped, db, profile_id)
     inserted_keys = {job.job_key for job in inserted}
     for job in inserted:
-        job.intake()
+        # Extraction runs inside run_pipeline's metered 'intake' bundle; the old
+        # job.intake() call duplicated it unmetered (H3 audit).
         try:
             _sse_send("job", job.serialize(), profile_id=profile_id)
         except Exception:

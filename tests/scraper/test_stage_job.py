@@ -85,31 +85,35 @@ def test_stage_job_returns_422_for_missing_url(client):
     assert response.status_code == 422
 
 
-def test_stage_job_calls_intake_on_new_job(client, db_session):
+def test_stage_job_does_not_run_unmetered_intake(client, db_session):
+    """H3: extraction must only run inside run_pipeline's metered bundle.
+
+    Job.intake() spawned a second, unmetered extraction + skill-match thread.
+    """
     intake_called = []
+    pipeline_calls = []
 
     def fake_intake(self):
         intake_called.append(self.job_key)
 
-    with patch.object(Job, "intake", fake_intake):
+    with patch.object(Job, "intake", fake_intake),          patch("web.routers.scraper.run_pipeline",
+               side_effect=lambda jk, pid: pipeline_calls.append(jk)):
         response = client.post("/api/scraper/stage-job", json=_VALID)
 
     assert response.status_code == 200
     assert response.json()["status"] == "staged"
-    assert intake_called == ["linkedin_123"]
+    assert intake_called == []
+    assert pipeline_calls == ["linkedin_123"]
 
 
-def test_stage_job_does_not_call_intake_on_duplicate(client, db_session):
-    client.post("/api/scraper/stage-job", json=_VALID)
-
+def test_scrape_selected_does_not_run_unmetered_intake(client, db_session):
     intake_called = []
 
     def fake_intake(self):
         intake_called.append(self.job_key)
 
-    with patch.object(Job, "intake", fake_intake):
-        response = client.post("/api/scraper/stage-job", json=_VALID)
+    with patch.object(Job, "intake", fake_intake),          patch("web.routers.scraper.run_pipeline"):
+        response = client.post("/api/scraper/scrape-selected", json={"jobs": [_VALID]})
 
     assert response.status_code == 200
-    assert response.json()["status"] == "duplicate"
     assert intake_called == []

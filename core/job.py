@@ -877,6 +877,10 @@ class Job(Base):
     def intake(self) -> None:
         """Run post-intake processing (description extraction) in a background thread.
 
+        UNMETERED: calls the LLM outside ``meter_action``. Not used by any web
+        route (the hosted intake path is ``web.intake_pipeline.run_pipeline``,
+        which bills the 'intake' bundle); keep it off tenant-reachable paths.
+
         Opens a fresh DB session so the thread is session-safe. Logs start,
         completion, and any failure to stdout.
         """
