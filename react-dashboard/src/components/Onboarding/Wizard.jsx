@@ -1,5 +1,6 @@
 import { useState } from "react";
 import StepResume from "./StepResume";
+import ApiKeySettings from "../widgets/ApiKeySettings";
 
 const TABS = [
   {
@@ -16,6 +17,7 @@ const TABS = [
 
 export default function Wizard({ onFinish, onSkip, onManual, onEdit }) {
   const [tab, setTab] = useState("resume");
+  const [keyOpen, setKeyOpen] = useState(false);
   const active = TABS.find((t) => t.key === tab);
 
   return (
@@ -35,6 +37,25 @@ export default function Wizard({ onFinish, onSkip, onManual, onEdit }) {
           >
             Skip for now
           </button>
+        </div>
+
+        {/* Optional BYOK: résumé parsing is an AI action, so a key saved here
+            makes it (and everything after) free instead of using credits. */}
+        <div className="mb-4 rounded-lg border border-space-border px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setKeyOpen((o) => !o)}
+            aria-expanded={keyOpen}
+            className="w-full flex items-center justify-between text-sm text-space-text"
+          >
+            <span>Have an AI API key? Add it and AutoApply is free.</span>
+            <span className="text-space-dim">{keyOpen ? "−" : "+"}</span>
+          </button>
+          {keyOpen && (
+            <div className="mt-3">
+              <ApiKeySettings compact onSaved={() => setKeyOpen(false)} />
+            </div>
+          )}
         </div>
 
         {/* Tab switcher */}

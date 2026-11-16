@@ -7,6 +7,7 @@ import { getProfiles, getStats, getSkillFrequency, getJobsForSkill, getMe, getPu
 import SkillChipModal from './SkillChipModal'
 import CreditBalance from './CreditBalance'
 import BuyCreditsModal from './BuyCreditsModal'
+import ApiKeySettings from './ApiKeySettings'
 import { usePrerequisites } from '../../hooks/usePrerequisites'
 
 const WINDOWS = [
@@ -422,6 +423,10 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
           isAdmin={isAdmin}
           onClick={() => setBuyOpen(true)}
         />
+      </div>
+
+      <div className="px-3 py-3 rounded-lg border border-space-border">
+        <ApiKeySettings />
       </div>
 
       <div className="flex flex-col gap-2">

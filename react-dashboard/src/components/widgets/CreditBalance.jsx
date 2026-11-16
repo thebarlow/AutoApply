@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getCredits, getSystemBalance } from '../../api'
+import { getCredits, getSystemBalance, getLlmKey } from '../../api'
 
 const CREDITS_PER_DOLLAR = 1000
 
@@ -14,6 +14,7 @@ export default function CreditBalance({ variant = 'nav', onClick, isAdmin = fals
   const [remaining, setRemaining] = useState(null) // admin: system $ remaining
   const [unit, setUnit] = useState('usd')           // admin toggle: 'usd' | 'credits'
   const [error, setError] = useState(false)
+  const [ownKey, setOwnKey] = useState(false)   // BYOK: actions are free
 
   const refresh = useCallback(() => {
     if (isAdmin) {
@@ -22,6 +23,7 @@ export default function CreditBalance({ variant = 'nav', onClick, isAdmin = fals
         .catch(() => setError(true))
       return
     }
+    getLlmKey().then((k) => setOwnKey(!!k?.has_key)).catch(() => setOwnKey(false))
     getCredits()
       .then((d) => {
         setBalance(d.balance); setError(false)
@@ -46,6 +48,8 @@ export default function CreditBalance({ variant = 'nav', onClick, isAdmin = fals
     } else {
       text = `${Math.round(remaining * CREDITS_PER_DOLLAR).toLocaleString()} credits`
     }
+  } else if (ownKey) {
+    text = 'Own API key · free'
   } else {
     text = balance == null ? '…' : `${balance.toLocaleString()} credits`
   }
