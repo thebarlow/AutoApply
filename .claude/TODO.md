@@ -142,6 +142,17 @@ git history is the archive (see `.claude/skills/update-todo/`).
   (`LLM_ALLOWED_MODELS`; prod default = `LLM_DEFAULT_MODEL` only) now bounds what users can
   pick — see the audit entry in Done. The UI control + tier pricing question remains open.
 
+- [ ] **Onboarding wizard for custom cover-letter (and other) prompts.** Idea (2026-08-12),
+  from the `workflows/` local cover-letter prompt-tuning session: designing
+  `workflows/prompts/cover_prompt.md` for personal use required a short interview (length/
+  structure, thin-content handling, tone, enthusiasm framing) to translate vague preferences
+  ("too long, I don't have much to say") into a concrete prompt. That question set is itself
+  a reusable artifact — offer it to SaaS users as an onboarding step so they get a
+  personalized cover-letter prompt/persona instead of one fixed house style. Likely the same
+  pattern as the "Guided section-prompt authoring" item below (pre-formatted template vs.
+  full GUI questionnaire); could share implementation. Not started — needs its own design
+  pass on which questions to ask and how answers compile into a stored prompt override.
+
 - [ ] **Guided section-prompt authoring for users (from the prompt-polish work).** Once we've
   settled how to best structure section/item prompts (baseline-facts + tailoring direction;
   honesty rules re: seniority/titles and proof-words; per-project technology surfacing), give
