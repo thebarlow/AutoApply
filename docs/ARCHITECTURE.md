@@ -338,6 +338,7 @@ key-writing is disabled when `APP_ENV=production`.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth app creds |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app creds |
 | `SESSION_SECRET` | random secret for signed session cookies |
+| `KEY_ENCRYPTION_KEY` | Fernet key encrypting users' stored bring-your-own LLM keys (`core/secret_box.py`; generate with `secret_box.generate_key()`). Without it the app boots but saving a key returns 503. Losing or rotating it makes all stored keys unreadable — users must re-enter them |
 | `ALLOWED_EMAILS` | comma-separated beta allowlist |
 | `ADMIN_EMAILS` | comma-separated admin/owner emails |
 | `DATA_DIR` | `/data` |
@@ -369,12 +370,13 @@ already in place (see "Tenant scoping" in `db/CONTEXT.md`); these layer on top:
    admin grant/system-balance endpoints. See "Credits & Metering" above.
 3. **Payments** *(implemented)* — Stripe Checkout for credit packs + webhook →
    credit grants via `grant_credits(reason="purchase")`. See "Payments" above.
-4. **Onboarding UX rework** *(in progress)* — the API-key step is dropped: the
+4. **Onboarding UX rework** *(in progress)* — the required API-key step is dropped
+   (an optional bring-your-own-key panel replaced it in 2026-11; BYOK actions are free): the
    welcome wizard is now a single "Upload Master Resume" modal triggered on first
    login (no parsed résumé), parsing against the auto-provisioned profile using
-   the platform key and the account's tiered signup credit grant
+   the platform key and the account's tiered signup credit grant (or the user's own key, unmetered)
    (`signup_grant_for_tier`, env `CREDIT_SIGNUP_GRANTS`). `setup-status.llm_configured` counts the platform
-   `LLM_API_KEY` so credit-gated actions aren't blocked. After the wizard, a
+   `LLM_API_KEY` (or a stored BYOK key) so credit-gated actions aren't blocked. After the wizard, a
    single **action-gated guided tour** (react-joyride; `react-dashboard/src/
    components/Onboarding/`, `TOUR_STEPS`) walks the user through the profile
    editor, job inbox, scoring, and generation. It drives against a pre-seeded

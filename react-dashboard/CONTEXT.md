@@ -8,7 +8,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 - **Right (col-span-2)** — `Settings.jsx`: profile editor, task monitor, document preview
 - **Wrapper** — `Dashboard.jsx`: framer-motion animated grid container, height = `100vh - 53px`
 - **Header** — `Navbar.jsx`: branding, credits display, help button
-- **Onboarding** — `Onboarding/Wizard.jsx`: single-step "Upload Master Resume" modal shown on first login (no parsed résumé yet); the platform owns the LLM key, so there is no API-key step — just resume upload/parse (`StepResume.jsx`)
+- **Onboarding** — `Onboarding/Wizard.jsx`: single-step "Upload Master Resume" modal shown on first login (no parsed résumé yet): resume upload/parse (`StepResume.jsx`) plus an optional collapsible "Have an AI API key? Add it and AutoApply is free." panel (`ApiKeySettings compact`). With a key (BYOK) every AI action — including the résumé parse — is free; without one, actions use the platform key and credits
 - **Onboarding tour** (`src/components/Onboarding/`): a single **action-gated**
   react-joyride walkthrough. `TourController.jsx` mounts one controlled
   `<Joyride>`; `tourSteps.js` holds one linear `TOUR_STEPS` array
@@ -42,7 +42,8 @@ Two-panel layout split 3:2 in a 5-column grid:
 | What you want to change | File |
 |---|---|
 | Top navbar (branding, credits, help button, Admin link for admins) | `src/components/Navbar.jsx` — shows an Admin link when `me.is_admin` |
-| Credit balance display (navbar + User tab panel) | `src/components/widgets/CreditBalance.jsx` — fetches `/api/credits`; refetches on `auto-apply:credits-stale` event; `variant` prop: `nav`/`panel`; for admins shows the platform system balance (click toggles $/credits) instead of personal credits |
+| Credit balance display (navbar + User tab panel) | `src/components/widgets/CreditBalance.jsx` — fetches `/api/credits` and `/api/account/llm-key`; refetches on `auto-apply:credits-stale` event; `variant` prop: `nav`/`panel`/`settings`; shows "Own API key · free" instead of a balance for BYOK accounts; for admins shows the platform system balance (click toggles $/credits) instead of personal credits |
+| Bring-your-own LLM key settings (provider, key test, searchable model picker, change default model, remove) | `src/components/widgets/ApiKeySettings.jsx` — mounted in `UserHome.jsx` (User tab) and, with `compact`, in the collapsible onboarding panel in `Onboarding/Wizard.jsx`; the raw key is only sent on test/save, display uses the masked last4; shows a "set `LLM_API_KEY` in `.env`" note on local installs (409); dispatches `auto-apply:credits-stale` + `auto-apply:byok-changed` on change |
 | Out-of-credits (HTTP 402) global signal | `src/api.js` — `_fetch` dispatches `auto-apply:credits-error` + `auto-apply:credits-stale`; toasted in `src/App.jsx` |
 | Gateway-error (502/503/504) retry for idempotent calls | `src/api.js` — `_fetch` accepts opt-in `retries`/`retryDelay` options and retries only gateway statuses with linear backoff (deploy-window rollovers); the actual fetch is `_fetchOnce`, and thrown errors carry `err.status`. `uploadJob` sets `retries:3` (server dedupes by URL) |
 | Grid layout or viewport sizing | `src/components/Dashboard.jsx` |
@@ -72,7 +73,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Dev-only résumé comparison view (section-aligned Model 1 vs Model 2 with eval scores) | `src/components/admin/ResumeCompare.jsx` — rendered by `AdminPage.jsx` when `active === 'resume-compare'`; calls `POST /api/dev/resume-compare/{job_key}` via `resumeCompare(jobKey)` in `api.js`. Renders a two-column grid: one row per top-level section (union of both models' headings, case-insensitive, model1 order then model2-only appended). Each cell renders its section's HTML inside an isolated `<iframe srcDoc>` carrying the returned `resume.css` (so it looks as it would in the PDF — no Chromium/PDF generation); paired iframes are height-equalized on load so headings line up across models. Missing section → "— not present —"; errored model column → "— error —". See `docs/superpowers/specs/2026-06-29-resume-compare-section-alignment-design.md`. |
 | Admin error-log viewer (hosted error observability) | `src/components/admin/ErrorLog.jsx` — rendered by `AdminPage.jsx` when `active === 'errors'`; filter bar (level/route/profile_id/since) → `getErrors(params)`, grouped table (last_seen, level, route, profile, message, count) with expandable rows that fetch traceback + request_id via `getErrorDetail(id)`, and a "Clear all" button calling `clearErrors()` — all three in `api.js`, hitting the Task 7 `GET/DELETE /api/admin/errors[/{id}]` endpoints (`web/routers/admin.py`). |
 | Impersonation banner ("Viewing as {email} — Exit") | `src/App.jsx` — rendered when `me.impersonating` is set; calls `stopImpersonation` on exit |
-| First-run onboarding modal (single resume-upload step) | `src/components/Onboarding/Wizard.jsx` |
+| First-run onboarding modal (single resume-upload step + optional BYOK key panel) | `src/components/Onboarding/Wizard.jsx` |
 | Onboarding resume upload/parse step | `src/components/Onboarding/StepResume.jsx` |
 | Docs viewer (markdown rendering, sidebar nav) | `src/components/Docs.jsx` |
 | Find Jobs page (search remote boards, two-column cards+HTML preview, per-card ✓scrape/✗delete, exclude words, region dropdown, posted-age) | `src/components/FindJobs.jsx` |
@@ -84,6 +85,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 | Help icon tooltip component | `src/components/shared/HelpIcon.jsx` |
 | Loading spinner component | `src/components/shared/Spinner.jsx` |
 | Admin ban/restore, grant-budget, credit grants | `src/api.js` — `setUserAccess`, `getGrantBudget`, `grantCredits` |
+| BYOK key API (`/api/account/llm-key`) | `src/api.js` — `getLlmKey`, `getLlmKeyModels`, `testLlmKey` (returns `{ok, models|error}`), `saveLlmKey`, `setLlmDefaultModel`, `deleteLlmKey` |
 | API calls (jobs, profiles, providers, generate, apply, setup status) | `src/api.js` |
 | Structured document fetch/save | `src/api.js` — `getDocument` / `putDocument` (replaced `putDocumentMarkdown`) |
 | Global state (jobs list, selected job, processing keys, active tab) | `src/App.jsx` |
@@ -136,6 +138,7 @@ Two-panel layout split 3:2 in a 5-column grid:
 - Rotating stat counter ("You've applied to {x} jobs"); clicking the highlighted phrase cycles Applied → Scraped → Resumes (`STAT_METRICS`), reading `stats.totals` from `/api/stats`
 - In-Demand Skills recharts pie/bar charts; time-window selector (Today / Week / All Time) drives the counter via `getStats(win)`
 - Embeds `ProfileCards` for quick profile switching
+- Renders `ApiKeySettings` (bring-your-own LLM key) under the `CreditBalance` settings widget
 - Fetches profiles once on mount; also refetches profiles + its own `usePrerequisites` on the `auto-apply:profile-updated` window event so the "Welcome back {name}" header reflects a just-parsed résumé without a page refresh
 
 ### parse/ParsePreview.jsx
@@ -148,7 +151,7 @@ Customization checklist rendered during intake (onboarding `StepResume` and the 
 - **Known follow-up:** the per-section generator (`apply_parse` → `set_section_customize`) can author field *values* but cannot reorder or drop list entries — it only writes into the existing item slots.
 
 ### Onboarding/Wizard.jsx
-- "Create your User Profile" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The platform owns the LLM key via env, so onboarding no longer collects an API key (`StepLLM.jsx` was removed).
+- "Create your User Profile" modal; shown when `usePrerequisites.isFirstRun` is true (i.e. the active profile has no parsed résumé). The old required API-key step (`StepLLM.jsx`) was removed; instead an **optional** collapsible panel above the tabs embeds `ApiKeySettings compact` (closes on save). A saved key makes the résumé parse and all later AI actions free (BYOK); skipping it leaves the user on the platform key + credits.
 - Two tabs under the "Skip for now" line: **"Use existing Resume"** (default) renders `StepResume`; **"Manual Entry"** shows a blurb + a **"Try it out"** link. Each tab shows a one-sentence explainer.
 - **No Finish button.** The modal auto-closes on: a successful résumé parse (`StepResume` calls `onFinish`), "Skip for now" (`setWizardSkipped`), or "Try it out". `onFinish` does **not** reload the page — it calls `prereqs.refresh()` and dispatches `auto-apply:profile-updated` (so `UserHome` refetches profiles + prereqs and the "Welcome back {name}" header updates in place without a manual refresh) plus `auto-apply:tour-launch-part1`.
 - `StepResume` uploads + parses the résumé against the already-provisioned active profile (resolved from `getProfiles`' `active_id`, which the tenant seam returns), then `onFinish`. It fetches the full profile via `getProfile` before attaching the upload (the `getProfiles` list omits `data`).
