@@ -22,6 +22,13 @@ describe('SignInCard', () => {
     expect(screen.getByText(/anyone can sign up/i)).toBeTruthy()
   })
 
+  it('logged out: links the Terms and Privacy Policy near the sign-in buttons', () => {
+    render(<SignInCard isAuthed={false} />)
+    expect(screen.getByText(/by signing in you agree/i)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /^terms$/i }).getAttribute('href')).toBe('/terms')
+    expect(screen.getByRole('link', { name: /privacy policy/i }).getAttribute('href')).toBe('/privacy')
+  })
+
   it('logged in: shows Go to dashboard and no OAuth links', () => {
     render(<SignInCard isAuthed />)
     const cta = screen.getByRole('link', { name: /go to dashboard/i })

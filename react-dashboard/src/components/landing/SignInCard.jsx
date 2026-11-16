@@ -37,6 +37,11 @@ export default function SignInCard({ isAuthed, betaClosed }) {
               <button className={oauthBtn}>Sign in with GitHub</button>
             </a>
           </div>
+          <p className="mt-4 text-xs text-space-dim">
+            By signing in you agree to the{' '}
+            <a href="/terms" className="underline hover:text-purple-400">Terms</a> and{' '}
+            <a href="/privacy" className="underline hover:text-purple-400">Privacy Policy</a>.
+          </p>
         </>
       )}
     </section>

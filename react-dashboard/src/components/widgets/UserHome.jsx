@@ -429,6 +429,11 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
         <ApiKeySettings />
       </div>
 
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-space-dim">
+        <a href="/privacy" className="hover:text-purple-400 transition-colors">Privacy Policy</a>
+        <a href="/terms" className="hover:text-purple-400 transition-colors">Terms of Service</a>
+      </div>
+
       <div className="flex flex-col gap-2">
         {history.length > 0 && (
           <div className="mt-3">
