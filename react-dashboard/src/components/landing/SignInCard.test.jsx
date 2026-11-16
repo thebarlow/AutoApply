@@ -12,7 +12,7 @@ describe('SignInCard', () => {
   it('logged out + betaClosed: shows the sign-in-rejected message', () => {
     render(<SignInCard isAuthed={false} betaClosed />)
     expect(screen.getByText(/couldn't sign you in/i)).toBeTruthy()
-    expect(screen.getByText('barlowmatt96@gmail.com')).toBeTruthy()
+    expect(screen.getByText('contact@matthewbarlow.me')).toBeTruthy()
     expect(screen.queryByText(/closed beta|invite list/i)).toBeNull()
   })
 

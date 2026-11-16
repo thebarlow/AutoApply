@@ -195,7 +195,7 @@ git history is the archive (see `.claude/skills/update-todo/`).
   "Sign in with Claude subscription" is off the table). Separate project; complements BYOK.
 
 - [ ] **Self-serve account deletion/export.** The Privacy Policy currently tells users to email
-  `barlowmatt96@gmail.com` to delete or export their data. Add an in-app "Export my data" (JSON
+  `contact@matthewbarlow.me` to delete or export their data. Add an in-app "Export my data" (JSON
   of profile, jobs, documents, purchases) and "Delete my account" (account, identity,
   extension tokens, profile + all tenant rows, uploaded résumé files; keep purchase records
   only as long as tax rules require), then update `legal/Privacy.jsx`.

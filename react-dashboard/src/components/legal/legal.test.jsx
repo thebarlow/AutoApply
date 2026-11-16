@@ -12,7 +12,7 @@ describe('Privacy', () => {
     expect(screen.getByRole('heading', { name: /ai processing/i })).toBeTruthy()
     expect(screen.getByRole('heading', { name: /cookies and tracking/i })).toBeTruthy()
     expect(screen.getByRole('heading', { name: /deleting or exporting/i })).toBeTruthy()
-    expect(screen.getAllByText('barlowmatt96@gmail.com').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('contact@matthewbarlow.me').length).toBeGreaterThan(0)
   })
 })
 
