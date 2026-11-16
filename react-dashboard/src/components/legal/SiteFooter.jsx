@@ -1,3 +1,5 @@
+import { COFFEE_URL } from './links'
+
 // Small public footer for the landing page and legal pages.
 export default function SiteFooter() {
   const link = 'hover:text-purple-400 transition-colors'
@@ -7,6 +9,10 @@ export default function SiteFooter() {
         <span>© 2026 Matthew Barlow</span>
         <a href="/privacy" className={link}>Privacy Policy</a>
         <a href="/terms" className={link}>Terms of Service</a>
+        {/* Plain link, no BMC widget script: the CSP is script-src 'self'. */}
+        <a href={COFFEE_URL} target="_blank" rel="noopener noreferrer" className={link}>
+          Buy me a coffee
+        </a>
       </div>
     </footer>
   )

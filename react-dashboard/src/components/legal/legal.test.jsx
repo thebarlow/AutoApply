@@ -32,4 +32,12 @@ describe('SiteFooter', () => {
     expect(screen.getByRole('link', { name: /privacy policy/i }).getAttribute('href')).toBe('/privacy')
     expect(screen.getByRole('link', { name: /terms of service/i }).getAttribute('href')).toBe('/terms')
   })
+
+  it('has a plain new-tab Buy me a coffee link', () => {
+    render(<SiteFooter />)
+    const a = screen.getByRole('link', { name: /buy me a coffee/i })
+    expect(a.getAttribute('href')).toBe('https://buymeacoffee.com/mrbarlow')
+    expect(a.getAttribute('target')).toBe('_blank')
+    expect(a.getAttribute('rel')).toBe('noopener noreferrer')
+  })
 })

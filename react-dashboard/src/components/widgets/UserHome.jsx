@@ -8,6 +8,7 @@ import SkillChipModal from './SkillChipModal'
 import CreditBalance from './CreditBalance'
 import BuyCreditsModal from './BuyCreditsModal'
 import ApiKeySettings from './ApiKeySettings'
+import { COFFEE_URL } from '../legal/links'
 import { usePrerequisites } from '../../hooks/usePrerequisites'
 
 const WINDOWS = [
@@ -428,6 +429,19 @@ export default function UserHome({ onSelect, onCreateProfile, onSkillFilter, act
       <div className="px-3 py-3 rounded-lg border border-space-border">
         <ApiKeySettings />
       </div>
+
+      <p className="text-xs text-center text-space-dim">
+        AutoApply is free with your own API key. If it helped, you can{' '}
+        <a
+          href={COFFEE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-purple-300 hover:text-purple-200 underline"
+        >
+          buy me a coffee
+        </a>
+        .
+      </p>
 
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-space-dim">
         <a href="/privacy" className="hover:text-purple-400 transition-colors">Privacy Policy</a>
