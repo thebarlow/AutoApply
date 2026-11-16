@@ -16,8 +16,10 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # pandoc: markdown -> document conversion used by the generator
+# libatomic1: required by the Node binary bundled with newer Playwright releases
+# (`playwright install` fails with "libatomic.so.1: cannot open shared object").
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends pandoc \
+    && apt-get install -y --no-install-recommends pandoc libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
