@@ -9,9 +9,7 @@ HEAD. Resets/checkouts/amends silently re-sync the marker without firing. The
 hook never edits docs itself.
 """
 
-import hashlib
 import json
-import os
 import pathlib
 import subprocess
 import sys
@@ -40,8 +38,10 @@ def _git(*args: str) -> str:
 
 
 def _marker() -> pathlib.Path:
-    key = hashlib.sha1(os.getcwd().encode()).hexdigest()[:12]
-    return pathlib.Path(os.path.expanduser("~/.claude")) / f".commit-docsync-{key}"
+    # Lives in the repo's own git dir so it never clutters ~/.claude and is
+    # never committed.
+    git_dir = _git("rev-parse", "--absolute-git-dir")
+    return pathlib.Path(git_dir) / "claude-docsync-head"
 
 
 def main() -> int:
@@ -52,7 +52,7 @@ def main() -> int:
         pass
 
     head = _git("rev-parse", "HEAD")
-    if not head:
+    if not head or not _git("rev-parse", "--absolute-git-dir"):
         return 0  # not a git repo / no commits yet
 
     marker = _marker()
