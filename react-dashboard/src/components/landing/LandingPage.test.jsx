@@ -27,6 +27,6 @@ describe('LandingPage', () => {
 
   it('passes betaClosed through to the sign-in card', () => {
     render(<LandingPage me={null} betaClosed />)
-    expect(screen.getByText(/closed beta/i)).toBeTruthy()
+    expect(screen.getByText(/couldn't sign you in/i)).toBeTruthy()
   })
 })
