@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json as _json
-import os
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
+from core.env import is_production
 from core.job import Job
 from core.schemas import AtsReport
 from db.database import get_db
@@ -27,7 +27,7 @@ async def tray_ws(websocket: WebSocket):
     # The tray socket is a single unauthenticated process-global slot for the
     # local desktop app. On the hosted multi-tenant instance it would let any
     # internet client receive other tenants' apply payloads — refuse outright.
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         await websocket.close(code=4003)
         return
     if _tray_ws is not None:

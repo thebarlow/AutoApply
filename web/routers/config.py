@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import tempfile
 import uuid
@@ -14,6 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.env import is_production
 from db.database import get_db
 from db.database import Config, PromptDefault, ProfileConfig
 from db.seed import PROFILE_CONFIG_DEFAULTS
@@ -109,7 +109,7 @@ def _read_env() -> dict[str, str]:
 def _write_env(env: dict[str, str]) -> None:
     # In hosted mode the filesystem is ephemeral and secrets come from the
     # platform's environment, so runtime .env writes are disabled.
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         raise HTTPException(
             status_code=400,
             detail="API keys are managed via environment variables in hosted mode.",
@@ -195,7 +195,7 @@ def create_profile(body: ProfileNameBody, db: Session = Depends(get_db)) -> dict
     # endpoint is how a fresh local/dev/tray DB (no auth) creates its first
     # profile row; it is unscoped and would otherwise let a hosted user mint
     # dangling, unlinked User rows, so it is disabled in production.
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         raise HTTPException(status_code=404, detail="Not found")
     row = User(name=body.name, data=json.dumps(_EMPTY_PROFILE_DATA))
     db.add(row)

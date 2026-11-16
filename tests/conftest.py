@@ -26,6 +26,21 @@ def configure_sqlalchemy_mappers():
 
 
 @pytest.fixture(autouse=True)
+def isolate_railway_env(monkeypatch):
+    """Strip RAILWAY_* runtime vars inherited from a developer's shell.
+
+    core.env treats any RAILWAY_* runtime variable as "running on Railway" and
+    defaults to production when APP_ENV is unset, which would silently flip
+    every APP_ENV-less test into production mode. Tests that exercise that
+    path set the variable explicitly via monkeypatch.
+    """
+    import os
+
+    for key in [k for k in os.environ if k.startswith("RAILWAY_")]:
+        monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolate_prompts_dir(tmp_path, monkeypatch):
     """Redirect prompt-blob persistence to a temp dir for every test.
 

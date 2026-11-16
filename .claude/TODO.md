@@ -13,6 +13,15 @@ git history is the archive (see `.claude/skills/update-todo/`).
   must re-download/reinstall the extension to pick up the pinned `key` (the ID only changes on a fresh
   load-unpacked). Until both are done, Chrome sign-in still 400s with a redirect-mismatch.
 
+- [ ] **[deploy] Verify on Railway that `ADMIN_EMAILS` includes the owner before deploying the
+  admin re-sync** (commit `222fe05`). `sync_admin_flag` now promotes *and demotes* on every login;
+  if the owner isn't in `ADMIN_EMAILS` (and has no admin `allowed_email` invite row) they lose admin
+  on next login.
+
+- [ ] **[deploy] Confirm the PDF preview iframe still renders in Chrome and Firefox on the live
+  site** with the new security headers (commit `6d51b91`). PDFs get `X-Frame-Options: SAMEORIGIN` +
+  `frame-ancestors 'self'`; everything else is `DENY` / `frame-ancestors 'none'`.
+
 - [ ] **[audit 2026-07-19] Pre-existing order-dependent test failures (test pollution).** Both
   pass in isolation but fail in full-suite runs; present on clean HEAD before the dead-code
   cleanup:
@@ -235,6 +244,13 @@ Known accepted limitations (each would be its own feature if prioritized):
   counts — check in the Stripe dashboard (app UI is authoritative).
 
 ## Done
+
+- [x] **Security audit hardening (H2, M3, L2, L3, L6, L7).** **DONE 2026-11-16** — fail-closed
+  `APP_ENV` resolution via `core/env.py` (unknown value aborts boot; unset on Railway → production);
+  `SecurityHeadersMiddleware` (nosniff, frame/referrer policy, prod HSTS, `'self'` CSP) + API docs
+  hidden in production; `.dockerignore` excludes secrets/backups/DBs/dev dirs; auth gate rejects
+  banned/missing accounts per request; admin flag re-synced from `ADMIN_EMAILS`/invites on login.
+  Two deploy checks remain open under Bugs.
 
 - [x] **Bring-your-own LLM key (BYOK).** **DONE 2026-11-16** (branch `feat/byok`) — accounts can
   store their own OpenRouter/OpenAI/Anthropic/Gemini key; BYOK usage is completely free (product

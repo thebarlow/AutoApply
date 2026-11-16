@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, Request
 from sqlalchemy.orm import Session
 from fastapi import Depends
 
+from core.env import is_production
 from core import session_cost
 from db.database import Account, get_db
 
@@ -20,7 +19,7 @@ def get_session_cost(request: Request, db: Session = Depends(get_db)) -> dict:
     admins see the real figure; other users get 0.0. The frontend also uses
     this endpoint as a liveness heartbeat, so it must return 200 for everyone.
     """
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         account_id = request.session.get("account_id")
         acct = (
             db.query(Account).filter_by(id=account_id).first()

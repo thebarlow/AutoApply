@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from typing import Any, Generator
 
+from core.env import is_production
+
 import openai
 
 _ENV_PATH = Path(__file__).parent.parent / ".env"
@@ -60,7 +62,7 @@ def allowed_models() -> set[str] | None:
     raw = os.getenv("LLM_ALLOWED_MODELS", "").strip()
     if raw:
         return {m.strip() for m in raw.split(",") if m.strip()}
-    if os.getenv("APP_ENV") == "production":
+    if is_production():
         default = (os.getenv("LLM_DEFAULT_MODEL")
                    or _read_env_file().get("LLM_DEFAULT_MODEL", "")).strip()
         return {default} if default else set()
@@ -108,7 +110,7 @@ def get_client_for_profile(user: Any = None, model_override: str = "") -> tuple:
 
     provider_type = (os.getenv("LLM_PROVIDER_TYPE") or "openrouter").lower()
     if provider_type == "claude_cli":
-        if os.getenv("APP_ENV") == "production":
+        if is_production():
             raise RuntimeError("LLM_PROVIDER_TYPE=claude_cli is not allowed when APP_ENV=production.")
         from core.llm_claude_cli import ClaudeCliClient
         return ClaudeCliClient(), "claude-cli"

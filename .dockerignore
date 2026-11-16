@@ -1,19 +1,35 @@
+# VCS / tooling
 .git
 .gitignore
 .venv
 **/__pycache__
 **/*.pyc
 .pytest_cache
+.playwright-mcp
 node_modules
-react-dashboard/node_modules
+**/node_modules
 react-dashboard/dist
-auto_apply.db
-auto_apply.db-shm
-auto_apply.db-wal
+
+# Secrets — never ship into the image (audit L7)
 .env
 .env.*
 !.env.example
-docs/
+backups/
+# agent worktrees under .claude/ hold full DB copies
+.claude/
+
+# Local data / generated output
+**/*.db
+**/*.db-*
+auto_apply.db
+auto_apply.db-shm
+auto_apply.db-wal
+logs/
+workflows/output/
 generator/outputs/
 profiles/
+
+# Not needed at runtime
+docs/
 tests/
+e2e/
