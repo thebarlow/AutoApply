@@ -177,3 +177,57 @@ def test_concurrent_provision_race_recovers(db, monkeypatch):
     acct = resolve_or_provision_account(db, _claims())
     assert acct.id == 1
     assert acct.profile_id == 2
+
+
+# ─── Open signups (OPEN_SIGNUPS) ─────────────────────────────────────────────
+
+def test_open_signups_provisions_anyone_with_zero_credits(db, monkeypatch):
+    monkeypatch.setenv("OPEN_SIGNUPS", "true")
+    monkeypatch.delenv("ALLOWED_EMAILS", raising=False)
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    monkeypatch.delenv("CREDIT_SIGNUP_GRANTS", raising=False)
+    _seed_prompt_defaults(db)
+    acct = resolve_or_provision_account(db, _claims(email="stranger@x.com"))
+    assert acct.tier == "standard" and acct.is_admin is False
+    assert acct.credit_balance == 0
+    from db.database import CreditLedger
+    assert db.query(CreditLedger).count() == 0  # no zero-amount grant row
+
+
+def test_open_signups_still_requires_verified_email(db, monkeypatch):
+    monkeypatch.setenv("OPEN_SIGNUPS", "true")
+    with pytest.raises(BetaAccessDenied):
+        resolve_or_provision_account(db, _claims(verified=False))
+
+
+def test_open_signups_still_blocks_banned_account(db, monkeypatch):
+    monkeypatch.setenv("OPEN_SIGNUPS", "true")
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    _seed_prompt_defaults(db)
+    acct = resolve_or_provision_account(db, _claims(email="bad@x.com"))
+    acct.banned = True
+    db.commit()
+    with pytest.raises(BetaAccessDenied):
+        resolve_or_provision_account(db, _claims(email="bad@x.com", subject="s1"))
+    with pytest.raises(BetaAccessDenied):  # new provider, same email
+        resolve_or_provision_account(db, _claims(provider="github", subject="g9", email="bad@x.com"))
+
+
+def test_signups_closed_by_default(db, monkeypatch):
+    monkeypatch.delenv("OPEN_SIGNUPS", raising=False)
+    monkeypatch.setenv("ALLOWED_EMAILS", "other@x.com")
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    with pytest.raises(BetaAccessDenied):
+        resolve_or_provision_account(db, _claims(email="stranger@x.com"))
+
+
+def test_invited_beta_tier_keeps_grant_when_open(db, monkeypatch):
+    monkeypatch.setenv("OPEN_SIGNUPS", "true")
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    monkeypatch.delenv("CREDIT_SIGNUP_GRANTS", raising=False)
+    _seed_prompt_defaults(db)
+    from db.database import AllowedEmail
+    db.add(AllowedEmail(email="friend@x.com", created_at="t", tier="beta", is_admin=False))
+    db.commit()
+    acct = resolve_or_provision_account(db, _claims(email="friend@x.com"))
+    assert acct.tier == "beta" and acct.credit_balance == 200

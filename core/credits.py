@@ -39,7 +39,10 @@ def default_rate() -> float:
 
 
 def signup_grant_for_tier(tier: str) -> int:
-    defaults = {"standard": 20, "friends_family": 50, "beta": 200}
+    # Standard (open-signup) accounts start at 0: anyone can sign up, so a free
+    # grant would only fund abuse of the platform LLM key. The free path is BYOK.
+    # Invite-only tiers keep their grants. Override via CREDIT_SIGNUP_GRANTS.
+    defaults = {"standard": 0, "friends_family": 50, "beta": 200}
     raw = os.getenv("CREDIT_SIGNUP_GRANTS", "").strip()
     table = {**defaults, **json.loads(raw)} if raw else defaults
     return int(table.get(tier, table["standard"]))

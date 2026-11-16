@@ -196,7 +196,7 @@ refunded.
 
 **Grants.** New accounts receive a signup grant sized by tier
 (`core.credits.signup_grant_for_tier(tier)`, env `CREDIT_SIGNUP_GRANTS` JSON
-map, defaults `standard` 20 / `friends_family` 50 / `beta` 200 units) at
+map, defaults `standard` 0 / `friends_family` 50 / `beta` 200 units) at
 provisioning, reason `signup_grant`. Admin grants go through the
 budget-checked `POST /api/admin/users/{profile_id}/grant`
 (`web/routers/admin.py`, admin-only), which calls `grant_credits` with
@@ -339,7 +339,8 @@ key-writing is disabled when `APP_ENV=production`.
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app creds |
 | `SESSION_SECRET` | random secret for signed session cookies |
 | `KEY_ENCRYPTION_KEY` | Fernet key encrypting users' stored bring-your-own LLM keys (`core/secret_box.py`; generate with `secret_box.generate_key()`). Without it the app boots but saving a key returns 503. Losing or rotating it makes all stored keys unreadable — users must re-enter them |
-| `ALLOWED_EMAILS` | comma-separated beta allowlist |
+| `ALLOWED_EMAILS` | comma-separated invite allowlist (ignored when `OPEN_SIGNUPS=true`) |
+| `OPEN_SIGNUPS` | `true` = any verified Google/GitHub email may sign up (bans still apply) |
 | `ADMIN_EMAILS` | comma-separated admin/owner emails |
 | `DATA_DIR` | `/data` |
 | `APP_ENV` | `production` |

@@ -99,10 +99,10 @@ def test_refund_debit_restores_balance(db_session):
 def test_signup_grant_for_tier_defaults(monkeypatch):
     from core import credits
     monkeypatch.delenv("CREDIT_SIGNUP_GRANTS", raising=False)
-    assert credits.signup_grant_for_tier("standard") == 20
+    assert credits.signup_grant_for_tier("standard") == 0
     assert credits.signup_grant_for_tier("friends_family") == 50
     assert credits.signup_grant_for_tier("beta") == 200
-    assert credits.signup_grant_for_tier("unknown_tier") == 20  # falls back to standard
+    assert credits.signup_grant_for_tier("unknown_tier") == 0  # falls back to standard
 
 
 def test_signup_grant_env_override(monkeypatch):

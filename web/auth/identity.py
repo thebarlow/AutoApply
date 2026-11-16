@@ -47,7 +47,19 @@ def is_admin_email(email: str) -> bool:
     return email.lower() in _email_set("ADMIN_EMAILS")
 
 
+def signups_open() -> bool:
+    """True when anyone with a verified Google/GitHub email may create an account.
+
+    Controlled by ``OPEN_SIGNUPS`` (default off) so the invite gate can be
+    restored with an env change, no deploy. Bans still apply: banned accounts
+    are rejected by email before provisioning.
+    """
+    return os.getenv("OPEN_SIGNUPS", "").strip().lower() in {"1", "true", "yes"}
+
+
 def is_allowed_email(db: Session, email: str) -> bool:
+    if signups_open():
+        return True
     e = email.lower()
     if e in _email_set("ALLOWED_EMAILS"):
         return True
@@ -212,7 +224,9 @@ def _provision_account(db: Session, *, email: str, is_admin: bool, claims: Claim
         provider_subject=claims.subject, created_at=_now(),
     ))
     db.commit()
-    grant_credits(db, profile_id, signup_grant_for_tier(tier), reason="signup_grant")
+    grant = signup_grant_for_tier(tier)
+    if grant > 0:
+        grant_credits(db, profile_id, grant, reason="signup_grant")
     return acct
 
 
