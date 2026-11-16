@@ -114,8 +114,8 @@ export default function Privacy() {
         <p>
           When something breaks, the server records the error along with request details (the
           route, request method, a request ID, and your account email and profile ID). These
-          logs help fix bugs, are visible only to the administrator, and are automatically cleared
-          out after 30 days.
+          logs help fix bugs, are visible only to the administrator, and are kept for about 30 days.
+          The administrator can also clear them at any time.
         </p>
       </Section>
 
@@ -148,7 +148,7 @@ export default function Privacy() {
       <Section title="How long we keep data">
         <p>
           Your account data is kept while your account exists. Jobs you delete in the app are
-          permanently removed within a day. Error logs are cleared out after 30 days. Purchase
+          permanently removed within a day. Error logs are kept for about 30 days. Purchase
           records may be kept longer where tax or accounting rules require it.
         </p>
       </Section>
