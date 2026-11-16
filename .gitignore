@@ -9,6 +9,7 @@
 # Job data
 jobs/
 generator/outputs/
+workflows/output/
 
 
 # Python
