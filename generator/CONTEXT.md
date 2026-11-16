@@ -41,6 +41,19 @@ The `Document` snapshot also carries the contact/education data captured at gene
 3. Jinja2 (`Environment` with `strip_url` filter) renders the template with the fragment, frontmatter vars, and today's date.
 4. **Playwright** (headless Chromium) renders the full HTML page to PDF.
 
+`build_render_html` (steps 1–3) is split out of `render_pdf` as a test seam; it returns the exact HTML handed to Chromium.
+
+### Render security (audit H1/M1)
+
+Invariant: **user content is never rendered as raw HTML; Chromium renders offline with JS disabled.** Profile fields, document fields, and LLM output (which can carry job-description prompt injection) all reach this path, and `POST /api/profile/export-master` returns the PDF directly — so a live `<iframe>`/`<img>` would be SSRF into Railway's private network with the response printed into the PDF.
+
+- **pandoc**: `-f markdown-raw_html-raw_attribute-native_divs-native_spans` (`_PANDOC_FROM`). `-raw_html` alone is not enough: `raw_attribute` (`` `<script>`{=html} `` / ```` ```{=html} ```` fences) is a second passthrough. Literal tags come out as escaped text. Output on all existing generated `.md` files was byte-identical before/after.
+- **Jinja**: `Environment(autoescape=True)`. Only `css`, `content_html`, `content_pre`, `content_post` are wrapped in `Markup` (in `build_render_html`); every meta field (name, email, links, education, company…) is escaped. Template `| safe` is only used on those values and on the hardcoded SVG icon literals. Don't add new `| safe` on user data.
+- **Chromium**: `browser.new_context(java_script_enabled=False)` + `context.route("**/*", _route_handler)`, which allows only `about:blank` and `data:` and aborts everything else (http/https/file). The templates need nothing external: CSS is inlined into `<style>`, icons are inline SVG, and no web fonts are loaded (font stacks fall back to locally installed fonts). If a template ever needs a font, inline it as a `data:` URI — don't widen the allowlist.
+- **Sandbox**: Playwright's default `chromium_sandbox=False` launches Chromium with `--no-sandbox`. Left as-is: the Docker image runs as root (no `USER`), where Chromium refuses to start sandboxed. Enabling it needs a non-root user in the Dockerfile and verification on Railway (open item).
+- **Concurrency**: `_RENDER_SEMAPHORE` (`threading.BoundedSemaphore`, size `PDF_RENDER_CONCURRENCY`, default 2, min 1) wraps each Chromium launch; extra renders block in the threadpool rather than exhaust memory.
+- Known gap: markdown links still keep their scheme (`[x](javascript:…)` becomes an `href`). JS is disabled in Chromium, so it can't run during render, but the link annotation could survive into the PDF.
+
 The CSS file is resolved by stripping `_template` from the template stem (e.g. `resume_template.html` → `resume.css`).
 
 Both résumé and cover-letter rendering pass `max_pages=1` (`generate_resume_pdf` and `generate_cover_pdf` in `core/job.py`). If content overflows one page, `render_pdf` auto-shrinks the Playwright print scale in steps (down to a `_PDF_SCALE_FLOOR` of 0.8) until it fits, raising `RuntimeError` only if it still overflows at the floor. Note: Chromium ignores CSS `zoom` and visual `transform` in its print path — only `page.pdf(scale=)` actually reduces the page count. The CSS should still keep typical content near one page so the shrink factor stays mild (readable text). For covers, `cover.css` reserves `1.05in` of `.cover-body` bottom padding as clearance so the sign-off never spills into/behind the fixed `.bottom-bar`, and the `cover.md` prompt caps body length (~225–275 words, max 300) to keep content on one page.

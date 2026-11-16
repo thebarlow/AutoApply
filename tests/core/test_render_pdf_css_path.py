@@ -19,6 +19,12 @@ class _FakeP:
     def launch(self, *a, **k):
         return self
 
+    def new_context(self, *a, **k):
+        return self
+
+    def route(self, *a, **k):
+        pass
+
     def new_page(self, *a, **k):
         return self
 

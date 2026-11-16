@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
+import os
 import re
 import subprocess
+import threading
 from datetime import date as _date
 from pathlib import Path
 from typing import Any
 
 import yaml
 from jinja2 import Environment
+from markupsafe import Markup
 from playwright.sync_api import sync_playwright
 from pypdf import PdfReader
 
@@ -17,6 +21,53 @@ from pypdf import PdfReader
 # raise rather than emit an unreadable document.
 _PDF_SCALE_FLOOR = 0.8
 _PDF_SCALE_STEP = 0.025
+
+logger = logging.getLogger(__name__)
+
+# Pandoc input format. Raw HTML is disabled so user/LLM-authored markup
+# (``<script>``, ``<iframe>``, …) is emitted as escaped text, never as live
+# elements. ``raw_attribute`` (```{=html}``/`` `x`{=html} ``) is a second raw
+# passthrough that ``-raw_html`` alone does not close; ``native_divs``/
+# ``native_spans`` would otherwise still turn literal ``<div>``/``<span>`` tags
+# into elements carrying arbitrary attributes.
+_PANDOC_FROM = "markdown-raw_html-raw_attribute-native_divs-native_spans"
+
+
+def _render_concurrency() -> int:
+    try:
+        return max(1, int(os.environ.get("PDF_RENDER_CONCURRENCY", "2")))
+    except ValueError:
+        return 2
+
+
+# Each render launches a full Chromium; cap how many run at once so concurrent
+# requests can't exhaust container memory. Excess callers block (FastAPI runs
+# sync endpoints in a threadpool, so this queues rather than rejects).
+_RENDER_SEMAPHORE = threading.BoundedSemaphore(_render_concurrency())
+
+# The rendered page is fully self-contained (CSS inlined, SVG icons inline, no
+# web fonts), so the only URLs Chromium legitimately touches are the blank
+# document set_content writes into and inline data: URIs.
+_ALLOWED_URL_PREFIXES = ("about:blank", "data:")
+
+
+def _is_allowed_render_url(url: str) -> bool:
+    """Return True if Chromium may load ``url`` while rendering a PDF."""
+    return url.startswith(_ALLOWED_URL_PREFIXES)
+
+
+def _route_handler(route: Any) -> None:
+    """Playwright route handler: abort every request not on the allowlist.
+
+    Blocks SSRF (e.g. ``<img src=http://169.254.169.254/>`` from a markdown
+    image or link attribute) and any other network or ``file://`` access.
+    """
+    url = route.request.url
+    if _is_allowed_render_url(url):
+        route.continue_()
+    else:
+        logger.warning("Blocked PDF-render request to %s", url[:200])
+        route.abort("blockedbyclient")
 
 
 def _strip_url(url: str) -> str:
@@ -78,7 +129,7 @@ def markdown_to_html(md_text: str) -> str:
     """
     md_text = re.sub(r"(?<=\S)\n(- )", r"\n\n\1", md_text)
     return subprocess.run(
-        ["pandoc", "-t", "html"],
+        ["pandoc", "-f", _PANDOC_FROM, "-t", "html"],
         input=md_text,
         check=True,
         capture_output=True,
@@ -87,37 +138,28 @@ def markdown_to_html(md_text: str) -> str:
     ).stdout
 
 
-def render_pdf(
+def build_render_html(
     md_path: Path,
-    pdf_path: Path,
     template_path: Path,
-    max_pages: int | None = None,
     meta: dict | None = None,
     css_path: Path | None = None,
-) -> None:
-    """Render a Markdown file to PDF via pandoc → Jinja2 HTML → Chromium.
+) -> str:
+    """Build the full HTML document ``render_pdf`` hands to Chromium.
 
-    The template is a Jinja2 HTML file with two slots: ``{{ css }}`` (inlined
-    into a ``<style>`` block) and ``{{ content_html }}`` (the pandoc HTML
-    fragment). By default the paired CSS file is derived from the template stem
-    (e.g. ``resume.css`` for ``resume_template.html``); an explicit ``css_path``
-    argument overrides this stem-derived default.
+    Every template variable is autoescaped; only the pandoc body fragment (made
+    safe by ``_PANDOC_FROM``) and the repo-owned CSS are marked ``Markup``.
 
     Args:
         md_path: Path to the source markdown file.
-        pdf_path: Destination path for the rendered PDF.
         template_path: Path to the Jinja2 HTML template.
-        max_pages: If set, shrink the print scale (down to ``_PDF_SCALE_FLOOR``)
-            until the output fits within this page count; raise ``RuntimeError``
-            only if it still overflows at the minimum scale. ``None`` disables
-            both the limit and auto-shrink.
+        meta: Template variables (contact fields, education, …). When ``None``,
+            parsed from the markdown's YAML frontmatter.
         css_path: Optional explicit CSS file to inline. When ``None``, the CSS
             file is derived from the template stem (e.g. ``resume.css`` for
             ``resume_template.html``).
 
-    Raises:
-        subprocess.CalledProcessError: If pandoc exits non-zero.
-        RuntimeError: If ``max_pages`` cannot be met even at the minimum scale.
+    Returns:
+        The rendered HTML document.
     """
     md_text = md_path.read_text(encoding="utf-8")
     fragment = markdown_to_html(md_text)
@@ -141,21 +183,65 @@ def render_pdf(
     if meta.get("education"):
         content_pre, content_post = _split_body_for_education(fragment)
 
-    env = Environment(autoescape=False)
+    env = Environment(autoescape=True)
     env.filters["strip_url"] = _strip_url
-    html = env.from_string(template_path.read_text(encoding="utf-8")).render(
-        css=css,
-        content_html=fragment,
-        content_pre=content_pre,
-        content_post=content_post,
-        date=date_str,
+    return env.from_string(template_path.read_text(encoding="utf-8")).render(
         **meta,
+        # Trusted HTML: CSS ships with the repo (themes are a fixed registry) and
+        # the body fragment comes from pandoc with raw HTML disabled.
+        css=Markup(css),
+        content_html=Markup(fragment),
+        content_pre=Markup(content_pre),
+        content_post=Markup(content_post),
+        date=date_str,
     )
 
-    with sync_playwright() as p:
+
+def render_pdf(
+    md_path: Path,
+    pdf_path: Path,
+    template_path: Path,
+    max_pages: int | None = None,
+    meta: dict | None = None,
+    css_path: Path | None = None,
+) -> None:
+    """Render a Markdown file to PDF via pandoc → Jinja2 HTML → Chromium.
+
+    The template is a Jinja2 HTML file with two slots: ``{{ css }}`` (inlined
+    into a ``<style>`` block) and ``{{ content_html }}`` (the pandoc HTML
+    fragment). By default the paired CSS file is derived from the template stem
+    (e.g. ``resume.css`` for ``resume_template.html``); an explicit ``css_path``
+    argument overrides this stem-derived default.
+
+    Chromium renders offline with JavaScript disabled: every request except
+    ``about:blank``/``data:`` is aborted. Concurrent renders are capped by
+    ``PDF_RENDER_CONCURRENCY`` (default 2).
+
+    Args:
+        md_path: Path to the source markdown file.
+        pdf_path: Destination path for the rendered PDF.
+        template_path: Path to the Jinja2 HTML template.
+        max_pages: If set, shrink the print scale (down to ``_PDF_SCALE_FLOOR``)
+            until the output fits within this page count; raise ``RuntimeError``
+            only if it still overflows at the minimum scale. ``None`` disables
+            both the limit and auto-shrink.
+        meta: Template variables; parsed from frontmatter when ``None``.
+        css_path: Optional explicit CSS file to inline. When ``None``, the CSS
+            file is derived from the template stem (e.g. ``resume.css`` for
+            ``resume_template.html``).
+
+    Raises:
+        subprocess.CalledProcessError: If pandoc exits non-zero.
+        RuntimeError: If ``max_pages`` cannot be met even at the minimum scale.
+    """
+    html = build_render_html(md_path, template_path, meta=meta, css_path=css_path)
+
+    with _RENDER_SEMAPHORE, sync_playwright() as p:
         browser = p.chromium.launch()
         try:
-            page = browser.new_page()
+            context = browser.new_context(java_script_enabled=False)
+            context.route("**/*", _route_handler)
+            page = context.new_page()
             page.set_content(html, wait_until="load")
             # Render at full scale first; if the output exceeds max_pages, shrink
             # the print scale step-by-step until it fits. Chromium ignores CSS

@@ -380,6 +380,7 @@ rule existed, run `python -m scripts.flag_failed_scrapes` (dry run) then
 - `Job` methods that call the LLM receive an already-constructed client + model string — they do not read config themselves.
 - All DB writes inside `Job` methods use the session passed in; callers are responsible for commit/rollback.
 - The résumé refine + structured-edit paths pass `max_pages=1` to `generate_resume_pdf`; `render_pdf` auto-shrinks the print scale to fit one page (see `generator/CONTEXT.md`). (`web/routers/jobs.py` `put_document` also passes `max_pages=1`.)
+- **User content is never rendered as raw HTML; Chromium renders offline with JS disabled.** `core/utils.py` runs pandoc with `-f markdown-raw_html-raw_attribute-native_divs-native_spans`, renders templates with Jinja `autoescape=True` (only the pandoc body + repo CSS are `Markup`), and launches Chromium with `java_script_enabled=False` plus a route handler that aborts everything but `about:blank`/`data:`. Renders are capped by a `BoundedSemaphore` (`PDF_RENDER_CONCURRENCY`, default 2). Details in `generator/CONTEXT.md` → "Render security".
 - `_refine_doc_md` uses `max_tokens=32768` to avoid truncation on rewrites.
 - `User.from_markdown` (résumé-parse LLM call, backing `from_pdf` and the parse/propose
   endpoint) uses `max_tokens=32768` and `timeout=90` — a long (4+ page) résumé produces
